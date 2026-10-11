@@ -174,10 +174,9 @@ def wall_geom(ctx, e, r):
     if res is None: return None
     return res
 
-def wall_solid(ctx, e, r):
-    pls = ref_planes(r['fields'])
-    if not pls: return curved_wall_geom(ctx, e, r)
-    pls = [p for p in pls if p[3]]
+def wall_frame(ctx, e, r):
+    """straight wall frame from the reference faces: (o0, x0 along the wall, n across, y0 up, ext[2][3] = min/max (along, across, up) relative to o0)"""
+    pls = [p for p in ref_planes(r['fields']) if p[3]]
     if not pls: return None
     o0, x0, y0, _ = pls[0]; n = np.cross(x0, y0); nn = np.linalg.norm(n)
     if nn < 1e-9: return None
@@ -190,17 +189,82 @@ def wall_solid(ctx, e, r):
                 q = o + x * u + y * v; c = np.array([np.dot(q - o0, x0), np.dot(q - o0, n), np.dot(q - o0, y0)])
                 ext[0] = np.minimum(ext[0], c); ext[1] = np.maximum(ext[1], c)
     if np.any(ext[1] - ext[0] < 1e-6): return None
+    return o0, x0, n, y0, ext
+
+def wall_end_joins(ctx, e, r, fr):
+    """corner joins at the two wall ends: [None | (cut plane point Q, keep-side normal, extension length)] for end 0 and end 1. Revit trims a joined wall end at the miter line
+    through the intersections of the two walls' face lines (outer-outer, inner-inner); the wall is first extended past its location-line end, then cut."""
+    out = [None, None]
+    o0, x0, n, y0, ext = fr
+    drv = g(r['fields'], 'm_pCurveDriver') or {}
+    for it in drv.get('m_controlJoinsSet') or []:
+        info = it.get('obj', it); ji = info.get('m_JoinInfo', info); k = int(info.get('m_index', -1))
+        if k not in (0, 1): continue
+        others = [x for x in (ji.get('m_info') or []) if int(x['m_elemId']) != e]
+        if len(others) != 1: continue
+        b = int(others[0]['m_elemId']); jb = int(others[0]['m_joinedEnd']); rb = ctx.recs.get(b)
+        if not rb or rb['class'] != 'SWall': continue
+        fb = wall_frame(ctx, b, rb)
+        if fb is None: continue
+        ob, xb, nb, yb, eb = fb
+        # plan geometry (xy): the two strips' face lines
+        def lines(o, x, nrm, ex): return [(o[:2] + nrm[:2] * ex[0][1], x[:2]), (o[:2] + nrm[:2] * ex[1][1], x[:2])]
+        LA = lines(o0, x0, n, ext); LB = lines(ob, xb, nb, eb)
+        pa = o0[:2] + x0[:2] * (ext[0][0] if k == 0 else ext[1][0]); pb_ = ob[:2] + xb[:2] * (eb[0][0] if jb == 0 else eb[1][0])
+        P = (pa + pb_) / 2
+        a = x0[:2] * (1 if k == 0 else -1); bdir = xb[:2] * (1 if jb == 0 else -1)           # unit vectors from the joint into each wall body
+        cross = abs(a[0] * bdir[1] - a[1] * bdir[0])
+        if cross < 0.05: continue                                                        # collinear: plain end
+        if cross > 0.985:                                                                # perpendicular butt join: the first wall listed at the joint runs through to the far face of the other wall, the others stop at its near face
+            first = int(g(it, 'm_JoinInfo', 'm_info')[0]['m_elemId']) == e if g(it, 'm_JoinInfo', 'm_info') else True
+            ub = sorted(float(np.dot(ob + nb * ex_ - o0, x0)) for ex_ in (eb[0][1], eb[1][1]))
+            near, far = (ub[0], ub[1]) if k == 1 else (ub[1], ub[0])
+            out[k] = {'u': far if first else near}; continue
+        Qs = []
+        for (p1, d1) in LA:
+            for (p2, d2) in LB:
+                M = np.array([d1, -d2]).T
+                try: t = np.linalg.solve(M, p2 - p1)
+                except np.linalg.LinAlgError: continue
+                Qs.append(p1 + d1 * t[0])
+        if len(Qs) != 4: continue
+        sc = [np.dot(q - P, a + bdir) for q in Qs]; Qout = Qs[int(np.argmin(sc))]; Qin = Qs[int(np.argmax(sc))]
+        m = Qin - Qout
+        if np.linalg.norm(m) < 1e-6: continue
+        m /= np.linalg.norm(m); keep = a - np.dot(a, m) * m
+        if np.linalg.norm(keep) < 1e-6: continue
+        keep /= np.linalg.norm(keep)
+        out[k] = {'miter': (np.array([Qout[0], Qout[1], 0.0]), np.array([keep[0], keep[1], 0.0]), float(abs(ext[1][1] - ext[0][1]) + abs(eb[1][1] - eb[0][1])) + 0.5)}
+    return out
+
+def wall_solid(ctx, e, r):
+    if not ref_planes(r['fields']): return curved_wall_geom(ctx, e, r)
+    fr = wall_frame(ctx, e, r)
+    if fr is None: return None
+    o0, x0, n, y0, ext = fr
     d = ext[1] - ext[0]
     org = o0 + x0 * ext[0][0] + n * ext[0][1] + y0 * ext[0][2]
+    joins = wall_end_joins(ctx, e, r, fr)
+    if any(j and 'u' in j for j in joins):                     # butt joins only move the end positions
+        u0 = joins[0]['u'] if joins[0] and 'u' in joins[0] else ext[0][0]; u1 = joins[1]['u'] if joins[1] and 'u' in joins[1] else ext[1][0]
+        if u1 - u0 > 0.05:
+            org = o0 + x0 * u0 + n * ext[0][1] + y0 * ext[0][2]; d = np.array([u1 - u0, d[1], d[2]])
+    joins = [j if j and 'miter' in j else None for j in joins]
     holes = wall_openings(ctx, e, org, x0, n, y0, d)
     prof = wall_top_profile(ctx, e, r, org, x0, n, y0, d)
+    if prof is not None: joins = [None, None]
     tid = type_of(ctx, e, r); layers = type_layers(ctx, tid)
     flipped = bool(r['fields'].get('m_isFlipped'))
     solid = None
-    if prof is not None or holes or len(layers) > 1:
+    if prof is not None or holes or len(layers) > 1 or any(joins):
         try:
             from . import occ
-            w = occ.extrude_polygon(prof, n * d[1]) if prof is not None else occ.box_frame(org, x0 * d[0], n * d[1], y0 * d[2])
+            if prof is not None: w = occ.extrude_polygon(prof, n * d[1])
+            else:
+                e0 = joins[0]['miter'][2] if joins[0] else 0.0; e1 = joins[1]['miter'][2] if joins[1] else 0.0
+                w = occ.box_frame(org - x0 * e0, x0 * (d[0] + e0 + e1), n * d[1], y0 * d[2])
+                for jn in joins:
+                    if jn: w = occ.cut(w, occ.halfspace_below(np.array([jn['miter'][0][0], jn['miter'][0][1], org[2]]), jn['miter'][1]))
             for ho in holes: w = occ.cut(w, ho)
             solid = w
         except Exception as ex:
@@ -212,7 +276,7 @@ def wall_solid(ctx, e, r):
             seq = layers if not flipped else layers[::-1]            # exterior layer first; exterior is the -n side of the reference-face frame (wall direction x, left = exterior)
             for wd, fn, rgb in seq:
                 t0 = cum / tot * d[1]; t1 = (cum + wd) / tot * d[1]; cum += wd
-                slab = occ.box_frame(org - x0 * 1.0 - y0 * 1.0 + n * t0, x0 * (d[0] + 2.0), n * (t1 - t0), y0 * (d[2] + 2.0))
+                slab = occ.box_frame(org - x0 * 6.0 - y0 * 1.0 + n * t0, x0 * (d[0] + 12.0), n * (t1 - t0), y0 * (d[2] + 60.0))
                 parts.append((occ.to_mesh(occ.common(solid, slab)), rgb or CORE_GRAY))
             mu = geom.Multi(parts)
             if mu: return mu, 'param'
@@ -257,7 +321,7 @@ def wall_top_profile(ctx, e, r, org, x0, n, y0, d):
     for poly, zf in fields:
         inside = poly.contains_points(P, radius=0.3)
         if inside.any():
-            z = zf(P); top = np.where(inside, np.minimum(top, z), top); hit = True
+            z = zf(P); top = np.where(inside, z, top); hit = True          # attached wall runs up to the roof underside (the reference faces only know the unattached height)
     if not hit: return None
     top = np.maximum(top, org[2] + 0.05)
     pts = [org, org + x0 * d[0]] + [np.array([*(mid[:2] + u * x0[:2] - n[:2] * d[1] / 2), z]) for u, z in zip(us[::-1], top[::-1])]
