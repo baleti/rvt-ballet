@@ -36,6 +36,10 @@ def make_app(models):
         mid, d = mdir(req); return web.FileResponse(os.path.join(d, 'model.glb'))
     async def preview(req):
         mid, d = mdir(req); return web.FileResponse(os.path.join(d, 'preview.glb'))
+    async def compare(req):
+        mid, d = mdir(req); fn = os.path.join(d, 'compare.json')
+        if not os.path.exists(fn): raise web.HTTPNotFound()
+        return web.FileResponse(fn)
     async def progress(req):
         mid, d = mdir(req); fn = os.path.join(d, 'progress.json')
         try: return web.json_response(json.load(open(fn)))
@@ -45,7 +49,9 @@ def make_app(models):
         row = db.execute('select * from el where i=?', (i,)).fetchone()
         if not row: raise web.HTTPNotFound()
         prm = [(r['k'], r['v']) for r in db.execute('select k,v from prm where i=? order by k', (i,))]
-        return web.json_response({'el': dict(row), 'params': prm})
+        tp = []
+        if row['type_i'] is not None and row['type_i'] != i: tp = [(r['k'], r['v']) for r in db.execute('select k,v from prm where i=? order by k', (row['type_i'],))]
+        return web.json_response({'el': dict(row), 'params': prm, 'typeParams': tp})
     async def search(req):
         """parameter-value / name search: ?q=text[&limit=500]; returns element indices with the matching parameter"""
         mid, d = mdir(req); q = req.query.get('q', '').strip(); lim = int(req.query.get('limit', 2000)); db = models.db(mid)
@@ -97,6 +103,7 @@ def make_app(models):
     app.router.add_get('/m/{mid}/model.glb', glb)
     app.router.add_get('/m/{mid}/preview.glb', preview)
     app.router.add_get('/api/m/{mid}/progress', progress)
+    app.router.add_get('/m/{mid}/compare.json', compare)
     app.router.add_get('/api/m/{mid}/el/{i}', element)
     app.router.add_get('/api/m/{mid}/search', search)
     app.router.add_static('/', WEB, follow_symlinks=False)

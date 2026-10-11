@@ -876,10 +876,10 @@ def convert(path, outdir, log=print, workers=None):
     dbp = os.path.join(outdir, 'model.sqlite')
     if os.path.exists(dbp): os.remove(dbp)
     db = sqlite3.connect(dbp)
-    db.executescript('create table el(i integer primary key, id integer, cls text, cat text, name text, type text, family text, level text, uid text, ifc text, fid text, bb text, iou real);'
+    db.executescript('create table el(i integer primary key, id integer, cls text, cat text, name text, type text, family text, level text, uid text, ifc text, fid text, bb text, iou real, type_i integer);'
                      'create table prm(i integer, k text, v text);')
-    db.executemany('insert into el values(?,?,?,?,?,?,?,?,?,?,?,?,?)', [(el['i'], el['id'], el['cls'], el['cat'], el['name'], el['type'], el['family'], el.get('level'), el['uid'], el['ifc'], 'none',
-                    '[[%r,%r,%r],[%r,%r,%r]]' % (*el['bb'][0].tolist(), *el['bb'][1].tolist()) if el['bb'] else None, None) for el in els])
+    db.executemany('insert into el values(?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [(el['i'], el['id'], el['cls'], el['cat'], el['name'], el['type'], el['family'], el.get('level'), el['uid'], el['ifc'], 'none',
+                    '[[%r,%r,%r],[%r,%r,%r]]' % (*el['bb'][0].tolist(), *el['bb'][1].tolist()) if el['bb'] else None, None, idx_of.get(el['typeId'])) for el in els])
     rows = []; sg = 1 << (8 * ctx.W - 1)
     for el in els:
         for k, v in ctx.par.get(el['id'], {}).get('params', {}).items():

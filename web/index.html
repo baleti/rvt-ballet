@@ -19,6 +19,7 @@
   <button id="bShowAll" title="Show everything">Show all</button>
   <button id="bLink" title="Copy a link to this exact view">Link</button>
   <button id="bHelp" title="Controls">?</button>
+  <button id="bCmp" title="Compare geometry with Revit oracle files (gt_geom)">Compare</button>
   <button id="bFid" title="Colour by geometry fidelity">Fidelity colours</button>
 </header>
 <main>
@@ -38,6 +39,7 @@
     <div id="viewbar" hidden></div>
     <div id="progress" hidden></div>
     <div id="picker" hidden></div>
+    <div id="cmpPanel" hidden></div>
     <div id="status">loading...</div>
     <div id="legend" hidden></div>
     <div id="help" hidden><b>Controls</b> <span class="dim">(? toggles)</span><br>left-drag orbit &middot; right-drag / shift-drag pan &middot; wheel zoom<br>click select (Ctrl/Shift adds) &middot; double-click zoom to element<br>F fit &middot; H hide &middot; I isolate &middot; M measure &middot; Esc clear<br>tree: checkbox = category visibility, dot = element visibility<br>measure: M, click two points (snaps to vertices/edges, Alt = free) &middot; section: plane or box<br>views tab: click a plan/section/3D view to open it &middot; Link button copies camera+selection+filters<br>level 'only' / category &#9678; isolate &middot; phases: click to isolate &middot; O model picker<br>fidelity tags: solid / matched / param / approx / bbox / line (see Coverage tab)</div>

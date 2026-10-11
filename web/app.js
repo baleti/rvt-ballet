@@ -42,7 +42,7 @@ vec4 fidCol(float f){ if(f<.5) return vec4(.18,.62,.36,1.); if(f<1.5) return vec
 float eI = floor(vE+.5); vec4 stt = texelFetch(tState, ivec2(int(mod(eI,${TW}.)), int(eI/${TW}.)), 0);
 float fl = floor(stt.r*255.+.5); if(mod(fl,2.)>.5) discard;`)
       .replace('#include <color_fragment>', `#include <color_fragment>
-if(uMode>.5) diffuseColor.rgb = fidCol(floor(stt.g*255.+.5)).rgb;
+if(uMode>1.5){ float dv=floor(stt.b*255.+.5); diffuseColor.rgb = dv<.5?vec3(.55):dv<1.5?vec3(.18,.7,.3):dv<2.5?vec3(.9,.8,.2):dv<3.5?vec3(.95,.55,.15):vec3(.9,.2,.2); } else if(uMode>.5) diffuseColor.rgb = fidCol(floor(stt.g*255.+.5)).rgb;
 if(mod(floor(fl/8.),2.)>.5){ if(mod(floor(gl_FragCoord.x)+2.*floor(gl_FragCoord.y),5.)>.5) discard; diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.6), .5); }
 if(mod(floor(fl/2.),2.)>.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.,.69,.1), .75);
 else if(mod(floor(fl/4.),2.)>.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.3,.7,1.), .5);`);
@@ -105,7 +105,7 @@ function refreshState() {
     if (S.hidden[i] || (cat && S.catHidden.has(cat)) || (S.lvlHidden.size && S.lvlHidden.has(el[5] || '')) ) f |= 1;
     else if (S.isolate && !S.isolate.has(i)) f |= S.isoGhost ? 8 : 1;
     if (S.sel.has(i)) f |= 2; else if (i === S.hoverI) f |= 4;
-    stateData[i * 4] = f; stateData[i * 4 + 1] = FID.indexOf(el[6]);
+    stateData[i * 4] = f; stateData[i * 4 + 1] = FID.indexOf(el[6]); stateData[i * 4 + 2] = S.devCode ? S.devCode[i] : 0;
   }
   stateTex.needsUpdate = true; dirty = true;
 }
@@ -271,6 +271,7 @@ async function showInspector() {
   el.innerHTML = `<h2>${esc(e.name || e.type || e.cls + ' ' + e.id)}</h2><div class="dim">${esc(e.cat || '')}${e.family ? ' | ' + esc(e.family) : ''}${e.type ? ' : ' + esc(e.type) : ''}</div>
   <div style="margin:6px 0"><span class="fid f-${e.fid}">${e.fid}</span> <span class="dim">${esc(fidLabel)}</span></div>
   <table class="kv">${rows}</table>
+  ${(info.typeParams || []).length ? `<h3>Type parameters / profile dimensions (${info.typeParams.length})</h3><table class="kv">${info.typeParams.filter(p => !/^(UniqueId|IfcGUID|Family|Type Id|Type|Family and Type)$/.test(p[0])).map(p => `<tr><td>${esc(p[0])}</td><td class="mono">${fmtVal(p[0], p[1])}</td></tr>`).join('')}</table>` : ''}
   <h3>Parameters (${info.params.length})</h3><input id="pf" type="search" placeholder="filter parameters" style="width:100%;margin-bottom:5px">
   <table class="kv" id="ptab">${info.params.map(p => `<tr data-k="${esc((p[0] + ' ' + p[1]).toLowerCase())}"><td>${esc(p[0])}</td><td class="mono">${fmtVal(p[0], p[1])}</td></tr>`).join('')}</table>
   <div class="dim" style="margin-top:6px;font-size:11px">Doubles are Revit internal units (feet, radians) as stored in the file.</div>`;
@@ -687,3 +688,21 @@ addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
   if (e.key === '?') $('#help').hidden = !$('#help').hidden; else if (e.key === 'Escape') $('#help').hidden = true;
 });
+
+// ------------------------------------------------------------------ compare with Revit oracle (tools/compare_gt.py -> compare.json): colour by deviation, per-class table
+$('#bCmp').onclick = async () => {
+  if (S.cmpOn) { S.cmpOn = false; S.devCode = null; U.uMode.value = S.fidMode; $('#bCmp').classList.remove('on'); $('#cmpPanel').hidden = true; refreshState(); return; }
+  const r = await fetch(`/m/${S.mid}/compare.json`);
+  if (!r.ok) { $('#status').textContent = 'no compare.json for this model: run tools/compare_gt.py MODELDIR GTDIR (oracle files in rvt-research/gt_geom)'; return; }
+  const c = await r.json(); S.cmpOn = true; S.devCode = new Uint8Array(S.N); const E = S.meta.elements; const byCls = {};
+  for (const [i, v] of Object.entries(c.elements)) {
+    const iou = v.iou, vr = v.vratio, hd = v.hausdorff_ft; let code = iou >= 0.97 && (vr == null || Math.abs(vr - 1) < 0.05) && (hd == null || hd < 0.1) ? 1 : iou >= 0.85 ? 2 : iou >= 0.6 ? 3 : 4;
+    S.devCode[+i] = code; const k = E[+i][1]; (byCls[k] ||= []).push(v);
+  }
+  U.uMode.value = 2; $('#bCmp').classList.add('on'); refreshState();
+  const med = a => { a = a.filter(x => x != null).sort((x, y) => x - y); return a.length ? a[a.length >> 1] : null; };
+  const f = x => x == null ? '' : x.toFixed(2);
+  const p = $('#cmpPanel'); p.hidden = false;
+  p.innerHTML = `<b>Compare with Revit</b> <span class="dim">${c.n} elements; green = within 5% / IoU>=0.97, yellow >=0.85, orange >=0.6, red worse, grey no oracle</span><table class="cov"><tr><th>class</th><th>n</th><th>median IoU</th><th>median vol ratio</th><th>median hausdorff ft</th></tr>` +
+    Object.entries(byCls).sort((a, b) => b[1].length - a[1].length).map(([k, a]) => `<tr><td>${esc(k)}</td><td>${a.length}</td><td>${f(med(a.map(v => v.iou)))}</td><td>${f(med(a.map(v => v.vratio)))}</td><td>${f(med(a.map(v => v.hausdorff_ft)))}</td></tr>`).join('') + '</table>';
+};
