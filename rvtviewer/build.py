@@ -33,6 +33,12 @@ class Ctx:
             if e not in self.recs: self.recs[e] = r
         self.eh = raw['eh']; self.par = raw['params']
         self.cat = reader.category_names()
+        self.hosted = collections.defaultdict(list)      # host element id -> hosted door/window instance ids (openings)
+        for e, r in self.recs.items():
+            if r['class'] == 'FamilyInstance' and r['fields'].get('m_hostId') is not None:
+                h = self.eid_int(r['fields']['m_hostId'])
+                if h is not None and self.catname(e) in ('Doors', 'Windows'): self.hosted[h].append(e)
+        self.roof_fields = {}      # roof id -> (footprint Path, bottom-surface height function (xy Nx2 -> z)), filled by roof_geom
         self.levels = {}      # id -> (name, elev ft)
         for e, r in self.recs.items():
             if r['class'] == 'Level':
@@ -152,7 +158,80 @@ def wall_geom(ctx, e, r):
                 ext[0] = np.minimum(ext[0], c); ext[1] = np.maximum(ext[1], c)
     if np.any(ext[1] - ext[0] < 1e-6): return None
     d = ext[1] - ext[0]
-    return geom.obox(o0 + x0 * ext[0][0] + n * ext[0][1] + y0 * ext[0][2], x0 * d[0], n * d[1], y0 * d[2]), 'param'
+    org = o0 + x0 * ext[0][0] + n * ext[0][1] + y0 * ext[0][2]
+    holes = wall_openings(ctx, e, org, x0, n, y0, d)
+    prof = wall_top_profile(ctx, e, r, org, x0, n, y0, d)
+    if prof is not None:
+        try:
+            from . import occ
+            w = occ.extrude_polygon(prof, n * d[1])
+            for ho in holes: w = occ.cut(w, ho)
+            m = occ.to_mesh(w)
+            if m: return m, 'param'
+        except Exception as ex:
+            if os.environ.get('RVT_DEBUG'): print('profile wall failed', e, repr(ex))
+    if holes:
+        try:
+            from . import occ
+            w = occ.box_frame(org, x0 * d[0], n * d[1], y0 * d[2])
+            for ho in holes: w = occ.cut(w, ho)
+            m = occ.to_mesh(w)
+            if m: return m, 'param'
+        except Exception as ex:
+            if os.environ.get('RVT_DEBUG'): print('opening cut failed', e, repr(ex))
+    return geom.obox(org, x0 * d[0], n * d[1], y0 * d[2]), 'param'
+
+def ensure_roofs(ctx):
+    if getattr(ctx, '_roofs_done', False): return
+    ctx._roofs_done = True
+    for e, r in ctx.recs.items():
+        if r['class'] in ('ProfileRoof', 'FootPrintRoof'):
+            try: roof_geom(ctx, e, r)
+            except Exception: pass
+
+def wall_top_profile(ctx, e, r, org, x0, n, y0, d):
+    """wall whose top is attached to a roof: polygon in the wall plane (3D points) whose top edge follows the roof's bottom surface along the wall's mid-plane"""
+    if abs(y0[2]) < 0.999: return None
+    gs = g(r['fields'], 'm_geomSteps') or {}
+    roofs = []
+    for lst in ('m_bRepFormGList', 'm_bRepAdjustGList', 'm_bRepTweakGList'):
+        for st in gs.get(lst) or []:
+            o = st.get('obj') if isinstance(st, dict) else None
+            if o and 'm_ids' in o and 'm_baseOrTop' in o and int(o['m_baseOrTop']) == 1: roofs += [int(i) for i in o['m_ids']]     # JoinToRoofGStep: top joined to these roofs
+    if not roofs: return None
+    ensure_roofs(ctx)
+    fields = [ctx.roof_fields[i] for i in roofs if i in ctx.roof_fields]
+    if not fields: return None
+    us = np.unique(np.concatenate([np.arange(0, d[0], 0.25), [d[0]]]))
+    mid = org + n * d[1] / 2
+    P = (mid[None, :2] + us[:, None] * x0[None, :2])
+    top = np.full(len(us), org[2] + d[2]); hit = False
+    for poly, zf in fields:
+        inside = poly.contains_points(P, radius=0.3)
+        if inside.any():
+            z = zf(P); top = np.where(inside, np.minimum(top, z), top); hit = True
+    if not hit: return None
+    top = np.maximum(top, org[2] + 0.05)
+    pts = [org, org + x0 * d[0]] + [np.array([*(mid[:2] + u * x0[:2] - n[:2] * d[1] / 2), z]) for u, z in zip(us[::-1], top[::-1])]
+    pts = [np.asarray(q, float) for q in pts]
+    return pts
+
+def wall_openings(ctx, e, org, x0, n, y0, d):
+    """cutter boxes for the doors/windows hosted by wall e: the instance's stored bounding box projected into the wall frame (full wall thickness)"""
+    from . import occ
+    out = []
+    for h in ctx.hosted.get(e, []):
+        bb = ctx.bbox(h)
+        if bb is None: continue
+        c = np.array([[bb[i][0] if k & 1 else bb[1 - i][0], 0, 0] for i in range(1) for k in range(1)])      # placeholder to keep numpy import used
+        corners = np.array([[x, y, z] for x in (bb[0][0], bb[1][0]) for y in (bb[0][1], bb[1][1]) for z in (bb[0][2], bb[1][2])])
+        loc = np.c_[(corners - org) @ x0, (corners - org) @ n, (corners - org) @ y0]
+        lo = np.maximum(loc.min(0), 0.0); hi = np.minimum(loc.max(0), d)
+        # the instance box is axis aligned in world space; for a wall at an angle it over-covers along the wall: shrink to the box the instance really occupies
+        if hi[0] - lo[0] < 0.2 or hi[2] - lo[2] < 0.2: continue
+        pad = 0.2
+        out.append(occ.box_frame(org + x0 * lo[0] + y0 * lo[2] - n * pad, x0 * (hi[0] - lo[0]), n * (d[1] + 2 * pad), y0 * (hi[2] - lo[2])))
+    return out
 
 def sketch_loops(ctx, e):
     """boundary loops (3D points, feet) of the sketch that belongs to element e: the VarSketch/Sketch listed in the element's header parents
@@ -251,9 +330,9 @@ def roof_geom(ctx, e, r):
     sloped = [c for c in curves if c[2] and abs(c[1]) > 1e-6 and len(c[0]) >= 2]
     if not sloped:
         m = geom.prism([outer] + holes, bb[0][2], bb[1][2]); return (m, 'approx') if m else None
-    return roof_surface(outer, holes, sloped, bb)
+    return roof_surface(outer, holes, sloped, bb, store=(ctx.roof_fields, e))
 
-def roof_surface(outer, holes, sloped, bb):
+def roof_surface(outer, holes, sloped, bb, store=None):
     """roof slab over a footprint: bottom height z(p) = min over slope edges whose perpendicular strip contains p of (z_edge + tan(angle) * distance to the edge line);
     the minimum is the hip/gable surface Revit builds for equal-slope footprint roofs (for a convex footprint it is the exact straight-skeleton height).
     Thickness = bbox top minus the highest point of the bottom surface."""
@@ -297,7 +376,8 @@ def roof_surface(outer, holes, sloped, bb):
         for i in range(k):
             a_, b_ = idx[i], idx[(i + 1) % k]
             m.f = np.vstack([m.f, [[a_, b_, b_ + n], [a_, b_ + n, a_ + n]]])
-    m.v[:, 2] += bb[0][2] - m.v[:, 2].min()          # sketch plane height is only a reference; absolute height comes from the stored bbox
+    shift = float(bb[0][2] - m.v[:, 2].min()); m.v[:, 2] += shift          # sketch plane height is only a reference; absolute height comes from the stored bbox
+    if store is not None: store[0][store[1]] = (poly, (lambda P, _z=zfun, _s=shift: _z(P) + _s))
     return (m, 'param')
 
 class LineSet:

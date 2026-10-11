@@ -80,3 +80,9 @@ def to_mesh(shape, defl=0.05):
             off += n
         ex.Next()
     return Mesh(np.array(V), np.array(F, np.int32)) if F else Mesh()
+
+
+def extrude_polygon(pts3d, vec):
+    """planar closed polygon (3D points) swept along vec -> solid"""
+    f = BRepBuilderAPI_MakeFace(_wire(pts3d)).Face()
+    return BRepPrimAPI_MakePrism(f, gp_Vec(*[float(x) for x in vec])).Shape()
