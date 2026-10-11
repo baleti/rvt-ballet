@@ -485,7 +485,8 @@ function frame() {
 requestAnimationFrame(frame);
 
 (async () => {
-  const models = await (await fetch('/api/models')).json();
+  let models = [];
+  for (let k = 0; k < 8; k++) { try { models = await (await fetch('/api/models')).json(); break; } catch (e) { await new Promise(r => setTimeout(r, 400)); } }
   const sel = $('#modelSel'); sel.innerHTML = models.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
   sel.onchange = () => loadModel(sel.value);
   const want = location.hash.slice(1); if (models.some(m => m.id === want)) sel.value = want;

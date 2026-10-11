@@ -6,6 +6,8 @@ class Browser:
     def __init__(self, port=9333, size=(1500, 950), gl='swiftshader'):
         self.port = port; self.size = size; self.gl = gl; self.id = 0
     async def start(self):
+        import socket
+        sk = socket.socket(); sk.bind(('127.0.0.1', 0)); self.port = sk.getsockname()[1]; sk.close()
         self.prof = tempfile.mkdtemp(prefix='rvtv-cdp-')
         args = ['chromium', '--headless=new', '--remote-debugging-port=%d' % self.port, '--user-data-dir=' + self.prof, '--no-first-run', '--window-size=%d,%d' % self.size,
                 '--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--ignore-gpu-blocklist', '--hide-scrollbars', 'about:blank'] if self.gl == 'swiftshader' else \
