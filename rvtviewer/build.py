@@ -196,7 +196,27 @@ def wall_frame(ctx, e, r):
                 q = o + x * u + y * v; c = np.array([np.dot(q - o0, x0), np.dot(q - o0, n), np.dot(q - o0, y0)])
                 ext[0] = np.minimum(ext[0], c); ext[1] = np.maximum(ext[1], c)
     if np.any(ext[1] - ext[0] < 1e-6): return None
+    ext = full_thickness(ctx, e, r, pls, o0, n, ext)
     return o0, x0, n, y0, ext
+
+def full_thickness(ctx, e, r, pls, o0, n, ext):
+    """the reference faces can omit outer finish layers: extend the across-extent to the type's full compound-structure width, placing the layer boundaries so that as many reference-face offsets as possible coincide with boundaries"""
+    lay = type_layers(ctx, type_of(ctx, e, r)); W = sum(L[0] for L in lay)
+    lo, hi = float(ext[0][1]), float(ext[1][1])
+    if W <= hi - lo + 1e-4 or len(lay) < 2: return ext
+    R = sorted({round(float(np.dot(p[0] - o0, n)), 5) for p in pls}); cum = [0.0]
+    for L in lay: cum.append(cum[-1] + L[0])
+    best = None
+    for rev in (False, True):
+        B = [W - c for c in cum][::-1] if rev else cum
+        for ri in R:
+            for b in B:
+                st = ri - b; score = sum(1 for rj in R if any(abs(rj - (st + bb)) < 2e-3 for bb in B))
+                contains = st <= lo + 2e-3 and st + W >= hi - 2e-3
+                key = (contains, score, -abs(st - lo))
+                if best is None or key > best[0]: best = (key, st)
+    if best is None or not best[0][0]: return ext
+    out = ext.copy(); out[0][1] = best[1]; out[1][1] = best[1] + W; return out
 
 def wall_end_joins(ctx, e, r, fr):
     """corner joins at the two wall ends: [None | (cut plane point Q, keep-side normal, extension length)] for end 0 and end 1. Revit trims a joined wall end at the miter line
