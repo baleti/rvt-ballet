@@ -49,12 +49,13 @@ class Browser:
     async def click(self, x, y, button='left', mods=0, count=1):
         for t in ('mouseMoved', 'mousePressed', 'mouseReleased'):
             await self.call('Input.dispatchMouseEvent', type=t, x=x, y=y, button=button if t != 'mouseMoved' else 'none', clickCount=count, modifiers=mods)
-    async def drag(self, x0, y0, x1, y1, button='left', steps=8):
+    async def drag(self, x0, y0, x1, y1, button='left', steps=8, mods=0):
+        mask = {'left': 1, 'right': 2, 'middle': 4}[button]
         await self.call('Input.dispatchMouseEvent', type='mouseMoved', x=x0, y=y0)
-        await self.call('Input.dispatchMouseEvent', type='mousePressed', x=x0, y=y0, button=button, clickCount=1, buttons=1 if button == 'left' else 2)
+        await self.call('Input.dispatchMouseEvent', type='mousePressed', x=x0, y=y0, button=button, clickCount=1, buttons=mask, modifiers=mods)
         for k in range(1, steps + 1):
-            await self.call('Input.dispatchMouseEvent', type='mouseMoved', x=x0 + (x1 - x0) * k / steps, y=y0 + (y1 - y0) * k / steps, button=button, buttons=1 if button == 'left' else 2)
-        await self.call('Input.dispatchMouseEvent', type='mouseReleased', x=x1, y=y1, button=button, clickCount=1)
+            await self.call('Input.dispatchMouseEvent', type='mouseMoved', x=x0 + (x1 - x0) * k / steps, y=y0 + (y1 - y0) * k / steps, button=button, buttons=mask, modifiers=mods)
+        await self.call('Input.dispatchMouseEvent', type='mouseReleased', x=x1, y=y1, button=button, clickCount=1, modifiers=mods)
     async def wheel(self, x, y, dy):
         await self.call('Input.dispatchMouseEvent', type='mouseWheel', x=x, y=y, deltaX=0, deltaY=dy)
     async def key(self, k):

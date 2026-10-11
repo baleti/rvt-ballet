@@ -21,6 +21,13 @@ scene.background = new THREE.Color(isDark ? 0x1a1e25 : 0xdfe4ea);
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
 camera.position.set(30, 25, 30);
 const controls = new OrbitControls(camera, canvas);
+function setNav(mode) {
+  const M = THREE.MOUSE;
+  if (mode === 'revit') { controls.mouseButtons = {LEFT: -1, MIDDLE: M.PAN, RIGHT: M.ROTATE}; controls.zoomToCursor = true; }      // Revit: middle-drag pan, Shift+middle-drag orbit, wheel zooms at the cursor
+  else { controls.mouseButtons = {LEFT: M.ROTATE, MIDDLE: M.DOLLY, RIGHT: M.PAN}; controls.zoomToCursor = false; }
+  try { localStorage.setItem('rvtNav', mode); } catch (e) {}
+  const sel = document.getElementById('navSel'); if (sel) sel.value = mode;
+}
 controls.enableDamping = true; controls.dampingFactor = 0.12; controls.screenSpacePanning = true;
 scene.add(new THREE.HemisphereLight(0xffffff, 0x556070, 1.1));
 const sun = new THREE.DirectionalLight(0xffffff, 1.6); scene.add(sun, sun.target);
@@ -706,3 +713,6 @@ $('#bCmp').onclick = async () => {
   p.innerHTML = `<b>Compare with Revit</b> <span class="dim">${c.n} elements; green = within 5% / IoU>=0.97, yellow >=0.85, orange >=0.6, red worse, grey no oracle</span><table class="cov"><tr><th>class</th><th>n</th><th>median IoU</th><th>median vol ratio</th><th>median hausdorff ft</th></tr>` +
     Object.entries(byCls).sort((a, b) => b[1].length - a[1].length).map(([k, a]) => `<tr><td>${esc(k)}</td><td>${a.length}</td><td>${f(med(a.map(v => v.iou)))}</td><td>${f(med(a.map(v => v.vratio)))}</td><td>${f(med(a.map(v => v.hausdorff_ft)))}</td></tr>`).join('') + '</table>';
 };
+
+{ let m = 'revit'; try { m = localStorage.getItem('rvtNav') || 'revit'; } catch (e) {} setNav(m);
+  $('#navSel').onchange = e => setNav(e.target.value); window.setNav = setNav; }
