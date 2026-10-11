@@ -34,7 +34,7 @@ ROOF_ATTACH_FRACTION = 1.0      # measured against Revit wall volumes: wall tops
 
 class Ctx:
     def __init__(self, raw):
-        self.raw = raw; self.W = raw['W']
+        self.raw = raw; self.W = raw['W']; self.names = raw['classes']
         self.recs = {}; self.cls_of = {}
         for (e, c), r in raw['recs'].items():
             if e not in self.recs: self.recs[e] = r
@@ -109,6 +109,8 @@ def dominant_rgb(layers):
     best = max(layers, key=lambda L: (L[2] is not None, L[0]))     # widest layer that has a material
     return best[2]
 
+CLASS_CAT = {'ArcWall': 'Walls', 'SWall': 'Walls', 'Floor': 'Floors', 'Ceiling': 'Ceilings', 'ProfileRoof': 'Roofs', 'FootPrintRoof': 'Roofs', 'RbsDuctCurve': 'Ducts', 'RbsPipeCurve': 'Pipes'}      # elements the file stores without an ElementHeader (no category / bbox)
+
 def sym_name(ctx, r):
     n = g(r['fields'], 'm_symbolInfo', 'm_name')
     return n if isinstance(n, str) and n else None
@@ -136,7 +138,7 @@ def build_table(ctx):
         is_type = ('Type Name' in p or 'm_symbolInfo' in r['fields']) and tid is None and ctx.eid_int(p.get('Type Id')) in (None, e)
         fam = family_name(ctx, tid if tid is not None else (e if is_type else None))
         if is_type and tname is None: tname = name
-        els.append({'id': e, 'cls': r['class'], 'cat': ctx.catname(e), 'name': name if isinstance(name, str) else None, 'type': tname if isinstance(tname, str) else None, 'family': fam,
+        els.append({'id': e, 'cls': r['class'], 'cat': ctx.catname(e) or CLASS_CAT.get(r['class']), 'name': name if isinstance(name, str) else None, 'type': tname if isinstance(tname, str) else None, 'family': fam,
                     'typeId': tid, 'isType': bool(is_type), 'uid': p.get('UniqueId'), 'ifc': p.get('IfcGUID'), 'fid': 'none', 'bb': ctx.bbox(e)})
     return els
 
@@ -256,7 +258,8 @@ def wall_solid(ctx, e, r):
             org = o0 + x0 * u0 + n * ext[0][1] + y0 * ext[0][2]; d = np.array([u1 - u0, d[1], d[2]])
     joins = [j if j and 'miter' in j else None for j in joins]
     holes = wall_openings(ctx, e, org, x0, n, y0, d)
-    prof = wall_top_profile(ctx, e, r, org, x0, n, y0, d)
+    prof = wall_edit_profile(ctx, e, r, o0, x0, n, y0, ext, d)           # wall with an edited elevation profile (sketch loop)
+    if prof is None: prof = wall_top_profile(ctx, e, r, org, x0, n, y0, d)
     if prof is not None: joins = [None, None]
     tid = type_of(ctx, e, r); layers = type_layers(ctx, tid)
     flipped = bool(r['fields'].get('m_isFlipped'))
@@ -297,6 +300,29 @@ def wall_solid(ctx, e, r):
             if os.environ.get('RVT_DEBUG'): print('wall mesh failed', e, repr(ex))
     m = geom.obox(org, x0 * d[0], n * d[1], y0 * d[2])
     return (geom.Multi([(m, col)]) if col else m), 'param'
+
+def wall_edit_profile(ctx, e, r, o0, x0, n, y0, ext, d):
+    """Edit Profile walls: the elevation outline is a sketch of lines/arcs in the wall plane (VarSketch owned via the header parents / created just before the wall; step ExtrusionGStep). -> closed polygon (3D points on the wall's lower face plane) or None"""
+    gs = g(r['fields'], 'm_geomSteps') or {}
+    names = ctx.names if hasattr(ctx, 'names') else None
+    has = False
+    for lst in ('m_bRepFormGList', 'm_bRepAdjustGList'):
+        for st in gs.get(lst) or []:
+            if isinstance(st, dict) and names and names[st['ptr'] - 12] == 'ExtrusionGStep': has = True
+    if not has: return None
+    loops = sketch_loops(ctx, e)
+    if not loops:                                   # walls without an ElementHeader: the profile sketch is created next to the wall (nearest VarSketch id whose curves lie in the wall plane)
+        for sid in sorted((i for i, rr in ctx.recs.items() if rr['class'] == 'VarSketch' and e - 3 <= i <= e + 12), key=lambda i: abs(i - e)):
+            segs = [curve_pts(g(ctx.recs[int(it['m_elementId'])]['fields'], 'm_pCurveDriver', 'm_pCrv')) for it in (g(ctx.recs[sid]['fields'], 'm_elemIdsPairSet', 'm_data') or []) if int(it['m_elementId']) in ctx.recs]
+            segs = [q for q in segs if q is not None]
+            if segs and all(abs(float(np.dot(q - o0, n)) - ext[0][1]) < max(ext[1][1] - ext[0][1], 0.1) + 0.5 for q in np.vstack(segs)): loops = geom.chain_loops(segs); break
+    if not loops: return None
+    L = [l for l in loops if len(l) >= 3]
+    if not L: return None
+    big = max(L, key=lambda l: abs(0.5 * np.sum(np.cross(l - l.mean(0), np.roll(l - l.mean(0), -1, axis=0)), axis=0)[:3] @ n) if False else float(np.linalg.norm(l.max(0) - l.min(0))))
+    # keep points in the wall plane: project onto the lower face plane (across-coordinate = ext[0][1])
+    pts = [p + n * (ext[0][1] - float(np.dot(p - o0, n))) for p in big]
+    return [np.asarray(q, float) for q in pts]
 
 def ensure_roofs(ctx):
     if getattr(ctx, '_roofs_done', False): return
@@ -613,7 +639,7 @@ def instance_box(ctx, e, r):
     return m, 'bbox'
 
 LINE_CLASSES = {'CurveElem'}
-BUILDERS = {'ProfileRoof': roof_geom, 'FootPrintRoof': roof_geom, 'SWall': wall_geom, 'Floor': slab_geom, 'Ceiling': slab_geom, 'RoofSoffit': slab_geom, 'BuildingPad': slab_geom, 'RbsDuctCurve': mep_geom, 'RbsPipeCurve': mep_geom, 'RbsConduitCurve': mep_geom, 'CableTray': mep_geom,
+BUILDERS = {'ArcWall': wall_geom, 'ProfileRoof': roof_geom, 'FootPrintRoof': roof_geom, 'SWall': wall_geom, 'Floor': slab_geom, 'Ceiling': slab_geom, 'RoofSoffit': slab_geom, 'BuildingPad': slab_geom, 'RbsDuctCurve': mep_geom, 'RbsPipeCurve': mep_geom, 'RbsConduitCurve': mep_geom, 'CableTray': mep_geom,
             'RbsFlexDuctCurve': mep_geom, 'RbsFlexPipeCurve': mep_geom, 'CurveElem': line_geom, 'FamilyInstance': instance_box}
 HIDE_DEFAULT_CATS = {'Center line', '<Sketch>', 'Work Plane Grid', 'Cameras', 'Scope Boxes', 'Boundary Conditions', 'Area Loads', 'Line Loads', 'Point Loads', 'Division Profiles',
                      'Survey Point', 'Project Base Point', 'Internal Origin', 'Guide Grid', 'Reference Planes', 'Parts', 'Spaces', 'Rooms', 'Areas', 'Mass Floor', 'RVT Links', 'Analytical Nodes', 'Reference Points', 'Grids', 'Levels', 'Sections', 'Viewports'}
@@ -653,7 +679,7 @@ def contained_match(lo, hi, blo, bhi, tol=0.15):
     rd = bhi - blo; od = hi - lo; big = np.argsort(rd)[::-1][:2]
     return bool(np.all(od[big] >= 0.93 * rd[big] - 1e-6))
 
-ANALYTIC_CLASSES = {'SWall', 'Floor', 'Ceiling', 'RoofSoffit', 'BuildingPad', 'ProfileRoof', 'FootPrintRoof', 'RbsDuctCurve', 'RbsPipeCurve', 'RbsConduitCurve', 'CableTray', 'RbsFlexDuctCurve', 'RbsFlexPipeCurve', 'CurveElem'}
+ANALYTIC_CLASSES = {'ArcWall', 'SWall', 'Floor', 'Ceiling', 'RoofSoffit', 'BuildingPad', 'ProfileRoof', 'FootPrintRoof', 'RbsDuctCurve', 'RbsPipeCurve', 'RbsConduitCurve', 'CableTray', 'RbsFlexDuctCurve', 'RbsFlexPipeCurve', 'CurveElem'}
 USE_READER_MESH = True
 
 def reader_brep_extra(ctx, e, GG):
