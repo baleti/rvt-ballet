@@ -224,20 +224,81 @@ def slab_geom(ctx, e, r):
     m = geom.prism([outer] + holes, bot, top)
     return (m, 'param') if m else None
 
+def sketch_curves(ctx, sid):
+    """curves of a sketch element with their stored slope data: [(pts Nx3, angle, defines_slope, offset)]"""
+    sk = ctx.recs.get(sid); out = []
+    if not sk: return out
+    for it in g(sk['fields'], 'm_elemIdsPairSet', 'm_data') or []:
+        ce = ctx.recs.get(int(it['m_elementId']))
+        if not ce: continue
+        pts = curve_pts(g(ce['fields'], 'm_pCurveDriver', 'm_pCrv'))
+        ud = g(ce['fields'], 'm_data', 'm_oUserData') or {}
+        if pts is not None: out.append((pts, float(ud.get('m_angle') or 0.0), bool(ud.get('m_definingCurve') or ud.get('m_definesHeight')), float(ud.get('m_offset') or 0.0)))
+    return out
+
 def roof_geom(ctx, e, r):
+    """footprint roof: footprint prism intersected with one half-space per slope-defining sketch edge (Revit slope = angle stored on the edge, rising inwards from the
+    edge's own height); thickness from the stored bounding box. Booleans via OpenCascade. Without slope edges: flat prism in the bbox height range."""
+    from . import occ
     f = r['fields']; bb = ctx.bbox(e)
     if bb is None: return None
-    segs = []
-    for cl in f.get('m_curveLoops') or []:
-        for c in g(cl, 'm_curves') or []:
-            p = curve_pts(c)
-            if p is not None: segs.append(p)
+    curves = sketch_curves(ctx, ctx.eid_int(f.get('m_sketchId')) or -1)
+    segs = [c[0] for c in curves] or [p for cl in (f.get('m_curveLoops') or []) for c in (g(cl, 'm_curves') or []) for p in [curve_pts(c)] if p is not None]
     loops = [l for l in geom.chain_loops(segs) if len(l) >= 3]
     if not loops: return None
     areas = [abs(0.5 * np.sum(l[:, 0] * np.roll(l[:, 1], -1) - np.roll(l[:, 0], -1) * l[:, 1])) for l in loops]
-    order = np.argsort(areas)[::-1]
-    m = geom.prism([loops[order[0]][:, :2]] + [loops[i][:, :2] for i in order[1:]], bb[0][2], bb[1][2])
-    return (m, 'approx') if m else None
+    order = np.argsort(areas)[::-1]; outer = loops[order[0]][:, :2]; holes = [loops[i][:, :2] for i in order[1:]]
+    sloped = [c for c in curves if c[2] and abs(c[1]) > 1e-6 and len(c[0]) >= 2]
+    if not sloped:
+        m = geom.prism([outer] + holes, bb[0][2], bb[1][2]); return (m, 'approx') if m else None
+    return roof_surface(outer, holes, sloped, bb)
+
+def roof_surface(outer, holes, sloped, bb):
+    """roof slab over a footprint: bottom height z(p) = min over slope edges whose perpendicular strip contains p of (z_edge + tan(angle) * distance to the edge line);
+    the minimum is the hip/gable surface Revit builds for equal-slope footprint roofs (for a convex footprint it is the exact straight-skeleton height).
+    Thickness = bbox top minus the highest point of the bottom surface."""
+    from scipy.spatial import Delaunay
+    from matplotlib.path import Path as _P
+    edges = []; poly = _P(outer)
+    for pts, ang, _, off in sloped:
+        a_ = pts[0][:2]; b_ = pts[-1][:2]; d = b_ - a_; L = np.linalg.norm(d)
+        if L < 1e-6: continue
+        u = d / L; nrm = np.array([-u[1], u[0]]); mid = (a_ + b_) / 2
+        if not poly.contains_point(mid + 0.05 * nrm): nrm = -nrm          # inward = the side of the edge that lies inside the footprint
+        edges.append((a_, nrm, np.tan(ang), float(pts[0][2])))
+    def zfun(P):
+        z = np.full(len(P), np.inf)
+        for a_, nrm, t, z0 in edges:
+            dist = (P - a_) @ nrm                              # signed inward distance to the edge line
+            z = np.minimum(z, np.where(dist >= -0.05, z0 + t * np.maximum(dist, 0.0), np.inf))      # a slope plane only governs the region on its inner side
+        z[~np.isfinite(z)] = min(e[3] for e in edges)
+        return z
+    def dens(l, h=0.5):
+        out = []
+        for a_, b_ in zip(l, np.roll(l, -1, axis=0)):
+            n = max(1, int(np.linalg.norm(b_ - a_) / h)); out += [a_ + (b_ - a_) * k / n for k in range(n)]
+        return np.array(out)
+    ring = dens(outer); hr = [dens(h_) for h_ in holes]
+    lo = outer.min(0); hi = outer.max(0); step = 0.4
+    gx, gy = np.meshgrid(np.arange(lo[0] + step / 2, hi[0], step), np.arange(lo[1] + step / 2, hi[1], step)); G = np.c_[gx.ravel(), gy.ravel()]
+    inside = _P(outer).contains_points(G, radius=-0.05)
+    for h_ in holes: inside &= ~_P(h_).contains_points(G, radius=0.05)
+    pts = np.vstack([ring] + hr + [G[inside]])
+    tri = Delaunay(pts).simplices
+    cen = pts[tri].mean(1); keep = _P(outer).contains_points(cen)
+    for h_ in holes: keep &= ~_P(h_).contains_points(cen)
+    tri = tri[keep]
+    zb = zfun(pts); dz = float((bb[1][2] - bb[0][2]) - (zb.max() - zb.min()))      # thickness = stored bbox height range minus the slope's own rise
+    if not 0.05 <= dz <= 3.0: dz = float(np.clip(dz, 0.05, 3.0))
+    n = len(pts); top = np.c_[pts, zb + dz]; bot = np.c_[pts, zb]
+    m = Mesh(np.vstack([top, bot]), np.vstack([tri, tri[:, ::-1] + n]))
+    for l in [ring] + hr:                                    # boundary side faces
+        k = len(l); idx = [int(np.argmin(np.linalg.norm(pts - q, axis=1))) for q in l]
+        for i in range(k):
+            a_, b_ = idx[i], idx[(i + 1) % k]
+            m.f = np.vstack([m.f, [[a_, b_, b_ + n], [a_, b_ + n, a_ + n]]])
+    m.v[:, 2] += bb[0][2] - m.v[:, 2].min()          # sketch plane height is only a reference; absolute height comes from the stored bbox
+    return (m, 'param')
 
 class LineSet:
     """polylines as GL line segments"""
