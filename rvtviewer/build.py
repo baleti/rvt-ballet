@@ -290,12 +290,13 @@ def brep_geom(ctx, e, r):
     if not m: return None
     bb = ctx.bbox(e)
     if bb is not None and box_iou(m.v.min(0), m.v.max(0), *bb) < 0.5: return None
-    return m, ('solid' if nsk == 0 else 'param')
+    return m, ('solid' if nsk == 0 else 'partial')
 
 def element_mesh(ctx, e, r):
     try:
         res = brep_geom(ctx, e, r)
-        if res and res[0]: return res
+        if res and res[0] and res[1] == 'solid': return res
+        part = res if res and res[0] else None
     except Exception as ex:
         if os.environ.get('RVT_DEBUG'): print('brep', r['class'], e, repr(ex))
     fn = BUILDERS.get(r['class'])
@@ -305,6 +306,7 @@ def element_mesh(ctx, e, r):
             if res and res[0]: return res
         except Exception as ex:
             if os.environ.get('RVT_DEBUG'): print('builder', r['class'], e, repr(ex))
+    if part: return part[0], 'approx'          # some faces of the decoded body are of an unsupported surface type
     bb = ctx.bbox(e)
     if bb is not None: return geom.box(*bb), 'bbox'
     return None

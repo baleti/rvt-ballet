@@ -19,8 +19,10 @@ def face_polygons(geo):
     for fs in faces:
         fo = _unwrap(fs); fh = fs.get('handle')
         surf = _unwrap(fo.get('m_pSurf')) if fo.get('m_pSurf') else None
-        if not surf or 'm_xVec' not in surf or 'm_origin' not in surf or 'm_yVec' not in surf: skipped += 1; continue
-        pl = (np.array(surf['m_origin'], float), np.array(surf['m_xVec'], float), np.array(surf['m_yVec'], float))
+        if surf and 'm_radius' in surf and 'm_zVec' in surf and 'm_center' in surf and 'm_xVec' in surf:
+            pl = ('cyl', np.array(surf['m_center'], float), np.array(surf['m_xVec'], float), np.array(surf['m_yVec'], float), np.array(surf['m_zVec'], float), float(surf['m_radius']))
+        elif not surf or 'm_xVec' not in surf or 'm_origin' not in surf or 'm_yVec' not in surf: skipped += 1; continue
+        else: pl = (np.array(surf['m_origin'], float), np.array(surf['m_xVec'], float), np.array(surf['m_yVec'], float))
         loops = []; loop_s = fo.get('m_pFirstLoop'); guard = 0
         while loop_s and guard < 64:
             guard += 1
@@ -66,14 +68,18 @@ def geometry_mesh(geo):
     """Mesh (feet) from all planar faces; returns (mesh, n_planar, n_skipped)"""
     polys, skipped = face_polygons(geo)
     m = Mesh(); n = 0
-    for (o, x, y), loops in polys:
+    for pl, loops in polys:
         loops = [l for l in loops if len(l) >= 3]
         if not loops: continue
         areas = [abs(0.5 * np.sum(l[:, 0] * np.roll(l[:, 1], -1) - np.roll(l[:, 0], -1) * l[:, 1])) for l in loops]
         order = np.argsort(areas)[::-1]; ls = [loops[i] for i in order]
         try: pts, idx = geom.polygon_tris(ls)
         except Exception: skipped += 1; continue
-        v = o + pts[:, :1] * x + pts[:, 1:2] * y
+        if isinstance(pl[0], str):
+            _, c, x, y, z, R = pl; u = pts[:, :1]; w = pts[:, 1:2]
+            v = c + R * (np.cos(u) * x + np.sin(u) * y) + w * z
+        else:
+            o, x, y = pl; v = o + pts[:, :1] * x + pts[:, 1:2] * y
         m.add(Mesh(v, idx)); n += 1
     return m, n, skipped
 
