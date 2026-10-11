@@ -27,6 +27,7 @@ from .build_util import g
 
 HOSTED_CUT_CATS = ('Doors', 'Windows', 'Generic Models')
 
+OPENING_SHRINK = 0.2      # ft trimmed from each side of a hosted instance's bbox to get the actual hole (frame/casing)
 ROOF_ATTACH_FRACTION = 1.0      # measured against Revit wall volumes: wall tops joined to a roof reach the roof's top surface (0 = underside)
 
 class Ctx:
@@ -342,6 +343,8 @@ def wall_openings(ctx, e, org, x0, n, y0, d):
         loc = np.c_[(corners - org) @ x0, (corners - org) @ n, (corners - org) @ y0]
         lo = np.maximum(loc.min(0), 0.0); hi = np.minimum(loc.max(0), d)
         # the instance box is axis aligned in world space; for a wall at an angle it over-covers along the wall: shrink to the box the instance really occupies
+        sh = OPENING_SHRINK if ctx.catname(h) in ('Doors', 'Windows') else 0.0       # frames/casing are inside the instance bbox; generic voids are cut as stored
+        lo = lo + np.array([sh, 0, sh]); hi = hi - np.array([sh, 0, sh])
         if hi[0] - lo[0] < 0.2 or hi[2] - lo[2] < 0.2: continue
         pad = 0.2
         out.append(occ.box_frame(org + x0 * lo[0] + y0 * lo[2] - n * pad, x0 * (hi[0] - lo[0]), n * (d[1] + 2 * pad), y0 * (hi[2] - lo[2])))
@@ -799,6 +802,9 @@ def convert(path, outdir, log=print, workers=None):
                 if v in lvl_by_id: lv = v; break
         el['level'] = lvl_by_id.get(lv)
     views, sheets = datums.views_sheets(ctx); rooms = datums.rooms(ctx, lvl_by_id); grids = build_grids(ctx)
+    ph_names, ph_ids = datums.phases(ctx)
+    for el in els:
+        v = ctx.par.get(el['id'], {}).get('params', {}).get('Phase Created'); el['phase'] = ph_ids.get(ctx.eid_int(v), -1) if isinstance(v, int) else -1
     idx_of = {el['id']: el['i'] for el in els}
     for r_ in rooms: r_['i'] = idx_of.get(r_['id'])
     # sqlite first (inspector / search work from the preview on); fidelity + iou are updated at the end
@@ -818,7 +824,7 @@ def convert(path, outdir, log=print, workers=None):
     db.executemany('insert into prm values(?,?,?)', rows); db.execute('create index prm_i on prm(i)'); db.commit()
     T['tables'] = round(time.time() - t, 2)
     base_meta = {'file': os.path.basename(path), 'levels': levels, 'grids': grids, 'rooms': rooms, 'views': views, 'sheets': sheets, 'fidLabels': FID_LABEL,
-                 'defaultHidden': sorted({el['cat'] for el in els if el['cat'] and default_hidden(el['cat'])}), 'stamps': {'reader': reader.reader_stamp(), 'viewer': reader.viewer_stamp()},
+                 'phases': ph_names, 'defaultHidden': sorted({el['cat'] for el in els if el['cat'] and default_hidden(el['cat'])}), 'stamps': {'reader': reader.reader_stamp(), 'viewer': reader.viewer_stamp()},
                  'elements': None}
     # preview: every element that has a stored bounding box as a plain box (vectorised, ~1 s), written before the expensive geometry
     prog.set('preview', 0.0, 'writing box preview')
@@ -829,7 +835,7 @@ def convert(path, outdir, log=print, workers=None):
     pb, pm, pcovg, _, _ = pack_batches(pels, pres)
     glb.write_glb(os.path.join(outdir, 'preview.glb'), pb)
     meta = dict(base_meta); meta.update({'phase': 'preview', 'batches': pm, 'bbox': model_bbox(pels), 'coverage': {k: dict(v) for k, v in pcovg.items()}, 'coverageByClass': {}, 'bboxAgreement': {},
-                                         'elements': [[el['id'], el['cls'], el['cat'], el['name'], el['type'], el['level'], el['fid'], el['isType'], el['family']] for el in pels], 'built': time.time(), 'buildSecs': 0})
+                                         'elements': [[el['id'], el['cls'], el['cat'], el['name'], el['type'], el['level'], el['fid'], el['isType'], el['family'], el['phase']] for el in pels], 'built': time.time(), 'buildSecs': 0})
     json.dump(meta, open(os.path.join(outdir, 'meta.json'), 'w'), separators=(',', ':'))
     T['preview'] = round(time.time() - t, 2)
     prog.set('geometry', 0.0, 'building geometry')
@@ -840,7 +846,7 @@ def convert(path, outdir, log=print, workers=None):
     db.executemany('update el set fid=?, iou=? where i=?', [(el['fid'], el.get('iou'), el['i']) for el in els if el['fid'] != 'none']); db.commit(); db.close()
     meta = dict(base_meta); meta.update({'phase': 'done', 'batches': bmeta, 'bbox': model_bbox(els), 'coverage': {k: dict(v) for k, v in covg.items()}, 'coverageByClass': {k: dict(v) for k, v in covc.items()},
                                          'bboxAgreement': {k: [round(float(np.mean(v)), 3), len(v)] for k, v in ious.items()}, 'built': time.time(),
-                                         'elements': [[el['id'], el['cls'], el['cat'], el['name'], el['type'], el['level'], el['fid'], el['isType'], el['family']] for el in els]})
+                                         'elements': [[el['id'], el['cls'], el['cat'], el['name'], el['type'], el['level'], el['fid'], el['isType'], el['family'], el['phase']] for el in els]})
     T['packing'] = round(time.time() - t, 2); T['total'] = round(time.time() - prog.t0, 2); meta['buildSecs'] = T['total']; meta['timings'] = T
     json.dump(meta, open(os.path.join(outdir, 'meta.json'), 'w'), separators=(',', ':'))
     write_summary(outdir, meta, path)

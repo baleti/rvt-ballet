@@ -124,7 +124,7 @@ function showProgress(pr, floating) {
      `<div class="dim">${esc(pr.msg || '')}<br>${(pr.elapsed || 0).toFixed(0)} s elapsed. The first open of a file decodes it with the reader (minutes for big files); later opens are instant.</div>`);
 }
 async function loadModel(mid, opts = {}) {
-  S.mid = mid; location.hash = mid; $('#status').textContent = 'loading...';
+  S.mid = mid; { const cur = location.hash.slice(1); if (!(cur === mid || cur.startsWith(mid + '?'))) { S.hashRestored = true; history.replaceState(null, '', '#' + mid); } } $('#status').textContent = 'loading...';
   const t0 = performance.now(); let meta = null;
   while (!meta) {                              // the conversion may still be running: show its stages until the first usable model (box preview) exists
     const r = await fetch(`/m/${mid}/meta.json`);
@@ -154,11 +154,12 @@ async function loadModel(mid, opts = {}) {
     } else {
       const lm = new THREE.LineBasicMaterial({color: old.color}); lm.onBeforeCompile = patch(new THREE.MeshStandardMaterial()).onBeforeCompile; lm.customProgramCacheKey = () => 'rvtline1'; o.material = lm;
     }
-    o.frustumCulled = false;
+    o.frustumCulled = false; o.userData.bi = o.userData.batch ?? o.parent?.userData?.batch ?? 0;
   });
-  world.add(gltf.scene);
+  world.add(gltf.scene); buildElRanges();
   buildOverlays(); if (!opts.keepCamera) fitAll(); buildTabs(); setupLegend(); refreshState();
   $('#status').textContent = `${S.N.toLocaleString()} elements, ${tris.toLocaleString()} triangles - ${((performance.now() - t0) / 1000).toFixed(1)}s` + ((S.meta.phase || 'done') === 'done' ? '' : ' (box preview)');
+  if (!opts.keepCamera && !S.hashRestored) { S.hashRestored = true; restoreHash(); }
   dirty = true; window.__loaded = true;
   if ((S.meta.phase || 'done') !== 'done') refineLoop(mid);
 }
@@ -340,6 +341,7 @@ function mkNode(label, count, key, color, mkKids, idsForSelect, catKey) {
   const tw = document.createElement('span'); tw.className = 'tw'; tw.textContent = openNodes.has(key) ? '▾' : '▸';
   row.appendChild(tw);
   if (catKey) { const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !S.catHidden.has(catKey); cb.title = 'visible'; cb.onchange = () => { cb.checked ? S.catHidden.delete(catKey) : S.catHidden.add(catKey); refreshState(); }; cb.onclick = e => e.stopPropagation(); row.appendChild(cb); }
+  if (catKey) { const only = document.createElement('span'); only.className = 'tw'; only.textContent = '\u25ce'; only.title = 'show only this category'; only.onclick = ev => { ev.stopPropagation(); S.catHidden = new Set([...S.byCat.keys()].filter(c => c !== catKey)); refreshState(); renderTab(); }; row.appendChild(only); }
   if (color) { const sw = document.createElement('span'); sw.className = 'sw'; sw.style.background = color; row.appendChild(sw); }
   const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = label; row.appendChild(nm);
   const c = document.createElement('span'); c.className = 'cnt'; c.textContent = count; row.appendChild(c);
@@ -367,13 +369,15 @@ function markTree() { document.querySelectorAll('#tabbody .row[data-i]').forEach
 function renderLevels(tb) {
   const L = S.meta.levels, E = S.meta.elements; const cnt = {}; E.forEach(el => { if (el[5] && el[6] !== 'none') cnt[el[5]] = (cnt[el[5]] || 0) + 1; });
   tb.innerHTML = `<div style="margin-bottom:6px"><label class="chk"><input type="checkbox" id="sl" ${showLvl ? 'checked' : ''}> level planes</label> <label class="chk"><input type="checkbox" id="sg" ${showGrid ? 'checked' : ''}> grids</label></div>
-  <h3>Levels (${L.length})</h3>` + [...L].reverse().map(l => `<div class="li" data-l="${esc(l.name)}"><input type="checkbox" ${S.lvlHidden.has(l.name) ? '' : 'checked'} title="show elements of this level"><b>${esc(l.name)}</b><span class="cnt">${l.elev.toFixed(3)} m &middot; ${cnt[l.name] || 0}</span></div>`).join('') +
-  `<h3>Grids (${S.meta.grids.length})</h3><div class="dim">` + S.meta.grids.map(g => esc(g.name)).sort().join(', ') + '</div>';
+  <h3>Levels (${L.length})</h3>` + [...L].reverse().map(l => `<div class="li" data-l="${esc(l.name)}"><input type="checkbox" ${S.lvlHidden.has(l.name) ? '' : 'checked'} title="show elements of this level"><b>${esc(l.name)}</b><button class="only" title="show only this level">only</button><span class="cnt">${l.elev.toFixed(3)} m &middot; ${cnt[l.name] || 0}</span></div>`).join('') +
+  `<h3>Phases (created in)</h3>` + ((S.meta.phases || []).map((p, k) => `<div class="li" data-ph="${k}"><b>${esc(p)}</b><span class="cnt">isolate</span></div>`).join('') || '<div class="dim">none stored</div>') + `<h3>Grids (${S.meta.grids.length})</h3><div class="dim">` + S.meta.grids.map(g => esc(g.name)).sort().join(', ') + '</div>';
   tb.querySelector('#sl').onchange = e => { showLvl = e.target.checked; S.lvlGroup.visible = showLvl; dirty = true; };
   tb.querySelector('#sg').onchange = e => { showGrid = e.target.checked; S.gridGroup.visible = showGrid; dirty = true; };
-  tb.querySelectorAll('.li').forEach(d => {
+  tb.querySelectorAll('[data-ph]').forEach(d => d.onclick = () => { const k = +d.dataset.ph, set = new Set(); S.meta.elements.forEach((el, i) => { if (el[9] === k && el[6] !== 'none') set.add(i); }); setIsolate(set); });
+  tb.querySelectorAll('.li[data-l]').forEach(d => {
     const name = d.dataset.l;
     d.querySelector('input').onchange = e => { e.target.checked ? S.lvlHidden.delete(name) : S.lvlHidden.add(name); refreshState(); };
+    d.querySelector('.only').onclick = ev => { ev.stopPropagation(); S.lvlHidden = new Set([...L.map(x => x.name), ''].filter(n => n !== name)); refreshState(); renderTab(); };
     d.onclick = ev => { if (ev.target.tagName === 'INPUT') return; const l = L.find(x => x.name === name); setSection('Y', l.elev + 1.2); };
     d.title = 'click: horizontal section 1.2 m above the level';
   });
@@ -381,7 +385,8 @@ function renderLevels(tb) {
 function renderViews(tb) {
   const V = S.meta.views || [], Sh = S.meta.sheets || [];
   tb.innerHTML = `<h3>Sheets (${Sh.length})</h3>` + Sh.map(s => `<div class="li"><b>${esc(s.number)}</b> ${esc(s.name)}<span class="cnt">${(s.views || []).length} views</span></div>` + ((s.views || []).length ? `<div class="dim" style="margin:-2px 0 3px 22px;font-size:11px">${s.views.map(esc).join(' &middot; ')}</div>` : '')).join('') +
-    `<h3>Views (${V.length})</h3>` + V.map(v => `<div class="li"><span>${esc(v.name)}</span><span class="cnt">${esc(v.kind)}${v.scale ? ' 1:' + v.scale : ''}${v.template ? ' (template)' : ''}</span></div>`).join('');
+    `<h3>Views (${V.length})</h3>` + V.map((v, k) => `<div class="li" data-vk="${k}" style="${v.origin ? '' : 'opacity:.55'}" title="${v.origin ? 'click: open this view in the 3D scene' : 'no camera stored'}"><span>${esc(v.name)}</span><span class="cnt">${esc(v.kind)}${v.scale ? ' 1:' + Math.round(1 / v.scale) : ''}${v.template ? ' (template)' : ''}</span></div>`).join('');
+  tb.querySelectorAll('[data-vk]').forEach(d => d.onclick = () => openView(V[+d.dataset.vk]));
 }
 function renderRooms(tb) {
   const R = S.meta.rooms || [];
@@ -394,7 +399,7 @@ function renderResults(tb) {
   const hits = S.hits;
   tb.innerHTML = `<div style="display:flex;gap:5px;margin-bottom:6px"><button id="rSel">Select all</button><button id="rIso">Isolate</button><button id="rZoom">Zoom</button><span class="dim" style="align-self:center">${hits.length} results</span></div>` +
     hits.slice(0, 600).map(h => { const el = S.meta.elements[h.i]; return `<div class="li" data-i="${h.i}"><span class="fid f-${el[6]}">${el[6][0]}</span><span class="nm">${esc(el[3] || el[4] || el[1])}</span><span class="dim">${esc(el[2] || '')}</span><span class="cnt">${h.why ? esc(h.why) : el[0]}</span></div>`; }).join('') + (hits.length > 600 ? `<div class="dim">... ${hits.length - 600} more</div>` : '');
-  tb.querySelectorAll('.li').forEach(d => { d.onclick = ev => select(+d.dataset.i, ev.ctrlKey); d.ondblclick = () => zoomTo([+d.dataset.i]); });
+  tb.querySelectorAll('.li').forEach(d => { d.onclick = async ev => { await select(+d.dataset.i, ev.ctrlKey); zoomTo([...S.sel]); }; d.ondblclick = () => zoomTo([+d.dataset.i]); });
   tb.querySelector('#rSel').onclick = () => setSelection(hits.map(h => h.i));
   tb.querySelector('#rIso').onclick = () => { setIsolate(new Set(hits.map(h => h.i))); };
   tb.querySelector('#rZoom').onclick = () => zoomTo(hits.slice(0, 200).map(h => h.i));
@@ -447,23 +452,39 @@ function renderIfSearch() { if (S.tab === 'search') renderTab(); }
 $('#qParams').onchange = runSearch;
 
 // ------------------------------------------------------------------ section, isolate, measure
-const secPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0); let secOn = false, secFlip = 1;
+// ---- clipping: section plane (axis + offset), section box (6 planes), and the cut plane of an opened Revit view
+const secPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0); let secOn = false, secFlip = 1, secMode = 'plane';
+const boxPlanes = [0, 1, 2, 3, 4, 5].map(() => new THREE.Plane()); S.viewClip = null;
 function setSection(axis, posM) {
-  secOn = true; $('#secui').hidden = false; $('#secAxis').value = axis;
+  secOn = true; secMode = 'plane'; $('#secui').hidden = false; $('#secAxis').value = axis; $('#secMode').value = 'plane';
   const mb = modelBox(), k = axis === 'X' ? 'x' : axis === 'Y' ? 'y' : 'z';
   const lo = mb.min[k], hi = mb.max[k]; $('#secPos').value = Math.round((posM - lo) / (hi - lo) * 1000); applySection();
 }
 function applySection() {
-  if (!secOn) { renderer.clippingPlanes = []; dirty = true; return; }
-  const ax = $('#secAxis').value, mb = modelBox(), k = ax === 'X' ? 'x' : ax === 'Y' ? 'y' : 'z';
-  const pos = mb.min[k] + (mb.max[k] - mb.min[k]) * $('#secPos').value / 1000;
-  const n = new THREE.Vector3(); n[k] = -secFlip; secPlane.normal.copy(n); secPlane.constant = secFlip * pos;
-  renderer.clippingPlanes = [secPlane]; dirty = true;
+  const planes = [];
+  const mb = modelBox(), ax = $('#secAxis').value, k = ax === 'X' ? 'x' : ax === 'Y' ? 'y' : 'z';
+  $('#secPlaneUi').hidden = secMode !== 'plane'; $('#secBoxUi').hidden = secMode !== 'box';
+  if (secOn && secMode === 'plane') {
+    const pos = mb.min[k] + (mb.max[k] - mb.min[k]) * $('#secPos').value / 1000;
+    const n = new THREE.Vector3(); n[k] = -secFlip; secPlane.normal.copy(n); secPlane.constant = secFlip * pos; planes.push(secPlane);
+  } else if (secOn && secMode === 'box') {
+    ['x', 'y', 'z'].forEach((kk, i) => {
+      const lo = mb.min[kk], hi = mb.max[kk]; const a = +$(`#bx${kk}0`).value / 1000, b = +$(`#bx${kk}1`).value / 1000;
+      const nlo = new THREE.Vector3(); nlo[kk] = 1; boxPlanes[2 * i].normal.copy(nlo); boxPlanes[2 * i].constant = -(lo + (hi - lo) * Math.min(a, b));
+      const nhi = new THREE.Vector3(); nhi[kk] = -1; boxPlanes[2 * i + 1].normal.copy(nhi); boxPlanes[2 * i + 1].constant = (lo + (hi - lo) * Math.max(a, b));
+      planes.push(boxPlanes[2 * i], boxPlanes[2 * i + 1]);
+    });
+  }
+  if (S.viewClip) planes.push(S.viewClip);
+  renderer.clippingPlanes = planes; dirty = true; scheduleHash();
 }
 $('#bSection').onclick = () => { secOn ? (secOn = false, $('#secui').hidden = true, applySection()) : setSection('Y', (modelBox().min.y + modelBox().max.y) / 2); };
 $('#secAxis').onchange = applySection; $('#secPos').oninput = applySection;
+$('#secMode').onchange = () => { secMode = $('#secMode').value; secOn = true; applySection(); };
+['x', 'y', 'z'].forEach(kk => { $(`#bx${kk}0`).oninput = applySection; $(`#bx${kk}1`).oninput = applySection; });
 $('#secFlip').onclick = () => { secFlip *= -1; applySection(); };
 $('#secOff').onclick = () => { secOn = false; $('#secui').hidden = true; applySection(); };
+
 
 function setIsolate(set) { S.isolate = set; S.isoGhost = true; refreshState(); $('#bIsolate').classList.toggle('on', !!set); }
 $('#bIsolate').onclick = () => { if (S.isolate) setIsolate(null); else if (S.sel.size) setIsolate(new Set(S.sel)); };
@@ -495,7 +516,7 @@ canvas.addEventListener('pointerup', e => {
   if (!down) return; const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y); down = null;
   if (moved > 4 || e.button !== 0) return;
   const h = pickAt(e.clientX, e.clientY);
-  if (S.measure) { if (h) measureClick(h.p); return; }
+  if (S.measure) { if (h) { const sn = e.altKey ? null : snapTo(h.id, h.p); if (sn) $('#status').textContent = 'snapped to ' + sn.kind; measureClick(sn ? sn.pt : h.p); } return; }
   if (h) select(h.id, e.ctrlKey || e.shiftKey); else if (!e.ctrlKey) select(null);
 });
 canvas.addEventListener('dblclick', e => { const h = pickAt(e.clientX, e.clientY); if (h) zoomTo([h.id]); });
@@ -534,7 +555,7 @@ requestAnimationFrame(frame);
   for (let k = 0; k < 8; k++) { try { models = await (await fetch('/api/models')).json(); break; } catch (e) { await new Promise(r => setTimeout(r, 400)); } }
   const sel = $('#modelSel'); sel.innerHTML = models.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
   sel.onchange = () => loadModel(sel.value);
-  const want = location.hash.slice(1); if (models.some(m => m.id === want)) sel.value = want;
+  const want = location.hash.slice(1).split('?')[0]; if (models.some(m => m.id === want)) sel.value = want;
   if (models.length) await loadModel(sel.value); else $('#status').textContent = 'no models';
 })();
 window.pickAt = pickAt; window.selectEl = select; window.setSection = setSection; window.zoomTo = zoomTo;
@@ -579,3 +600,90 @@ async function switchModel(id, name) {
 }
 $('#bModels').onclick = openPicker;
 addEventListener('keydown', e => { if (e.target.tagName !== 'INPUT' && (e.key === 'o' || e.key === 'O')) openPicker(); });
+
+// ------------------------------------------------------------------ opening a Revit view (3D camera / plan cut / section-elevation plane) from its stored frame
+const dirV = d => new THREE.Vector3(d[0], d[2], -d[1]).normalize();
+function openView(v) {
+  if (!v || !v.origin) { $('#status').textContent = 'this view stores no camera/cut plane'; return; }
+  const o = toV(v.origin), mb = modelBox(), c = mb.getCenter(new THREE.Vector3()), size = mb.getSize(new THREE.Vector3()).length();
+  S.viewClip = null; S.openView = v;
+  if (v.kind === '3d') {
+    const d = dirV(v.dir); camera.position.copy(o); controls.target.copy(o).addScaledVector(d, Math.max(5, size / 4));
+  } else if (v.kind === 'Plan' && v.cut) {
+    const z = v.cut.origin[2]; S.viewClip = new THREE.Plane(new THREE.Vector3(0, -1, 0), z);
+    controls.target.set(c.x, z, c.z); camera.position.set(c.x, z + size * 0.9, c.z + 0.001);
+  } else if (v.dir) {
+    const d = dirV(v.dir); S.viewClip = new THREE.Plane(d.clone(), -d.dot(o));
+    controls.target.copy(o); camera.position.copy(o).addScaledVector(d, -size * 0.8);
+  }
+  camera.near = 0.05; camera.far = size * 20 + 500; camera.updateProjectionMatrix(); controls.update();
+  const vb = $('#viewbar'); vb.hidden = false; vb.innerHTML = `<b>${esc(v.name)}</b> <span class="dim">${esc(v.kind)}${S.viewClip ? ' (cut plane active)' : ''}</span> <button id="vbOff">close view</button>`;
+  $('#vbOff').onclick = () => { S.viewClip = null; vb.hidden = true; S.openView = null; applySection(); fitAll(); };
+  applySection(); dirty = true;
+}
+window.openView = openView;
+
+// ------------------------------------------------------------------ share state in the URL: #model?c=camera,target&s=selected ids&hc=hidden categories&sec=..&v=view id
+let hashT = 0;
+function scheduleHash() { clearTimeout(hashT); hashT = setTimeout(writeHash, 500); }
+function writeHash() {
+  if (!S.meta || !S.mid) return;
+  const q = new URLSearchParams(); const f = x => +x.toFixed(2);
+  q.set('c', [...camera.position.toArray(), ...controls.target.toArray()].map(f).join(','));
+  if (S.sel.size && S.sel.size <= 50) q.set('s', [...S.sel].map(i => S.meta.elements[i][0]).join(','));
+  if (S.catHidden.size) q.set('hc', [...S.catHidden].join('|'));
+  if (secOn) q.set('sec', secMode === 'plane' ? `p,${$('#secAxis').value},${$('#secPos').value},${secFlip}` : 'b,' + ['x', 'y', 'z'].map(k => $(`#bx${k}0`).value + '-' + $(`#bx${k}1`).value).join(','));
+  if (S.openView) q.set('v', S.openView.id);
+  try { history.replaceState(null, '', '#' + S.mid + '?' + q.toString()); } catch (e) {}
+}
+function restoreHash() {
+  const h = location.hash.slice(1); const qi = h.indexOf('?'); if (qi < 0) return false;
+  const q = new URLSearchParams(h.slice(qi + 1)); let used = false;
+  const hc = q.get('hc'); if (hc) { S.catHidden = new Set(hc.split('|')); used = true; }
+  const sec = q.get('sec');
+  if (sec) { const t = sec.split(','); secOn = true; $('#secui').hidden = false;
+    if (t[0] === 'p') { secMode = 'plane'; $('#secMode').value = 'plane'; $('#secAxis').value = t[1]; $('#secPos').value = t[2]; secFlip = +t[3] || 1; }
+    else { secMode = 'box'; $('#secMode').value = 'box'; ['x', 'y', 'z'].forEach((k, i) => { const [a, b] = (t[1 + i] || '0-1000').split('-'); $(`#bx${k}0`).value = a; $(`#bx${k}1`).value = b; }); }
+    applySection(); used = true; }
+  const v = q.get('v'); if (v) { const vv = (S.meta.views || []).find(x => String(x.id) === v); if (vv) openView(vv); }
+  const c = q.get('c'); if (c) { const a = c.split(',').map(Number); if (a.length === 6) { camera.position.set(a[0], a[1], a[2]); controls.target.set(a[3], a[4], a[5]); controls.update(); used = true; } }
+  const sl = q.get('s'); if (sl) { const ids = new Set(sl.split(',').map(Number)); const idx = []; S.meta.elements.forEach((e, i) => { if (ids.has(e[0])) idx.push(i); }); if (idx.length) { S.sel = new Set(idx); used = true; } }
+  if (used) { refreshState(); markTree(); updateSelBox(); showInspector(); }
+  return used;
+}
+controls.addEventListener('change', scheduleHash);
+$('#bLink').onclick = async () => { writeHash(); try { await Promise.race([navigator.clipboard.writeText(location.href), new Promise((_, rej) => setTimeout(() => rej(new Error('clipboard timeout')), 1500))]); $('#status').textContent = 'link copied: camera, selection, hidden categories, section'; } catch (e) { $('#status').textContent = 'link in the address bar (clipboard unavailable): ' + location.href; } };
+window.restoreHash = restoreHash;
+
+// ------------------------------------------------------------------ measuring with snapping to vertices / edges of the picked element
+function buildElRanges() {
+  S.elRanges = new Map();
+  world.traverse(o => {
+    if (!(o.isMesh)) return; const b = S.meta.batches[o.userData.bi]; if (!b || b.kind !== 'tri') return;
+    const R = b.ranges; for (let k = 0; k < R.length; k += 3) { const i = R[k]; if (!S.elRanges.has(i)) S.elRanges.set(i, []); S.elRanges.get(i).push({mesh: o, start: R[k + 1], count: R[k + 2]}); }
+  });
+}
+function snapTo(i, p, tol = 0.3) {
+  const rs = S.elRanges?.get(i); if (!rs) return null;
+  let best = null, bd = tol; const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), t = new THREE.Vector3();
+  for (const r of rs) {
+    const pos = r.mesh.geometry.attributes.position, ix = r.mesh.geometry.index;
+    for (let k = r.start; k < r.start + r.count; k++) {
+      a.fromBufferAttribute(pos, ix.getX(3 * k)); b.fromBufferAttribute(pos, ix.getX(3 * k + 1)); c.fromBufferAttribute(pos, ix.getX(3 * k + 2));
+      for (const q of [a, b, c]) { const d = q.distanceTo(p); if (d < bd) { bd = d - 0.001; best = {pt: q.clone(), kind: 'vertex'}; } }
+      for (const [u, w] of [[a, b], [b, c], [c, a]]) {
+        const e = w.clone().sub(u), L2 = e.lengthSq(); if (L2 < 1e-12) continue;
+        const s = THREE.MathUtils.clamp(p.clone().sub(u).dot(e) / L2, 0, 1); t.copy(u).addScaledVector(e, s); const d = t.distanceTo(p);
+        if (d < bd - 0.05) { bd = d; best = {pt: t.clone(), kind: 'edge'}; }
+      }
+    }
+  }
+  return best;
+}
+window.snapTo = snapTo;
+
+// ------------------------------------------------------------------ keyboard help overlay (? toggles, Esc closes)
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.key === '?') $('#help').hidden = !$('#help').hidden; else if (e.key === 'Escape') $('#help').hidden = true;
+});

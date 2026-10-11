@@ -35,7 +35,7 @@ class Browser:
         return r.get('result')
     async def goto(self, url): await self.call('Page.navigate', url=url)
     async def ev(self, js):
-        r = await self.call('Runtime.evaluate', expression=js, awaitPromise=True, returnByValue=True)
+        r = await asyncio.wait_for(self.call('Runtime.evaluate', expression=js, awaitPromise=True, returnByValue=True), 30)
         if 'exceptionDetails' in r: raise RuntimeError(json.dumps(r['exceptionDetails'])[:500])
         return r['result'].get('value')
     async def wait(self, js, timeout=120):
@@ -58,7 +58,7 @@ class Browser:
     async def wheel(self, x, y, dy):
         await self.call('Input.dispatchMouseEvent', type='mouseWheel', x=x, y=y, deltaX=0, deltaY=dy)
     async def key(self, k):
-        await self.call('Input.dispatchKeyEvent', type='keyDown', key=k, text=k); await self.call('Input.dispatchKeyEvent', type='keyUp', key=k)
+        kw = {'text': k} if len(k) == 1 else {}; await self.call('Input.dispatchKeyEvent', type='keyDown', key=k, **kw); await self.call('Input.dispatchKeyEvent', type='keyUp', key=k)
     async def shot(self, path):
         r = await self.call('Page.captureScreenshot', format='png', fromSurface=getattr(self, 'from_surface', True)); open(path, 'wb').write(base64.b64decode(r['data']))
     async def close(self):
