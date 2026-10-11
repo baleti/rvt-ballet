@@ -1,5 +1,12 @@
 """Tiny headless-Chromium CDP driver for UI tests (no window is ever shown, so no workspace / focus issues)."""
-import asyncio, json, os, subprocess, tempfile, time, base64, urllib.request, shutil
+import asyncio, json, os, subprocess, tempfile, time, base64, urllib.request, shutil, atexit, signal
+_LIVE = set()
+def _kill_all(*a):
+    for b in list(_LIVE): b._kill()
+atexit.register(_kill_all)
+for _sg in (signal.SIGTERM, signal.SIGINT):
+    try: signal.signal(_sg, lambda n, f: (_kill_all(), os._exit(1)))
+    except Exception: pass
 import aiohttp
 
 class Browser:
@@ -12,7 +19,7 @@ class Browser:
         args = ['chromium', '--headless=new', '--remote-debugging-port=%d' % self.port, '--user-data-dir=' + self.prof, '--no-first-run', '--window-size=%d,%d' % self.size,
                 '--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--ignore-gpu-blocklist', '--hide-scrollbars', 'about:blank'] if self.gl == 'swiftshader' else \
                ['chromium', '--headless=new', '--remote-debugging-port=%d' % self.port, '--user-data-dir=' + self.prof, '--no-first-run', '--window-size=%d,%d' % self.size, '--ignore-gpu-blocklist', 'about:blank']
-        self.p = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.p = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True); _LIVE.add(self)
         for _ in range(100):
             try: tabs = json.load(urllib.request.urlopen('http://127.0.0.1:%d/json' % self.port)); break
             except Exception: await asyncio.sleep(0.1)
@@ -62,10 +69,17 @@ class Browser:
         kw = {'text': k} if len(k) == 1 else {}; await self.call('Input.dispatchKeyEvent', type='keyDown', key=k, **kw); await self.call('Input.dispatchKeyEvent', type='keyUp', key=k)
     async def shot(self, path):
         r = await self.call('Page.captureScreenshot', format='png', fromSurface=getattr(self, 'from_surface', True)); open(path, 'wb').write(base64.b64decode(r['data']))
+    def _kill(self):
+        try: os.killpg(self.p.pid, signal.SIGKILL)
+        except Exception: pass
+        try: self.p.wait(timeout=2)
+        except Exception: pass
+        shutil.rmtree(getattr(self, 'prof', ''), ignore_errors=True); _LIVE.discard(self)
     async def close(self):
         try: await self.call('Browser.close')
         except Exception: pass
-        self.p.terminate(); await self.sess.close(); shutil.rmtree(self.prof, ignore_errors=True)
+        try: await self.sess.close()
+        finally: self._kill()
 
 def wait_http(url, timeout=30):
     t = time.time()
