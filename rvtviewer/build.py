@@ -116,18 +116,19 @@ def wall_geom(ctx, e, r):
     return geom.obox(o0 + x0 * ext[0][0] + n * ext[0][1] + y0 * ext[0][2], x0 * d[0], n * d[1], y0 * d[2]), 'param'
 
 def sketch_loops(ctx, e):
-    """boundary loops (3D points, feet) of the sketch that belongs to element e (found via ElementHeader parents)"""
+    """boundary loops (3D points, feet) of the sketch that belongs to element e: the VarSketch/Sketch listed in the element's header parents
+    with the highest id below e (a sketch is created just before its element)"""
     h = ctx.eh.get(e); par = g(h, 'm_parents', 'm_deletion') if h else None
-    for pid in par or []:
-        pid = int(pid); r = ctx.recs.get(pid)
-        if not r or r['class'] not in ('VarSketch', 'Sketch'): continue
+    cands = sorted((int(p) for p in par or [] if int(p) in ctx.recs and ctx.recs[int(p)]['class'] in ('VarSketch', 'Sketch') and int(p) < e), reverse=True)
+    for pid in cands[:1]:
+        r = ctx.recs[pid]
         pairs = g(r['fields'], 'm_elemIdsPairSet', 'm_data') or []
         segs = []
         for it in pairs:
             ce = ctx.recs.get(int(it['m_elementId']))
             if not ce: continue
-            s = curve_pts(g(ce['fields'], 'm_pCurveDriver', 'm_pCrv'))
-            if s is not None: segs.append(s)
+            s_ = curve_pts(g(ce['fields'], 'm_pCurveDriver', 'm_pCrv'))
+            if s_ is not None: segs.append(s_)
         if segs: return geom.chain_loops(segs)
     return None
 
@@ -155,22 +156,28 @@ def curve_pts(c, maxdeg=10):
         return P
     return None
 
+def plane_z(pl, ctr):
+    o, x, y = pl[0], pl[1], pl[2]; n = np.cross(x, y); n = n / np.linalg.norm(n)
+    return (lambda xy: o[2] - (n[0] * (xy[:, 0] - o[0]) + n[1] * (xy[:, 1] - o[1])) / n[2]), n
+
 def slab_geom(ctx, e, r):
-    pls = ref_planes(r['fields'])
-    if not pls: return None
-    zs = [p[0][2] for p in pls if abs(np.cross(p[1], p[2])[2]) > 0.999]
-    if len(zs) < 2: return None
+    """floor/ceiling/roof-like slab: sketch outline extruded between the lowest and highest near-horizontal reference planes (sloped planes followed exactly)"""
+    pls = [p for p in ref_planes(r['fields']) if abs(np.cross(p[1], p[2])[2]) / max(np.linalg.norm(np.cross(p[1], p[2])), 1e-12) > 0.3]
+    if len(pls) < 2: return None
     loops = sketch_loops(ctx, e)
     if not loops: return None
     closed = [l for l in loops if len(l) >= 3]
     if not closed: return None
     areas = [abs(0.5 * np.sum(l[:, 0] * np.roll(l[:, 1], -1) - np.roll(l[:, 0], -1) * l[:, 1])) for l in closed]
     order = np.argsort(areas)[::-1]
-    outer = closed[order[0]][:, :2]
+    outer = closed[order[0]][:, :2]; ctr = outer.mean(0)[None, :]
+    fz = [plane_z(p, ctr) for p in pls]
+    zc = [f(ctr)[0] for f, _ in fz]
+    top = fz[int(np.argmax(zc))][0]; bot = fz[int(np.argmin(zc))][0]
+    if abs(max(zc) - min(zc)) < 1e-6: return None
     holes = [closed[i][:, :2] for i in order[1:] if areas[i] > 1e-6]
-    m = geom.prism([outer] + holes, min(zs), max(zs))
+    m = geom.prism([outer] + holes, bot, top)
     return (m, 'param') if m else None
-
 
 class LineSet:
     """polylines as GL line segments"""
@@ -237,7 +244,7 @@ def instance_box(ctx, e, r):
     return m, 'bbox'
 
 LINE_CLASSES = {'CurveElem'}
-BUILDERS = {'SWall': wall_geom, 'Floor': slab_geom, 'RbsDuctCurve': mep_geom, 'RbsPipeCurve': mep_geom, 'RbsConduitCurve': mep_geom, 'CableTray': mep_geom,
+BUILDERS = {'SWall': wall_geom, 'Floor': slab_geom, 'Ceiling': slab_geom, 'RoofSoffit': slab_geom, 'BuildingPad': slab_geom, 'RbsDuctCurve': mep_geom, 'RbsPipeCurve': mep_geom, 'RbsConduitCurve': mep_geom, 'CableTray': mep_geom,
             'RbsFlexDuctCurve': mep_geom, 'RbsFlexPipeCurve': mep_geom, 'CurveElem': line_geom, 'FamilyInstance': instance_box}
 HIDE_DEFAULT_CATS = {'Center line', '<Sketch>', 'Work Plane Grid', 'Cameras', 'Scope Boxes', 'Boundary Conditions', 'Area Loads', 'Line Loads', 'Point Loads', 'Division Profiles',
                      'Survey Point', 'Project Base Point', 'Internal Origin', 'Guide Grid', 'Reference Planes', 'Parts', 'Spaces', 'Rooms', 'Areas', 'Mass Floor', 'RVT Links', 'Analytical Nodes', 'Reference Points', 'Grids', 'Levels', 'Sections', 'Viewports'}
@@ -250,7 +257,26 @@ def box_iou(lo1, hi1, lo2, hi2):
     inter = float(np.prod(d)); a = float(np.prod(np.maximum(hi1 - lo1, 1e-6))); b = float(np.prod(np.maximum(hi2 - lo2, 1e-6)))
     return inter / (a + b - inter) if a + b - inter > 0 else 0.0
 
+def brep_geom(ctx, e, r):
+    """decoded planar B-rep bodies stored in the element (stairs runs, some floors/families). Needs >= 4 faces per body; rejected if far from the header box."""
+    from . import brep
+    if r['class'].startswith(('DBView', 'Analytical')): return None
+    gs = [x for x in brep.find_geometries(r['fields']) if len(x['m_pFaces']) >= 4]
+    if not gs: return None
+    m = Mesh(); npl = 0; nsk = 0
+    for gm in gs:
+        mm, n, sk = brep.geometry_mesh(gm); m.add(mm); npl += n; nsk += sk
+    if not m: return None
+    bb = ctx.bbox(e)
+    if bb is not None and box_iou(m.v.min(0), m.v.max(0), *bb) < 0.5: return None
+    return m, ('solid' if nsk == 0 else 'param')
+
 def element_mesh(ctx, e, r):
+    try:
+        res = brep_geom(ctx, e, r)
+        if res and res[0]: return res
+    except Exception as ex:
+        if os.environ.get('RVT_DEBUG'): print('brep', r['class'], e, repr(ex))
     fn = BUILDERS.get(r['class'])
     if fn:
         try:
@@ -341,10 +367,10 @@ def convert(path, outdir, log=print):
     dbp = os.path.join(outdir, 'model.sqlite')
     if os.path.exists(dbp): os.remove(dbp)
     db = sqlite3.connect(dbp)
-    db.executescript('create table el(i integer primary key, id integer, cls text, cat text, name text, type text, level text, uid text, ifc text, fid text, bb text);'
+    db.executescript('create table el(i integer primary key, id integer, cls text, cat text, name text, type text, level text, uid text, ifc text, fid text, bb text, iou real);'
                      'create table prm(i integer, k text, v text);create index prm_i on prm(i);')
-    db.executemany('insert into el values(?,?,?,?,?,?,?,?,?,?,?)', [(el['i'], el['id'], el['cls'], el['cat'], el['name'], el['type'], el.get('level'), el['uid'], el['ifc'], el['fid'],
-                    json.dumps([x.tolist() for x in el['bb']]) if el['bb'] else None) for el in els])
+    db.executemany('insert into el values(?,?,?,?,?,?,?,?,?,?,?,?)', [(el['i'], el['id'], el['cls'], el['cat'], el['name'], el['type'], el.get('level'), el['uid'], el['ifc'], el['fid'],
+                    json.dumps([x.tolist() for x in el['bb']]) if el['bb'] else None, el.get('iou')) for el in els])
     rows = []
     for el in els:
         for k, v in ctx.par.get(el['id'], {}).get('params', {}).items():

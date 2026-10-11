@@ -47,7 +47,8 @@ def prism(loops, z0, z1):
     if not loops: return Mesh()
     pts, idx = polygon_tris(loops)
     n = len(pts)
-    top = np.c_[pts, np.full(n, z1)]; bot = np.c_[pts, np.full(n, z0)]
+    zf0 = z0 if callable(z0) else (lambda xy, c=z0: np.full(len(xy), c)); zf1 = z1 if callable(z1) else (lambda xy, c=z1: np.full(len(xy), c))
+    top = np.c_[pts, zf1(pts)]; bot = np.c_[pts, zf0(pts)]
     # orient cap triangles: up on top, down on bottom
     a = pts[idx[:, 1]] - pts[idx[:, 0]]; b = pts[idx[:, 2]] - pts[idx[:, 0]]
     sgn = np.sign((a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0])); sgn[sgn == 0] = 1
@@ -59,7 +60,7 @@ def prism(loops, z0, z1):
         area = 0.5 * np.sum(l[:, 0] * np.roll(l[:, 1], -1) - np.roll(l[:, 0], -1) * l[:, 1])
         ll = l if (area > 0) == (li == 0) else l[::-1]
         m = len(ll); nxt = np.roll(ll, -1, axis=0)
-        sv = np.vstack([np.c_[ll, np.full(m, z0)], np.c_[nxt, np.full(m, z0)], np.c_[nxt, np.full(m, z1)], np.c_[ll, np.full(m, z1)]])
+        sv = np.vstack([np.c_[ll, zf0(ll)], np.c_[nxt, zf0(nxt)], np.c_[nxt, zf1(nxt)], np.c_[ll, zf1(ll)]])
         i = np.arange(m)
         sf = np.vstack([np.c_[i, i + m, i + 2 * m], np.c_[i, i + 2 * m, i + 3 * m]]) + off
         v.append(sv); f.append(sf); off += 4 * m
