@@ -19,7 +19,9 @@ def face_polygons(geo):
     for fs in faces:
         fo = _unwrap(fs); fh = fs.get('handle')
         surf = _unwrap(fo.get('m_pSurf')) if fo.get('m_pSurf') else None
-        if surf and 'm_radius' in surf and 'm_zVec' in surf and 'm_center' in surf and 'm_xVec' in surf:
+        if surf and surf.get('type') in ('cone', 'sphere', 'torus', 'revolution', 'bspline', 'ruled', 'cylinder', 'plane') and 'type' in surf:
+            pl = ('occ', surf)                      # reader-provided surface schema (NEEDS-FROM-READER.md section 1): tessellated through OpenCascade (occsurf)
+        elif surf and 'm_radius' in surf and 'm_zVec' in surf and 'm_center' in surf and 'm_xVec' in surf:
             pl = ('cyl', np.array(surf['m_center'], float), np.array(surf['m_xVec'], float), np.array(surf['m_yVec'], float), np.array(surf['m_zVec'], float), float(surf['m_radius']))
         elif not surf or 'm_xVec' not in surf or 'm_origin' not in surf or 'm_yVec' not in surf: skipped += 1; continue
         else: pl = (np.array(surf['m_origin'], float), np.array(surf['m_xVec'], float), np.array(surf['m_yVec'], float))
@@ -86,6 +88,11 @@ def geometry_mesh(geo):
         order = np.argsort(areas)[::-1]; ls = [loops[i] for i in order]
         try: pts, idx = geom.polygon_tris(ls)
         except Exception: skipped += 1; continue
+        if isinstance(pl[0], str) and pl[0] == 'occ':
+            from . import occsurf
+            try: m.add(occsurf.tessellate_face(pl[1], ls)); n += 1
+            except Exception: skipped += 1
+            continue
         if isinstance(pl[0], str):
             _, c, x, y, z, R = pl; u = pts[:, :1]; w = pts[:, 1:2]
             v = c + R * (np.cos(u) * x + np.sin(u) * y) + w * z

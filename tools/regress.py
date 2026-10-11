@@ -35,9 +35,9 @@ def main():
         for c, v in m['coverage'].items():
             if c in hid: continue
             for k, n in v.items(): tot[k] = tot.get(k, 0) + n
-        ex, ap, bx = tot.get('solid', 0) + tot.get('matched', 0), tot.get('param', 0) + tot.get('approx', 0), tot.get('bbox', 0); n = max(ex + ap + bx, 1)
+        tr, mt, ap, bx = tot.get('solid', 0) + tot.get('mesh', 0), tot.get('matched', 0), tot.get('param', 0) + tot.get('approx', 0), tot.get('bbox', 0); n = max(tr + mt + ap + bx, 1)
         diff = pixdiff(cur, prev) if os.path.exists(prev) else None
-        rows.append('| %s | %d | %.0f%% | %.0f%% | %.0f%% | %s |' % (name, n, 100 * ex / n, 100 * ap / n, 100 * bx / n, 'new' if diff is None else '%.1f%%' % diff))
+        rows.append('| %s | %d | %.0f%% | %.0f%% | %.0f%% | %.0f%% | %s |' % (name, n, 100 * tr / n, 100 * mt / n, 100 * ap / n, 100 * bx / n, 'new' if diff is None else '%.1f%%' % diff))
         print(rows[-1], flush=True)
-    open(os.path.join(OUT, 'summary.md'), 'w').write('| model | solid-bearing elements | exact | approximate | box only | pixel change vs previous |\n|---|---|---|---|---|---|\n' + '\n'.join(rows) + '\n')
+    open(os.path.join(OUT, 'summary.md'), 'w').write('| model | elements | true geometry (B-rep / saved mesh) | parametric, extents match | approximate | box only | pixel change vs previous |\n|---|---|---|---|---|---|---|\n' + '\n'.join(rows) + '\n')
 main()

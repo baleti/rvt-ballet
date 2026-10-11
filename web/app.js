@@ -5,8 +5,8 @@ import {GLTFLoader} from 'three/loaders/GLTFLoader.js';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 const TW = 2048;                       // state texture width
-const FID = ['solid', 'matched', 'param', 'approx', 'bbox', 'line', 'none'];
-const FIDCOL = {solid: '#2e9e5b', matched: '#6cc24a', param: '#3a7bd5', approx: '#1fa7b0', bbox: '#d08a2a', line: '#8a5fd0', none: '#666'};
+const FID = ['solid', 'mesh', 'matched', 'param', 'approx', 'bbox', 'line', 'none'];
+const FIDCOL = {solid: '#2e9e5b', mesh: '#1f8f6f', matched: '#6cc24a', param: '#3a7bd5', approx: '#1fa7b0', bbox: '#d08a2a', line: '#8a5fd0', none: '#666'};
 const S = {meta: null, mid: null, N: 0, sel: new Set(), hidden: new Uint8Array(0), catHidden: new Set(), lvlHidden: new Set(), isolate: null, showNoGeo: false,
            byCat: new Map(), catOf: [], tab: 'tree', fidMode: 0, measure: false, mpts: [], hoverI: -1, hits: []};
 window.S = S;
@@ -43,7 +43,7 @@ function patch(mat) {
     sh.uniforms.tState = U.tState; sh.uniforms.uMode = U.uMode;
     sh.vertexShader = 'attribute float _eidx; varying float vE;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvE=_eidx;');
     sh.fragmentShader = `varying float vE; uniform sampler2D tState; uniform float uMode;
-vec4 fidCol(float f){ if(f<.5) return vec4(.18,.62,.36,1.); if(f<1.5) return vec4(.42,.76,.29,1.); if(f<2.5) return vec4(.23,.48,.84,1.); if(f<3.5) return vec4(.12,.65,.69,1.); if(f<4.5) return vec4(.82,.54,.16,1.); if(f<5.5) return vec4(.54,.37,.82,1.); return vec4(.5,.5,.5,1.);}
+vec4 fidCol(float f){ if(f<.5) return vec4(.18,.62,.36,1.); if(f<1.5) return vec4(.12,.56,.44,1.); if(f<2.5) return vec4(.42,.76,.29,1.); if(f<3.5) return vec4(.23,.48,.84,1.); if(f<4.5) return vec4(.12,.65,.69,1.); if(f<5.5) return vec4(.82,.54,.16,1.); if(f<6.5) return vec4(.54,.37,.82,1.); return vec4(.5,.5,.5,1.);}
 ` + sh.fragmentShader
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
 float eI = floor(vE+.5); vec4 stt = texelFetch(tState, ivec2(int(mod(eI,${TW}.)), int(eI/${TW}.)), 0);
@@ -414,22 +414,22 @@ function renderResults(tb) {
 }
 let covMode = 'cat';
 function renderCov(tb) {
-  const C = covMode === 'cat' ? S.meta.coverage : (S.meta.coverageByClass || S.meta.coverage); const tot = {solid: 0, matched: 0, param: 0, approx: 0, bbox: 0, line: 0, none: 0};
+  const C = covMode === 'cat' ? S.meta.coverage : (S.meta.coverageByClass || S.meta.coverage); const tot = {solid: 0, mesh: 0, matched: 0, param: 0, approx: 0, bbox: 0, line: 0, none: 0};
   for (const v of Object.values(S.meta.coverage)) for (const k in v) tot[k] = (tot[k] || 0) + v[k];
   const sum = Object.values(tot).reduce((a, b) => a + b, 0), geo = sum - tot.none;
-  const drawn = v => (v.solid || 0) + (v.matched || 0) + (v.param || 0) + (v.approx || 0) + (v.bbox || 0) + (v.line || 0);
+  const drawn = v => (v.solid || 0) + (v.mesh || 0) + (v.matched || 0) + (v.param || 0) + (v.approx || 0) + (v.bbox || 0) + (v.line || 0);
   const pct = (n, d) => d ? (n / d * 100).toFixed(0) + '%' : '';
-  const grp = v => ({exact: (v.solid || 0) + (v.matched || 0), approx: (v.param || 0) + (v.approx || 0), box: v.bbox || 0});
+  const grp = v => ({exact: (v.solid || 0) + (v.mesh || 0), matched: v.matched || 0, approx: (v.param || 0) + (v.approx || 0), box: v.bbox || 0});
   const hid = new Set(S.meta.defaultHidden || []); const ptot = {};
   for (const [c, v] of Object.entries(S.meta.coverage)) if (!hid.has(c)) for (const k in v) ptot[k] = (ptot[k] || 0) + v[k];
-  const g = grp(ptot), gd = g.exact + g.approx + g.box;
+  const g = grp(ptot), gd = g.exact + g.matched + g.approx + g.box;
   tb.innerHTML = `<h3>Geometry coverage</h3><div class="bar">${FID.map(f => `<div style="width:${tot[f] / sum * 100}%;background:${FIDCOL[f]}" title="${f}"></div>`).join('')}</div>
   <table class="cov"><tr><th>fidelity</th><th>elements</th><th></th></tr>${FID.map(f => `<tr><td><span class="fid f-${f}">${f}</span> ${esc(S.meta.fidLabels[f] || '')}</td><td>${tot[f] || 0}</td><td>${(tot[f] / sum * 100).toFixed(1)}%</td></tr>`).join('')}</table>
-  <p><b>Of ${gd.toLocaleString()} building-geometry elements</b> (analytical, reference, room and annotation-like categories excluded):<br> exact ${pct(g.exact, gd)} &middot; approximate (rebuilt from parameters) ${pct(g.approx, gd)} &middot; box only ${pct(g.box, gd)}<br><span class="dim">${geo.toLocaleString()} of ${sum.toLocaleString()} database elements have anything drawn (others are types, views, parameters, annotations...). Lines excluded from the percentages.</span></p>
+  <p><b>Of ${gd.toLocaleString()} building-geometry elements</b> (analytical, reference, room and annotation-like categories excluded):<br> <b>true geometry</b> (decoded B-rep / saved mesh) ${pct(g.exact, gd)} &middot; <b>parametric, extents match</b> (rebuilt from stored data, shape unproven) ${pct(g.matched, gd)} &middot; approximate ${pct(g.approx, gd)} &middot; <b>box only</b> ${pct(g.box, gd)}<br><span class="dim">${geo.toLocaleString()} of ${sum.toLocaleString()} database elements have anything drawn (others are types, views, parameters, annotations...). Lines excluded from the percentages.</span></p>
   <div style="margin:6px 0"><label class="chk"><input type="radio" name="cm" value="cat" ${covMode === 'cat' ? 'checked' : ''}> by category</label> <label class="chk"><input type="radio" name="cm" value="cls" ${covMode === 'cls' ? 'checked' : ''}> by Revit class</label></div>
-  <table class="cov"><tr><th>${covMode === 'cat' ? 'category' : 'class'}</th><th>n</th><th>exact</th><th>approx</th><th>box</th></tr>` +
-    Object.entries(C).filter(([k, v]) => grp(v).exact + grp(v).approx + grp(v).box > 0).sort((a, b) => { const x = grp(a[1]), y = grp(b[1]); return (y.exact + y.approx + y.box) - (x.exact + x.approx + x.box); })
-      .map(([k, v]) => { const x = grp(v), n = x.exact + x.approx + x.box; return `<tr class="covrow" data-k="${esc(k)}" title="click: show only this ${covMode === 'cat' ? 'category' : 'class'} in fidelity colours"><td>${esc(k)}</td><td>${n}</td><td>${pct(x.exact, n)}</td><td>${pct(x.approx, n)}</td><td>${pct(x.box, n)}</td></tr>`; }).join('') + '</table>';
+  <table class="cov"><tr><th>${covMode === 'cat' ? 'category' : 'class'}</th><th>n</th><th>true</th><th>param-match</th><th>approx</th><th>box</th></tr>` +
+    Object.entries(C).filter(([k, v]) => grp(v).exact + grp(v).matched + grp(v).approx + grp(v).box > 0).sort((a, b) => { const x = grp(a[1]), y = grp(b[1]); return (y.exact + y.matched + y.approx + y.box) - (x.exact + x.matched + x.approx + x.box); })
+      .map(([k, v]) => { const x = grp(v), n = x.exact + x.matched + x.approx + x.box; return `<tr class="covrow" data-k="${esc(k)}" title="click: show only this ${covMode === 'cat' ? 'category' : 'class'} in fidelity colours"><td>${esc(k)}</td><td>${n}</td><td>${pct(x.exact, n)}</td><td>${pct(x.matched, n)}</td><td>${pct(x.approx, n)}</td><td>${pct(x.box, n)}</td></tr>`; }).join('') + '</table>';
   tb.querySelectorAll('input[name=cm]').forEach(r => r.onchange = () => { covMode = r.value; renderTab(); });
   tb.querySelectorAll('.covrow').forEach(tr => tr.onclick = () => {
     const k = tr.dataset.k, idx = [];
@@ -438,7 +438,7 @@ function renderCov(tb) {
   });
 }
 function setupLegend() {
-  $('#legend').innerHTML = FID.slice(0, 6).map(f => `<div><i style="background:${FIDCOL[f]}"></i>${f}</div>`).join('');
+  $('#legend').innerHTML = FID.slice(0, 7).map(f => `<div><i style="background:${FIDCOL[f]}"></i>${f}</div>`).join('');
 }
 
 // ------------------------------------------------------------------ search

@@ -4,8 +4,8 @@ import numpy as np
 from . import reader, geom, glb
 from .geom import Mesh
 
-FID_ORDER = ['solid', 'matched', 'param', 'approx', 'bbox', 'line', 'none']      # honesty ladder shown in the UI
-FID_LABEL = {'solid': 'decoded B-rep', 'matched': 'rebuilt from stored data; extents agree with the bounding box Revit stored (IoU >= 0.97, or inside it spanning >= 93% of its two largest dimensions)', 'param': 'rebuilt from stored parameters (approximate: no joins/openings)', 'approx': 'footprint from stored curves, height range from the Revit bounding box (slopes not modelled)', 'bbox': 'placeholder at true bounding box', 'line': 'curve', 'none': 'no geometry'}
+FID_ORDER = ['solid', 'mesh', 'matched', 'param', 'approx', 'bbox', 'line', 'none']      # honesty ladder shown in the UI
+FID_LABEL = {'solid': 'decoded B-rep (true geometry from the element\'s own faces)', 'mesh': 'triangle mesh Revit saved with the element (true geometry; planar + cylindrical faces)', 'matched': 'rebuilt from stored data; extents agree with the bounding box Revit stored (IoU >= 0.97, or inside it spanning >= 93% of its two largest dimensions)', 'param': 'rebuilt from stored parameters (approximate: no joins/openings)', 'approx': 'footprint from stored curves, height range from the Revit bounding box (slopes not modelled)', 'bbox': 'placeholder at true bounding box', 'line': 'curve', 'none': 'no geometry'}
 
 CAT_COLORS = {
     'Walls': (0.82, 0.80, 0.76), 'Floors': (0.70, 0.66, 0.60), 'Roofs': (0.60, 0.35, 0.30), 'Ceilings': (0.90, 0.90, 0.88),
@@ -671,7 +671,7 @@ def reader_mesh(ctx, e):
     bb = ctx.bbox(e)
     iou = box_iou(P.min(0), P.max(0), *bb) if bb is not None else 1.0
     if iou < 0.4: return None                                   # not the element's own geometry
-    return m, ('approx' if 'unsupported_faces' in (a.get('flags') or []) or iou < 0.9 else 'solid')
+    return m, ('approx' if 'unsupported_faces' in (a.get('flags') or []) or iou < 0.9 else 'mesh')
 
 def prefetch_reader_meshes(ctx, els, prog=None):
     ctx._rm = None; out = {}; t = time.time(); n = 0
@@ -836,9 +836,9 @@ def write_summary(outdir, meta, src=None):
     for c, v in meta['coverage'].items():
         if c in hid: continue                                    # analytical / reference / annotation-like categories are not building geometry
         for k, n in v.items(): tot[k] = tot.get(k, 0) + n
-    ex, ap, bx = tot.get('solid', 0) + tot.get('matched', 0), tot.get('param', 0) + tot.get('approx', 0), tot.get('bbox', 0); n = max(ex + ap + bx, 1)
+    tr, mt, ap, bx = tot.get('solid', 0) + tot.get('mesh', 0), tot.get('matched', 0), tot.get('param', 0) + tot.get('approx', 0), tot.get('bbox', 0); ex = tr + mt; n = max(ex + ap + bx, 1)
     sm = {'file': meta['file'], 'src': src and os.path.abspath(src), 'size': os.path.getsize(src) if src and os.path.exists(src) else None, 'built': meta.get('built'), 'elements': len(meta['elements']),
-          'tris': sum(b['tris'] for b in meta['batches']), 'exact': ex / n, 'approx': ap / n, 'box': bx / n, 'stamps': meta.get('stamps'), 'secs': meta.get('buildSecs')}
+          'tris': sum(b['tris'] for b in meta['batches']), 'exact': ex / n, 'true': tr / n, 'matched': mt / n, 'approx': ap / n, 'box': bx / n, 'stamps': meta.get('stamps'), 'secs': meta.get('buildSecs')}
     json.dump(sm, open(os.path.join(outdir, 'summary.json'), 'w'))
 
 def convert(path, outdir, log=print, workers=None):

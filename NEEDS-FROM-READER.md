@@ -2,8 +2,20 @@
 Already consumed: analytic solids are rebuilt in the viewer itself; `rvt_geometry.element_geometry` triangle meshes ('mesh_approx', saved graphics, planar+cylindrical faces) now drive family instances, railings, stairs, sweeps, footings
 (e.g. 2020 Residential: box-only 69% -> 35%); `rvt_mesh.components` decides closed vs open bodies.
 
-## 1. Surfaces the mesh skips (flag `unsupported_faces`) - highest value
-Ruled, revolved, cone, torus, spline/NURBS faces and faces with `noloops`: please tessellate them (surface parameters are in the Face.m_pSurf objects; edges carry interior points) or report per-element which faces were skipped so the viewer can show the element as 'approx' with a hole count. Cylinders with partial arcs / seams are fine today.
+## 1. Surfaces the mesh skips (flag `unsupported_faces`) - highest value. READY ON THE VIEWER SIDE: `rvtviewer/occsurf.py` tessellates every type below through OpenCascade (one unit test per type, tests/test_surfaces.py)
+For each face, expose the surface as a plain dict (replace/extend `Face.m_pSurf.obj`, same place the viewer reads Plane/CylSurf today) plus the face's trim loops in the surface's (u, v) parameter space (as `rvt_mesh.face_loops_uv` already produces):
+```
+plane      {'type':'plane','origin':[x,y,z],'xdir':[..],'ydir':[..]}                          u,v = distance along xdir, ydir
+cylinder   {'type':'cylinder','origin','xdir','ydir','radius'}                                 u = angle (rad) from xdir, v = height along xdir x ydir
+cone       {'type':'cone','origin','xdir','ydir','ref_radius','semi_angle'}                    u = angle, v = distance along the generatrix from the reference circle (OCC Geom_ConicalSurface convention)
+sphere     {'type':'sphere','origin','xdir','ydir','radius'}                                   u = longitude, v = latitude
+torus      {'type':'torus','origin','xdir','ydir','major_radius','minor_radius'}               u,v = angles
+revolution {'type':'revolution','profile':<curve>,'axis_origin':[..],'axis_dir':[..]}         u = angle about the axis, v = profile curve parameter
+bspline    {'type':'bspline','poles':[[[x,y,z] per v] per u],'weights':same shape (optional, rational),'uknots','vknots','umults','vmults','udegree','vdegree'}
+ruled      {'type':'ruled','curve1':<curve>,'curve2':<curve>}                                  u along the curves, v 0..1 between them
+<curve>    {'type':'line','p0','p1'} | {'type':'arc','p0','mid','p1'} | {'type':'bspline','poles','degree','knots','mults'[,'weights']}
+```
+All lengths feet, angles radians, world coordinates (instance transform already applied) or give `transform` once per body. `m_orientFlag` stays as is. If the Revit class carries the same information under other field names (ConeSurf, RuledSurf with m_pProfileCurve1/2, revolved/NURBS classes), just list the field names and the viewer will map them: `rvtviewer/brep.py` already routes any face whose surface dict has one of these `type` values through `occsurf.tessellate_face`.
 
 ## 2. Closedness and per-face attributes
 - per-shell `closed` + `volume` + `area` (rvt_mesh.components already does it): expose through element_geometry so the viewer can mark 'exact' only for closed shells.
