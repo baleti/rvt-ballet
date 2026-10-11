@@ -34,12 +34,12 @@ Every element has a fidelity tag shown in the inspector, tree, tooltip, coverage
 `exact` = solid (decoded B-rep) + matched (rebuilt from stored data AND extents agree with the bounding box Revit stored: IoU >= 0.97, or inside it spanning >= 93% of its two largest dimensions); `approximate` = rebuilt but not matching / footprint-only; `box only` = placeholder at the stored bounding box.
 | model | elements | exact | approximate | box only |
 |---|---|---|---|---|
-| residential-2020 | 218 | 22% | 9% | 69% |
-| structural-2024 | 1447 | 5% | 1% | 94% |
-| mep-2020 | 7157 | 20% | 1% | 79% |
-| hvac-2024 | 2630 | 40% | 0% | 60% |
-| facades-2026 | 523 | 9% | 7% | 84% |
-Box-only is almost entirely family instances (the reader does not decode family symbol geometry). GEOMETRY_API.md reviewed: for every class it covers (walls, floors, ceilings, ducts..., instances as boxes) the API is 'approx'/'box' and the viewer's own builders already include joins, openings, layers and slopes, so nothing was switched to it; `tools/check_api.py FILE` compares both and flags classes where the API becomes 'exact'.
+| residential-2020 | 218 | 49% | 17% | 35% |
+| structural-2024 | 1447 | 61% | 21% | 19% |
+| mep-2020 | 7157 | 83% | 3% | 15% |
+| hvac-2024 | 2630 | 82% | 13% | 6% |
+| facades-2026 | see summary.md | | | |
+Family instances now come from the reader's saved-graphics triangle meshes (rvt_geometry 'mesh_approx': planar + cylindrical faces; ruled/revolved/NURBS faces still missing); box-only is what the reader has no saved graphics for. `tools/compare_gt.py` + the viewer's Compare button measure deviation against Revit oracle files (rvt-research/gt_geom). GEOMETRY_API.md reviewed: for every class it covers (walls, floors, ceilings, ducts..., instances as boxes) the API is 'approx'/'box' and the viewer's own builders already include joins, openings, layers and slopes, so nothing was switched to it; `tools/check_api.py FILE` compares both and flags classes where the API becomes 'exact'.
 
 ### Volume vs Revit (tools/verify_gt.py; share within 5% of Revit's Volume)
 | sample | walls | floors | ceilings | roofs |
