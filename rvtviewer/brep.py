@@ -64,9 +64,20 @@ def trace_loop(emap, fh, lh, first):
         cur = nx.get('ref') if isinstance(nx, dict) else None
     return np.array(pts) if pts else None
 
+def open_edge_count(geo):
+    """edges bounding only one face: a closed solid has none (some stored bodies are open shells, e.g. a top surface without bottom)"""
+    n = 0
+    for e in _unwrap(geo).get('m_pEdges') or []:
+        eo = _unwrap(e)
+        if not isinstance(eo, dict): continue
+        fs = eo.get('m_pFace') or []
+        if len([f for f in fs if f]) < 2: n += 1
+    return n
+
 def geometry_mesh(geo):
-    """Mesh (feet) from all planar faces; returns (mesh, n_planar, n_skipped)"""
+    """Mesh (feet) from all planar/cylindrical faces; returns (mesh, n_planar, n_skipped); open shells count their open edges as skipped"""
     polys, skipped = face_polygons(geo)
+    skipped += 1 if open_edge_count(geo) else 0
     m = Mesh(); n = 0
     for pl, loops in polys:
         loops = [l for l in loops if len(l) >= 3]

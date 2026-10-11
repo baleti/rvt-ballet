@@ -392,39 +392,59 @@ def plane_z(pl, ctr):
     o, x, y = pl[0], pl[1], pl[2]; n = np.cross(x, y); n = n / np.linalg.norm(n)
     return (lambda xy: o[2] - (n[0] * (xy[:, 0] - o[0]) + n[1] * (xy[:, 1] - o[1])) / n[2]), n
 
+def group_loops(loops):
+    """nesting by containment: even depth = outer boundary, odd depth = hole of its parent. -> [(outer Nx2, [holes])]"""
+    from matplotlib.path import Path as _P
+    L = [np.asarray(l)[:, :2] for l in loops if len(l) >= 3]
+    area = [abs(0.5 * np.sum(l[:, 0] * np.roll(l[:, 1], -1) - np.roll(l[:, 0], -1) * l[:, 1])) for l in L]
+    order = sorted(range(len(L)), key=lambda i: -area[i]); paths = {i: _P(L[i]) for i in order}
+    parent = {}
+    for pos, i in enumerate(order):
+        c = L[i].mean(0) if paths[i].contains_point(L[i].mean(0)) else L[i][0]
+        pt = L[i][len(L[i]) // 3]
+        par = [j for j in order[:pos] if area[j] > area[i] and paths[j].contains_point(pt, radius=-1e-6)]
+        parent[i] = par[-1] if par else None
+    depth = {}
+    for i in order: depth[i] = 0 if parent[i] is None else depth[parent[i]] + 1
+    groups = []
+    for i in order:
+        if depth[i] % 2 == 0: groups.append((L[i], [L[j] for j in order if parent.get(j) == i and area[j] > 1e-6]))
+    return groups
+
 def slab_geom(ctx, e, r):
-    """floor/ceiling/roof-like slab: sketch outline extruded between the lowest and highest near-horizontal reference planes (sloped planes followed exactly)"""
+    """floor/ceiling slab: sketch outline (nested loops = outers and holes) extruded between the top and bottom surfaces; sloped planes followed exactly; flat slabs take their stored bbox
+    height range when the reference faces do not cover the whole thickness. Layers from the type's compound structure."""
     pls = [p for p in ref_planes(r['fields']) if abs(np.cross(p[1], p[2])[2]) / max(np.linalg.norm(np.cross(p[1], p[2])), 1e-12) > 0.3]
     if len(pls) < 2: return None
     loops = sketch_loops(ctx, e)
     if not loops: return None
     closed = [l for l in loops if len(l) >= 3]
     if not closed: return None
-    areas = [abs(0.5 * np.sum(l[:, 0] * np.roll(l[:, 1], -1) - np.roll(l[:, 0], -1) * l[:, 1])) for l in closed]
-    order = np.argsort(areas)[::-1]
-    outer = closed[order[0]][:, :2]; ctr = outer.mean(0)[None, :]
+    groups = group_loops(closed)
+    if not groups: return None
+    big = max(closed, key=lambda l: abs(0.5 * np.sum(l[:, 0] * np.roll(l[:, 1], -1) - np.roll(l[:, 0], -1) * l[:, 1])))
+    ctr = big[:, :2].mean(0)[None, :]
     fz = [plane_z(p, ctr) for p in pls]
-    zl = float(closed[order[0]][:, 2].mean())      # the sketch plane is also a bounding layer (ceilings hang below their reference faces)
+    zl = float(big[:, 2].mean())      # the sketch plane is also a bounding layer (ceilings hang below their reference faces)
     bbz = ctx.bbox(e)
     if bbz is not None and bbz[0][2] - 1e-3 <= zl <= bbz[1][2] + 1e-3: fz.append(((lambda xy, c=zl: np.full(len(xy), c)), None))
     zc = [f(ctr)[0] for f, _ in fz]
     top = fz[int(np.argmax(zc))][0]; bot = fz[int(np.argmin(zc))][0]
     flat = all(abs(n[2]) > 0.99999 for _, n in fz if n is not None)
-    if flat and bbz is not None and abs(max(zc) - bbz[1][2]) < 0.02 and bbz[0][2] < min(zc) - 1e-6:       # lowest layer is not among the reference faces: take it from the stored bbox
-        zb = float(bbz[0][2]); bot = lambda xy, c=zb: np.full(len(xy), c); zc = zc + [zb]
+    if flat and bbz is not None and (bbz[1][2] - bbz[0][2]) > (max(zc) - min(zc)) + 0.02 and abs(max(zc) - bbz[1][2]) < 0.6:      # reference faces miss the top and/or bottom layer: use Revit's stored extent
+        zt, zb = float(bbz[1][2]), float(bbz[0][2]); top = lambda xy, c=zt: np.full(len(xy), c); bot = lambda xy, c=zb: np.full(len(xy), c); zc = zc + [zt, zb]
     if abs(max(zc) - min(zc)) < 1e-6: return None
-    holes = [closed[i][:, :2] for i in order[1:] if areas[i] > 1e-6]
-    layers = type_layers(ctx, type_of(ctx, e, r))
-    if len(layers) > 1:                      # compound structure: one prism per layer, first layer on top (exterior side of a floor/ceiling)
-        tot = sum(L[0] for L in layers); cum = 0.0; parts = []
-        for wd, fn, rgb in layers:
-            f0, f1 = cum / tot, (cum + wd) / tot; cum += wd
-            lt = (lambda xy, a=f0: top(xy) - a * (top(xy) - bot(xy))); lb = (lambda xy, a=f1: top(xy) - a * (top(xy) - bot(xy)))
-            parts.append((geom.prism([outer] + holes, lb, lt), rgb or CORE_GRAY))
-        mu = geom.Multi(parts)
-        if mu: return mu, 'param'
-    m = geom.prism([outer] + holes, bot, top)
-    return (m, 'param') if m else None
+    layers = type_layers(ctx, type_of(ctx, e, r)); parts = []
+    for outer, holes in groups:
+        if len(layers) > 1:                  # compound structure: one prism per layer, first layer on top (exterior side of a floor/ceiling)
+            tot = sum(L[0] for L in layers); cum = 0.0
+            for wd, fn, rgb in layers:
+                f0, f1 = cum / tot, (cum + wd) / tot; cum += wd
+                lt = (lambda xy, a=f0: top(xy) - a * (top(xy) - bot(xy))); lb = (lambda xy, a=f1: top(xy) - a * (top(xy) - bot(xy)))
+                parts.append((geom.prism([outer] + holes, lb, lt), rgb or CORE_GRAY))
+        else: parts.append((geom.prism([outer] + holes, bot, top), dominant_rgb(layers)))
+    mu = geom.Multi(parts)
+    return (mu, 'param') if mu else None
 
 def sketch_curves(ctx, sid):
     """curves of a sketch element with their stored slope data: [(pts Nx3, angle, defines_slope, offset)]"""
