@@ -109,7 +109,7 @@ def dominant_rgb(layers):
     best = max(layers, key=lambda L: (L[2] is not None, L[0]))     # widest layer that has a material
     return best[2]
 
-CLASS_CAT = {'ArcWall': 'Walls', 'SWall': 'Walls', 'Floor': 'Floors', 'Ceiling': 'Ceilings', 'ProfileRoof': 'Roofs', 'FootPrintRoof': 'Roofs', 'RbsDuctCurve': 'Ducts', 'RbsPipeCurve': 'Pipes'}      # elements the file stores without an ElementHeader (no category / bbox)
+CLASS_CAT = {'SiteSurface': 'Topography', 'ArcWall': 'Walls', 'SWall': 'Walls', 'Floor': 'Floors', 'Ceiling': 'Ceilings', 'ProfileRoof': 'Roofs', 'FootPrintRoof': 'Roofs', 'RbsDuctCurve': 'Ducts', 'RbsPipeCurve': 'Pipes'}      # elements the file stores without an ElementHeader (no category / bbox)
 
 def sym_name(ctx, r):
     n = g(r['fields'], 'm_symbolInfo', 'm_name')
@@ -747,7 +747,7 @@ def reader_mesh(ctx, e):
 def prefetch_reader_meshes(ctx, els, prog=None):
     ctx._rm = None; out = {}; t = time.time(); n = 0
     for el in els:
-        if not el['cat'] or el['isType'] or ctx.recs[el['id']]['class'] in ANALYTIC_CLASSES or ctx.bbox(el['id']) is None or el['cat'] in ('Planting', 'Entourage'): continue
+        if not el['cat'] or el['isType'] or ctx.recs[el['id']]['class'] in ANALYTIC_CLASSES or (ctx.bbox(el['id']) is None and el['id'] in ctx.eh) or el['cat'] in ('Planting', 'Entourage'): continue
         try: out[el['id']] = reader_mesh(ctx, el['id'])
         except Exception: out[el['id']] = None
         n += 1
@@ -755,7 +755,7 @@ def prefetch_reader_meshes(ctx, els, prog=None):
     ctx._rm = out
 
 def element_mesh(ctx, e, r):
-    if r['class'] not in ANALYTIC_CLASSES and ctx.bbox(e) is not None and ctx.catname(e) not in ('Planting', 'Entourage'):
+    if r['class'] not in ANALYTIC_CLASSES and (ctx.bbox(e) is not None or e not in ctx.eh) and ctx.catname(e) not in ('Planting', 'Entourage'):
         rm = reader_mesh(ctx, e)
         if rm: return rm
     if ctx.catname(e) in ('Planting', 'Entourage') and ctx.bbox(e) is not None and r['class'] == 'FamilyInstance': return geom.ellipsoid(*ctx.bbox(e)), 'bbox'
