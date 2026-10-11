@@ -58,6 +58,15 @@ def make_app(models):
     app.router.add_get('/', index)
     app.router.add_get('/api/models', list_models)
     app.router.add_get('/m/{mid}/meta.json', meta)
+    async def reader_info(req):
+        from . import reader
+        return web.json_response({'reader': reader.reader_stamp(), 'viewer': reader.viewer_stamp(), 'geometryApi': os.path.exists(os.path.join(reader.READER_DIR, 'GEOMETRY_API.md'))})
+    async def reconvert(req):
+        mid = req.match_info['mid']; cb = getattr(models, 'reconvert', None)
+        new = cb(mid) if cb else None
+        return web.json_response({'ok': bool(new), 'id': new})
+    app.router.add_get('/api/reader', reader_info)
+    app.router.add_post('/api/m/{mid}/reconvert', reconvert)
     app.router.add_get('/m/{mid}/model.glb', glb)
     app.router.add_get('/m/{mid}/preview.glb', preview)
     app.router.add_get('/api/m/{mid}/progress', progress)

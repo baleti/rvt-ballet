@@ -54,23 +54,28 @@ def main(argv=None):
         from . import build
         out = a.out or model_dir(a.file); build.convert(a.file, out); print(out); return
     models = server.Models()
+    import threading
+
+    def start_job(f, rebuild=False):
+        """convert f in a separate process (UI polls progress.json); on success the finished directory replaces the building one"""
+        d = model_dir(f); tmp = d + '.tmp'; mid = os.path.basename(d)
+        shutil.rmtree(tmp, ignore_errors=True); os.makedirs(tmp)
+        models.add(mid, tmp, os.path.basename(f), building=True); models.m[mid]['src'] = f
+        def job():
+            p = subprocess.Popen([sys.executable, '-c', "import sys; sys.path.insert(0,%r); from rvtviewer.cli import main; main(['convert', %r, %r])" % (os.path.dirname(os.path.dirname(os.path.abspath(__file__))), f, tmp)], stdout=sys.stdout, stderr=sys.stderr)
+            if p.wait() == 0 and os.path.exists(os.path.join(tmp, 'meta.json')):
+                shutil.rmtree(d, ignore_errors=True); os.rename(tmp, d); models.m[mid]['dir'] = d; models.m[mid]['building'] = False; models.m[mid]['db'] = None
+            else:
+                try: open(os.path.join(tmp, 'progress.json'), 'w').write(json.dumps({'stage': 'error', 'msg': 'conversion failed - see the terminal output', 'pct': 0, 'stages': []}))
+                except OSError: pass
+        threading.Thread(target=job, daemon=True).start(); return mid
+    models.reconvert = lambda mid: start_job(models.m[mid]['src']) if models.m.get(mid, {}).get('src') else None
     if a.cmd == 'open':
-        import threading
         for f in a.files:
             d = model_dir(f)
             if os.path.exists(os.path.join(d, 'meta.json')) and not a.rebuild and json.load(open(os.path.join(d, 'meta.json'))).get('phase') == 'done':
-                print('cache hit: %s' % d); models.add(os.path.basename(d), d, os.path.basename(f)); continue
-            tmp = d + '.tmp'; shutil.rmtree(tmp, ignore_errors=True); os.makedirs(tmp)
-            mid = os.path.basename(d); models.add(mid, tmp, os.path.basename(f), building=True)
-            def job(f=f, d=d, tmp=tmp, mid=mid):
-                # conversion runs in its own process so the server and the browser stay responsive; progress.json in tmp is polled by the UI
-                p = subprocess.Popen([sys.executable, '-c', "import sys; sys.path.insert(0,%r); from rvtviewer.cli import main; main(['convert', %r, %r])" % (os.path.dirname(os.path.dirname(os.path.abspath(__file__))), f, tmp)], stdout=sys.stdout, stderr=sys.stderr)
-                if p.wait() == 0 and os.path.exists(os.path.join(tmp, 'meta.json')):
-                    shutil.rmtree(d, ignore_errors=True); os.rename(tmp, d); models.m[mid]['dir'] = d; models.m[mid]['building'] = False; models.m[mid]['db'] = None
-                else:
-                    try: open(os.path.join(tmp, 'progress.json'), 'w').write(json.dumps({'stage': 'error', 'msg': 'conversion failed - see the terminal output', 'pct': 0, 'stages': []}))
-                    except OSError: pass
-            threading.Thread(target=job, daemon=True).start()
+                print('cache hit: %s' % d); models.add(os.path.basename(d), d, os.path.basename(f)); models.m[os.path.basename(d)]['src'] = f
+            else: start_job(f)
     else:
         for d in a.dirs: models.add(os.path.basename(d.rstrip('/')), d, os.path.basename(d.rstrip('/')))
         root = os.path.join(reader.CACHE_DIR, 'models')

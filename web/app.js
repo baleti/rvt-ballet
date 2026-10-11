@@ -544,3 +544,16 @@ $('#bHelp').onclick = () => { $('#help').hidden = !$('#help').hidden; };
 window.__controls = controls;
 window.fitAll = fitAll; window.THREE = THREE;
 window.toVd = toV; window.fitBox = fitBox;
+
+// reader / viewer upgrade watcher: when the reader (or this converter) changes, models converted with an older version are stale -> offer a reconvert
+setInterval(async () => {
+  if (!S.meta || !S.meta.stamps || S.meta.phase !== 'done') return;
+  try {
+    const r = await (await fetch('/api/reader')).json();
+    const stale = r.reader !== S.meta.stamps.reader || r.viewer !== S.meta.stamps.viewer;
+    let b = $('#stale'); if (!stale) { if (b) b.hidden = true; return; }
+    if (!b) { b = document.createElement('div'); b.id = 'stale'; $('#view').appendChild(b); }
+    b.hidden = false; b.innerHTML = `Reader/converter updated${r.geometryApi ? ' (GEOMETRY_API.md present)' : ''}: this model was converted with an older version. <button id="reconv">Reconvert</button>`;
+    $('#reconv').onclick = async () => { b.hidden = true; const j = await (await fetch(`/api/m/${S.mid}/reconvert`, {method: 'POST'})).json(); if (j.ok) { window.__loaded = false; const sel = $('#modelSel'); if (![...sel.options].some(o => o.value === j.id)) sel.add(new Option(S.meta.file, j.id)); sel.value = j.id; await loadModel(j.id); } else b.innerHTML = 'No source file known for this model: reopen the .rvt with rvt-viewer open.'; };
+  } catch (e) {}
+}, 20000);
