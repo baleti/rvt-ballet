@@ -46,11 +46,11 @@ def main(path):
         elif fid == 'param' and iou is not None and (iou >= 0.97 or build.contained_match(V.min(0), V.max(0), *bb)): c['param_match'] += 1
         elif fid == 'bbox': c['box'] += 1
         else: c['approx'] += 1
-        if iou is not None: c['iou_n'] += 1; c['iou_ok'] += iou >= 0.95
+        if iou is not None: c['iou_n'] += 1; c['iou_ok'] += int(iou >= 0.95)
         v = vols.get(el['id'])
         if v and v > 1e-6:
             vol = abs(np.einsum('ij,ij->i', V[F[:, 0]], np.cross(V[F[:, 1]], V[F[:, 2]])).sum() / 6)
-            c['vol_n'] += 1; c['vol_ok'] += abs(vol / v - 1) <= 0.02; c['vol_ratios'].append(round(vol / v, 4))
+            c['vol_n'] += 1; c['vol_ok'] += int(abs(vol / v - 1) <= 0.02); c['vol_ratios'].append(round(float(vol / v), 4))
     out = {'file': os.path.basename(path), 'year': year, 'has_gt4': has_gt, 'elements': len(els), 'classes': {k: {**v, 'vol_ratios': v['vol_ratios'][:400]} for k, v in cls.items()}}
     json.dump(out, open(os.path.join(OUT, '%s_%s.json' % (year, stem)), 'w'))
     print('OK', year, stem, len(cls), 'classes')

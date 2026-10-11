@@ -32,3 +32,8 @@
 - Features: open plan/section/3D views from stored frames, section plane + box, URL state (camera, selection, hidden categories, section, view), snapping measure, level/category/phase isolation, ? help overlay, model picker.
 - Tests: tests/run.sh (unit + smoke), tools/uitest6.py (features, all pass).
 - Reader B-rep API: no family solids yet, nothing to wire; fidelity table unchanged in kind (box-only dominated by family instances).
+
+## 2026-10-11 acceptance work (ACCEPTANCE.md / OBJECTIVES.md)
+- tools/accept_eval.py + accept_all.sh (2 files at a time, 5 GB cap, nice) compute per-class true / parametric-unproven / approximate / box-only, bbox IoU>=0.95 and volume<=2% error (gt4 Volume) for ALL 42 corpus .rvt files 2020-2026; tools/accept_table.py writes docs/ACCEPTANCE-STATUS.md (per class, per year, DONE flag).
+- gt_geom oracle (session 181) wired into tools/compare_gt.py: kwalls.rte plain walls IoU 1.0 / volume ratio 1.0 (5 walls); stair run rosetta: StairsRun/Supports IoU 0.85-1.0 (approx -> mesh in the "var" file), BaseRailing IoU 0.56 (reader mesh partial).
+- Baseline (first 3 files, 2020): walls 21% within 2% volume, floors/ceilings 100%, family instances 77% true geometry but only 19% volume-accurate (saved-graphics meshes are not always closed / may omit voids), curtain grid lines, hubs, reference points, filled regions, rebar, analytical elements still box-only.
