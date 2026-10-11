@@ -60,7 +60,7 @@ class Browser:
     async def key(self, k):
         await self.call('Input.dispatchKeyEvent', type='keyDown', key=k, text=k); await self.call('Input.dispatchKeyEvent', type='keyUp', key=k)
     async def shot(self, path):
-        r = await self.call('Page.captureScreenshot', format='png'); open(path, 'wb').write(base64.b64decode(r['data']))
+        r = await self.call('Page.captureScreenshot', format='png', fromSurface=getattr(self, 'from_surface', True)); open(path, 'wb').write(base64.b64decode(r['data']))
     async def close(self):
         try: await self.call('Browser.close')
         except Exception: pass

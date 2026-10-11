@@ -308,7 +308,7 @@ BUILDERS = {'ProfileRoof': roof_geom, 'FootPrintRoof': roof_geom, 'SWall': wall_
             'RbsFlexDuctCurve': mep_geom, 'RbsFlexPipeCurve': mep_geom, 'CurveElem': line_geom, 'FamilyInstance': instance_box}
 HIDE_DEFAULT_CATS = {'Center line', '<Sketch>', 'Work Plane Grid', 'Cameras', 'Scope Boxes', 'Boundary Conditions', 'Area Loads', 'Line Loads', 'Point Loads', 'Division Profiles',
                      'Survey Point', 'Project Base Point', 'Internal Origin', 'Guide Grid', 'Reference Planes', 'Parts', 'Spaces', 'Rooms', 'Areas', 'Mass Floor', 'RVT Links', 'Analytical Nodes', 'Reference Points', 'Grids', 'Levels', 'Sections', 'Viewports'}
-TRANSLUCENT_CATS = {'Mass', 'Rooms', 'Spaces', 'Areas', 'Scope Boxes', 'Mass Floor', 'RVT Links'}
+TRANSLUCENT_CATS = {'Planting', 'Entourage', 'Mass', 'Rooms', 'Spaces', 'Areas', 'Scope Boxes', 'Mass Floor', 'RVT Links'}
 
 def default_hidden(cat): return cat in HIDE_DEFAULT_CATS or cat.startswith('Analytical')
 
@@ -332,6 +332,7 @@ def brep_geom(ctx, e, r):
     return m, ('solid' if nsk == 0 else 'partial')
 
 def element_mesh(ctx, e, r):
+    if ctx.catname(e) in ('Planting', 'Entourage') and ctx.bbox(e) is not None and r['class'] == 'FamilyInstance': return geom.ellipsoid(*ctx.bbox(e)), 'bbox'
     try:
         res = brep_geom(ctx, e, r)
         if res and res[0] and res[1] == 'solid': return res
@@ -345,7 +346,8 @@ def element_mesh(ctx, e, r):
             if res and res[0]: return res
         except Exception as ex:
             if os.environ.get('RVT_DEBUG'): print('builder', r['class'], e, repr(ex))
-    if part: return part[0], 'approx'          # some faces of the decoded body are of an unsupported surface type
+    if part: return part[0], 'approx'
+    if ctx.catname(e) in ('Planting', 'Entourage') and ctx.bbox(e) is not None: return geom.ellipsoid(*ctx.bbox(e)), 'bbox'          # some faces of the decoded body are of an unsupported surface type
     bb = ctx.bbox(e)
     if bb is not None: return geom.box(*bb), 'bbox'
     return None
@@ -410,7 +412,7 @@ def convert(path, outdir, log=print):
     for (cat, kind, transl), a in acc.items():
         pos = glb.to_yup_m(np.vstack(a['pos'])); idx = np.concatenate(a['idx']).astype(np.uint32)
         c = (0.1, 0.1, 0.12) if kind == 'line' else cat_color(cat)
-        alpha = 0.45 if cat in ('Windows', 'Curtain Panels') else (0.18 if transl else 1.0)
+        alpha = 0.45 if cat in ('Windows', 'Curtain Panels') else ((0.08 if cat in ('Planting', 'Entourage') else 0.18) if transl else 1.0)
         batches.append({'name': cat + ('' if kind == 'tri' else ' (lines)'), 'color': (*c, alpha), 'pos': pos, 'eidx': np.concatenate(a['eidx']), 'idx': idx, 'mode': 1 if kind == 'line' else 4})
         bmeta.append({'cat': cat, 'kind': kind, 'color': '#%02x%02x%02x' % tuple(int(x * 255) for x in c), 'alpha': alpha, 'ranges': a['ranges'], 'tris': a['nt']})
     glb.write_glb(os.path.join(outdir, 'model.glb'), batches)

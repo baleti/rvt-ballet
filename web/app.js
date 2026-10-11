@@ -160,8 +160,8 @@ const lbls = []; let showLvl = true, showGrid = true;
 function buildOverlays() {
   lbls.length = 0; $('#labels').innerHTML = '';
   const mb = modelBox(), sz = mb.getSize(new THREE.Vector3()), c = mb.getCenter(new THREE.Vector3());
-  const lvlMat = new THREE.MeshBasicMaterial({color: 0x2d6cdf, transparent: true, opacity: .035, side: THREE.DoubleSide, depthWrite: false});
-  const lineMat = new THREE.LineBasicMaterial({color: 0x2d6cdf, transparent: true, opacity: .35});
+  const lvlMat = new THREE.MeshBasicMaterial({color: 0x2d6cdf, transparent: true, opacity: .02, side: THREE.DoubleSide, depthWrite: false});
+  const lineMat = new THREE.LineBasicMaterial({color: 0x2d6cdf, transparent: true, opacity: .22});
   S.lvlGroup = new THREE.Group(); S.gridGroup = new THREE.Group(); overlay.add(S.lvlGroup, S.gridGroup);
   for (const l of S.meta.levels) {
     const w = sz.x * 1.1 + 4, d = sz.z * 1.1 + 4;
@@ -499,3 +499,5 @@ window.__renderer = renderer; window.__scene = scene; window.__camera = camera;
 
 $('#bHelp').onclick = () => { $('#help').hidden = !$('#help').hidden; };
 window.__controls = controls;
+window.fitAll = fitAll; window.THREE = THREE;
+window.toVd = toV; window.fitBox = fitBox;

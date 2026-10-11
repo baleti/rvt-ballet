@@ -15,7 +15,7 @@ def _import():
 def reader_stamp():
     """changes whenever the reader's decoder/param code changes (cache key)"""
     h = hashlib.md5()
-    for f in ('rvt_decode.py', 'rvt_entities.py', 'rvt_params.py', 'rvt_geom.py', 'rvt_map2.py', 'map3_train.json'):
+    for f in ('rvt_decode.py', 'rvt_entities.py', 'rvt_xcache.py', 'rvt_params.py', 'rvt_geom.py', 'rvt_map2.py', 'map3_train.json'):
         try: h.update(str(int(os.path.getmtime(os.path.join(READER_DIR, f)))).encode())
         except OSError: pass
     return h.hexdigest()[:8]
@@ -24,20 +24,16 @@ def load(path, log=print):
     """-> dict: recs {(id, class): record}, eh {id: header fields}, params {id: {class, params}}, W, classes [names], idsize"""
     E, P, S = _import()
     t = time.time()
-    orig = E.extract; memo = {}
-    def shared(p, *a, **k):
-        key = (p, tuple(a), tuple(sorted(k.items())))
-        if key not in memo: memo[key] = orig(p, *a, **k)
-        return memo[key]
-    E.extract = shared; P.E.extract = shared
     try:
-        par = P.params(path)
-    finally:
-        E.extract = orig; P.E.extract = orig
-    x = next(iter(memo.values()))
+        import rvt_xcache
+        x = rvt_xcache.get_x(path)                 # reader's own shared extraction cache (also used by rvt_params)
+    except ImportError:
+        x = E.extract(path, want_all=True)
+    par = P.params(path)
+    names = x['sch'].c if 'sch' in x else S.load(path)[1]
     log('reader: %d records, %d headers, %d param sets in %.1fs' % (len(x['recs']), len(x['eh']), len(par), time.time() - t))
     return {'recs': x['recs'], 'eh': x['eh'], 'W': x['W'], 'params': par,
-            'classes': [c['name'] for c in x['sch'].c], 'tagbase': 12}
+            'classes': [c['name'] for c in names], 'tagbase': 12}
 
 def cached_load(path, log=print):
     os.makedirs(CACHE_DIR, exist_ok=True)

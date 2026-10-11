@@ -6,7 +6,7 @@ def model_dir(path):
     key = hashlib.md5(('%s|%s|%s|%s' % (os.path.abspath(path), os.path.getmtime(path), os.path.getsize(path), reader.reader_stamp() + BUILD_VERSION)).encode()).hexdigest()[:12]
     return os.path.join(reader.CACHE_DIR, 'models', os.path.splitext(os.path.basename(path))[0] + '-' + key)
 
-BUILD_VERSION = 'b1'
+BUILD_VERSION = 'b3'
 
 def ensure(path, force=False, log=print):
     from . import build

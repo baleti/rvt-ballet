@@ -126,3 +126,16 @@ def chain_loops(segs, tol=1e-3):
         if np.linalg.norm(cur[0] - cur[-1]) < tol: cur = cur[:-1]
         loops.append(np.array(cur))
     return loops
+
+
+def ellipsoid(lo, hi, nu=16, nv=10):
+    """UV ellipsoid inscribed in the box lo..hi (placeholder for tree-like shapes)"""
+    lo = np.asarray(lo, float); hi = np.asarray(hi, float); c = (lo + hi) / 2; r = (hi - lo) / 2
+    th = np.linspace(0, math.pi, nv + 1); ph = np.linspace(0, 2 * math.pi, nu, endpoint=False)
+    v = np.array([[math.sin(t) * math.cos(p), math.sin(t) * math.sin(p), math.cos(t)] for t in th for p in ph]) * r + c
+    f = []
+    for i in range(nv):
+        for j in range(nu):
+            a = i * nu + j; b = i * nu + (j + 1) % nu; c2 = (i + 1) * nu + j; d = (i + 1) * nu + (j + 1) % nu
+            f += [(a, b, c2), (b, d, c2)]
+    return Mesh(v, f)
