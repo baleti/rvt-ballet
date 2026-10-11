@@ -659,6 +659,7 @@ USE_READER_MESH = True
 def reader_mesh(ctx, e):
     """triangle mesh the reader decoded from Revit's saved graphics (rvt_geometry.element_geometry, confidence 'mesh_approx', world feet): the family-instance geometry. -> (Mesh, fid) or None"""
     if not USE_READER_MESH or not getattr(ctx, 'src', None): return None
+    if getattr(ctx, '_rm', None) is not None: return ctx._rm.get(e)          # prefetched in the parent process (workers must not each load the reader's geometry context)
     try:
         reader._import(); import rvt_geometry as GG
         a = GG.element_geometry(ctx.src, e)
@@ -671,6 +672,16 @@ def reader_mesh(ctx, e):
     iou = box_iou(P.min(0), P.max(0), *bb) if bb is not None else 1.0
     if iou < 0.4: return None                                   # not the element's own geometry
     return m, ('approx' if 'unsupported_faces' in (a.get('flags') or []) or iou < 0.9 else 'solid')
+
+def prefetch_reader_meshes(ctx, els, prog=None):
+    ctx._rm = None; out = {}; t = time.time(); n = 0
+    for el in els:
+        if not el['cat'] or el['isType'] or ctx.recs[el['id']]['class'] in ANALYTIC_CLASSES or ctx.bbox(el['id']) is None or el['cat'] in ('Planting', 'Entourage'): continue
+        try: out[el['id']] = reader_mesh(ctx, el['id'])
+        except Exception: out[el['id']] = None
+        n += 1
+        if prog and n % 300 == 0: prog.set('geometry', 0.0, 'reading saved-graphics meshes %d' % n)
+    ctx._rm = out
 
 def element_mesh(ctx, e, r):
     if r['class'] not in ANALYTIC_CLASSES and ctx.bbox(e) is not None and ctx.catname(e) not in ('Planting', 'Entourage'):
@@ -770,10 +781,10 @@ def run_geometry(ctx, els, prog, workers=None):
     key = geometry_cache_key(); fn = os.path.join(reader.CACHE_DIR, 'geom-%s-%s.pkl' % (hashlib.md5(ctx.raw_key.encode()).hexdigest()[:10], key))
     if os.path.exists(fn):
         t = time.time(); res = pickle.load(open(fn, 'rb')); prog.set('geometry', 1.0, 'geometry cache hit (%.1fs)' % (time.time() - t)); return res
-    ensure_roofs(ctx)
+    ensure_roofs(ctx); prefetch_reader_meshes(ctx, els, prog)
     _G['ctx'] = ctx; _G['els'] = els
     n = len(els); step = 150; chunks = [(a, min(a + step, n)) for a in range(0, n, step)]
-    nw = workers or max(1, min(10, (os.cpu_count() or 2) - 1)); res = []
+    nw = workers or max(1, min(6, (os.cpu_count() or 2) - 1)); res = []
     if nw == 1 or n < 400:
         for k, c in enumerate(chunks): res += _geo_chunk(c); prog.set('geometry', (k + 1) / len(chunks), '')
     else:
