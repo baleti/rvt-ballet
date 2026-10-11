@@ -26,6 +26,7 @@ scene.add(new THREE.HemisphereLight(0xffffff, 0x556070, 1.1));
 const sun = new THREE.DirectionalLight(0xffffff, 1.6); scene.add(sun, sun.target);
 const world = new THREE.Group(); scene.add(world);
 const overlay = new THREE.Group(); scene.add(overlay);
+let selBoxDummy;
 let stateTex, stateData;
 const U = {tState: {value: null}, uMode: {value: 0}};
 
@@ -193,12 +194,25 @@ function updateLabels() {
 
 // ------------------------------------------------------------------ selection / inspector
 let selBox = null;
+async function updateSelBox() {
+  if (selBox) { overlay.remove(selBox); selBox.geometry.dispose(); selBox = null; }
+  if (S.sel.size < 1 || S.sel.size > 50) { dirty = true; return; }
+  const box = new THREE.Box3();
+  for (const i of S.sel) { const b = await bbOf(i); if (b) box.union(b); }
+  if (box.isEmpty()) return;
+  const h = new THREE.Box3Helper(box, 0xffb020); h.material.depthTest = false; h.renderOrder = 5; selBox = h; overlay.add(h); dirty = true;
+}
+async function bbOf(i) {
+  let b = S.bbCache?.get(i);
+  if (!b) { const info = await elInfo(i); if (info.el.bb) { const bb = JSON.parse(info.el.bb).map(p => p.map(x => x * 0.3048)); b = new THREE.Box3().setFromPoints([toV(bb[0]), toV(bb[1])]); (S.bbCache ||= new Map()).set(i, b); } }
+  return b;
+}
 async function select(i, add = false) {
   if (!add) S.sel.clear();
   if (i != null && i >= 0) { if (add && S.sel.has(i)) S.sel.delete(i); else S.sel.add(i); }
-  refreshState(); markTree(); await showInspector();
+  refreshState(); markTree(); updateSelBox(); await showInspector();
 }
-function setSelection(ids) { S.sel = new Set(ids); refreshState(); markTree(); showInspector(); }
+function setSelection(ids) { S.sel = new Set(ids); refreshState(); markTree(); updateSelBox(); showInspector(); }
 async function elInfo(i) { return await (await fetch(`/api/m/${S.mid}/el/${i}`)).json(); }
 const LEN_RE = /length|width|height|offset|elevation|thickness|diameter|depth|radius|distance|extension|size|top|bottom|base/i;
 function fmtVal(k, v) {
@@ -221,7 +235,7 @@ async function showInspector() {
   const e = info.el, bb = e.bb ? JSON.parse(e.bb) : null;
   const dims = bb ? bb[0].map((_, k) => ((bb[1][k] - bb[0][k]) * 0.3048).toFixed(3)).join(' x ') + ' m (x,y,z)' : null;
   const fidLabel = S.meta.fidLabels[e.fid] || e.fid;
-  const rows = [['Category', e.cat], ['Class', e.cls], ['Type', e.type], ['Level', e.level], ['ElementId', e.id], ['UniqueId', e.uid], ['IfcGUID', e.ifc], ['Bounding box', dims]]
+  const rows = [['Category', e.cat], ['Geometry bbox agreement', e.iou != null ? e.iou.toFixed(3) + ' (IoU vs Revit-stored bounding box)' : null], ['Class', e.cls], ['Type', e.type], ['Level', e.level], ['ElementId', e.id], ['UniqueId', e.uid], ['IfcGUID', e.ifc], ['Bounding box', dims]]
     .filter(r => r[1] != null && r[1] !== '').map(r => `<tr><td>${r[0]}</td><td class="mono">${esc(r[1])}</td></tr>`).join('');
   el.innerHTML = `<h2>${esc(e.name || e.type || e.cls + ' ' + e.id)}</h2><div class="dim">${esc(e.cat || '')}${e.type ? ' : ' + esc(e.type) : ''}</div>
   <div style="margin:6px 0"><span class="fid f-${e.fid}">${e.fid}</span> <span class="dim">${esc(fidLabel)}</span></div>
@@ -237,11 +251,7 @@ function elementBox(i) {
 }
 async function zoomTo(ids) {
   const box = new THREE.Box3();
-  for (const i of ids) {
-    let b = S.bbCache?.get(i);
-    if (!b) { const info = await elInfo(i); if (info.el.bb) { const bb = JSON.parse(info.el.bb).map(p => p.map(x => x * 0.3048)); b = new THREE.Box3(toV(bb[0]), toV(bb[1])); b = new THREE.Box3().setFromPoints([toV(bb[0]), toV(bb[1])]); (S.bbCache ||= new Map()).set(i, b); } }
-    if (b) box.union(b);
-  }
+  for (const i of ids) { const b = await bbOf(i); if (b) box.union(b); }
   if (!box.isEmpty()) fitBox(box, camera.position.clone().sub(controls.target));
 }
 

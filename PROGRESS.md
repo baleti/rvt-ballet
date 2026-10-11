@@ -1,0 +1,16 @@
+# PROGRESS
+
+## 2026-10-11 milestone 1 (repo, pipeline, viewer)
+- Repo created, reader adapter (`rvtviewer/reader.py`) imports ~/rvt-research read-only, one shared extraction pass, raw cache in ~/.cache/rvt-viewer.
+- Converter (`rvtviewer/build.py`) -> `model.glb` (batched per category, per-vertex element index `_EIDX`, no normals), `meta.json` (tree, levels, grids, rooms, views, sheets, coverage), `model.sqlite` (elements + all parameters, lazily queried).
+- Server (aiohttp) + Three.js viewer: orbit/pan/zoom, GPU picking (ID + depth pass), hover tooltip, selection highlight + bbox, inspector, tree by category/level, search (+ parameter values), category/level/element visibility, isolate, section plane, measure, level planes/grids/rooms, coverage panel, fidelity colour mode.
+- Headless Chromium CDP tests (`tools/cdp.py`, `tools/uitest*.py`): real mouse click -> inspector, search, tree checkbox, section, measure verified.
+- Directive received: no ODA-derived data. Category table regenerated from Revit gt4 dumps (`tools/make_category_names.py`), see PROVENANCE.md.
+
+## 2026-10-11 milestone 2 (geometry classes)
+- Findings about the file: Revit does NOT store final solids for walls/floors/MEP/family instances; it stores parametric inputs plus reference faces. ElementHeader carries Revit's own world bounding box for every geometric element.
+- Walls: reference-face planes give exact extents (IoU vs header bbox 0.94-0.97, mitred ends/openings not modelled).
+- Floors/ceilings/pads: sketch outline (VarSketch -> CurveElem) extruded between top/bottom reference planes (sloped planes followed). IoU 0.94-0.99.
+- Ducts/pipes/conduits/trays: line/arc driver + width/height/diameter, IoU 0.99.
+- Family instances: placeholder box at true bbox, oriented via instance transform when rotated.
+- Planar B-rep `Geometry` objects (Face/EdgeLoop/Edge with UV end points) decoded (`rvtviewer/brep.py`): real faces for stairs runs ('solid').
