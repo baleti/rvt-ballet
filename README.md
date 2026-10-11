@@ -62,6 +62,15 @@ Floors: Volume within 5% for 87-100% (2020/18, 2026/55, 2026/58). Location check
 
 Samples 2020/2024/2026, family-heavy (2020 Residential, 2026 Facades) and MEP-heavy (2020 rme_advanced, 2024 HVAC, 2026 Plumbing) all convert and open. More files (2021-2025) converted OK via tools/batch.py, except 2021/24_rst_basic which the reader takes minutes on (reader-side).
 
+### Conversion pipeline and timings (this machine, 12 threads; tools/timing.py; reader time is session 176's pure-Python decoder)
+Stages (progress.json, shown in the UI): reading -> tables (+sqlite) -> preview (boxes, usable immediately) -> geometry (parallel worker processes, disk-cached by reader stamp + geometry source) -> packing.
+`open` returns at once: the server starts, the browser shows a progress card, then the box preview, then swaps in the full model without moving the camera. A reader/converter change marks open models stale (banner + Reconvert button).
+| file | cold (nothing cached) | reader cache warm | everything warm (re-convert) | my stages cold (tables / preview / geometry / packing) |
+|---|---|---|---|---|
+| 6 MB 2020 rst_basic | 20.5 s (reader 18.6) | 5.6 s | 1.3 s | 0.4 / 0.2 / 1.3 / 0.06 s |
+| 40 MB 2024 Snowdon Electrical | 47.2 s (reader 44.8) | 9.6 s | 2.5 s | 0.7 / 0.15 / 1.5 / 0.1 s |
+My own code is about 2.5 s of the 47 s cold run; the rest is the reader (single-threaded). Before this work my geometry stage alone took 12 s on the 35 MB MEP sample (now 2.4 s: parallel, pruned B-rep search, cached bounding boxes).
+
 ### Performance
 Synthetic 150k elements / 1.8M triangles (tools/synth.py): metadata+GLB load 1.2 s (software GL), visibility change 5 ms. Real Intel Iris Xe (app-mode Chromium): GPU pick 4.5 ms, full 120k-triangle render 13 ms at 1906x972.
 Not done: true instancing (placeholders are tiny merged boxes; real symbol geometry is not in the file, see NEEDS-FROM-READER.md).

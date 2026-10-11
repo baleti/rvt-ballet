@@ -19,3 +19,9 @@
 - Curved walls, cylindrical B-rep faces, roofs as footprint prisms ('approx'), grids from datum planes, Family:Type names, sheet->view links, level dedupe, ghost isolate, help panel.
 - Verified vs Revit values (verify_gt.py), real-GPU run in an app-mode window on Hyprland workspace 178 (silent, no focus change), 150k-element synthetic stress test.
 - Open: family symbol solids (needs reader), roof slopes, room outlines, wall openings, true instancing.
+
+## 2026-10-11 milestone 4
+- Staged non-blocking conversion with progress UI and box preview; parallel + cached geometry; cache keys include reader stamp (any rvt*.py / GEOMETRY_API.md change) and converter source; stale-model banner + reconvert.
+- Geometry: sloped roofs (stored per-edge slope), walls with hosted door/window/generic-void openings and tops joined to roofs (OpenCascade booleans), layered walls/floors/ceilings with material colours, curved walls, B-rep cylinders.
+- Coverage tab: exact / approximate / box percentages, by category or Revit class; click a row to isolate it in fidelity colours. Screenshot regression set: tools/regress.py -> screenshots/regress (git-excluded).
+- Timings table in README (cold/warm, 6 MB and 40 MB).

@@ -348,6 +348,15 @@ def slab_geom(ctx, e, r):
         zb = float(bbz[0][2]); bot = lambda xy, c=zb: np.full(len(xy), c); zc = zc + [zb]
     if abs(max(zc) - min(zc)) < 1e-6: return None
     holes = [closed[i][:, :2] for i in order[1:] if areas[i] > 1e-6]
+    layers = type_layers(ctx, type_of(ctx, e, r))
+    if len(layers) > 1:                      # compound structure: one prism per layer, first layer on top (exterior side of a floor/ceiling)
+        tot = sum(L[0] for L in layers); cum = 0.0; parts = []
+        for wd, fn, rgb in layers:
+            f0, f1 = cum / tot, (cum + wd) / tot; cum += wd
+            lt = (lambda xy, a=f0: top(xy) - a * (top(xy) - bot(xy))); lb = (lambda xy, a=f1: top(xy) - a * (top(xy) - bot(xy)))
+            parts.append((geom.prism([outer] + holes, lb, lt), rgb or CORE_GRAY))
+        mu = geom.Multi(parts)
+        if mu: return mu, 'param'
     m = geom.prism([outer] + holes, bot, top)
     return (m, 'param') if m else None
 
