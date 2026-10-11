@@ -31,10 +31,11 @@ def main():
         cur = os.path.join(OUT, name + '.png'); prev = os.path.join(OUT, name + '.prev.png')
         if os.path.exists(cur): shutil.copy(cur, prev)
         port += 1; asyncio.run(shoot(d, port, cur))
-        tot = {}
-        for v in m['coverage'].values():
+        tot = {}; hid = set(m.get('defaultHidden') or [])
+        for c, v in m['coverage'].items():
+            if c in hid: continue
             for k, n in v.items(): tot[k] = tot.get(k, 0) + n
-        ex, ap, bx = tot.get('solid', 0), tot.get('param', 0) + tot.get('approx', 0), tot.get('bbox', 0); n = max(ex + ap + bx, 1)
+        ex, ap, bx = tot.get('solid', 0) + tot.get('matched', 0), tot.get('param', 0) + tot.get('approx', 0), tot.get('bbox', 0); n = max(ex + ap + bx, 1)
         diff = pixdiff(cur, prev) if os.path.exists(prev) else None
         rows.append('| %s | %d | %.0f%% | %.0f%% | %.0f%% | %s |' % (name, n, 100 * ex / n, 100 * ap / n, 100 * bx / n, 'new' if diff is None else '%.1f%%' % diff))
         print(rows[-1], flush=True)

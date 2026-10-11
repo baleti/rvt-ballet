@@ -30,6 +30,23 @@ Every element has a fidelity tag shown in the inspector, tree, tooltip, coverage
 - `line`   curve;  `none` nothing drawable (types, annotations, views...)
 `bboxAgreement` in meta.json / inspector = IoU between our mesh and the Revit-stored bounding box (location accuracy check).
 
+### Fidelity table (tools/regress.py, building-geometry elements only: analytical/reference/room/annotation-like categories excluded)
+`exact` = solid (decoded B-rep) + matched (rebuilt from stored data AND extents agree with the bounding box Revit stored: IoU >= 0.97, or inside it spanning >= 93% of its two largest dimensions); `approximate` = rebuilt but not matching / footprint-only; `box only` = placeholder at the stored bounding box.
+| model | elements | exact | approximate | box only |
+|---|---|---|---|---|
+| residential-2020 | 218 | 22% | 9% | 69% |
+| structural-2024 | 1447 | 5% | 1% | 94% |
+| mep-2020 | 7157 | 20% | 1% | 79% |
+| hvac-2024 | 2630 | 40% | 0% | 60% |
+| facades-2026 | 523 | 9% | 7% | 84% |
+Box-only is almost entirely family instances (the reader does not decode family symbol geometry). GEOMETRY_API.md reviewed: for every class it covers (walls, floors, ceilings, ducts..., instances as boxes) the API is 'approx'/'box' and the viewer's own builders already include joins, openings, layers and slopes, so nothing was switched to it; `tools/check_api.py FILE` compares both and flags classes where the API becomes 'exact'.
+
+### Wall volume vs Revit (tools/verify_gt.py): share of walls within 5% of Revit's Volume
+2020 MEP 87% (133 walls), 2026 Structural 68%, 2020 Residential 37%, 2026 Facades 40%. Joins: perpendicular butt joins (first wall at the joint runs through, the others stop at its face) and miter joins from the stored join lists; openings: hosted doors/windows/generic voids; layers by compound structure; tops joined to roofs follow the roof.
+
+### Safety
+Every conversion runs under `systemd-run --user --scope -p MemoryMax=6G -p MemorySwapMax=0` with nice (cli does it for `open`/`convert`; `tools/capped.sh CMD...` for scripts; RVT_MEM_CAP overrides, RVT_NO_CAP disables).
+
 ### Coverage per class (current)
 | class | tier | check |
 |---|---|---|
