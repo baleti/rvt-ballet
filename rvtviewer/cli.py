@@ -51,6 +51,11 @@ def main(argv=None):
     a = ap.parse_args(argv)
     from . import server
     if a.cmd == 'convert':
+        if not os.environ.get('RVT_CAPPED') and not os.environ.get('RVT_NO_CAP') and shutil.which('systemd-run'):
+            # every conversion runs under a memory cap + nice (the reader can balloon on big files)
+            env = dict(os.environ, RVT_CAPPED='1')
+            os.execvpe('systemd-run', ['systemd-run', '--user', '--scope', '-q', '-p', 'MemoryMax=' + os.environ.get('RVT_MEM_CAP', '6G'), '-p', 'MemorySwapMax=0', 'nice', '-n', '10', sys.executable, '-c',
+                       "import sys; sys.path.insert(0,%r); from rvtviewer.cli import main; main(sys.argv[1:])" % os.path.dirname(os.path.dirname(os.path.abspath(__file__)))] + (list(argv) if argv is not None else sys.argv[1:]), env)
         from . import build
         out = a.out or model_dir(a.file); build.convert(a.file, out); print(out); return
     models = server.Models()
@@ -69,6 +74,12 @@ def main(argv=None):
                 try: open(os.path.join(tmp, 'progress.json'), 'w').write(json.dumps({'stage': 'error', 'msg': 'conversion failed - see the terminal output', 'pct': 0, 'stages': []}))
                 except OSError: pass
         threading.Thread(target=job, daemon=True).start(); return mid
+    def open_path(f):
+        d = model_dir(f); mid = os.path.basename(d)
+        if os.path.exists(os.path.join(d, 'meta.json')) and json.load(open(os.path.join(d, 'meta.json'))).get('phase') == 'done':
+            models.add(mid, d, os.path.basename(f)); models.m[mid]['src'] = f; return mid
+        return start_job(f)
+    models.open_path = open_path
     models.reconvert = lambda mid: start_job(models.m[mid]['src']) if models.m.get(mid, {}).get('src') else None
     if a.cmd == 'open':
         for f in a.files:

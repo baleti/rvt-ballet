@@ -65,6 +65,33 @@ def make_app(models):
         mid = req.match_info['mid']; cb = getattr(models, 'reconvert', None)
         new = cb(mid) if cb else None
         return web.json_response({'ok': bool(new), 'id': new})
+    async def library(req):
+        """every converted model in the cache (summary.json per model), flagged stale if the reader/converter changed since"""
+        from . import reader
+        root = os.path.join(reader.CACHE_DIR, 'models'); out = []; rs, vs = reader.reader_stamp(), reader.viewer_stamp()
+        for n in sorted(os.listdir(root)) if os.path.isdir(root) else []:
+            d = os.path.join(root, n)
+            if n.endswith('.tmp') or not os.path.exists(os.path.join(d, 'meta.json')): continue
+            fn = os.path.join(d, 'summary.json')
+            if not os.path.exists(fn):
+                try:
+                    m = json.load(open(os.path.join(d, 'meta.json'))); from .build import write_summary; write_summary(d, m)
+                except Exception: continue
+            sm = json.load(open(fn)); st = sm.get('stamps') or {}
+            out.append({'id': n, 'stale': st.get('reader') != rs or st.get('viewer') != vs, 'loaded': n in models.m, **sm})
+        out.sort(key=lambda x: -(x.get('built') or 0)); return web.json_response(out)
+    async def open_path(req):
+        body = await req.json(); path = os.path.expanduser(body.get('path', ''))
+        if not os.path.isfile(path): return web.json_response({'ok': False, 'error': 'file not found: ' + path})
+        cb = getattr(models, 'open_path', None); mid = cb(path) if cb else None
+        return web.json_response({'ok': bool(mid), 'id': mid})
+    async def load_id(req):
+        from . import reader
+        body = await req.json(); n = body.get('id', ''); d = os.path.join(reader.CACHE_DIR, 'models', os.path.basename(n))
+        if not os.path.exists(os.path.join(d, 'meta.json')): return web.json_response({'ok': False})
+        if n not in models.m: models.add(n, d, n.rsplit('-', 1)[0])
+        return web.json_response({'ok': True, 'id': n})
+    app.router.add_get('/api/library', library); app.router.add_post('/api/open', open_path); app.router.add_post('/api/load', load_id)
     app.router.add_get('/api/reader', reader_info)
     app.router.add_post('/api/m/{mid}/reconvert', reconvert)
     app.router.add_get('/m/{mid}/model.glb', glb)

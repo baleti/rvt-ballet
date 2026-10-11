@@ -143,7 +143,7 @@ async function loadModel(mid, opts = {}) {
   initState(S.N); refreshState();
   $('#status').textContent = 'loading geometry...';
   world.clear(); overlay.clear(); S.bbCache = null;
-  const gltf = await new GLTFLoader().loadAsync(`/m/${mid}/${S.meta.phase === 'done' ? 'model' : 'preview'}.glb`);
+  const gltf = await new GLTFLoader().loadAsync(`/m/${mid}/${(S.meta.phase || 'done') === 'done' ? 'model' : 'preview'}.glb`);
   let tris = 0;
   gltf.scene.traverse(o => {
     if (!o.isMesh && !o.isLine && !o.isLineSegments) return;
@@ -158,9 +158,9 @@ async function loadModel(mid, opts = {}) {
   });
   world.add(gltf.scene);
   buildOverlays(); if (!opts.keepCamera) fitAll(); buildTabs(); setupLegend(); refreshState();
-  $('#status').textContent = `${S.N.toLocaleString()} elements, ${tris.toLocaleString()} triangles - ${((performance.now() - t0) / 1000).toFixed(1)}s` + (S.meta.phase === 'done' ? '' : ' (box preview)');
+  $('#status').textContent = `${S.N.toLocaleString()} elements, ${tris.toLocaleString()} triangles - ${((performance.now() - t0) / 1000).toFixed(1)}s` + ((S.meta.phase || 'done') === 'done' ? '' : ' (box preview)');
   dirty = true; window.__loaded = true;
-  if (S.meta.phase !== 'done') refineLoop(mid);
+  if ((S.meta.phase || 'done') !== 'done') refineLoop(mid);
 }
 async function refineLoop(mid) {
   // geometry is still being built: poll, then swap the preview for the full model without moving the camera
@@ -547,7 +547,7 @@ window.toVd = toV; window.fitBox = fitBox;
 
 // reader / viewer upgrade watcher: when the reader (or this converter) changes, models converted with an older version are stale -> offer a reconvert
 setInterval(async () => {
-  if (!S.meta || !S.meta.stamps || S.meta.phase !== 'done') return;
+  if (!S.meta || !S.meta.stamps || (S.meta.phase || 'done') !== 'done') return;
   try {
     const r = await (await fetch('/api/reader')).json();
     const stale = r.reader !== S.meta.stamps.reader || r.viewer !== S.meta.stamps.viewer;
@@ -557,3 +557,23 @@ setInterval(async () => {
     $('#reconv').onclick = async () => { b.hidden = true; const j = await (await fetch(`/api/m/${S.mid}/reconvert`, {method: 'POST'})).json(); if (j.ok) { window.__loaded = false; const sel = $('#modelSel'); if (![...sel.options].some(o => o.value === j.id)) sel.add(new Option(S.meta.file, j.id)); sel.value = j.id; await loadModel(j.id); } else b.innerHTML = 'No source file known for this model: reopen the .rvt with rvt-viewer open.'; };
   } catch (e) {}
 }, 20000);
+
+// model picker: every converted model (fidelity summary, stale flag), open another .rvt by path, switch without reloading the page
+async function openPicker() {
+  const el = $('#picker'); el.hidden = false; el.innerHTML = '<div class="pk"><h3>Models</h3><div class="dim">loading...</div></div>';
+  const lib = await (await fetch('/api/library')).json();
+  const f = x => (x * 100).toFixed(0) + '%';
+  el.innerHTML = `<div class="pk"><div style="display:flex;justify-content:space-between"><h3>Models</h3><button id="pkClose">close</button></div>
+  <div style="display:flex;gap:6px;margin-bottom:8px"><input id="pkPath" type="text" placeholder="open another file: /path/to/model.rvt" style="flex:1"><button id="pkOpen">Open</button></div><div id="pkErr" class="dim"></div>
+  <table class="cov"><tr><th>model</th><th>MB</th><th>elements</th><th>exact</th><th>approx</th><th>box</th><th>converted</th><th></th></tr>` +
+  lib.map(m => `<tr class="covrow" data-id="${esc(m.id)}"><td>${esc(m.file)}${m.id === S.mid ? ' <b>(open)</b>' : ''}</td><td>${m.size ? (m.size / 1e6).toFixed(0) : ''}</td><td>${m.elements}</td><td>${f(m.exact)}</td><td>${f(m.approx)}</td><td>${f(m.box)}</td><td>${m.built ? new Date(m.built * 1000).toLocaleString() : ''}</td><td>${m.stale ? '<span class="fid f-bbox" title="reader/converter changed since">stale</span>' : ''}</td></tr>`).join('') + '</table></div>';
+  $('#pkClose').onclick = () => el.hidden = true;
+  $('#pkOpen').onclick = async () => { const j = await (await fetch('/api/open', {method: 'POST', body: JSON.stringify({path: $('#pkPath').value.trim()})})).json(); if (!j.ok) { $('#pkErr').textContent = j.error || 'could not open'; return; } el.hidden = true; await switchModel(j.id, j.name); };
+  el.querySelectorAll('.covrow').forEach(tr => tr.onclick = async () => { const j = await (await fetch('/api/load', {method: 'POST', body: JSON.stringify({id: tr.dataset.id})})).json(); if (j.ok) { el.hidden = true; await switchModel(j.id); } });
+}
+async function switchModel(id, name) {
+  const sel = $('#modelSel'); if (![...sel.options].some(o => o.value === id)) sel.add(new Option(name || id.replace(/-[0-9a-f]{12}$/, ''), id));
+  sel.value = id; window.__loaded = false; await loadModel(id);
+}
+$('#bModels').onclick = openPicker;
+addEventListener('keydown', e => { if (e.target.tagName !== 'INPUT' && (e.key === 'o' || e.key === 'O')) openPicker(); });

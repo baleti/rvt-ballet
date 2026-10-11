@@ -736,6 +736,15 @@ def model_bbox(els):
     if len(allb) < 50: lo = np.minimum(lo, np.min([b[0] for b in allb], 0) * 0.3048); hi = np.maximum(hi, np.max([b[1] for b in allb], 0) * 0.3048)
     return [lo.tolist(), hi.tolist()]
 
+def write_summary(outdir, meta, src=None):
+    tot = {}
+    for v in meta['coverage'].values():
+        for k, n in v.items(): tot[k] = tot.get(k, 0) + n
+    ex, ap, bx = tot.get('solid', 0), tot.get('param', 0) + tot.get('approx', 0), tot.get('bbox', 0); n = max(ex + ap + bx, 1)
+    sm = {'file': meta['file'], 'src': src and os.path.abspath(src), 'size': os.path.getsize(src) if src and os.path.exists(src) else None, 'built': meta.get('built'), 'elements': len(meta['elements']),
+          'tris': sum(b['tris'] for b in meta['batches']), 'exact': ex / n, 'approx': ap / n, 'box': bx / n, 'stamps': meta.get('stamps'), 'secs': meta.get('buildSecs')}
+    json.dump(sm, open(os.path.join(outdir, 'summary.json'), 'w'))
+
 def convert(path, outdir, log=print, workers=None):
     """rvt -> outdir. Stages (progress.json): reading (reader), tables (+sqlite), preview (boxes only: meta.json phase=preview + preview.glb, usable at once), geometry (parallel,
     cached), packing (model.glb, final meta.json phase=done)."""
@@ -803,5 +812,6 @@ def convert(path, outdir, log=print, workers=None):
                                          'elements': [[el['id'], el['cls'], el['cat'], el['name'], el['type'], el['level'], el['fid'], el['isType'], el['family']] for el in els]})
     T['packing'] = round(time.time() - t, 2); T['total'] = round(time.time() - prog.t0, 2); meta['buildSecs'] = T['total']; meta['timings'] = T
     json.dump(meta, open(os.path.join(outdir, 'meta.json'), 'w'), separators=(',', ':'))
+    write_summary(outdir, meta, path)
     prog.set('done', 1.0, 'wrote %s in %.1fs: %d batches, %d tris  %s' % (outdir, T['total'], len(batches), sum(b['tris'] for b in bmeta), json.dumps(T)))
     return meta
