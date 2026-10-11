@@ -476,9 +476,10 @@ def roof_geom(ctx, e, r):
     sloped = [c for c in curves if c[2] and abs(c[1]) > 1e-6 and len(c[0]) >= 2]
     if not sloped:
         m = geom.prism([outer] + holes, bb[0][2], bb[1][2]); return (m, 'approx') if m else None
-    return roof_surface(outer, holes, sloped, bb, store=(ctx.roof_fields, e))
+    lay = type_layers(ctx, type_of(ctx, e, r)); th = sum(L[0] for L in lay) if lay else None
+    return roof_surface(outer, holes, sloped, bb, store=(ctx.roof_fields, e), thick=th)
 
-def roof_surface(outer, holes, sloped, bb, store=None):
+def roof_surface(outer, holes, sloped, bb, store=None, thick=None):
     """roof slab over a footprint: bottom height z(p) = min over slope edges whose perpendicular strip contains p of (z_edge + tan(angle) * distance to the edge line);
     the minimum is the hip/gable surface Revit builds for equal-slope footprint roofs (for a convex footprint it is the exact straight-skeleton height).
     Thickness = bbox top minus the highest point of the bottom surface."""
@@ -514,6 +515,8 @@ def roof_surface(outer, holes, sloped, bb, store=None):
     for h_ in holes: keep &= ~_P(h_).contains_points(cen)
     tri = tri[keep]
     zb = zfun(pts); dz = float((bb[1][2] - bb[0][2]) - (zb.max() - zb.min()))      # thickness = stored bbox height range minus the slope's own rise
+    if thick:                                                    # compound-structure thickness is perpendicular to the slope: vertical thickness = t / cos(slope)
+        amax = max(abs(c[1]) for c in sloped); dz = thick / max(np.cos(amax), 0.2)
     if not 0.05 <= dz <= 3.0: dz = float(np.clip(dz, 0.05, 3.0))
     n = len(pts); top = np.c_[pts, zb + dz]; bot = np.c_[pts, zb]
     m = Mesh(np.vstack([top, bot]), np.vstack([tri, tri[:, ::-1] + n]))
