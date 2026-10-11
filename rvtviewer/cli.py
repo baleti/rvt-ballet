@@ -17,12 +17,24 @@ def ensure(path, force=False, log=print):
     else: log('cache hit: %s' % d)
     return d
 
+def hypr_env():
+    env = dict(os.environ)
+    if not env.get('HYPRLAND_INSTANCE_SIGNATURE'):
+        d = os.path.join(env.get('XDG_RUNTIME_DIR', '/run/user/%d' % os.getuid()), 'hypr')
+        try:
+            c = sorted((os.path.getmtime(os.path.join(d, x)), x) for x in os.listdir(d) if os.path.exists(os.path.join(d, x, '.socket.sock')))
+            if c: env['HYPRLAND_INSTANCE_SIGNATURE'] = c[-1][1]
+        except OSError: pass
+    return env
+
 def open_browser(url, workspace=None, headless=False):
     prof = os.path.join(reader.CACHE_DIR, 'chromium-profile')
     cmd = ['chromium', '--app=' + url, '--user-data-dir=' + prof, '--enable-unsafe-webgpu', '--ignore-gpu-blocklist', '--no-first-run', '--window-size=1500,950']
+    if os.environ.get('RVT_VIEWER_CDP'): cmd.append('--remote-debugging-port=' + os.environ['RVT_VIEWER_CDP'])
     if workspace:
-        sig = os.environ.get('HYPRLAND_INSTANCE_SIGNATURE')
-        subprocess.Popen(['hyprctl', 'dispatch', 'exec', '[workspace %s silent] %s' % (workspace, ' '.join(cmd))])
+        import shlex
+        code = 'hl.dispatch(hl.dsp.exec_cmd(%s))' % json.dumps('[workspace %s silent] %s' % (workspace, ' '.join(shlex.quote(c) for c in cmd)))
+        subprocess.run(['hyprctl', 'eval', code], env=hypr_env())
     else: subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def main(argv=None):

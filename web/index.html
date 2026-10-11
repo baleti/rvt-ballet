@@ -34,4 +34,6 @@
   <aside id="right"><div id="insp"><p class="dim">Click an element to inspect it.</p></div></aside>
 </main>
 <script type="module" src="/app.js"></script>
+<script>/* first-contact safety net: if the app module has not started after 6 s (server still warming up), reload once */
+setTimeout(()=>{try{if(!window.S&&!sessionStorage.rvtRetry){sessionStorage.rvtRetry=1;location.reload()}}catch(e){}},6000)</script>
 </body></html>

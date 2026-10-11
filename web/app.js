@@ -494,3 +494,5 @@ requestAnimationFrame(frame);
 })();
 window.pickAt = pickAt; window.selectEl = select; window.setSection = setSection; window.zoomTo = zoomTo;
 window.refreshState = refreshState;
+
+window.__renderer = renderer; window.__scene = scene; window.__camera = camera;
