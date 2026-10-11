@@ -38,3 +38,4 @@ input[type=range]{accent-color:var(--acc2)}
 [hidden]{display:none!important}
 
 #modelSel{max-width:230px}#top button{white-space:nowrap}#top{overflow:hidden}
+#help{position:absolute;right:8px;top:8px;background:var(--panel);border:1px solid var(--line);padding:8px 11px;border-radius:6px;font-size:12px;line-height:1.6}

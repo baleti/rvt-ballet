@@ -496,3 +496,6 @@ window.pickAt = pickAt; window.selectEl = select; window.setSection = setSection
 window.refreshState = refreshState;
 
 window.__renderer = renderer; window.__scene = scene; window.__camera = camera;
+
+$('#bHelp').onclick = () => { $('#help').hidden = !$('#help').hidden; };
+window.__controls = controls;

@@ -116,8 +116,28 @@ def ref_planes(f):
         if pl: out.append(pl)
     return out
 
+def curved_wall_geom(ctx, e, r):
+    """curved wall: reference faces are cylinders (center, axes, radius, angle/height envelope); ring sector between the smallest and largest radius"""
+    cyl = []
+    for fc in r['fields'].get('m_pRefFaces') or []:
+        sf = g(fc, 'm_pSurf')
+        if isinstance(sf, dict) and 'm_radius' in sf and 'm_zVec' in sf and sf.get('m_Envelope'):
+            cyl.append(sf)
+    if len(cyl) < 2: return None
+    c = np.array(cyl[0]['m_center'], float); x = np.array(cyl[0]['m_xVec'], float); y = np.array(cyl[0]['m_yVec'], float); z = np.array(cyl[0]['m_zVec'], float)
+    (u0, v0), (u1, v1) = cyl[0]['m_Envelope']['m_corners']
+    radii = [float(sf['m_radius']) for sf in cyl]; r0, r1 = min(radii), max(radii)
+    if r1 - r0 < 1e-6: return None
+    k = max(4, int(abs(u1 - u0) / np.radians(8)) + 1); t = np.linspace(u0, u1, k + 1)
+    if abs(z[2]) < 0.999: return None
+    ring = lambda R: c[:2] + R * (np.cos(t)[:, None] * x[:2] + np.sin(t)[:, None] * y[:2])
+    outer = ring(r1); inner = ring(r0)
+    m = geom.prism([np.vstack([outer, inner[::-1]])], c[2] + v0, c[2] + v1)
+    return (m, 'param') if m else None
+
 def wall_geom(ctx, e, r):
     pls = ref_planes(r['fields'])
+    if not pls: return curved_wall_geom(ctx, e, r)
     pls = [p for p in pls if p[3]]
     if not pls: return None
     o0, x0, y0, _ = pls[0]; n = np.cross(x0, y0); nn = np.linalg.norm(n)

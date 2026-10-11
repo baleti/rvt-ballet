@@ -17,6 +17,7 @@
   <button id="bIsolate" title="Isolate selection (I)">Isolate</button>
   <button id="bHide" title="Hide selection (H)">Hide</button>
   <button id="bShowAll" title="Show everything">Show all</button>
+  <button id="bHelp" title="Controls">?</button>
   <button id="bFid" title="Colour by geometry fidelity">Fidelity colours</button>
 </header>
 <main>
@@ -30,6 +31,7 @@
       <input type="range" id="secPos" min="0" max="1000" value="500"><button id="secFlip">flip</button><button id="secOff">off</button></div>
     <div id="status">loading...</div>
     <div id="legend" hidden></div>
+    <div id="help" hidden><b>Controls</b><br>left-drag orbit &middot; right-drag / shift-drag pan &middot; wheel zoom<br>click select (Ctrl/Shift adds) &middot; double-click zoom to element<br>F fit &middot; H hide &middot; I isolate &middot; M measure &middot; Esc clear<br>tree: checkbox = category visibility, dot = element visibility<br>fidelity tags: solid / param / approx / bbox / line (see Coverage tab)</div>
   </div>
   <aside id="right"><div id="insp"><p class="dim">Click an element to inspect it.</p></div></aside>
 </main>
