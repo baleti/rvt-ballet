@@ -119,7 +119,7 @@ async function loadModel(mid) {
   const E = S.meta.elements; S.N = E.length; S.hidden = new Uint8Array(S.N);
   S.byCat = new Map();
   E.forEach((el, i) => { const c = el[2] || '(no category)'; if (!S.byCat.has(c)) S.byCat.set(c, []); S.byCat.get(c).push(i); });
-  S.hay = E.map(el => [el[0], el[1], el[2], el[3], el[4], el[5]].join(' ').toLowerCase());
+  S.hay = E.map(el => [el[0], el[1], el[2], el[3], el[4], el[5], el[8]].join(' ').toLowerCase());
   S.catHidden = new Set(S.meta.defaultHidden || []);
   initState(S.N); refreshState();
   $('#status').textContent = 'loading geometry...';
@@ -235,9 +235,9 @@ async function showInspector() {
   const e = info.el, bb = e.bb ? JSON.parse(e.bb) : null;
   const dims = bb ? bb[0].map((_, k) => ((bb[1][k] - bb[0][k]) * 0.3048).toFixed(3)).join(' x ') + ' m (x,y,z)' : null;
   const fidLabel = S.meta.fidLabels[e.fid] || e.fid;
-  const rows = [['Category', e.cat], ['Geometry bbox agreement', e.iou != null ? e.iou.toFixed(3) + ' (IoU vs Revit-stored bounding box)' : null], ['Class', e.cls], ['Type', e.type], ['Level', e.level], ['ElementId', e.id], ['UniqueId', e.uid], ['IfcGUID', e.ifc], ['Bounding box', dims]]
+  const rows = [['Category', e.cat], ['Family', e.family], ['Geometry bbox agreement', e.iou != null ? e.iou.toFixed(3) + ' (IoU vs Revit-stored bounding box)' : null], ['Class', e.cls], ['Type', e.type], ['Level', e.level], ['ElementId', e.id], ['UniqueId', e.uid], ['IfcGUID', e.ifc], ['Bounding box', dims]]
     .filter(r => r[1] != null && r[1] !== '').map(r => `<tr><td>${r[0]}</td><td class="mono">${esc(r[1])}</td></tr>`).join('');
-  el.innerHTML = `<h2>${esc(e.name || e.type || e.cls + ' ' + e.id)}</h2><div class="dim">${esc(e.cat || '')}${e.type ? ' : ' + esc(e.type) : ''}</div>
+  el.innerHTML = `<h2>${esc(e.name || e.type || e.cls + ' ' + e.id)}</h2><div class="dim">${esc(e.cat || '')}${e.family ? ' | ' + esc(e.family) : ''}${e.type ? ' : ' + esc(e.type) : ''}</div>
   <div style="margin:6px 0"><span class="fid f-${e.fid}">${e.fid}</span> <span class="dim">${esc(fidLabel)}</span></div>
   <table class="kv">${rows}</table>
   <h3>Parameters (${info.params.length})</h3><input id="pf" type="search" placeholder="filter parameters" style="width:100%;margin-bottom:5px">
@@ -280,7 +280,7 @@ function renderTree(tb) {
     if (el[7] && !S.showNoGeo) return;                                  // types
     if (el[6] === 'none' && !S.showNoGeo) return;
     const g1 = treeMode === 'category' ? (el[2] || '(no category)') : (el[5] || '(no level)');
-    const g2 = treeMode === 'category' ? (el[4] || el[1]) : (el[2] || '(no category)');
+    const g2 = treeMode === 'category' ? ((el[8] ? el[8] + ' : ' : '') + (el[4] || el[1])) : (el[2] || '(no category)');
     if (!groups.has(g1)) groups.set(g1, new Map());
     const m = groups.get(g1); if (!m.has(g2)) m.set(g2, []); m.get(g2).push(i);
   });

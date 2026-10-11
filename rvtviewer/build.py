@@ -67,18 +67,37 @@ def type_of(ctx, e, r):
             if isinstance(v, int) and v != e: t = ctx.eid_int(v); break
     return t if t in ctx.recs else None
 
+SYSTEM_FAMILY = {'BasicWallType': 'Basic Wall', 'NewCurtainWallType': 'Curtain Wall', 'StackedWallType': 'Stacked Wall', 'FloorType': 'Floor', 'CompoundCeilingType': 'Compound Ceiling',
+                 'RoofType': 'Basic Roof', 'StairsType': 'Stairs', 'RbsPipeType': 'Pipe Types', 'RbsDuctType': 'Duct Types', 'RbsConduitType': 'Conduit', 'RbsCableTrayType': 'Cable Tray'}
+
+def sym_name(ctx, r):
+    n = g(r['fields'], 'm_symbolInfo', 'm_name')
+    return n if isinstance(n, str) and n else None
+
+def family_name(ctx, tid):
+    """Family name of a type element: loaded family via the symbol's m_familyId, else the system-family name for the type class"""
+    if tid is None: return None
+    r = ctx.recs.get(tid)
+    if r is None: return None
+    fid = ctx.eid_int(r['fields'].get('m_familyId')) if 'm_familyId' in r['fields'] else None
+    if fid is not None and fid in ctx.recs:
+        n = ctx.recs[fid]['fields'].get('m_name')
+        if isinstance(n, str) and n: return n
+    return SYSTEM_FAMILY.get(r['class'])
+
 def build_table(ctx):
     els = []
     for e, r in ctx.recs.items():
-        if e not in ctx.eh and r['class'] not in ('Level', 'Grid'): pass
         p = ctx.par.get(e, {}).get('params', {})
         tid = type_of(ctx, e, r)
-        name = p.get('Name') or p.get('Type Name') or r['fields'].get('m_name') or r['fields'].get('m_text') or r['fields'].get('m_viewName')
+        name = p.get('Name') or p.get('Type Name') or sym_name(ctx, r) or r['fields'].get('m_name') or r['fields'].get('m_text') or r['fields'].get('m_viewName')
         tname = None
         if tid is not None:
-            tp = ctx.par.get(tid, {}).get('params', {}); tname = tp.get('Type Name') or tp.get('Name') or ctx.recs[tid]['fields'].get('m_name')
-        is_type = 'Type Name' in p and tid is None and ctx.eid_int(p.get('Type Id')) in (None, e)
-        els.append({'id': e, 'cls': r['class'], 'cat': ctx.catname(e), 'name': name if isinstance(name, str) else None, 'type': tname if isinstance(tname, str) else None,
+            tp = ctx.par.get(tid, {}).get('params', {}); tname = tp.get('Type Name') or tp.get('Name') or sym_name(ctx, ctx.recs[tid]) or ctx.recs[tid]['fields'].get('m_name')
+        is_type = ('Type Name' in p or 'm_symbolInfo' in r['fields']) and tid is None and ctx.eid_int(p.get('Type Id')) in (None, e)
+        fam = family_name(ctx, tid if tid is not None else (e if is_type else None))
+        if is_type and tname is None: tname = name
+        els.append({'id': e, 'cls': r['class'], 'cat': ctx.catname(e), 'name': name if isinstance(name, str) else None, 'type': tname if isinstance(tname, str) else None, 'family': fam,
                     'typeId': tid, 'isType': bool(is_type), 'uid': p.get('UniqueId'), 'ifc': p.get('IfcGUID'), 'fid': 'none', 'bb': ctx.bbox(e)})
     return els
 
@@ -320,16 +339,17 @@ def build_levels(ctx):
     return sorted(out, key=lambda l: l['elev'])
 
 def build_grids(ctx):
+    """grid lines: the Grid element stores a vertical datum plane (origin, x along the line, y up) with an extent envelope [(u0,v0),(u1,v1)]"""
     out = []
     for e, r in ctx.recs.items():
         if r['class'] != 'Grid': continue
+        pl = plane_of(g(r['fields'], 'm_pSurface'))
         pts = None
-        for k, v in r['fields'].items():
-            if isinstance(v, dict) and k.startswith('m_p') and k not in ('m_pParamValueSetDouble', 'm_pParamValueSetInt', 'm_pParamValueSetAString', 'm_pParamValueSetElementId', 'm_pGeomTable'):
-                pts = curve_pts(g(v, 'm_pCrv')) if g(v, 'm_pCrv') else curve_pts(v)
-                if pts is not None: break
+        if pl and pl[3]:
+            o, x, y, env = pl; (u0, v0), (u1, v1) = env
+            pts = np.array([o + x * u0 + y * v0, o + x * u1 + y * v0])
         if pts is None: continue
-        out.append({'id': e, 'name': r['fields'].get('m_text', ''), 'pts': [[round(float(a) * 0.3048, 4) for a in p] for p in pts[[0, -1]]]})
+        out.append({'id': e, 'name': r['fields'].get('m_text', ''), 'pts': [[round(float(a) * 0.3048, 4) for a in p] for p in pts]})
     return out
 
 # ---------------------------------------------------------------- main
@@ -382,7 +402,7 @@ def convert(path, outdir, log=print):
     views, sheets = datums.views_sheets(ctx)
     meta = {'file': os.path.basename(path), 'levels': levels, 'grids': build_grids(ctx), 'batches': bmeta, 'rooms': datums.rooms(ctx, lvl_by_id), 'views': views, 'sheets': sheets,
             'bbox': [lo.tolist(), hi.tolist()], 'fidLabels': FID_LABEL, 'defaultHidden': sorted({el['cat'] for el in els if el['cat'] and default_hidden(el['cat'])}),
-            'elements': [[el['id'], el['cls'], el['cat'], el['name'], el['type'], el['level'], el['fid'], el['isType']] for el in els],
+            'elements': [[el['id'], el['cls'], el['cat'], el['name'], el['type'], el['level'], el['fid'], el['isType'], el['family']] for el in els],
             'coverage': {k: dict(v) for k, v in covg.items()}, 'bboxAgreement': {k: [round(float(np.mean(v)), 3), len(v)] for k, v in ious.items()}, 'built': time.time(), 'buildSecs': 0}
     for r_ in meta['rooms']:
         for el in els:
@@ -390,9 +410,9 @@ def convert(path, outdir, log=print):
     dbp = os.path.join(outdir, 'model.sqlite')
     if os.path.exists(dbp): os.remove(dbp)
     db = sqlite3.connect(dbp)
-    db.executescript('create table el(i integer primary key, id integer, cls text, cat text, name text, type text, level text, uid text, ifc text, fid text, bb text, iou real);'
+    db.executescript('create table el(i integer primary key, id integer, cls text, cat text, name text, type text, family text, level text, uid text, ifc text, fid text, bb text, iou real);'
                      'create table prm(i integer, k text, v text);create index prm_i on prm(i);')
-    db.executemany('insert into el values(?,?,?,?,?,?,?,?,?,?,?,?)', [(el['i'], el['id'], el['cls'], el['cat'], el['name'], el['type'], el.get('level'), el['uid'], el['ifc'], el['fid'],
+    db.executemany('insert into el values(?,?,?,?,?,?,?,?,?,?,?,?,?)', [(el['i'], el['id'], el['cls'], el['cat'], el['name'], el['type'], el['family'], el.get('level'), el['uid'], el['ifc'], el['fid'],
                     json.dumps([x.tolist() for x in el['bb']]) if el['bb'] else None, el.get('iou')) for el in els])
     rows = []
     for el in els:

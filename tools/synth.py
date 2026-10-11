@@ -23,6 +23,6 @@ t = time.time(); glb.write_glb(os.path.join(out, 'model.glb'), batches); print('
 meta = {'file': 'synthetic', 'levels': [{'id': k, 'name': 'Level %d' % k, 'elev': k * 5.0} for k in range(12)], 'grids': [], 'batches': bm, 'rooms': [], 'views': [], 'sheets': [], 'bbox': [[0, 0, 0], [300, 200, 60]],
         'fidLabels': build.FID_LABEL, 'defaultHidden': [], 'elements': els, 'coverage': {c: {'bbox': N // len(cats)} for c in cats}, 'bboxAgreement': {}}
 json.dump(meta, open(os.path.join(out, 'meta.json'), 'w'), separators=(',', ':'))
-db = sqlite3.connect(os.path.join(out, 'model.sqlite')); db.executescript('drop table if exists el;drop table if exists prm;create table el(i integer primary key, id integer, cls text, cat text, name text, type text, level text, uid text, ifc text, fid text, bb text, iou real);create table prm(i integer, k text, v text);create index prm_i on prm(i);')
-db.executemany('insert into el values(?,?,?,?,?,?,?,?,?,?,?,?)', [(i, e[0], e[1], e[2], e[3], e[4], e[5], None, None, 'bbox', None, None) for i, e in enumerate(els)])
+db = sqlite3.connect(os.path.join(out, 'model.sqlite')); db.executescript('drop table if exists el;drop table if exists prm;create table el(i integer primary key, id integer, cls text, cat text, name text, type text, family text, level text, uid text, ifc text, fid text, bb text, iou real);create table prm(i integer, k text, v text);create index prm_i on prm(i);')
+db.executemany('insert into el values(?,?,?,?,?,?,?,?,?,?,?,?,?)', [(i, e[0], e[1], e[2], e[3], e[4], 'Family', e[5], None, None, 'bbox', None, None) for i, e in enumerate(els)])
 db.executemany('insert into prm values(?,?,?)', [(i, 'Mark', str(i)) for i in range(N)]); db.commit()
