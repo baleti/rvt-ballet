@@ -52,6 +52,9 @@ Family instances now come from the reader's saved-graphics triangle meshes (rvt_
 Walls: butt/miter joins from the stored join lists, hosted door/window/generic-void openings (doors/windows shrunk 0.2 ft per side, fitted on gt4), compound-structure layers, tops joined to roofs follow the roof. Floors: nested loops, stored Revit extent for flat slabs, open B-rep shells not accepted as solid. Weakest group: gable walls joined to roofs.
 Reader API status (GEOMETRY_API.md, rvt_brep.py, new rvt_mesh.py): still no family solids. Wired in: the reader's shell split (rvt_mesh.components) decides which B-rep bodies are closed solids (open shells become approximate); `tools/check_mesh.py` cross-checks its tessellation against ours (18/19 bodies agree on the 2020 MEP sample); `tools/check_api.py` compares API confidence per class.
 
+### Acceptance status (ACCEPTANCE.md): per class, per year
+See `docs/ACCEPTANCE-STATUS.md` (regenerate with `tools/accept_table.py` after `tools/accept_all.sh` + `tools/accept_retry.sh`). Caveat: classes whose volume is not measurable in gt4 (rooms, topography...) can show DONE on IoU alone.
+
 ### Provisional constants
 `OPENING_SHRINK` (0.2 ft trimmed from door/window bounding boxes to approximate the real hole) was fitted against Revit volumes in gt4: it is tuning, not modelling. Openings should come from the families' real cut bodies (`m_complexCutGeoms`, already used when a symbol has one); the constant only covers doors/windows without them and will be removed once symbol geometry decodes. `ROOF_ATTACH_FRACTION` is likewise provisional.
 
