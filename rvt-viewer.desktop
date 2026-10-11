@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=RVT Viewer
+Comment=Open Revit .rvt files without Revit
+Exec=~/src/rvt-viewer/rvt-viewer open %f
+MimeType=application/x-revit;
+Terminal=false
+Categories=Graphics;Viewer;

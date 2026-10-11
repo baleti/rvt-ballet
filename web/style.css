@@ -36,3 +36,5 @@ table.cov{width:100%;border-collapse:collapse;font-size:12px}table.cov td,table.
 .bar{display:flex;height:10px;border-radius:3px;overflow:hidden;margin:3px 0 8px}.bar div{height:100%}
 input[type=range]{accent-color:var(--acc2)}
 [hidden]{display:none!important}
+
+#modelSel{max-width:230px}#top button{white-space:nowrap}#top{overflow:hidden}

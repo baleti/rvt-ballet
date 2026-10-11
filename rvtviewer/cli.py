@@ -44,7 +44,7 @@ def main(argv=None):
         root = os.path.join(reader.CACHE_DIR, 'models')
         if not a.dirs and os.path.isdir(root):
             for n in sorted(os.listdir(root)):
-                if os.path.exists(os.path.join(root, n, 'meta.json')): models.add(n, os.path.join(root, n), n)
+                if os.path.exists(os.path.join(root, n, 'meta.json')): models.add(n, os.path.join(root, n), n.rsplit('-', 1)[0])
     def ready(port):
         first = next(iter(models.m)) if models.m else ''
         url = 'http://127.0.0.1:%d/#%s' % (port, first)
