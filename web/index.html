@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RVT Viewer</title>
+<link rel="stylesheet" href="/style.css">
+<script type="importmap">{"imports":{"three":"/vendor/three/three.module.js","three/":"/vendor/three/"}}</script>
+</head><body>
+<header id="top">
+  <div id="brand">RVT Viewer</div>
+  <select id="modelSel" title="model"></select>
+  <input id="q" type="search" placeholder="Search name, category, type, level, id, GUID..." autocomplete="off">
+  <label class="chk" title="also search parameter values (server side)"><input type="checkbox" id="qParams"> params</label>
+  <span class="sp"></span>
+  <button id="bFit" title="Fit all (F)">Fit</button>
+  <button id="bTop">Top</button><button id="bFront">Front</button><button id="bIso">Iso</button>
+  <button id="bSection" title="Section plane">Section</button>
+  <button id="bMeasure" title="Measure (M)">Measure</button>
+  <button id="bIsolate" title="Isolate selection (I)">Isolate</button>
+  <button id="bHide" title="Hide selection (H)">Hide</button>
+  <button id="bShowAll" title="Show everything">Show all</button>
+  <button id="bFid" title="Colour by geometry fidelity">Fidelity colours</button>
+</header>
+<main>
+  <aside id="left">
+    <nav id="tabs"><button data-t="tree" class="on">Model</button><button data-t="levels">Levels</button><button data-t="views">Views</button><button data-t="rooms">Rooms</button><button data-t="search">Results</button><button data-t="cov">Coverage</button></nav>
+    <div id="tabbody"></div>
+  </aside>
+  <div id="view"><canvas id="gl"></canvas><div id="labels"></div><div id="tip"></div>
+    <div id="secui" hidden><b>Section</b>
+      <select id="secAxis"><option>X</option><option selected>Y</option><option>Z</option></select>
+      <input type="range" id="secPos" min="0" max="1000" value="500"><button id="secFlip">flip</button><button id="secOff">off</button></div>
+    <div id="status">loading...</div>
+    <div id="legend" hidden></div>
+  </div>
+  <aside id="right"><div id="insp"><p class="dim">Click an element to inspect it.</p></div></aside>
+</main>
+<script type="module" src="/app.js"></script>
+</body></html>
