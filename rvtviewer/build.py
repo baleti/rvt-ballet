@@ -28,7 +28,8 @@ from .build_util import g
 HOSTED_CUT_CATS = ('Doors', 'Windows', 'Generic Models')
 
 USE_SYMBOL_CUTS = True
-OPENING_SHRINK = 0.2      # ft trimmed from each side of a hosted instance's bbox to get the actual hole (frame/casing)
+OPENING_SHRINK = {'Doors': 0.2, 'Windows': 0.2}
+OPENING_SHRINK_Z = {'Doors': 0.2, 'Windows': 0.2}  # old:      # ft trimmed from each side of a hosted instance's bbox to get the actual hole (frame/casing)
 ROOF_ATTACH_FRACTION = 1.0      # measured against Revit wall volumes: wall tops joined to a roof reach the roof's top surface (0 = underside)
 
 class Ctx:
@@ -360,8 +361,9 @@ def wall_openings(ctx, e, org, x0, n, y0, d):
         loc = np.c_[(corners - org) @ x0, (corners - org) @ n, (corners - org) @ y0]
         lo = np.maximum(loc.min(0), 0.0); hi = np.minimum(loc.max(0), d)
         # the instance box is axis aligned in world space; for a wall at an angle it over-covers along the wall: shrink to the box the instance really occupies
-        sh = OPENING_SHRINK if (ctx.catname(h) in ('Doors', 'Windows') and not body) else 0.0       # frames/casing are inside the instance bbox; generic voids are cut as stored
-        lo = lo + np.array([sh, 0, sh]); hi = hi - np.array([sh, 0, sh])
+        cat_ = ctx.catname(h); sh = OPENING_SHRINK.get(cat_, 0.0) if not body else 0.0       # frames/casing are inside the instance bbox; generic voids are cut as stored
+        shz = OPENING_SHRINK_Z.get(cat_, sh) if not body else 0.0
+        lo = lo + np.array([sh, 0, shz]); hi = hi - np.array([sh, 0, shz])
         if hi[0] - lo[0] < 0.2 or hi[2] - lo[2] < 0.2: continue
         pad = 0.2
         out.append(occ.box_frame(org + x0 * lo[0] + y0 * lo[2] - n * pad, x0 * (hi[0] - lo[0]), n * (d[1] + 2 * pad), y0 * (hi[2] - lo[2])))
@@ -651,7 +653,29 @@ def contained_match(lo, hi, blo, bhi, tol=0.15):
     rd = bhi - blo; od = hi - lo; big = np.argsort(rd)[::-1][:2]
     return bool(np.all(od[big] >= 0.93 * rd[big] - 1e-6))
 
+ANALYTIC_CLASSES = {'SWall', 'Floor', 'Ceiling', 'RoofSoffit', 'BuildingPad', 'ProfileRoof', 'FootPrintRoof', 'RbsDuctCurve', 'RbsPipeCurve', 'RbsConduitCurve', 'CableTray', 'RbsFlexDuctCurve', 'RbsFlexPipeCurve', 'CurveElem'}
+USE_READER_MESH = True
+
+def reader_mesh(ctx, e):
+    """triangle mesh the reader decoded from Revit's saved graphics (rvt_geometry.element_geometry, confidence 'mesh_approx', world feet): the family-instance geometry. -> (Mesh, fid) or None"""
+    if not USE_READER_MESH or not getattr(ctx, 'src', None): return None
+    try:
+        reader._import(); import rvt_geometry as GG
+        a = GG.element_geometry(ctx.src, e)
+    except Exception: return None
+    if a.get('confidence') != 'mesh_approx': return None
+    T = [np.array(sl['triangles'], float).reshape(-1, 3) for sl in a['solids'] if sl.get('kind') == 'triangle_mesh' and sl.get('triangles')]
+    if not T: return None
+    P = np.vstack(T); m = Mesh(P, np.arange(len(P)).reshape(-1, 3))
+    bb = ctx.bbox(e)
+    iou = box_iou(P.min(0), P.max(0), *bb) if bb is not None else 1.0
+    if iou < 0.4: return None                                   # not the element's own geometry
+    return m, ('approx' if 'unsupported_faces' in (a.get('flags') or []) or iou < 0.9 else 'solid')
+
 def element_mesh(ctx, e, r):
+    if r['class'] not in ANALYTIC_CLASSES and ctx.bbox(e) is not None and ctx.catname(e) not in ('Planting', 'Entourage'):
+        rm = reader_mesh(ctx, e)
+        if rm: return rm
     if ctx.catname(e) in ('Planting', 'Entourage') and ctx.bbox(e) is not None and r['class'] == 'FamilyInstance': return geom.ellipsoid(*ctx.bbox(e)), 'bbox'
     try:
         res = brep_geom(ctx, e, r)
@@ -813,6 +837,9 @@ def convert(path, outdir, log=print, workers=None):
     os.makedirs(outdir, exist_ok=True); prog = Progress(outdir, log); T = {}
     prog.set('reading', 0.0, 'decoding %s with the reader' % os.path.basename(path))
     t = time.time(); raw = reader.cached_load(path, log); T['reader'] = round(time.time() - t, 2); ctx = Ctx(raw)
+    ctx.src = path
+    try: reader._import(); import rvt_geometry as GG; GG.file_geometry_index(path)        # load the reader's geometry context before the worker processes fork
+    except Exception: pass
     ctx.raw_key = '%s|%s|%s|%s' % (os.path.abspath(path), os.path.getmtime(path), os.path.getsize(path), reader.reader_stamp())
     from . import datums
     prog.set('tables', 0.0, 'building element tables')
