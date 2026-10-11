@@ -55,6 +55,9 @@ Reader API status (GEOMETRY_API.md, rvt_brep.py, new rvt_mesh.py): still no fami
 ### Provisional constants
 `OPENING_SHRINK` (0.2 ft trimmed from door/window bounding boxes to approximate the real hole) was fitted against Revit volumes in gt4: it is tuning, not modelling. Openings should come from the families' real cut bodies (`m_complexCutGeoms`, already used when a symbol has one); the constant only covers doors/windows without them and will be removed once symbol geometry decodes. `ROOF_ATTACH_FRACTION` is likewise provisional.
 
+### Memory discipline for evaluations
+`tools/accept_all.sh` runs ONE file at a time under a 3.5 GB cap, waits while MemAvailable < 5 GB, and `accept_eval.py` evaluates element by element (no model build, no worker pool, mesh freed after its metrics, aborts above 3.3 GB RSS). Results are streamed to `~/.cache/rvt-viewer/accept/*.json`; finished files are skipped on restart.
+
 ### Safety
 Every conversion runs under `systemd-run --user --scope -p MemoryMax=6G -p MemorySwapMax=0` with nice (cli does it for `open`/`convert`; `tools/capped.sh CMD...` for scripts; RVT_MEM_CAP overrides, RVT_NO_CAP disables).
 

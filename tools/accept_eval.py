@@ -24,28 +24,32 @@ def gt4_volumes(path):
 def main(path):
     os.makedirs(OUT, exist_ok=True)
     year = os.path.basename(os.path.dirname(path)); stem = os.path.splitext(os.path.basename(path))[0]
-    d = cli.ensure(path, False, log=lambda *a: None)
-    meta = json.load(open(os.path.join(d, 'meta.json'))); sm = json.load(open(os.path.join(d, 'summary.json')))
-    raw = reader.cached_load(path); ctx = build.Ctx(raw); ctx.src = path
-    els = build.build_table(ctx); ctx.raw_key = '%s|%s|%s|%s' % (os.path.abspath(path), os.path.getmtime(path), os.path.getsize(path), reader.reader_stamp())
-    class _P:
-        def set(self, *a, **k): pass
-    res = build.run_geometry(ctx, els, _P()); got = {t[0]: t for t in res}
+    import gc
+    raw = reader.cached_load(path); ctx = build.Ctx(raw); del raw; ctx.src = path
+    els = build.build_table(ctx); ctx._rm = None
+    build.ensure_roofs(ctx); gc.collect()
     vols, has_gt = gt4_volumes(path)
     cls = collections.defaultdict(lambda: {'n': 0, 'true': 0, 'param_match': 0, 'approx': 0, 'box': 0, 'vol_n': 0, 'vol_ok': 0, 'vol_ratios': [], 'iou_n': 0, 'iou_ok': 0})
     for i, el in enumerate(els):
-        t = got.get(i)
-        if t is None or el['isType']: continue
-        _, fid, kind, parts = t
-        if kind != 'tri': continue
+        if not el['cat'] or el['isType']: continue
+        if i % 200 == 0:
+            gc.collect(); rss = int(open('/proc/self/statm').read().split()[1]) * 4096 / 1e9
+            if rss > 3.3: print('ABORT %s: RSS %.1f GB over budget' % (os.path.basename(path), rss)); sys.exit(3)
+        try: r_ = build.element_mesh(ctx, el['id'], ctx.recs[el['id']])      # one element at a time: nothing is kept after its metrics are taken
+        except Exception: r_ = None
+        if r_ is None: continue
+        mesh, fid = r_
+        if getattr(mesh, 'kind', 'tri') != 'tri': continue
+        parts = [(pm.v, pm.f) for pm, _ in (mesh.parts if hasattr(mesh, 'parts') else [(mesh, None)])]; kind = 'tri'
         c = cls[el['cls']]; c['n'] += 1
-        V = np.vstack([p[0] for p in parts]); F = np.vstack([p[1] + sum(len(q[0]) for q in parts[:k]) for k, p in enumerate(parts)])
+        V = mesh.v; F = mesh.f
         bb = el['bb']
         iou = build.box_iou(V.min(0), V.max(0), *bb) if bb is not None else None
         if fid in ('solid', 'mesh'): c['true'] += 1
         elif fid == 'param' and iou is not None and (iou >= 0.97 or build.contained_match(V.min(0), V.max(0), *bb)): c['param_match'] += 1
         elif fid == 'bbox': c['box'] += 1
         else: c['approx'] += 1
+        del mesh, parts, r_
         if iou is not None: c['iou_n'] += 1; c['iou_ok'] += int(iou >= 0.95)
         v = vols.get(el['id'])
         if v and v > 1e-6:
