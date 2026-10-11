@@ -23,14 +23,7 @@ def cat_color(name):
     h = int(hashlib.md5(name.encode()).hexdigest()[:6], 16) / 0xffffff
     return colorsys.hls_to_rgb(h, 0.62, 0.35)
 
-def g(o, *path, default=None):
-    """navigate decoded record fields; transparently steps through pointer slots ('obj')"""
-    for p in path:
-        if isinstance(o, dict) and 'obj' in o and p not in o: o = o['obj']
-        if isinstance(o, dict) and p in o: o = o[p]
-        else: return default
-    if isinstance(o, dict) and 'obj' in o: o = o['obj']
-    return o
+from .build_util import g
 
 class Ctx:
     def __init__(self, raw):
@@ -139,14 +132,27 @@ def sketch_loops(ctx, e):
     return None
 
 def curve_pts(c, maxdeg=10):
+    """polyline (Nx3, feet) of a decoded curve object: GLine, GArc, GNurbSpline (clamped-uniform assumption), GPolyLine"""
+    if not isinstance(c, dict): return None
+    if 'obj' in c and 'm_endParams' not in c: c = c['obj']
     if not isinstance(c, dict): return None
     if 'm_dirVec' in c and 'm_endParams' in c and 'm_origin' in c:
         o = np.array(c['m_origin'], float); d = np.array(c['m_dirVec'], float); t0, t1 = c['m_endParams']
         return np.array([o + d * t0, o + d * t1])
-    if 'm_radius' in c and 'm_center' in c and 'm_endParams' in c:
-        ctr = c['m_center']; R = c['m_radius']; t0, t1 = c['m_endParams']
-        nv = c.get('m_normal') or c.get('m_zVec') or [0, 0, 1]; xv = c.get('m_xVec') or c.get('m_refVec') or [1, 0, 0]
-        return geom.arc_points(ctr, R, t0, t1, nv, xv, maxdeg)
+    if 'm_radius' in c and 'm_center' in c and 'm_endParams' in c and 'm_xVec' in c:
+        t0, t1 = c['m_endParams']; R = float(c['m_radius']); ctr = np.array(c['m_center'], float)
+        x = np.array(c['m_xVec'], float); y = np.array(c['m_yVec'], float)
+        k = max(2, int(abs(t1 - t0) / math.radians(maxdeg)) + 1); t = np.linspace(t0, t1, k + 1)
+        return ctr + R * (np.cos(t)[:, None] * x + np.sin(t)[:, None] * y)
+    if 'm_ctrlPoints' in c:
+        P = np.array([cp['m_Point'] for cp in c['m_ctrlPoints']], float); deg = int(c.get('m_Degree') or 3)
+        if len(P) > deg and not c.get('m_Rational'):
+            try:
+                from scipy.interpolate import BSpline
+                n = len(P); kn = np.concatenate([np.zeros(deg), np.linspace(0, 1, n - deg + 1), np.ones(deg)])
+                return BSpline(kn, P, deg)(np.linspace(0, 1, max(16, 4 * n)))
+            except Exception: pass
+        return P
     return None
 
 def slab_geom(ctx, e, r):
@@ -165,7 +171,84 @@ def slab_geom(ctx, e, r):
     m = geom.prism([outer] + holes, min(zs), max(zs))
     return (m, 'param') if m else None
 
-BUILDERS = {'SWall': wall_geom, 'Floor': slab_geom}
+
+class LineSet:
+    """polylines as GL line segments"""
+    def __init__(self, pts):
+        pts = np.asarray(pts, float); self.v = pts
+        n = len(pts); self.f = np.c_[np.arange(n - 1), np.arange(1, n)].astype(np.int32) if n > 1 else np.zeros((0, 2), np.int32)
+    def __bool__(self): return len(self.f) > 0
+    kind = 'line'
+
+def mep_geom(ctx, e, r):
+    f = r['fields']; c = g(f, 'm_pCurveDriver', 'm_pCrv')
+    pts = curve_pts(c)
+    if pts is None: return None
+    w = f.get('m_dWidthOrDiameter'); h = f.get('m_dHeight'); cls = r['class']
+    if not w: return None
+    round_ = cls in ('RbsPipeCurve', 'RbsConduitCurve', 'RbsFlexPipeCurve') or (cls in ('RbsDuctCurve', 'RbsFlexDuctCurve') and (not h or h <= 0))
+    if cls == 'RbsPipeCurve':
+        dpm = g(f, 'm_pDesignPropManager') or {}
+        od = dpm.get('m_dOuterDiameter') if isinstance(dpm, dict) else None
+        if od: w = od
+    m = Mesh()
+    for a_, b_ in zip(pts[:-1], pts[1:]):
+        m.add(geom.tube(a_, b_, w / 2, 14) if round_ else geom.rect_tube(a_, b_, w, h or w))
+    return (m, 'param') if m else None
+
+def line_geom(ctx, e, r):
+    pts = curve_pts(g(r['fields'], 'm_pCurveDriver', 'm_pCrv'))
+    return (LineSet(pts), 'line') if pts is not None and len(pts) > 1 else None
+
+def inst_frame(ctx, r):
+    ii = g(r['fields'], 'm_pInstanceInfo'); trf = g(ii, 'm_Trf') if ii else None
+    if not trf: return None
+    M = np.array(trf['m_3x3'], float); o = np.array(trf['m_or'], float)
+    return M, o
+
+def instance_box(ctx, e, r):
+    """placeholder for a family instance: box at the true location/orientation. The world bounding box from the element header is exact;
+    for rotated instances the oriented box is fitted so that its world AABB matches the header box (stretched axes are solved by NNLS)."""
+    bb = ctx.bbox(e)
+    if bb is None: return None
+    lo, hi = bb; A = hi - lo
+    fr = inst_frame(ctx, r)
+    sym = ctx.eid_int(r['fields'].get('m_masterSymbolId')); sb = ctx.bbox(sym) if sym is not None else None
+    if fr is None or sb is None: return geom.box(lo, hi), 'bbox'
+    M, o = fr
+    # world = M @ local (columns are the local axes) or M.T; pick the orientation consistent with the header box
+    cands = []
+    for MM in (M, M.T):
+        if np.all(np.abs(np.abs(MM) - np.round(np.abs(MM))) < 1e-3): cands.append((0, MM)); continue
+        e0 = sb[1] - sb[0]
+        from scipy.optimize import nnls
+        lam = 0.15
+        Aug = np.vstack([np.abs(MM), lam * np.eye(3)]); b = np.concatenate([A, lam * e0])
+        ext, _ = nnls(Aug, b)
+        err = np.linalg.norm(np.abs(MM) @ ext - A)
+        cands.append((err, MM, ext))
+    cands.sort(key=lambda t: t[0])
+    best = cands[0]
+    if len(best) == 2: return geom.box(lo, hi), 'bbox'          # axis-aligned: header box is exact
+    err, MM, ext = best
+    if err > 0.25 * max(np.linalg.norm(A), 1e-6): return geom.box(lo, hi), 'bbox'
+    c = (lo + hi) / 2
+    m = geom.box(-ext / 2, ext / 2); m.v = m.v @ MM.T + c
+    return m, 'bbox'
+
+LINE_CLASSES = {'CurveElem'}
+BUILDERS = {'SWall': wall_geom, 'Floor': slab_geom, 'RbsDuctCurve': mep_geom, 'RbsPipeCurve': mep_geom, 'RbsConduitCurve': mep_geom, 'CableTray': mep_geom,
+            'RbsFlexDuctCurve': mep_geom, 'RbsFlexPipeCurve': mep_geom, 'CurveElem': line_geom, 'FamilyInstance': instance_box}
+HIDE_DEFAULT_CATS = {'Center line', '<Sketch>', 'Work Plane Grid', 'Cameras', 'Scope Boxes', 'Boundary Conditions', 'Area Loads', 'Line Loads', 'Point Loads', 'Division Profiles',
+                     'Survey Point', 'Project Base Point', 'Internal Origin', 'Guide Grid', 'Reference Planes', 'Parts', 'Spaces', 'Rooms', 'Areas', 'Mass Floor', 'RVT Links', 'Analytical Nodes', 'Reference Points', 'Grids', 'Levels', 'Sections', 'Viewports'}
+TRANSLUCENT_CATS = {'Mass', 'Rooms', 'Spaces', 'Areas', 'Scope Boxes', 'Mass Floor', 'RVT Links'}
+
+def default_hidden(cat): return cat in HIDE_DEFAULT_CATS or cat.startswith('Analytical')
+
+def box_iou(lo1, hi1, lo2, hi2):
+    lo = np.maximum(lo1, lo2); hi = np.minimum(hi1, hi2); d = np.maximum(hi - lo, 0)
+    inter = float(np.prod(d)); a = float(np.prod(np.maximum(hi1 - lo1, 1e-6))); b = float(np.prod(np.maximum(hi2 - lo2, 1e-6)))
+    return inter / (a + b - inter) if a + b - inter > 0 else 0.0
 
 def element_mesh(ctx, e, r):
     fn = BUILDERS.get(r['class'])
@@ -191,10 +274,10 @@ def build_grids(ctx):
     out = []
     for e, r in ctx.recs.items():
         if r['class'] != 'Grid': continue
-        pts = curve_pts(g(r['fields'], 'm_pCurveDriver', 'm_pCrv')) or curve_pts(g(r['fields'], 'm_pCurve')) 
-        if pts is None:
-            for k, v in r['fields'].items():
-                pts = curve_pts(g(v)) if isinstance(v, dict) else None
+        pts = None
+        for k, v in r['fields'].items():
+            if isinstance(v, dict) and k.startswith('m_p') and k not in ('m_pParamValueSetDouble', 'm_pParamValueSetInt', 'm_pParamValueSetAString', 'm_pParamValueSetElementId', 'm_pGeomTable'):
+                pts = curve_pts(g(v, 'm_pCrv')) if g(v, 'm_pCrv') else curve_pts(v)
                 if pts is not None: break
         if pts is None: continue
         out.append({'id': e, 'name': r['fields'].get('m_text', ''), 'pts': [[round(float(a) * 0.3048, 4) for a in p] for p in pts[[0, -1]]]})
@@ -205,9 +288,9 @@ def build_grids(ctx):
 def convert(path, outdir, log=print):
     t0 = time.time(); os.makedirs(outdir, exist_ok=True)
     raw = reader.cached_load(path, log); ctx = Ctx(raw)
+    from . import datums
     els = build_table(ctx); log('%d elements' % len(els))
     levels = build_levels(ctx); lvl_by_id = {l['id']: l['name'] for l in levels}
-    # level per element
     for el in els:
         r = ctx.recs[el['id']]; p = ctx.par.get(el['id'], {}).get('params', {})
         lv = None
@@ -219,38 +302,42 @@ def convert(path, outdir, log=print):
                 v = ctx.eid_int(p.get(k)) if isinstance(p.get(k), int) else None
                 if v in lvl_by_id: lv = v; break
         el['level'] = lvl_by_id.get(lv)
-    # geometry
-    cats = collections.OrderedDict(); acc = {}   # category -> dict(pos list, eidx list, idx list, ranges)
-    stats = collections.Counter(); covg = collections.defaultdict(collections.Counter)
+    acc = {}; covg = collections.defaultdict(collections.Counter); ious = {}
     for i, el in enumerate(els):
-        el['i'] = i
-        r = ctx.recs[el['id']]
+        el['i'] = i; r = ctx.recs[el['id']]
         res = element_mesh(ctx, el['id'], r) if (el['cat'] and not el['isType']) else None
         if res is None:
             covg[el['cat'] or '(none)']['none'] += 1; continue
         mesh, fid = res
         el['fid'] = fid; covg[el['cat']][fid] += 1
-        a = acc.setdefault(el['cat'], {'pos': [], 'idx': [], 'eidx': [], 'ranges': [], 'nv': 0, 'nt': 0})
+        if fid in ('param', 'solid') and el['bb'] is not None:
+            el['iou'] = round(box_iou(mesh.v.min(0), mesh.v.max(0), *el['bb']), 3); ious.setdefault(el['cat'], []).append(el['iou'])
+        kind = getattr(mesh, 'kind', 'tri'); transl = fid == 'bbox' and el['cat'] in TRANSLUCENT_CATS
+        a = acc.setdefault((el['cat'], kind, transl), {'pos': [], 'idx': [], 'eidx': [], 'ranges': [], 'nv': 0, 'nt': 0})
         a['pos'].append(mesh.v); a['idx'].append(mesh.f.reshape(-1) + a['nv']); a['eidx'].append(np.full(len(mesh.v), i, np.float32))
         a['ranges'] += [i, a['nt'], len(mesh.f)]; a['nv'] += len(mesh.v); a['nt'] += len(mesh.f)
     batches = []; bmeta = []
-    for cat, a in acc.items():
+    for (cat, kind, transl), a in acc.items():
         pos = glb.to_yup_m(np.vstack(a['pos'])); idx = np.concatenate(a['idx']).astype(np.uint32)
-        # y-up conversion mirrors z -> flips handedness; winding is unimportant (double sided)
-        c = cat_color(cat); alpha = 0.45 if cat in ('Windows', 'Curtain Panels') else 1.0
-        batches.append({'name': cat, 'color': (*c, alpha), 'pos': pos, 'eidx': np.concatenate(a['eidx']), 'idx': idx})
-        bmeta.append({'cat': cat, 'color': '#%02x%02x%02x' % tuple(int(x * 255) for x in c), 'alpha': alpha, 'ranges': a['ranges'], 'tris': a['nt']})
+        c = (0.1, 0.1, 0.12) if kind == 'line' else cat_color(cat)
+        alpha = 0.45 if cat in ('Windows', 'Curtain Panels') else (0.18 if transl else 1.0)
+        batches.append({'name': cat + ('' if kind == 'tri' else ' (lines)'), 'color': (*c, alpha), 'pos': pos, 'eidx': np.concatenate(a['eidx']), 'idx': idx, 'mode': 1 if kind == 'line' else 4})
+        bmeta.append({'cat': cat, 'kind': kind, 'color': '#%02x%02x%02x' % tuple(int(x * 255) for x in c), 'alpha': alpha, 'ranges': a['ranges'], 'tris': a['nt']})
     glb.write_glb(os.path.join(outdir, 'model.glb'), batches)
-    # metadata
-    allb = [el['bb'] for el in els if el['bb'] is not None and el['fid'] != 'none']
+    allb = [el['bb'] for el in els if el['bb'] is not None and el['fid'] != 'none' and not default_hidden(el['cat'] or '') and el['cat'] not in ('Mass',)]
+    if not allb: allb = [el['bb'] for el in els if el['bb'] is not None and el['fid'] != 'none']
     if allb:
-        lo = np.min([b[0] for b in allb], 0) * 0.3048; hi = np.max([b[1] for b in allb], 0) * 0.3048
+        lo = np.percentile([b[0] for b in allb], 0.5, axis=0) * 0.3048; hi = np.percentile([b[1] for b in allb], 99.5, axis=0) * 0.3048
+        lo = np.minimum(lo, np.min([b[0] for b in allb], 0) * 0.3048 if len(allb) < 50 else lo); hi = np.maximum(hi, np.max([b[1] for b in allb], 0) * 0.3048 if len(allb) < 50 else hi)
     else: lo = hi = np.zeros(3)
-    meta = {'file': os.path.basename(path), 'version': None, 'levels': levels, 'grids': build_grids(ctx), 'batches': bmeta,
-            'bbox': [lo.tolist(), hi.tolist()], 'fidLabels': FID_LABEL,
+    views, sheets = datums.views_sheets(ctx)
+    meta = {'file': os.path.basename(path), 'levels': levels, 'grids': build_grids(ctx), 'batches': bmeta, 'rooms': datums.rooms(ctx, lvl_by_id), 'views': views, 'sheets': sheets,
+            'bbox': [lo.tolist(), hi.tolist()], 'fidLabels': FID_LABEL, 'defaultHidden': sorted({el['cat'] for el in els if el['cat'] and default_hidden(el['cat'])}),
             'elements': [[el['id'], el['cls'], el['cat'], el['name'], el['type'], el['level'], el['fid'], el['isType']] for el in els],
-            'coverage': {k: dict(v) for k, v in covg.items()}, 'built': time.time(), 'buildSecs': 0}
-    # sqlite
+            'coverage': {k: dict(v) for k, v in covg.items()}, 'bboxAgreement': {k: [round(float(np.mean(v)), 3), len(v)] for k, v in ious.items()}, 'built': time.time(), 'buildSecs': 0}
+    for r_ in meta['rooms']:
+        for el in els:
+            if el['id'] == r_['id']: r_['i'] = el['i']; break
     dbp = os.path.join(outdir, 'model.sqlite')
     if os.path.exists(dbp): os.remove(dbp)
     db = sqlite3.connect(dbp)
@@ -260,7 +347,9 @@ def convert(path, outdir, log=print):
                     json.dumps([x.tolist() for x in el['bb']]) if el['bb'] else None) for el in els])
     rows = []
     for el in els:
-        for k, v in ctx.par.get(el['id'], {}).get('params', {}).items(): rows.append((el['i'], k, json.dumps(v) if not isinstance(v, str) else v))
+        for k, v in ctx.par.get(el['id'], {}).get('params', {}).items():
+            if isinstance(v, int) and not isinstance(v, bool): v = ctx.sc(v) if v >= (1 << (8 * ctx.W - 1)) else int(v)
+            rows.append((el['i'], k, json.dumps(v) if not isinstance(v, str) else v))
     db.executemany('insert into prm values(?,?,?)', rows); db.commit(); db.close()
     meta['buildSecs'] = round(time.time() - t0, 1)
     json.dump(meta, open(os.path.join(outdir, 'meta.json'), 'w'), separators=(',', ':'))

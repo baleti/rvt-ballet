@@ -119,16 +119,22 @@ async function loadModel(mid) {
   S.byCat = new Map();
   E.forEach((el, i) => { const c = el[2] || '(no category)'; if (!S.byCat.has(c)) S.byCat.set(c, []); S.byCat.get(c).push(i); });
   S.hay = E.map(el => [el[0], el[1], el[2], el[3], el[4], el[5]].join(' ').toLowerCase());
+  S.catHidden = new Set(S.meta.defaultHidden || []);
   initState(S.N); refreshState();
   $('#status').textContent = 'loading geometry...';
   world.clear(); overlay.clear();
   const gltf = await new GLTFLoader().loadAsync(`/m/${mid}/model.glb`);
   let tris = 0;
   gltf.scene.traverse(o => {
-    if (!o.isMesh) return;
-    const b = S.meta.batches[o.userData.batch ?? o.parent?.userData?.batch ?? 0];
-    const old = o.material; const m = patch(new THREE.MeshStandardMaterial({color: old.color, roughness: .85, metalness: 0, side: THREE.DoubleSide, transparent: old.transparent, opacity: old.opacity}));
-    o.material = m; o.frustumCulled = false; o.userData.batch = b; tris += o.geometry.index.count / 3;
+    if (!o.isMesh && !o.isLine && !o.isLineSegments) return;
+    const old = o.material;
+    if (o.isMesh) {
+      o.material = patch(new THREE.MeshStandardMaterial({color: old.color, roughness: .85, metalness: 0, side: THREE.DoubleSide, transparent: old.transparent, opacity: old.opacity, depthWrite: !old.transparent}));
+      tris += o.geometry.index.count / 3;
+    } else {
+      const lm = new THREE.LineBasicMaterial({color: old.color}); lm.onBeforeCompile = patch(new THREE.MeshStandardMaterial()).onBeforeCompile; lm.customProgramCacheKey = () => 'rvtline1'; o.material = lm;
+    }
+    o.frustumCulled = false;
   });
   world.add(gltf.scene);
   buildOverlays(); fitAll(); buildTabs(); setupLegend();
@@ -153,8 +159,8 @@ const lbls = []; let showLvl = true, showGrid = true;
 function buildOverlays() {
   lbls.length = 0; $('#labels').innerHTML = '';
   const mb = modelBox(), sz = mb.getSize(new THREE.Vector3()), c = mb.getCenter(new THREE.Vector3());
-  const lvlMat = new THREE.MeshBasicMaterial({color: 0x2d6cdf, transparent: true, opacity: .06, side: THREE.DoubleSide, depthWrite: false});
-  const lineMat = new THREE.LineBasicMaterial({color: 0x2d6cdf, transparent: true, opacity: .55});
+  const lvlMat = new THREE.MeshBasicMaterial({color: 0x2d6cdf, transparent: true, opacity: .035, side: THREE.DoubleSide, depthWrite: false});
+  const lineMat = new THREE.LineBasicMaterial({color: 0x2d6cdf, transparent: true, opacity: .35});
   S.lvlGroup = new THREE.Group(); S.gridGroup = new THREE.Group(); overlay.add(S.lvlGroup, S.gridGroup);
   for (const l of S.meta.levels) {
     const w = sz.x * 1.1 + 4, d = sz.z * 1.1 + 4;
@@ -475,3 +481,4 @@ requestAnimationFrame(frame);
   const want = location.hash.slice(1); if (models.some(m => m.id === want)) sel.value = want;
   if (models.length) await loadModel(sel.value); else $('#status').textContent = 'no models';
 })();
+window.pickAt = pickAt; window.selectEl = select; window.setSection = setSection; window.zoomTo = zoomTo;

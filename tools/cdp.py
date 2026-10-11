@@ -63,3 +63,10 @@ class Browser:
         try: await self.call('Browser.close')
         except Exception: pass
         self.p.terminate(); await self.sess.close(); shutil.rmtree(self.prof, ignore_errors=True)
+
+def wait_http(url, timeout=30):
+    t = time.time()
+    while time.time() - t < timeout:
+        try: urllib.request.urlopen(url, timeout=2).read(); return
+        except Exception: time.sleep(0.2)
+    raise TimeoutError(url)
