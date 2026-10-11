@@ -333,9 +333,10 @@ def element_mesh(ctx, e, r):
 # ---------------------------------------------------------------- datum / spatial
 
 def build_levels(ctx):
-    out = []
+    out = []; seen = set()
     for e, (n, z) in ctx.levels.items():
-        if z is not None: out.append({'id': e, 'name': n, 'elev': z * 0.3048})
+        if z is None or (n, round(z, 4)) in seen: continue          # copies owned by groups / design options repeat name + elevation
+        seen.add((n, round(z, 4))); out.append({'id': e, 'name': n, 'elev': z * 0.3048})
     return sorted(out, key=lambda l: l['elev'])
 
 def build_grids(ctx):

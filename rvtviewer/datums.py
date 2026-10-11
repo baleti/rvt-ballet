@@ -34,7 +34,9 @@ def views_sheets(ctx):
         n = f.get('m_viewName')
         if n is None: continue
         if c == 'DBViewDrafting' and f.get('m_sheetNumber'):
-            vs = [_name_of(ctx, vp[int(v)]) for v in (f.get('m_sheetViewportElemIds') or []) if int(v) in vp and vp[int(v)] in ctx.recs]
+            dr = ctx.recs.get(ctx.eid_int(f.get('m_dbDrawingId')) or -1)
+            vids = [int(v) for v in ((dr['fields'].get('m_viewports') if dr else None) or f.get('m_sheetViewportElemIds') or [])]
+            vs = [_name_of(ctx, vp[v]) for v in vids if v in vp and vp[v] in ctx.recs]
             sheets.append({'id': e, 'number': f.get('m_sheetNumber'), 'name': n, 'views': [x for x in vs if x], 'issued': f.get('m_issueDate') or '', 'drawnBy': f.get('m_drawnBy') or ''})
         else:
             views.append({'id': e, 'name': n, 'kind': c[6:], 'template': bool(f.get('m_isTemplate')), 'scale': f.get('m_scale')})
