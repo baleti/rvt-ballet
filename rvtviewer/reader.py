@@ -13,11 +13,22 @@ def _import():
     return rvt_entities, rvt_params, rvt_scan
 
 def reader_stamp():
-    """changes whenever the reader's decoder/param code changes (cache key)"""
+    """changes whenever any reader module / table / GEOMETRY_API.md changes (cache key: a reader upgrade invalidates converted models)"""
+    import glob
     h = hashlib.md5()
-    for f in ('rvt_decode.py', 'rvt_entities.py', 'rvt_xcache.py', 'rvt_params.py', 'rvt_geom.py', 'rvt_map2.py', 'map3_train.json'):
-        try: h.update(str(int(os.path.getmtime(os.path.join(READER_DIR, f)))).encode())
+    files = sorted(glob.glob(os.path.join(READER_DIR, 'rvt*.py')) + glob.glob(os.path.join(READER_DIR, 'ifcguid.py')) + glob.glob(os.path.join(READER_DIR, 'map3_train.json')) + glob.glob(os.path.join(READER_DIR, 'GEOMETRY_API.md')))
+    for f in files:
+        try: st = os.stat(f); h.update(('%s:%d:%d' % (os.path.basename(f), int(st.st_mtime), st.st_size)).encode())
         except OSError: pass
+    return h.hexdigest()[:8]
+
+def viewer_stamp():
+    """hash of this project's converter sources (geometry code change also invalidates caches)"""
+    import glob
+    h = hashlib.md5(); d = os.path.dirname(os.path.abspath(__file__))
+    for f in sorted(glob.glob(os.path.join(d, '*.py'))):
+        if os.path.basename(f) in ('server.py', 'cli.py'): continue
+        h.update(open(f, 'rb').read())
     return h.hexdigest()[:8]
 
 def load(path, log=print):

@@ -3,7 +3,7 @@ import os, sys, argparse, hashlib, json, subprocess, shutil, time
 from . import reader
 
 def model_dir(path):
-    key = hashlib.md5(('%s|%s|%s|%s' % (os.path.abspath(path), os.path.getmtime(path), os.path.getsize(path), reader.reader_stamp() + BUILD_VERSION)).encode()).hexdigest()[:12]
+    key = hashlib.md5(('%s|%s|%s|%s' % (os.path.abspath(path), os.path.getmtime(path), os.path.getsize(path), reader.reader_stamp() + reader.viewer_stamp())).encode()).hexdigest()[:12]
     return os.path.join(reader.CACHE_DIR, 'models', os.path.splitext(os.path.basename(path))[0] + '-' + key)
 
 BUILD_VERSION = 'b3'
@@ -37,6 +37,12 @@ def open_browser(url, workspace=None, headless=False):
         subprocess.run(['hyprctl', 'eval', code], env=hypr_env())
     else: subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+def stale_mark(d):
+    try:
+        st = json.load(open(os.path.join(d, 'meta.json'))).get('stamps') or {}
+        return '' if st.get('reader') == reader.reader_stamp() and st.get('viewer') == reader.viewer_stamp() else ' (stale: reader/viewer changed, reopen the .rvt to reconvert)'
+    except Exception: return ''
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog='rvt-viewer'); sub = ap.add_subparsers(dest='cmd', required=True)
     o = sub.add_parser('open'); o.add_argument('files', nargs='+'); o.add_argument('--port', type=int, default=0); o.add_argument('--no-browser', action='store_true'); o.add_argument('--workspace'); o.add_argument('--rebuild', action='store_true')
@@ -56,7 +62,7 @@ def main(argv=None):
         root = os.path.join(reader.CACHE_DIR, 'models')
         if not a.dirs and os.path.isdir(root):
             for n in sorted(os.listdir(root)):
-                if os.path.exists(os.path.join(root, n, 'meta.json')): models.add(n, os.path.join(root, n), n.rsplit('-', 1)[0])
+                if os.path.exists(os.path.join(root, n, 'meta.json')): models.add(n, os.path.join(root, n), n.rsplit('-', 1)[0] + stale_mark(os.path.join(root, n)))
     def ready(port):
         first = next(iter(models.m)) if models.m else ''
         url = 'http://127.0.0.1:%d/#%s' % (port, first)

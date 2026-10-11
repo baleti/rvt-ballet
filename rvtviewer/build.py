@@ -426,7 +426,7 @@ def convert(path, outdir, log=print):
     meta = {'file': os.path.basename(path), 'levels': levels, 'grids': build_grids(ctx), 'batches': bmeta, 'rooms': datums.rooms(ctx, lvl_by_id), 'views': views, 'sheets': sheets,
             'bbox': [lo.tolist(), hi.tolist()], 'fidLabels': FID_LABEL, 'defaultHidden': sorted({el['cat'] for el in els if el['cat'] and default_hidden(el['cat'])}),
             'elements': [[el['id'], el['cls'], el['cat'], el['name'], el['type'], el['level'], el['fid'], el['isType'], el['family']] for el in els],
-            'coverage': {k: dict(v) for k, v in covg.items()}, 'bboxAgreement': {k: [round(float(np.mean(v)), 3), len(v)] for k, v in ious.items()}, 'built': time.time(), 'buildSecs': 0}
+            'stamps': {'reader': reader.reader_stamp(), 'viewer': reader.viewer_stamp()}, 'coverage': {k: dict(v) for k, v in covg.items()}, 'bboxAgreement': {k: [round(float(np.mean(v)), 3), len(v)] for k, v in ious.items()}, 'built': time.time(), 'buildSecs': 0}
     for r_ in meta['rooms']:
         for el in els:
             if el['id'] == r_['id']: r_['i'] = el['i']; break
