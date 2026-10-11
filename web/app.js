@@ -43,7 +43,7 @@ float eI = floor(vE+.5); vec4 stt = texelFetch(tState, ivec2(int(mod(eI,${TW}.))
 float fl = floor(stt.r*255.+.5); if(mod(fl,2.)>.5) discard;`)
       .replace('#include <color_fragment>', `#include <color_fragment>
 if(uMode>.5) diffuseColor.rgb = fidCol(floor(stt.g*255.+.5)).rgb;
-if(mod(floor(fl/8.),2.)>.5) diffuseColor.a *= .12;
+if(mod(floor(fl/8.),2.)>.5){ if(mod(floor(gl_FragCoord.x)+2.*floor(gl_FragCoord.y),5.)>.5) discard; diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.6), .5); }
 if(mod(floor(fl/2.),2.)>.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.,.69,.1), .75);
 else if(mod(floor(fl/4.),2.)>.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.3,.7,1.), .5);`);
   };

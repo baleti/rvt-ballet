@@ -360,7 +360,7 @@ def convert(path, outdir, log=print):
     raw = reader.cached_load(path, log); ctx = Ctx(raw)
     from . import datums
     els = build_table(ctx); log('%d elements' % len(els))
-    levels = build_levels(ctx); lvl_by_id = {l['id']: l['name'] for l in levels}
+    levels = build_levels(ctx); lvl_by_id = {e: n for e, (n, z) in ctx.levels.items()}
     for el in els:
         r = ctx.recs[el['id']]; p = ctx.par.get(el['id'], {}).get('params', {})
         lv = None
