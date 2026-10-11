@@ -21,17 +21,44 @@ def gt4_volumes(path):
     return V, True
 
 
+def main_mesh(path):
+    """low-memory mode for the big files: only the reader's geometry API (no viewer context): buckets for every non-analytic class from element_geometry confidence"""
+    os.makedirs(OUT, exist_ok=True)
+    year = os.path.basename(os.path.dirname(path)); stem = os.path.splitext(os.path.basename(path))[0]
+    reader._import(); import rvt_geometry as GG, gc
+    idx = GG.file_geometry_index(path); cls = collections.defaultdict(lambda: {'n': 0, 'true': 0, 'param_match': 0, 'approx': 0, 'box': 0, 'vol_n': 0, 'vol_ok': 0, 'vol_ratios': [], 'iou_n': 0, 'iou_ok': 0})
+    skip = ('FamilySymbol', 'Family', 'FamSymSurrogate', 'FamilySurrogate')
+    for k, (e, c) in enumerate(idx.items()):
+        if c in build.ANALYTIC_CLASSES or c in skip: continue
+        if k % 500 == 0:
+            gc.collect(); rss = int(open('/proc/self/statm').read().split()[1]) * 4096 / 1e9
+            if rss > float(os.environ.get('RVT_RSS_BUDGET', '2.7')): print('ABORT %s: RSS %.1f GB over budget' % (os.path.basename(path), rss)); sys.exit(3)
+        try: a = GG.element_geometry(path, e)
+        except Exception: continue
+        conf = a.get('confidence')
+        if conf in (None, 'none'): continue
+        d = cls[c]; d['n'] += 1
+        if conf == 'mesh_approx': d['true' if 'unsupported_faces' not in (a.get('flags') or []) else 'approx'] += 1
+        elif conf == 'box': d['box'] += 1
+        elif conf == 'exact': d['true'] += 1
+        else: d['approx'] += 1
+    json.dump({'file': os.path.basename(path), 'year': year, 'has_gt4': False, 'elements': len(idx), 'mode': 'mesh', 'classes': dict(cls)}, open(os.path.join(OUT, '%s_%s__mesh.json' % (year, stem)), 'w'))
+    print('OK mesh-mode', year, stem, len(cls), 'classes')
+
+
 def main(path):
     os.makedirs(OUT, exist_ok=True)
     year = os.path.basename(os.path.dirname(path)); stem = os.path.splitext(os.path.basename(path))[0]
     import gc
     raw = reader.cached_load(path); ctx = build.Ctx(raw); del raw; ctx.src = path
+    if os.environ.get('RVT_ANALYTIC_ONLY'): build.USE_READER_MESH = False
     els = build.build_table(ctx); ctx._rm = None
     build.ensure_roofs(ctx); gc.collect()
     vols, has_gt = gt4_volumes(path)
     cls = collections.defaultdict(lambda: {'n': 0, 'true': 0, 'param_match': 0, 'approx': 0, 'box': 0, 'vol_n': 0, 'vol_ok': 0, 'vol_ratios': [], 'iou_n': 0, 'iou_ok': 0})
     for i, el in enumerate(els):
         if not el['cat'] or el['isType']: continue
+        if os.environ.get('RVT_ANALYTIC_ONLY') and ctx.recs[el['id']]['class'] not in build.ANALYTIC_CLASSES: continue
         if i % 200 == 0:
             gc.collect(); rss = int(open('/proc/self/statm').read().split()[1]) * 4096 / 1e9
             if rss > float(os.environ.get('RVT_RSS_BUDGET', '3.3')): print('ABORT %s: RSS %.1f GB over budget' % (os.path.basename(path), rss)); sys.exit(3)
@@ -56,8 +83,10 @@ def main(path):
             vol = abs(np.einsum('ij,ij->i', V[F[:, 0]], np.cross(V[F[:, 1]], V[F[:, 2]])).sum() / 6)
             c['vol_n'] += 1; c['vol_ok'] += int(abs(vol / v - 1) <= 0.02); c['vol_ratios'].append(round(float(vol / v), 4))
     out = {'file': os.path.basename(path), 'year': year, 'has_gt4': has_gt, 'elements': len(els), 'classes': {k: {**v, 'vol_ratios': v['vol_ratios'][:400]} for k, v in cls.items()}}
-    json.dump(out, open(os.path.join(OUT, '%s_%s.json' % (year, stem)), 'w'))
+    json.dump(out, open(os.path.join(OUT, '%s_%s%s.json' % (year, stem, '__analytic' if os.environ.get('RVT_ANALYTIC_ONLY') else '')), 'w'))
     print('OK', year, stem, len(cls), 'classes')
 
 
-if __name__ == '__main__': main(os.path.abspath(sys.argv[1]))
+if __name__ == '__main__':
+    if '--mesh' in sys.argv: main_mesh(os.path.abspath([a for a in sys.argv[1:] if not a.startswith('--')][0]))
+    else: main(os.path.abspath(sys.argv[1]))

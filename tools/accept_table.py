@@ -11,13 +11,13 @@ CORE = ['SWall', 'Floor', 'Ceiling', 'ProfileRoof', 'FootPrintRoof', 'FamilyInst
 def main():
     agg = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.Counter())); files = collections.Counter()
     for f in sorted(glob.glob(os.path.join(OUT, '*.json'))):
-        d = json.load(open(f)); y = d['year']; files[y] += 1
+        d = json.load(open(f)); y = d['year']; files[y] += 0.5 if ('__mesh' in f or '__analytic' in f) else 1
         for cls, c in d['classes'].items():
             a = agg[cls][y]
             for k in ('n', 'true', 'param_match', 'approx', 'box', 'vol_n', 'vol_ok', 'iou_n', 'iou_ok'): a[k] += c[k]
     years = sorted(files)
     lines = ['# Geometry acceptance status (per class, per year; measured on all corpus .rvt files converted so far)', '',
-             'files per year: ' + ', '.join('%s: %d' % (y, files[y]) for y in years), '',
+             'files per year (big files evaluated in two low-memory halves count 0.5 each): ' + ', '.join('%s: %g' % (y, files[y]) for y in years), '',
              'Cell = elements n | true % | parametric-unproven % | approximate % | box-only % | IoU>=0.95 % | volume<=2% error % (n measurable). DONE = true>=95, box<=2, IoU>=95, volume>=95.', '']
     pct = lambda a, b: '%.0f' % (100.0 * a / b) if b else '-'
     classes = [c for c in CORE if c in agg] + sorted((c for c in agg if c not in CORE and sum(agg[c][y]['n'] for y in years) >= 20), key=lambda c: -sum(agg[c][y]['n'] for y in years))
