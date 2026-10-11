@@ -5,8 +5,8 @@ import {GLTFLoader} from 'three/loaders/GLTFLoader.js';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 const TW = 2048;                       // state texture width
-const FID = ['solid', 'param', 'bbox', 'line', 'none'];
-const FIDCOL = {solid: '#2e9e5b', param: '#3a7bd5', bbox: '#d08a2a', line: '#8a5fd0', none: '#666'};
+const FID = ['solid', 'param', 'approx', 'bbox', 'line', 'none'];
+const FIDCOL = {solid: '#2e9e5b', param: '#3a7bd5', approx: '#1fa7b0', bbox: '#d08a2a', line: '#8a5fd0', none: '#666'};
 const S = {meta: null, mid: null, N: 0, sel: new Set(), hidden: new Uint8Array(0), catHidden: new Set(), lvlHidden: new Set(), isolate: null, showNoGeo: false,
            byCat: new Map(), catOf: [], tab: 'tree', fidMode: 0, measure: false, mpts: [], hoverI: -1, hits: []};
 window.S = S;
@@ -36,7 +36,7 @@ function patch(mat) {
     sh.uniforms.tState = U.tState; sh.uniforms.uMode = U.uMode;
     sh.vertexShader = 'attribute float _eidx; varying float vE;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvE=_eidx;');
     sh.fragmentShader = `varying float vE; uniform sampler2D tState; uniform float uMode;
-vec4 fidCol(float f){ if(f<.5) return vec4(.18,.62,.36,1.); if(f<1.5) return vec4(.23,.48,.84,1.); if(f<2.5) return vec4(.82,.54,.16,1.); if(f<3.5) return vec4(.54,.37,.82,1.); return vec4(.5,.5,.5,1.);}
+vec4 fidCol(float f){ if(f<.5) return vec4(.18,.62,.36,1.); if(f<1.5) return vec4(.23,.48,.84,1.); if(f<2.5) return vec4(.12,.65,.69,1.); if(f<3.5) return vec4(.82,.54,.16,1.); if(f<4.5) return vec4(.54,.37,.82,1.); return vec4(.5,.5,.5,1.);}
 ` + sh.fragmentShader
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
 float eI = floor(vE+.5); vec4 stt = texelFetch(tState, ivec2(int(mod(eI,${TW}.)), int(eI/${TW}.)), 0);
@@ -370,17 +370,17 @@ function renderResults(tb) {
   tb.querySelector('#rZoom').onclick = () => zoomTo(hits.slice(0, 200).map(h => h.i));
 }
 function renderCov(tb) {
-  const C = S.meta.coverage; const tot = {solid: 0, param: 0, bbox: 0, line: 0, none: 0};
+  const C = S.meta.coverage; const tot = {solid: 0, param: 0, approx: 0, bbox: 0, line: 0, none: 0};
   for (const v of Object.values(C)) for (const k in v) tot[k] = (tot[k] || 0) + v[k];
   const sum = Object.values(tot).reduce((a, b) => a + b, 0), geo = sum - tot.none;
   tb.innerHTML = `<h3>Geometry coverage</h3><div class="bar">${FID.map(f => `<div style="width:${tot[f] / sum * 100}%;background:${FIDCOL[f]}" title="${f}"></div>`).join('')}</div>
   <table class="cov"><tr><th>fidelity</th><th>elements</th><th></th></tr>${FID.map(f => `<tr><td><span class="fid f-${f}">${f}</span> ${esc(S.meta.fidLabels[f] || '')}</td><td>${tot[f] || 0}</td><td>${(tot[f] / sum * 100).toFixed(1)}%</td></tr>`).join('')}</table>
   <p class="dim">${geo.toLocaleString()} of ${sum.toLocaleString()} database elements have something drawn (the rest are types, views, parameters, annotations...).</p>
   <h3>By category</h3><table class="cov"><tr><th>category</th>${FID.map(f => `<th>${f}</th>`).join('')}</tr>` +
-    Object.entries(C).filter(([k, v]) => (v.solid || 0) + (v.param || 0) + (v.bbox || 0) + (v.line || 0) > 0).sort((a, b) => (b[1].solid || 0) + (b[1].param || 0) + (b[1].bbox || 0) + (b[1].line || 0) - ((a[1].solid || 0) + (a[1].param || 0) + (a[1].bbox || 0) + (a[1].line || 0))).map(([k, v]) => `<tr><td>${esc(k)}</td>${FID.map(f => `<td>${v[f] || ''}</td>`).join('')}</tr>`).join('') + '</table>';
+    Object.entries(C).filter(([k, v]) => (v.solid || 0) + (v.param || 0) + (v.approx || 0) + (v.bbox || 0) + (v.line || 0) > 0).sort((a, b) => (b[1].solid || 0) + (b[1].param || 0) + (b[1].bbox || 0) + (b[1].line || 0) - ((a[1].solid || 0) + (a[1].param || 0) + (a[1].approx || 0) + (a[1].bbox || 0) + (a[1].line || 0))).map(([k, v]) => `<tr><td>${esc(k)}</td>${FID.map(f => `<td>${v[f] || ''}</td>`).join('')}</tr>`).join('') + '</table>';
 }
 function setupLegend() {
-  $('#legend').innerHTML = FID.slice(0, 4).map(f => `<div><i style="background:${FIDCOL[f]}"></i>${f}</div>`).join('');
+  $('#legend').innerHTML = FID.slice(0, 5).map(f => `<div><i style="background:${FIDCOL[f]}"></i>${f}</div>`).join('');
 }
 
 // ------------------------------------------------------------------ search
@@ -493,3 +493,4 @@ requestAnimationFrame(frame);
   if (models.length) await loadModel(sel.value); else $('#status').textContent = 'no models';
 })();
 window.pickAt = pickAt; window.selectEl = select; window.setSection = setSection; window.zoomTo = zoomTo;
+window.refreshState = refreshState;

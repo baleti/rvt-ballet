@@ -4,8 +4,8 @@ import numpy as np
 from . import reader, geom, glb
 from .geom import Mesh
 
-FID_ORDER = ['solid', 'param', 'bbox', 'line', 'none']      # honesty ladder shown in the UI
-FID_LABEL = {'solid': 'decoded B-rep', 'param': 'rebuilt from stored parameters (approximate: no joins/openings)', 'bbox': 'placeholder at true bounding box', 'line': 'curve', 'none': 'no geometry'}
+FID_ORDER = ['solid', 'param', 'approx', 'bbox', 'line', 'none']      # honesty ladder shown in the UI
+FID_LABEL = {'solid': 'decoded B-rep', 'param': 'rebuilt from stored parameters (approximate: no joins/openings)', 'approx': 'footprint from stored curves, height range from the Revit bounding box (slopes not modelled)', 'bbox': 'placeholder at true bounding box', 'line': 'curve', 'none': 'no geometry'}
 
 CAT_COLORS = {
     'Walls': (0.82, 0.80, 0.76), 'Floors': (0.70, 0.66, 0.60), 'Roofs': (0.60, 0.35, 0.30), 'Ceilings': (0.90, 0.90, 0.88),
@@ -179,6 +179,21 @@ def slab_geom(ctx, e, r):
     m = geom.prism([outer] + holes, bot, top)
     return (m, 'param') if m else None
 
+def roof_geom(ctx, e, r):
+    f = r['fields']; bb = ctx.bbox(e)
+    if bb is None: return None
+    segs = []
+    for cl in f.get('m_curveLoops') or []:
+        for c in g(cl, 'm_curves') or []:
+            p = curve_pts(c)
+            if p is not None: segs.append(p)
+    loops = [l for l in geom.chain_loops(segs) if len(l) >= 3]
+    if not loops: return None
+    areas = [abs(0.5 * np.sum(l[:, 0] * np.roll(l[:, 1], -1) - np.roll(l[:, 0], -1) * l[:, 1])) for l in loops]
+    order = np.argsort(areas)[::-1]
+    m = geom.prism([loops[order[0]][:, :2]] + [loops[i][:, :2] for i in order[1:]], bb[0][2], bb[1][2])
+    return (m, 'approx') if m else None
+
 class LineSet:
     """polylines as GL line segments"""
     def __init__(self, pts):
@@ -244,7 +259,7 @@ def instance_box(ctx, e, r):
     return m, 'bbox'
 
 LINE_CLASSES = {'CurveElem'}
-BUILDERS = {'SWall': wall_geom, 'Floor': slab_geom, 'Ceiling': slab_geom, 'RoofSoffit': slab_geom, 'BuildingPad': slab_geom, 'RbsDuctCurve': mep_geom, 'RbsPipeCurve': mep_geom, 'RbsConduitCurve': mep_geom, 'CableTray': mep_geom,
+BUILDERS = {'ProfileRoof': roof_geom, 'FootPrintRoof': roof_geom, 'SWall': wall_geom, 'Floor': slab_geom, 'Ceiling': slab_geom, 'RoofSoffit': slab_geom, 'BuildingPad': slab_geom, 'RbsDuctCurve': mep_geom, 'RbsPipeCurve': mep_geom, 'RbsConduitCurve': mep_geom, 'CableTray': mep_geom,
             'RbsFlexDuctCurve': mep_geom, 'RbsFlexPipeCurve': mep_geom, 'CurveElem': line_geom, 'FamilyInstance': instance_box}
 HIDE_DEFAULT_CATS = {'Center line', '<Sketch>', 'Work Plane Grid', 'Cameras', 'Scope Boxes', 'Boundary Conditions', 'Area Loads', 'Line Loads', 'Point Loads', 'Division Profiles',
                      'Survey Point', 'Project Base Point', 'Internal Origin', 'Guide Grid', 'Reference Planes', 'Parts', 'Spaces', 'Rooms', 'Areas', 'Mass Floor', 'RVT Links', 'Analytical Nodes', 'Reference Points', 'Grids', 'Levels', 'Sections', 'Viewports'}
