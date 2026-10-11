@@ -8,6 +8,26 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rvtviewer import reader, build
 
+def _xyz(t): return [float(v) for v in t.split(',')]
+
+def load_oracle(gtdir, stem=None):
+    """session-181 gt_geom format (FORMAT.md): BB rows (id, min, max as x,y,z) and G rows (key=<id>.<depth>.<solid>, volume=..); depth-0 solids are summed per element"""
+    G = {}
+    for f in glob.glob(os.path.join(gtdir, '*.tsv')):
+        if stem and stem not in os.path.basename(f): continue
+        for l in open(f, errors='ignore'):
+            x = l.rstrip('\n').split('\t')
+            if x[0] == 'BB' and len(x) >= 4 and x[2] != 'null':
+                try: G.setdefault(int(x[1]), {})['bb'] = [_xyz(x[2]), _xyz(x[3])]
+                except ValueError: pass
+            elif x[0] == 'G' and len(x) >= 3:
+                k = x[1].split('.')
+                try:
+                    if k[1] != '0': continue
+                    d = G.setdefault(int(k[0]), {}); vol = float(x[2].split('=')[1]); d['vol'] = d.get('vol', 0.0) + vol
+                except (ValueError, IndexError): pass
+    return {i: {'bb': v.get('bb'), 'vol': v.get('vol')} for i, v in G.items() if v.get('bb')}
+
 def load_g(gtdir):
     G = {}
     for f in glob.glob(os.path.join(gtdir, '**', '*.tsv'), recursive=True):
@@ -39,7 +59,7 @@ def main(mdir, gtdir):
     class _P:
         def set(self, *a, **k): pass
     res = build.run_geometry(ctx, els, _P()); got = {t[0]: t for t in res}
-    G = load_g(gtdir); out = {}; stem = os.path.splitext(os.path.basename(src))[0]
+    G = load_oracle(gtdir, os.path.splitext(os.path.basename(src))[0]) or load_g(gtdir); out = {}; stem = os.path.splitext(os.path.basename(src))[0]
     for i, el in enumerate(els):
         g = G.get(el['id'])
         if g is None or i not in got: continue
