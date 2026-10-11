@@ -83,13 +83,17 @@ def geometry_mesh(geo):
         m.add(Mesh(v, idx)); n += 1
     return m, n, skipped
 
+_SKIP = frozenset(('m_pParamValueSetDouble', 'm_pParamValueSetInt', 'm_pParamValueSetAString', 'm_pParamValueSetElementId', 'm_cellList', 'm_docAccess', 'm_faceHistTable', 'm_edgeHistTable',
+                  'm_curveHistTableSet', 'm_edgeHistTableReverse', 'm_pGeomTable', 'm_pInstParams', 'm_pParams', 'm_oUserData', 'm_pCurveDriver', 'm_pCrv', 'm_exposedFaceMap', 'm_affectedEdgesTags', 'm_pRefFaces'))
+
 def find_geometries(o, key_ok=lambda k: True, out=None, depth=0):
     """all `Geometry` objects (dicts with m_pFaces + m_pEdges) inside a record"""
     if out is None: out = []
     if isinstance(o, dict):
         if 'm_pFaces' in o and 'm_pEdges' in o and o.get('m_pFaces'): out.append(o); return out
         for k, v in o.items():
-            if key_ok(k): find_geometries(v, key_ok, out, depth + 1)
+            if k in _SKIP or not key_ok(k): continue
+            if isinstance(v, (dict, list)): find_geometries(v, key_ok, out, depth + 1)
     elif isinstance(o, list):
         for v in o: find_geometries(v, key_ok, out, depth + 1)
     return out

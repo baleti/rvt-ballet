@@ -35,12 +35,19 @@ def load(path, log=print):
     """-> dict: recs {(id, class): record}, eh {id: header fields}, params {id: {class, params}}, W, classes [names], idsize"""
     E, P, S = _import()
     t = time.time()
+    import threading
+    stop = threading.Event()
+    def beat():
+        log('decoding %s (first open of a file runs the pure-Python reader: seconds for small files, minutes for big ones; later opens are instant) ...' % os.path.basename(path))
+        while not stop.wait(15): log('  ... still decoding, %ds elapsed (%.0f MB file)' % (time.time() - t, os.path.getsize(path) / 1e6))
+    threading.Thread(target=beat, daemon=True).start()
     try:
         import rvt_xcache
         x = rvt_xcache.get_x(path)                 # reader's own shared extraction cache (also used by rvt_params)
     except ImportError:
         x = E.extract(path, want_all=True)
     par = P.params(path)
+    stop.set()
     names = x['sch'].c if 'sch' in x else S.load(path)[1]
     log('reader: %d records, %d headers, %d param sets in %.1fs' % (len(x['recs']), len(x['eh']), len(par), time.time() - t))
     return {'recs': x['recs'], 'eh': x['eh'], 'W': x['W'], 'params': par,

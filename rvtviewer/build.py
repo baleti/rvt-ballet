@@ -25,6 +25,8 @@ def cat_color(name):
 
 from .build_util import g
 
+HOSTED_CUT_CATS = ('Doors', 'Windows', 'Generic Models')
+
 class Ctx:
     def __init__(self, raw):
         self.raw = raw; self.W = raw['W']
@@ -37,7 +39,8 @@ class Ctx:
         for e, r in self.recs.items():
             if r['class'] == 'FamilyInstance' and r['fields'].get('m_hostId') is not None:
                 h = self.eid_int(r['fields']['m_hostId'])
-                if h is not None and self.catname(e) in ('Doors', 'Windows'): self.hosted[h].append(e)
+                if h is not None and self.catname(e) in HOSTED_CUT_CATS: self.hosted[h].append(e)
+        self._bb = {}
         self.roof_fields = {}      # roof id -> (footprint Path, bottom-surface height function (xy Nx2 -> z)), filled by roof_geom
         self.levels = {}      # id -> (name, elev ft)
         for e, r in self.recs.items():
@@ -53,11 +56,14 @@ class Ctx:
         if c is None: return None
         return self.cat.get(str(c), 'Category %d' % c) if c != -1 else None
     def bbox(self, e):
+        c = self._bb.get(e, 0)
+        if c != 0: return c
         h = self.eh.get(e); bb = g(h, 'm_pBBox', 'm_minmax') if h else None
-        if not bb: return None
-        lo, hi = np.array(bb[0], float), np.array(bb[1], float)
-        if np.any(np.abs(lo) > 1e8) or np.any(np.abs(hi) > 1e8) or np.any(hi < lo): return None
-        return lo, hi
+        res = None
+        if bb:
+            a, b = bb[0], bb[1]
+            if all(abs(x) <= 1e8 for x in a) and all(abs(x) <= 1e8 for x in b) and all(b[k] >= a[k] for k in range(3)): res = (np.array(a, float), np.array(b, float))
+        self._bb[e] = res; return res
     def eid_int(self, v):
         if v is None: return None
         v = self.sc(v); return None if v < 0 else v
@@ -75,6 +81,28 @@ def type_of(ctx, e, r):
 
 SYSTEM_FAMILY = {'BasicWallType': 'Basic Wall', 'NewCurtainWallType': 'Curtain Wall', 'StackedWallType': 'Stacked Wall', 'FloorType': 'Floor', 'CompoundCeilingType': 'Compound Ceiling',
                  'RoofType': 'Basic Roof', 'StairsType': 'Stairs', 'RbsPipeType': 'Pipe Types', 'RbsDuctType': 'Duct Types', 'RbsConduitType': 'Conduit', 'RbsCableTrayType': 'Cable Tray'}
+
+def material_rgb(ctx, mid):
+    r = ctx.recs.get(mid) if mid is not None else None
+    c = g(r['fields'], 'm_pMaterial', 'm_color') if r else None
+    if c is None: return None
+    c = int(c); return ((c & 255) / 255.0, ((c >> 8) & 255) / 255.0, ((c >> 16) & 255) / 255.0)
+
+def type_layers(ctx, tid):
+    """compound-structure layers of a wall/floor/roof type: [(width ft, function, rgb or None)] exterior side first"""
+    r = ctx.recs.get(tid) if tid is not None else None
+    cs = g(r['fields'], 'm_pCompoundStructure') if r else None
+    out = []
+    for L in (cs or {}).get('m_layers') or []:
+        w = float(L.get('m_layerWidth') or 0)
+        if w > 1e-6: out.append((w, int(L.get('m_layerFunction') or 0), material_rgb(ctx, ctx.eid_int(L.get('m_materialId')))))
+    return out
+
+CORE_GRAY = (0.62, 0.62, 0.60)
+def dominant_rgb(layers):
+    if not layers: return None
+    best = max(layers, key=lambda L: (L[2] is not None, L[0]))     # widest layer that has a material
+    return best[2]
 
 def sym_name(ctx, r):
     n = g(r['fields'], 'm_symbolInfo', 'm_name')
@@ -142,6 +170,11 @@ def curved_wall_geom(ctx, e, r):
     return (m, 'param') if m else None
 
 def wall_geom(ctx, e, r):
+    res = wall_solid(ctx, e, r)
+    if res is None: return None
+    return res
+
+def wall_solid(ctx, e, r):
     pls = ref_planes(r['fields'])
     if not pls: return curved_wall_geom(ctx, e, r)
     pls = [p for p in pls if p[3]]
@@ -161,25 +194,40 @@ def wall_geom(ctx, e, r):
     org = o0 + x0 * ext[0][0] + n * ext[0][1] + y0 * ext[0][2]
     holes = wall_openings(ctx, e, org, x0, n, y0, d)
     prof = wall_top_profile(ctx, e, r, org, x0, n, y0, d)
-    if prof is not None:
+    tid = type_of(ctx, e, r); layers = type_layers(ctx, tid)
+    flipped = bool(r['fields'].get('m_isFlipped'))
+    solid = None
+    if prof is not None or holes or len(layers) > 1:
         try:
             from . import occ
-            w = occ.extrude_polygon(prof, n * d[1])
+            w = occ.extrude_polygon(prof, n * d[1]) if prof is not None else occ.box_frame(org, x0 * d[0], n * d[1], y0 * d[2])
             for ho in holes: w = occ.cut(w, ho)
-            m = occ.to_mesh(w)
-            if m: return m, 'param'
+            solid = w
         except Exception as ex:
-            if os.environ.get('RVT_DEBUG'): print('profile wall failed', e, repr(ex))
-    if holes:
+            if os.environ.get('RVT_DEBUG'): print('wall solid failed', e, repr(ex))
+    if solid is not None and len(layers) > 1:
         try:
             from . import occ
-            w = occ.box_frame(org, x0 * d[0], n * d[1], y0 * d[2])
-            for ho in holes: w = occ.cut(w, ho)
-            m = occ.to_mesh(w)
-            if m: return m, 'param'
+            tot = sum(L[0] for L in layers); parts = []; cum = 0.0
+            seq = layers if not flipped else layers[::-1]            # exterior layer first; exterior is the -n side of the reference-face frame (wall direction x, left = exterior)
+            for wd, fn, rgb in seq:
+                t0 = cum / tot * d[1]; t1 = (cum + wd) / tot * d[1]; cum += wd
+                slab = occ.box_frame(org - x0 * 1.0 - y0 * 1.0 + n * t0, x0 * (d[0] + 2.0), n * (t1 - t0), y0 * (d[2] + 2.0))
+                parts.append((occ.to_mesh(occ.common(solid, slab)), rgb or CORE_GRAY))
+            mu = geom.Multi(parts)
+            if mu: return mu, 'param'
         except Exception as ex:
-            if os.environ.get('RVT_DEBUG'): print('opening cut failed', e, repr(ex))
-    return geom.obox(org, x0 * d[0], n * d[1], y0 * d[2]), 'param'
+            if os.environ.get('RVT_DEBUG'): print('layer split failed', e, repr(ex))
+    col = dominant_rgb(layers) or None
+    if solid is not None:
+        try:
+            from . import occ
+            m = occ.to_mesh(solid)
+            if m: return (geom.Multi([(m, col)]) if col else m), 'param'
+        except Exception as ex:
+            if os.environ.get('RVT_DEBUG'): print('wall mesh failed', e, repr(ex))
+    m = geom.obox(org, x0 * d[0], n * d[1], y0 * d[2])
+    return (geom.Multi([(m, col)]) if col else m), 'param'
 
 def ensure_roofs(ctx):
     if getattr(ctx, '_roofs_done', False): return
@@ -461,7 +509,7 @@ def box_iou(lo1, hi1, lo2, hi2):
 def brep_geom(ctx, e, r):
     """decoded planar B-rep bodies stored in the element (stairs runs, some floors/families). Needs >= 4 faces per body; rejected if far from the header box."""
     from . import brep
-    if r['class'].startswith(('DBView', 'Analytical')): return None
+    if r['class'].startswith(('DBView', 'Analytical')) or ctx.bbox(e) is None: return None
     gs = [x for x in brep.find_geometries(r['fields']) if len(x['m_pFaces']) >= 4]
     if not gs: return None
     m = Mesh(); npl = 0; nsk = 0
@@ -484,7 +532,11 @@ def element_mesh(ctx, e, r):
     if fn:
         try:
             res = fn(ctx, e, r)
-            if res and res[0]: return res
+            if res and res[0]:
+                if r['class'] in ('Floor', 'Ceiling', 'RoofSoffit', 'BuildingPad', 'ProfileRoof', 'FootPrintRoof') and not isinstance(res[0], geom.Multi):
+                    col = dominant_rgb(type_layers(ctx, type_of(ctx, e, r)))
+                    if col: return geom.Multi([(res[0], col)]), res[1]
+                return res
         except Exception as ex:
             if os.environ.get('RVT_DEBUG'): print('builder', r['class'], e, repr(ex))
     if part: return part[0], 'approx'
@@ -518,15 +570,113 @@ def build_grids(ctx):
 
 # ---------------------------------------------------------------- main
 
-def convert(path, outdir, log=print):
-    t0 = time.time(); os.makedirs(outdir, exist_ok=True)
-    raw = reader.cached_load(path, log); ctx = Ctx(raw)
+STAGES = ['reading', 'tables', 'preview', 'geometry', 'packing', 'done']
+
+class Progress:
+    """writes outdir/progress.json (stage, pct, message, per-stage seconds) atomically; the server exposes it so the UI can show a progress bar"""
+    def __init__(self, outdir, log):
+        self.dir = outdir; self.log = log; self.t0 = time.time(); self.times = {}; self.ts = time.time(); self.stage = None
+    def set(self, stage, pct=0.0, msg=''):
+        now = time.time()
+        if self.stage and stage != self.stage: self.times[self.stage] = round(now - self.ts, 2); self.ts = now
+        self.stage = stage
+        d = {'stage': stage, 'stages': STAGES, 'pct': round(pct, 3), 'msg': msg, 'elapsed': round(now - self.t0, 1), 'times': self.times}
+        try:
+            fn = os.path.join(self.dir, 'progress.json'); open(fn + '.tmp', 'w').write(json.dumps(d)); os.replace(fn + '.tmp', fn)
+        except OSError: pass
+        if msg: self.log('[%s] %s' % (stage, msg))
+
+_G = {}      # fork-shared state for the geometry workers
+
+def _geo_chunk(rng):
+    ctx, els = _G['ctx'], _G['els']; out = []
+    for i in range(*rng):
+        el = els[i]
+        if not el['cat'] or el['isType']: continue
+        try: res = element_mesh(ctx, el['id'], ctx.recs[el['id']])
+        except Exception: res = None
+        if res is None: continue
+        mesh, fid = res
+        parts = [(pm.v, pm.f, rgb) for pm, rgb in (mesh.parts if isinstance(mesh, geom.Multi) else [(mesh, None)])]
+        out.append((i, fid, getattr(mesh, 'kind', 'tri'), parts))
+    return out
+
+def geometry_cache_key():
+    import hashlib as _h
+    d = os.path.dirname(os.path.abspath(__file__)); h = _h.md5(reader.reader_stamp().encode())
+    src = open(os.path.join(d, 'build.py')).read(); a = src.index('# ---------------------------------------------------------------- geometry builders'); b = src.index('# ---------------------------------------------------------------- datum / spatial')
+    h.update(src[a:b].encode())
+    for f in ('geom.py', 'occ.py', 'brep.py', 'build_util.py'): h.update(open(os.path.join(d, f), 'rb').read())
+    return h.hexdigest()[:12]
+
+def run_geometry(ctx, els, prog, workers=None):
+    """per-element geometry, cached on disk by (reader stamp + geometry source) and computed in parallel worker processes (fork: the decoded model is shared copy-on-write)"""
+    import pickle, multiprocessing as mp
+    key = geometry_cache_key(); fn = os.path.join(reader.CACHE_DIR, 'geom-%s-%s.pkl' % (hashlib.md5(ctx.raw_key.encode()).hexdigest()[:10], key))
+    if os.path.exists(fn):
+        t = time.time(); res = pickle.load(open(fn, 'rb')); prog.set('geometry', 1.0, 'geometry cache hit (%.1fs)' % (time.time() - t)); return res
+    ensure_roofs(ctx)
+    _G['ctx'] = ctx; _G['els'] = els
+    n = len(els); step = 150; chunks = [(a, min(a + step, n)) for a in range(0, n, step)]
+    nw = workers or max(1, min(10, (os.cpu_count() or 2) - 1)); res = []
+    if nw == 1 or n < 400:
+        for k, c in enumerate(chunks): res += _geo_chunk(c); prog.set('geometry', (k + 1) / len(chunks), '')
+    else:
+        with mp.get_context('fork').Pool(nw) as pool:
+            for k, r in enumerate(pool.imap_unordered(_geo_chunk, chunks)):
+                res += r; prog.set('geometry', (k + 1) / len(chunks), 'geometry %d/%d chunks (%d workers)' % (k + 1, len(chunks), nw) if k % 10 == 0 else '')
+    res.sort(key=lambda t: t[0])
+    try: pickle.dump(res, open(fn + '.tmp', 'wb'), protocol=5); os.replace(fn + '.tmp', fn)
+    except Exception: pass
+    return res
+
+def pack_batches(els, res, previews=False):
+    """merge per-element parts into one indexed mesh per (category, kind, translucency, colour)"""
+    acc = {}; covg = collections.defaultdict(collections.Counter); covc = collections.defaultdict(collections.Counter); ious = {}
+    got = {t[0]: t for t in res}
+    for i, el in enumerate(els):
+        t = got.get(i)
+        if t is None: covg[el['cat'] or '(none)']['none'] += 1; el['fid'] = 'none'; continue
+        _, fid, kind, parts = t; el['fid'] = fid; covg[el['cat']][fid] += 1; covc[el['cls']][fid] += 1
+        if fid in ('param', 'solid') and el['bb'] is not None:
+            allv = np.vstack([p[0] for p in parts]); el['iou'] = round(box_iou(allv.min(0), allv.max(0), *el['bb']), 3); ious.setdefault(el['cat'], []).append(el['iou'])
+        transl = fid == 'bbox' and el['cat'] in TRANSLUCENT_CATS
+        for pv, pf, rgb in parts:
+            hexc = None if rgb is None else '%02x%02x%02x' % tuple(int(x * 255) for x in rgb)
+            a = acc.setdefault((el['cat'], kind, transl, hexc), {'pos': [], 'idx': [], 'eidx': [], 'ranges': [], 'nv': 0, 'nt': 0})
+            a['pos'].append(pv); a['idx'].append(pf.reshape(-1) + a['nv']); a['eidx'].append(np.full(len(pv), i, np.float32))
+            a['ranges'] += [i, a['nt'], len(pf)]; a['nv'] += len(pv); a['nt'] += len(pf)
+    batches = []; bmeta = []
+    for (cat, kind, transl, hexc), a in acc.items():
+        pos = glb.to_yup_m(np.vstack(a['pos'])); idx = np.concatenate(a['idx']).astype(np.uint32)
+        c = (0.1, 0.1, 0.12) if kind == 'line' else (tuple(int(hexc[k:k + 2], 16) / 255 for k in (0, 2, 4)) if hexc else cat_color(cat))
+        alpha = 0.45 if cat in ('Windows', 'Curtain Panels') else ((0.08 if cat in ('Planting', 'Entourage') else 0.18) if transl else 1.0)
+        batches.append({'name': cat + ('' if kind == 'tri' else ' (lines)'), 'color': (*c, alpha), 'pos': pos, 'eidx': np.concatenate(a['eidx']), 'idx': idx, 'mode': 1 if kind == 'line' else 4})
+        bmeta.append({'cat': cat, 'kind': kind, 'color': '#%02x%02x%02x' % tuple(int(x * 255) for x in c), 'alpha': alpha, 'ranges': a['ranges'], 'tris': a['nt']})
+    return batches, bmeta, covg, covc, ious
+
+def model_bbox(els):
+    allb = [el['bb'] for el in els if el['bb'] is not None and el['fid'] != 'none' and not default_hidden(el['cat'] or '') and el['cat'] not in ('Mass',)]
+    if not allb: allb = [el['bb'] for el in els if el['bb'] is not None and el['fid'] != 'none']
+    if not allb: return [[0, 0, 0], [0, 0, 0]]
+    lo = np.percentile([b[0] for b in allb], 0.5, axis=0) * 0.3048; hi = np.percentile([b[1] for b in allb], 99.5, axis=0) * 0.3048
+    if len(allb) < 50: lo = np.minimum(lo, np.min([b[0] for b in allb], 0) * 0.3048); hi = np.maximum(hi, np.max([b[1] for b in allb], 0) * 0.3048)
+    return [lo.tolist(), hi.tolist()]
+
+def convert(path, outdir, log=print, workers=None):
+    """rvt -> outdir. Stages (progress.json): reading (reader), tables (+sqlite), preview (boxes only: meta.json phase=preview + preview.glb, usable at once), geometry (parallel,
+    cached), packing (model.glb, final meta.json phase=done)."""
+    import pickle
+    os.makedirs(outdir, exist_ok=True); prog = Progress(outdir, log); T = {}
+    prog.set('reading', 0.0, 'decoding %s with the reader' % os.path.basename(path))
+    t = time.time(); raw = reader.cached_load(path, log); T['reader'] = round(time.time() - t, 2); ctx = Ctx(raw)
+    ctx.raw_key = '%s|%s|%s|%s' % (os.path.abspath(path), os.path.getmtime(path), os.path.getsize(path), reader.reader_stamp())
     from . import datums
-    els = build_table(ctx); log('%d elements' % len(els))
+    prog.set('tables', 0.0, 'building element tables')
+    t = time.time(); els = build_table(ctx)
     levels = build_levels(ctx); lvl_by_id = {e: n for e, (n, z) in ctx.levels.items()}
-    for el in els:
-        r = ctx.recs[el['id']]; p = ctx.par.get(el['id'], {}).get('params', {})
-        lv = None
+    for i, el in enumerate(els):
+        el['i'] = i; r = ctx.recs[el['id']]; p = ctx.par.get(el['id'], {}).get('params', {}); lv = None
         for k in ('m_assocLevelId', 'm_levelId', 'm_scheduleOnlyLevelId'):
             v = ctx.eid_int(r['fields'].get(k)) if k in r['fields'] else None
             if v in lvl_by_id: lv = v; break
@@ -535,56 +685,50 @@ def convert(path, outdir, log=print):
                 v = ctx.eid_int(p.get(k)) if isinstance(p.get(k), int) else None
                 if v in lvl_by_id: lv = v; break
         el['level'] = lvl_by_id.get(lv)
-    acc = {}; covg = collections.defaultdict(collections.Counter); ious = {}
-    for i, el in enumerate(els):
-        el['i'] = i; r = ctx.recs[el['id']]
-        res = element_mesh(ctx, el['id'], r) if (el['cat'] and not el['isType']) else None
-        if res is None:
-            covg[el['cat'] or '(none)']['none'] += 1; continue
-        mesh, fid = res
-        el['fid'] = fid; covg[el['cat']][fid] += 1
-        if fid in ('param', 'solid') and el['bb'] is not None:
-            el['iou'] = round(box_iou(mesh.v.min(0), mesh.v.max(0), *el['bb']), 3); ious.setdefault(el['cat'], []).append(el['iou'])
-        kind = getattr(mesh, 'kind', 'tri'); transl = fid == 'bbox' and el['cat'] in TRANSLUCENT_CATS
-        a = acc.setdefault((el['cat'], kind, transl), {'pos': [], 'idx': [], 'eidx': [], 'ranges': [], 'nv': 0, 'nt': 0})
-        a['pos'].append(mesh.v); a['idx'].append(mesh.f.reshape(-1) + a['nv']); a['eidx'].append(np.full(len(mesh.v), i, np.float32))
-        a['ranges'] += [i, a['nt'], len(mesh.f)]; a['nv'] += len(mesh.v); a['nt'] += len(mesh.f)
-    batches = []; bmeta = []
-    for (cat, kind, transl), a in acc.items():
-        pos = glb.to_yup_m(np.vstack(a['pos'])); idx = np.concatenate(a['idx']).astype(np.uint32)
-        c = (0.1, 0.1, 0.12) if kind == 'line' else cat_color(cat)
-        alpha = 0.45 if cat in ('Windows', 'Curtain Panels') else ((0.08 if cat in ('Planting', 'Entourage') else 0.18) if transl else 1.0)
-        batches.append({'name': cat + ('' if kind == 'tri' else ' (lines)'), 'color': (*c, alpha), 'pos': pos, 'eidx': np.concatenate(a['eidx']), 'idx': idx, 'mode': 1 if kind == 'line' else 4})
-        bmeta.append({'cat': cat, 'kind': kind, 'color': '#%02x%02x%02x' % tuple(int(x * 255) for x in c), 'alpha': alpha, 'ranges': a['ranges'], 'tris': a['nt']})
-    glb.write_glb(os.path.join(outdir, 'model.glb'), batches)
-    allb = [el['bb'] for el in els if el['bb'] is not None and el['fid'] != 'none' and not default_hidden(el['cat'] or '') and el['cat'] not in ('Mass',)]
-    if not allb: allb = [el['bb'] for el in els if el['bb'] is not None and el['fid'] != 'none']
-    if allb:
-        lo = np.percentile([b[0] for b in allb], 0.5, axis=0) * 0.3048; hi = np.percentile([b[1] for b in allb], 99.5, axis=0) * 0.3048
-        lo = np.minimum(lo, np.min([b[0] for b in allb], 0) * 0.3048 if len(allb) < 50 else lo); hi = np.maximum(hi, np.max([b[1] for b in allb], 0) * 0.3048 if len(allb) < 50 else hi)
-    else: lo = hi = np.zeros(3)
-    views, sheets = datums.views_sheets(ctx)
-    meta = {'file': os.path.basename(path), 'levels': levels, 'grids': build_grids(ctx), 'batches': bmeta, 'rooms': datums.rooms(ctx, lvl_by_id), 'views': views, 'sheets': sheets,
-            'bbox': [lo.tolist(), hi.tolist()], 'fidLabels': FID_LABEL, 'defaultHidden': sorted({el['cat'] for el in els if el['cat'] and default_hidden(el['cat'])}),
-            'elements': [[el['id'], el['cls'], el['cat'], el['name'], el['type'], el['level'], el['fid'], el['isType'], el['family']] for el in els],
-            'stamps': {'reader': reader.reader_stamp(), 'viewer': reader.viewer_stamp()}, 'coverage': {k: dict(v) for k, v in covg.items()}, 'bboxAgreement': {k: [round(float(np.mean(v)), 3), len(v)] for k, v in ious.items()}, 'built': time.time(), 'buildSecs': 0}
-    for r_ in meta['rooms']:
-        for el in els:
-            if el['id'] == r_['id']: r_['i'] = el['i']; break
+    views, sheets = datums.views_sheets(ctx); rooms = datums.rooms(ctx, lvl_by_id); grids = build_grids(ctx)
+    idx_of = {el['id']: el['i'] for el in els}
+    for r_ in rooms: r_['i'] = idx_of.get(r_['id'])
+    # sqlite first (inspector / search work from the preview on); fidelity + iou are updated at the end
     dbp = os.path.join(outdir, 'model.sqlite')
     if os.path.exists(dbp): os.remove(dbp)
     db = sqlite3.connect(dbp)
     db.executescript('create table el(i integer primary key, id integer, cls text, cat text, name text, type text, family text, level text, uid text, ifc text, fid text, bb text, iou real);'
-                     'create table prm(i integer, k text, v text);create index prm_i on prm(i);')
-    db.executemany('insert into el values(?,?,?,?,?,?,?,?,?,?,?,?,?)', [(el['i'], el['id'], el['cls'], el['cat'], el['name'], el['type'], el['family'], el.get('level'), el['uid'], el['ifc'], el['fid'],
-                    json.dumps([x.tolist() for x in el['bb']]) if el['bb'] else None, el.get('iou')) for el in els])
-    rows = []
+                     'create table prm(i integer, k text, v text);')
+    db.executemany('insert into el values(?,?,?,?,?,?,?,?,?,?,?,?,?)', [(el['i'], el['id'], el['cls'], el['cat'], el['name'], el['type'], el['family'], el.get('level'), el['uid'], el['ifc'], 'none',
+                    '[[%r,%r,%r],[%r,%r,%r]]' % (*el['bb'][0].tolist(), *el['bb'][1].tolist()) if el['bb'] else None, None) for el in els])
+    rows = []; sg = 1 << (8 * ctx.W - 1)
     for el in els:
         for k, v in ctx.par.get(el['id'], {}).get('params', {}).items():
-            if isinstance(v, int) and not isinstance(v, bool): v = ctx.sc(v) if v >= (1 << (8 * ctx.W - 1)) else int(v)
-            rows.append((el['i'], k, json.dumps(v) if not isinstance(v, str) else v))
-    db.executemany('insert into prm values(?,?,?)', rows); db.commit(); db.close()
-    meta['buildSecs'] = round(time.time() - t0, 1)
+            if isinstance(v, str): rows.append((el['i'], k, v))
+            elif isinstance(v, int) and not isinstance(v, bool): rows.append((el['i'], k, str(ctx.sc(v) if v >= sg else int(v))))
+            else: rows.append((el['i'], k, json.dumps(v)))
+    db.executemany('insert into prm values(?,?,?)', rows); db.execute('create index prm_i on prm(i)'); db.commit()
+    T['tables'] = round(time.time() - t, 2)
+    base_meta = {'file': os.path.basename(path), 'levels': levels, 'grids': grids, 'rooms': rooms, 'views': views, 'sheets': sheets, 'fidLabels': FID_LABEL,
+                 'defaultHidden': sorted({el['cat'] for el in els if el['cat'] and default_hidden(el['cat'])}), 'stamps': {'reader': reader.reader_stamp(), 'viewer': reader.viewer_stamp()},
+                 'elements': None}
+    # preview: every element that has a stored bounding box as a plain box (vectorised, ~1 s), written before the expensive geometry
+    prog.set('preview', 0.0, 'writing box preview')
+    t = time.time(); pres = []
+    for i, el in enumerate(els):
+        if el['cat'] and not el['isType'] and el['bb'] is not None: pres.append((i, 'bbox', 'tri', [(geom.box(*el['bb']).v, geom.box(*el['bb']).f, None)]))
+    pels = [dict(e) for e in els]
+    pb, pm, pcovg, _, _ = pack_batches(pels, pres)
+    glb.write_glb(os.path.join(outdir, 'preview.glb'), pb)
+    meta = dict(base_meta); meta.update({'phase': 'preview', 'batches': pm, 'bbox': model_bbox(pels), 'coverage': {k: dict(v) for k, v in pcovg.items()}, 'coverageByClass': {}, 'bboxAgreement': {},
+                                         'elements': [[el['id'], el['cls'], el['cat'], el['name'], el['type'], el['level'], el['fid'], el['isType'], el['family']] for el in pels], 'built': time.time(), 'buildSecs': 0})
     json.dump(meta, open(os.path.join(outdir, 'meta.json'), 'w'), separators=(',', ':'))
-    log('wrote %s in %.1fs: %d batches, %d tris' % (outdir, time.time() - t0, len(batches), sum(b['tris'] for b in bmeta)))
+    T['preview'] = round(time.time() - t, 2)
+    prog.set('geometry', 0.0, 'building geometry')
+    t = time.time(); res = run_geometry(ctx, els, prog, workers); T['geometry'] = round(time.time() - t, 2)
+    prog.set('packing', 0.0, 'packing glTF')
+    t = time.time(); batches, bmeta, covg, covc, ious = pack_batches(els, res)
+    glb.write_glb(os.path.join(outdir, 'model.glb'), batches)
+    db.executemany('update el set fid=?, iou=? where i=?', [(el['fid'], el.get('iou'), el['i']) for el in els if el['fid'] != 'none']); db.commit(); db.close()
+    meta = dict(base_meta); meta.update({'phase': 'done', 'batches': bmeta, 'bbox': model_bbox(els), 'coverage': {k: dict(v) for k, v in covg.items()}, 'coverageByClass': {k: dict(v) for k, v in covc.items()},
+                                         'bboxAgreement': {k: [round(float(np.mean(v)), 3), len(v)] for k, v in ious.items()}, 'built': time.time(),
+                                         'elements': [[el['id'], el['cls'], el['cat'], el['name'], el['type'], el['level'], el['fid'], el['isType'], el['family']] for el in els]})
+    T['packing'] = round(time.time() - t, 2); T['total'] = round(time.time() - prog.t0, 2); meta['buildSecs'] = T['total']; meta['timings'] = T
+    json.dump(meta, open(os.path.join(outdir, 'meta.json'), 'w'), separators=(',', ':'))
+    prog.set('done', 1.0, 'wrote %s in %.1fs: %d batches, %d tris  %s' % (outdir, T['total'], len(batches), sum(b['tris'] for b in bmeta), json.dumps(T)))
     return meta

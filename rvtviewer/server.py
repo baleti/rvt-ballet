@@ -6,7 +6,7 @@ WEB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
 
 class Models:
     def __init__(self): self.m = {}       # id -> dict(dir, name)
-    def add(self, mid, d, name): self.m[mid] = {'dir': d, 'name': name, 'db': None}
+    def add(self, mid, d, name, building=False): self.m[mid] = {'dir': d, 'name': name, 'db': None, 'building': building}
     def db(self, mid):
         m = self.m[mid]
         if m['db'] is None:
@@ -23,15 +23,23 @@ def make_app(models):
         return resp
     app.middlewares.append(nocache)
     async def index(req): return web.FileResponse(os.path.join(WEB, 'index.html'))
-    async def list_models(req): return web.json_response([{'id': k, 'name': v['name']} for k, v in models.m.items()])
+    async def list_models(req): return web.json_response([{'id': k, 'name': v['name'], 'building': v.get('building', False)} for k, v in models.m.items()])
     def mdir(req):
         mid = req.match_info['mid']
         if mid not in models.m: raise web.HTTPNotFound()
         return mid, models.m[mid]['dir']
     async def meta(req):
-        mid, d = mdir(req); return web.FileResponse(os.path.join(d, 'meta.json'))
+        mid, d = mdir(req); fn = os.path.join(d, 'meta.json')
+        if not os.path.exists(fn): raise web.HTTPNotFound()
+        return web.FileResponse(fn)
     async def glb(req):
         mid, d = mdir(req); return web.FileResponse(os.path.join(d, 'model.glb'))
+    async def preview(req):
+        mid, d = mdir(req); return web.FileResponse(os.path.join(d, 'preview.glb'))
+    async def progress(req):
+        mid, d = mdir(req); fn = os.path.join(d, 'progress.json')
+        try: return web.json_response(json.load(open(fn)))
+        except Exception: return web.json_response({'stage': 'starting', 'stages': ['reading', 'tables', 'preview', 'geometry', 'packing', 'done'], 'pct': 0, 'msg': 'starting', 'elapsed': 0})
     async def element(req):
         mid, d = mdir(req); i = int(req.match_info['i']); db = models.db(mid)
         row = db.execute('select * from el where i=?', (i,)).fetchone()
@@ -51,6 +59,8 @@ def make_app(models):
     app.router.add_get('/api/models', list_models)
     app.router.add_get('/m/{mid}/meta.json', meta)
     app.router.add_get('/m/{mid}/model.glb', glb)
+    app.router.add_get('/m/{mid}/preview.glb', preview)
+    app.router.add_get('/api/m/{mid}/progress', progress)
     app.router.add_get('/api/m/{mid}/el/{i}', element)
     app.router.add_get('/api/m/{mid}/search', search)
     app.router.add_static('/', WEB, follow_symlinks=False)

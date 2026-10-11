@@ -35,7 +35,7 @@ def box_frame(origin, ux, uy, uz):
     o = np.asarray(origin, float); ux = np.asarray(ux, float); uy = np.asarray(uy, float); uz = np.asarray(uz, float)
     dx, dy, dz = np.linalg.norm(ux), np.linalg.norm(uy), np.linalg.norm(uz)
     x = ux / dx; y = uy / dy; z = np.cross(x, y)
-    if np.dot(z, uz) < 0: z = -z; o = o + uz; uz = -uz     # keep a right-handed frame, flip origin to the other end
+    if np.dot(z, uz) < 0: o = o + uz        # right-handed frame points the other way: start from the opposite end and extend back
     ax = gp_Ax3(gp_Pnt(*o.tolist()), gp_Dir(*z.tolist()), gp_Dir(*x.tolist()))
     t = gp_Trsf(); t.SetTransformation(ax)                      # maps local -> world after inversion
     t.Invert()

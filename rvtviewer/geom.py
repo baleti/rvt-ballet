@@ -4,6 +4,18 @@ import numpy as np
 
 FT = 0.3048
 
+class Multi:
+    """several coloured parts of one element; v/f expose the union (volume / bbox checks use it)"""
+    def __init__(self, parts): self.parts = [(m, c) for m, c in parts if m]; 
+    @property
+    def v(self): return np.vstack([m.v for m, _ in self.parts]) if self.parts else np.zeros((0, 3))
+    @property
+    def f(self):
+        off = 0; out = []
+        for m, _ in self.parts: out.append(m.f + off); off += len(m.v)
+        return np.vstack(out) if out else np.zeros((0, 3), np.int32)
+    def __bool__(self): return bool(self.parts)
+
 class Mesh:
     __slots__ = ('v', 'f')
     def __init__(self, v=None, f=None):

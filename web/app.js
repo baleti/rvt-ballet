@@ -112,19 +112,38 @@ function refreshState() {
 let dirty = true;
 
 // ------------------------------------------------------------------ load
-async function loadModel(mid) {
-  S.mid = mid; location.hash = mid; $('#status').textContent = 'loading metadata...';
-  const t0 = performance.now();
-  S.meta = await (await fetch(`/m/${mid}/meta.json`)).json();
-  const E = S.meta.elements; S.N = E.length; S.hidden = new Uint8Array(S.N);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function showProgress(pr, floating) {
+  const el = $('#progress'); const st = pr.stages || []; const idx = Math.max(0, st.indexOf(pr.stage));
+  const overall = pr.stage === 'done' ? 1 : (idx + (pr.pct || 0)) / Math.max(1, st.length - 1);
+  const labels = {reading: 'Reading file (decoding records)', tables: 'Building element tables', preview: 'Box preview', geometry: 'Building geometry', packing: 'Packing meshes', done: 'Done'};
+  el.hidden = false; el.className = floating ? 'float' : '';
+  el.innerHTML = (floating ? '' : '<h3>Opening model</h3>') + `<div class="pbar"><div style="width:${(overall * 100).toFixed(0)}%"></div></div>` +
+    (floating ? `<span>Refining geometry: ${esc(labels[pr.stage] || pr.stage)} ${Math.round(overall * 100)}%</span>` :
+     st.filter(x => x !== 'done').map((x, i) => `<div class="stg ${i < idx ? 'ok' : i === idx ? 'cur' : ''}">${i < idx ? '\u2713' : i === idx ? '\u25b6' : '\u00b7'} ${labels[x] || x}</div>`).join('') +
+     `<div class="dim">${esc(pr.msg || '')}<br>${(pr.elapsed || 0).toFixed(0)} s elapsed. The first open of a file decodes it with the reader (minutes for big files); later opens are instant.</div>`);
+}
+async function loadModel(mid, opts = {}) {
+  S.mid = mid; location.hash = mid; $('#status').textContent = 'loading...';
+  const t0 = performance.now(); let meta = null;
+  while (!meta) {                              // the conversion may still be running: show its stages until the first usable model (box preview) exists
+    const r = await fetch(`/m/${mid}/meta.json`);
+    if (r.ok) { meta = await r.json(); break; }
+    const pr = await (await fetch(`/api/m/${mid}/progress`)).json(); showProgress(pr, false);
+    if (pr.stage === 'error') { $('#status').textContent = pr.msg; return; }
+    await sleep(700);
+  }
+  $('#progress').hidden = true;
+  S.meta = meta; const keepSel = opts.keepCamera ? [...S.sel] : [];
+  const E = S.meta.elements; S.N = E.length; S.hidden = new Uint8Array(S.N); S.sel = new Set(keepSel); S.isolate = null;
   S.byCat = new Map();
   E.forEach((el, i) => { const c = el[2] || '(no category)'; if (!S.byCat.has(c)) S.byCat.set(c, []); S.byCat.get(c).push(i); });
   S.hay = E.map(el => [el[0], el[1], el[2], el[3], el[4], el[5], el[8]].join(' ').toLowerCase());
-  S.catHidden = new Set(S.meta.defaultHidden || []);
+  S.catHidden = opts.keepCamera ? S.catHidden : new Set(S.meta.defaultHidden || []);
   initState(S.N); refreshState();
   $('#status').textContent = 'loading geometry...';
-  world.clear(); overlay.clear();
-  const gltf = await new GLTFLoader().loadAsync(`/m/${mid}/model.glb`);
+  world.clear(); overlay.clear(); S.bbCache = null;
+  const gltf = await new GLTFLoader().loadAsync(`/m/${mid}/${S.meta.phase === 'done' ? 'model' : 'preview'}.glb`);
   let tris = 0;
   gltf.scene.traverse(o => {
     if (!o.isMesh && !o.isLine && !o.isLineSegments) return;
@@ -138,9 +157,20 @@ async function loadModel(mid) {
     o.frustumCulled = false;
   });
   world.add(gltf.scene);
-  buildOverlays(); fitAll(); buildTabs(); setupLegend();
-  $('#status').textContent = `${S.N.toLocaleString()} elements, ${tris.toLocaleString()} triangles - ${((performance.now() - t0) / 1000).toFixed(1)}s`;
+  buildOverlays(); if (!opts.keepCamera) fitAll(); buildTabs(); setupLegend(); refreshState();
+  $('#status').textContent = `${S.N.toLocaleString()} elements, ${tris.toLocaleString()} triangles - ${((performance.now() - t0) / 1000).toFixed(1)}s` + (S.meta.phase === 'done' ? '' : ' (box preview)');
   dirty = true; window.__loaded = true;
+  if (S.meta.phase !== 'done') refineLoop(mid);
+}
+async function refineLoop(mid) {
+  // geometry is still being built: poll, then swap the preview for the full model without moving the camera
+  for (;;) {
+    await sleep(1000); if (S.mid !== mid) return;
+    let pr; try { pr = await (await fetch(`/api/m/${mid}/progress`)).json(); } catch (e) { continue; }
+    if (pr.stage === 'done') break; if (pr.stage === 'error') { $('#progress').hidden = true; return; }
+    showProgress(pr, true);
+  }
+  $('#progress').hidden = true; window.__loaded = false; await loadModel(mid, {keepCamera: true});
 }
 
 function modelBox() { const b = S.meta.bbox; return new THREE.Box3(new THREE.Vector3(b[0][0], b[0][2], -b[1][1]), new THREE.Vector3(b[1][0], b[1][2], -b[0][1])); }
@@ -369,15 +399,28 @@ function renderResults(tb) {
   tb.querySelector('#rIso').onclick = () => { setIsolate(new Set(hits.map(h => h.i))); };
   tb.querySelector('#rZoom').onclick = () => zoomTo(hits.slice(0, 200).map(h => h.i));
 }
+let covMode = 'cat';
 function renderCov(tb) {
-  const C = S.meta.coverage; const tot = {solid: 0, param: 0, approx: 0, bbox: 0, line: 0, none: 0};
-  for (const v of Object.values(C)) for (const k in v) tot[k] = (tot[k] || 0) + v[k];
+  const C = covMode === 'cat' ? S.meta.coverage : (S.meta.coverageByClass || S.meta.coverage); const tot = {solid: 0, param: 0, approx: 0, bbox: 0, line: 0, none: 0};
+  for (const v of Object.values(S.meta.coverage)) for (const k in v) tot[k] = (tot[k] || 0) + v[k];
   const sum = Object.values(tot).reduce((a, b) => a + b, 0), geo = sum - tot.none;
+  const drawn = v => (v.solid || 0) + (v.param || 0) + (v.approx || 0) + (v.bbox || 0) + (v.line || 0);
+  const pct = (n, d) => d ? (n / d * 100).toFixed(0) + '%' : '';
+  const grp = v => ({exact: v.solid || 0, approx: (v.param || 0) + (v.approx || 0), box: v.bbox || 0});
+  const g = grp(tot), gd = g.exact + g.approx + g.box;
   tb.innerHTML = `<h3>Geometry coverage</h3><div class="bar">${FID.map(f => `<div style="width:${tot[f] / sum * 100}%;background:${FIDCOL[f]}" title="${f}"></div>`).join('')}</div>
   <table class="cov"><tr><th>fidelity</th><th>elements</th><th></th></tr>${FID.map(f => `<tr><td><span class="fid f-${f}">${f}</span> ${esc(S.meta.fidLabels[f] || '')}</td><td>${tot[f] || 0}</td><td>${(tot[f] / sum * 100).toFixed(1)}%</td></tr>`).join('')}</table>
-  <p class="dim">${geo.toLocaleString()} of ${sum.toLocaleString()} database elements have something drawn (the rest are types, views, parameters, annotations...).</p>
-  <h3>By category</h3><table class="cov"><tr><th>category</th>${FID.map(f => `<th>${f}</th>`).join('')}</tr>` +
-    Object.entries(C).filter(([k, v]) => (v.solid || 0) + (v.param || 0) + (v.approx || 0) + (v.bbox || 0) + (v.line || 0) > 0).sort((a, b) => (b[1].solid || 0) + (b[1].param || 0) + (b[1].bbox || 0) + (b[1].line || 0) - ((a[1].solid || 0) + (a[1].param || 0) + (a[1].approx || 0) + (a[1].bbox || 0) + (a[1].line || 0))).map(([k, v]) => `<tr><td>${esc(k)}</td>${FID.map(f => `<td>${v[f] || ''}</td>`).join('')}</tr>`).join('') + '</table>';
+  <p><b>Of ${gd.toLocaleString()} solid-bearing elements:</b> exact ${pct(g.exact, gd)} &middot; approximate (rebuilt from parameters) ${pct(g.approx, gd)} &middot; box only ${pct(g.box, gd)}<br><span class="dim">${geo.toLocaleString()} of ${sum.toLocaleString()} database elements have anything drawn (others are types, views, parameters, annotations...). Lines excluded from the percentages.</span></p>
+  <div style="margin:6px 0"><label class="chk"><input type="radio" name="cm" value="cat" ${covMode === 'cat' ? 'checked' : ''}> by category</label> <label class="chk"><input type="radio" name="cm" value="cls" ${covMode === 'cls' ? 'checked' : ''}> by Revit class</label></div>
+  <table class="cov"><tr><th>${covMode === 'cat' ? 'category' : 'class'}</th><th>n</th><th>exact</th><th>approx</th><th>box</th></tr>` +
+    Object.entries(C).filter(([k, v]) => grp(v).exact + grp(v).approx + grp(v).box > 0).sort((a, b) => { const x = grp(a[1]), y = grp(b[1]); return (y.exact + y.approx + y.box) - (x.exact + x.approx + x.box); })
+      .map(([k, v]) => { const x = grp(v), n = x.exact + x.approx + x.box; return `<tr class="covrow" data-k="${esc(k)}" title="click: show only this ${covMode === 'cat' ? 'category' : 'class'} in fidelity colours"><td>${esc(k)}</td><td>${n}</td><td>${pct(x.exact, n)}</td><td>${pct(x.approx, n)}</td><td>${pct(x.box, n)}</td></tr>`; }).join('') + '</table>';
+  tb.querySelectorAll('input[name=cm]').forEach(r => r.onchange = () => { covMode = r.value; renderTab(); });
+  tb.querySelectorAll('.covrow').forEach(tr => tr.onclick = () => {
+    const k = tr.dataset.k, idx = [];
+    S.meta.elements.forEach((el, i) => { if ((covMode === 'cat' ? el[2] : el[1]) === k && el[6] !== 'none') idx.push(i); });
+    setIsolate(new Set(idx)); if (!S.fidMode) $('#bFid').click();
+  });
 }
 function setupLegend() {
   $('#legend').innerHTML = FID.slice(0, 5).map(f => `<div><i style="background:${FIDCOL[f]}"></i>${f}</div>`).join('');
