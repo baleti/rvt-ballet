@@ -34,7 +34,7 @@ def main(path):
         if not el['cat'] or el['isType']: continue
         if i % 200 == 0:
             gc.collect(); rss = int(open('/proc/self/statm').read().split()[1]) * 4096 / 1e9
-            if rss > 3.3: print('ABORT %s: RSS %.1f GB over budget' % (os.path.basename(path), rss)); sys.exit(3)
+            if rss > float(os.environ.get('RVT_RSS_BUDGET', '3.3')): print('ABORT %s: RSS %.1f GB over budget' % (os.path.basename(path), rss)); sys.exit(3)
         try: r_ = build.element_mesh(ctx, el['id'], ctx.recs[el['id']])      # one element at a time: nothing is kept after its metrics are taken
         except Exception: r_ = None
         if r_ is None: continue
