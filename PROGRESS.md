@@ -25,3 +25,10 @@
 - Geometry: sloped roofs (stored per-edge slope), walls with hosted door/window/generic-void openings and tops joined to roofs (OpenCascade booleans), layered walls/floors/ceilings with material colours, curved walls, B-rep cylinders.
 - Coverage tab: exact / approximate / box percentages, by category or Revit class; click a row to isolate it in fidelity colours. Screenshot regression set: tools/regress.py -> screenshots/regress (git-excluded).
 - Timings table in README (cold/warm, 6 MB and 40 MB).
+
+## 2026-10-11 milestone 5 (usage limit reached here)
+- Floors fixed: nested loops (outer/hole by containment), stored Revit extent for flat slabs, open B-rep shells no longer labelled solid. Floor volume vs Revit: median 1.00, 93-100% within 5% (2020 MEP was 19%).
+- Walls: door/window openings shrunk 0.2 ft (fitted on gt4); wall volume within 5%: MEP 81%, Structural 68%, Residential 43%, Facades 45%. Gable walls joined to roofs still the weak group.
+- Features: open plan/section/3D views from stored frames, section plane + box, URL state (camera, selection, hidden categories, section, view), snapping measure, level/category/phase isolation, ? help overlay, model picker.
+- Tests: tests/run.sh (unit + smoke), tools/uitest6.py (features, all pass).
+- Reader B-rep API: no family solids yet, nothing to wire; fidelity table unchanged in kind (box-only dominated by family instances).
