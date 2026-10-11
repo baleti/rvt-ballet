@@ -27,6 +27,7 @@ from .build_util import g
 
 HOSTED_CUT_CATS = ('Doors', 'Windows', 'Generic Models')
 
+USE_SYMBOL_CUTS = True
 OPENING_SHRINK = 0.2      # ft trimmed from each side of a hosted instance's bbox to get the actual hole (frame/casing)
 ROOF_ATTACH_FRACTION = 1.0      # measured against Revit wall volumes: wall tops joined to a roof reach the roof's top surface (0 = underside)
 
@@ -43,7 +44,7 @@ class Ctx:
             if r['class'] == 'FamilyInstance' and r['fields'].get('m_hostId') is not None:
                 h = self.eid_int(r['fields']['m_hostId'])
                 if h is not None and self.catname(e) in HOSTED_CUT_CATS: self.hosted[h].append(e)
-        self._bb = {}
+        self._bb = {}; self._cutcache = {}
         self.roof_fields = {}      # roof id -> (footprint Path, bottom-surface height function (xy Nx2 -> z)), filled by roof_geom
         self.levels = {}      # id -> (name, elev ft)
         for e, r in self.recs.items():
@@ -331,19 +332,35 @@ def wall_top_profile(ctx, e, r, org, x0, n, y0, d):
     pts = [np.asarray(q, float) for q in pts]
     return pts
 
+def symbol_cut_points(ctx, sid):
+    """vertices (symbol-local, feet) of the closed cut bodies (m_complexCutGeoms: the void shapes a family cuts into its host), via the reader's shell split"""
+    if sid in ctx._cutcache: return ctx._cutcache[sid]
+    pts = None; r = ctx.recs.get(sid)
+    try:
+        reader._import(); import rvt_mesh
+        bodies = []
+        for gm in (r['fields'].get('m_complexCutGeoms') or []) if r else []:
+            for comp in rvt_mesh.components(gm.get('obj', gm)):
+                if comp['tris'] and comp.get('closed') and not comp['unsupported']: bodies.append(np.array(comp['tris'], float).reshape(-1, 3))
+        if bodies: pts = np.vstack(bodies)
+    except Exception: pts = None
+    ctx._cutcache[sid] = pts; return pts
+
 def wall_openings(ctx, e, org, x0, n, y0, d):
     """cutter boxes for the doors/windows hosted by wall e: the instance's stored bounding box projected into the wall frame (full wall thickness)"""
     from . import occ
     out = []
     for h in ctx.hosted.get(e, []):
-        bb = ctx.bbox(h)
-        if bb is None: continue
-        c = np.array([[bb[i][0] if k & 1 else bb[1 - i][0], 0, 0] for i in range(1) for k in range(1)])      # placeholder to keep numpy import used
-        corners = np.array([[x, y, z] for x in (bb[0][0], bb[1][0]) for y in (bb[0][1], bb[1][1]) for z in (bb[0][2], bb[1][2])])
+        bb = ctx.bbox(h); body = False
+        sid = ctx.eid_int(ctx.recs[h]['fields'].get('m_masterSymbolId')); fr_ = inst_frame(ctx, ctx.recs[h]); cp = symbol_cut_points(ctx, sid) if (sid is not None and fr_) else None
+        if cp is not None and USE_SYMBOL_CUTS:
+            corners = cp @ fr_[0].T + fr_[1]; body = True            # the family's own void body at the instance transform
+        elif bb is None: continue
+        else: corners = np.array([[x, y, z] for x in (bb[0][0], bb[1][0]) for y in (bb[0][1], bb[1][1]) for z in (bb[0][2], bb[1][2])])
         loc = np.c_[(corners - org) @ x0, (corners - org) @ n, (corners - org) @ y0]
         lo = np.maximum(loc.min(0), 0.0); hi = np.minimum(loc.max(0), d)
         # the instance box is axis aligned in world space; for a wall at an angle it over-covers along the wall: shrink to the box the instance really occupies
-        sh = OPENING_SHRINK if ctx.catname(h) in ('Doors', 'Windows') else 0.0       # frames/casing are inside the instance bbox; generic voids are cut as stored
+        sh = OPENING_SHRINK if (ctx.catname(h) in ('Doors', 'Windows') and not body) else 0.0       # frames/casing are inside the instance bbox; generic voids are cut as stored
         lo = lo + np.array([sh, 0, sh]); hi = hi - np.array([sh, 0, sh])
         if hi[0] - lo[0] < 0.2 or hi[2] - lo[2] < 0.2: continue
         pad = 0.2
