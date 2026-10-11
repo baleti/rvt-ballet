@@ -37,6 +37,36 @@ def _curve(c):
     raise ValueError('curve type ' + t)
 
 
+class _P:
+    __slots__ = ('x', 'y', 'z')
+    def __init__(s_, v): s_.x, s_.y, s_.z = float(v[0]), float(v[1]), float(v[2])
+    def X(s_): return s_.x
+    def Y(s_): return s_.y
+    def Z(s_): return s_.z
+
+
+class HermiteSurface:
+    """bicubic Hermite patch grid: nodes u-fastest, each {'p','tu','tv','twist'}; uparams / vparams = node parameters. Value(u, v) -> point (OCC-like accessor)"""
+    def __init__(self, s):
+        self.up = np.asarray(s['uparams'], float); self.vp = np.asarray(s['vparams'], float); nu = len(self.up)
+        N = s['nodes']; self.P = np.array([[N[j * nu + i]['p'] for i in range(nu)] for j in range(len(self.vp))], float)
+        self.TU = np.array([[N[j * nu + i]['tu'] for i in range(nu)] for j in range(len(self.vp))], float)
+        self.TV = np.array([[N[j * nu + i]['tv'] for i in range(nu)] for j in range(len(self.vp))], float)
+        self.TW = np.array([[N[j * nu + i].get('twist', [0, 0, 0]) for i in range(nu)] for j in range(len(self.vp))], float)
+    @staticmethod
+    def _h(t):
+        return np.array([2 * t ** 3 - 3 * t ** 2 + 1, -2 * t ** 3 + 3 * t ** 2, t ** 3 - 2 * t ** 2 + t, t ** 3 - t ** 2])
+    def Value(self, u, v):
+        i = int(np.clip(np.searchsorted(self.up, u) - 1, 0, len(self.up) - 2)); j = int(np.clip(np.searchsorted(self.vp, v) - 1, 0, len(self.vp) - 2))
+        du = self.up[i + 1] - self.up[i]; dv = self.vp[j + 1] - self.vp[j]; hu = self._h((u - self.up[i]) / du); hv = self._h((v - self.vp[j]) / dv)
+        out = np.zeros(3)
+        for a, (ii, ub) in enumerate(((i, 0), (i + 1, 1))):
+            for b, (jj, vb) in enumerate(((j, 0), (j + 1, 1))):
+                out += self.P[jj, ii] * hu[a] * hv[b] + self.TU[jj, ii] * du * hu[2 + a] * hv[b] + self.TV[jj, ii] * dv * hu[a] * hv[2 + b] + self.TW[jj, ii] * du * dv * hu[2 + a] * hv[2 + b]
+        return _P(out)
+    def Bounds(self): return (self.up[0], self.up[-1], self.vp[0], self.vp[-1])
+
+
 def make_surface(s):
     """surface dict -> (Geom_Surface, default (u0,u1,v0,v1), kind)
     plane      {'type':'plane','origin','xdir','ydir'}                          u,v = distances along xdir, ydir
@@ -75,6 +105,8 @@ def make_surface(s):
         b = surf.Bounds(); return surf, tuple(b), t
     if t == 'ruled':
         surf = GeomFill.Surface_s(_curve(s['curve1']), _curve(s['curve2'])); b = surf.Bounds(); return surf, tuple(b), t
+    if t == 'hermite':
+        h = HermiteSurface(s); return h, tuple(h.Bounds()), t
     raise ValueError('surface type ' + t)
 
 
@@ -99,6 +131,7 @@ def tessellate_face(s, loops_uv=None, angular=math.radians(8)):
     elif kind == 'sphere': su, sv = angular, math.pi / 12
     elif kind == 'torus': su, sv = angular, angular
     elif kind == 'revolution': su, sv = angular, span[1] / 16
+    elif kind == 'hermite': su, sv = span[0] / 16, span[1] / 16
     else: su, sv = span[0] / 24, span[1] / 24
     step = np.array([su, sv])
     ring = [_densify(l, step) for l in L]

@@ -61,6 +61,12 @@ def test_ruled():
     assert abs(area(occsurf.tessellate_face(s)) - 5 * math.sqrt(5)) < 1e-4
 
 
+def test_hermite_flat_patch():
+    nodes = [{'p': [x, y, 0.0], 'tu': [1, 0, 0], 'tv': [0, 1, 0], 'twist': [0, 0, 0]} for y in (0, 3) for x in (0, 4)]       # bilinear Hermite patch 4 x 3 with unit tangents
+    s = {'type': 'hermite', 'uparams': [0, 4], 'vparams': [0, 3], 'nodes': nodes}
+    assert abs(area(occsurf.tessellate_face(s)) - 12) < 1e-6
+
+
 def test_trimmed_with_hole():
     s = {'type': 'plane', 'origin': [0, 0, 0], 'xdir': X, 'ydir': Y}
     loops = [[(0, 0), (10, 0), (10, 10), (0, 10)], [(4, 4), (6, 4), (6, 6), (4, 6)]]

@@ -37,3 +37,15 @@ When an instance has no saved graphics: the symbol's parametric solids with thei
 
 ## 5. Performance
 `element_geometry` is fast once the context is loaded (194 instances in 2.6 s); cold decode of a 40 MB file is ~45 s single-threaded (parallel partition decode / lazy decode would help the first open most).
+
+---
+## READER ANSWERS (session 176, 2026-10-11)
+1. Surfaces: `rvt_geometry.element_brep(file, id)` now returns faces with `surface` dicts in this file's vocabulary (plane, cylinder, cone [ref_radius 0, apex at origin], revolution, ruled, hermite) + `loops_uv` (correct trim loops incl. holes, taken from the edge-pointer topology with a geometric fallback) - see GEOMETRY_API.md. All formulas were fitted against Revit's own edge points (0.0 error): cylinder, cone, ruled, revolution. sphere/torus/B-spline surfaces do not occur as Revit classes in the 10 indexed corpus files (Revit's surface classes are Plane, ConeSurf, CylSurf, HermiteSurf, OffsetSurf, RuledSurf, SharedSurface, SurfRev, TempImportNurbsSurf); HermiteSurf is a bicubic Hermite patch grid (corner values verified, interior unverified).
+2. Closedness: element_mesh isolates the element's own shell from the reference-face Geometry nodes (`closed_shell` flag); for 8/8 walls in 2020 rst and 16/16 in 2020 Commercial volume equals Revit's within 1e-4. Per-face render style = `render_style`. Cut/void geometry: not yet separated (m_complexCutGeoms not decoded).
+3. Family generative geometry: for elements WITH saved graphics (channel 103) the evaluated solids are used; symbols without any 3D graphics are annotation/2D types (e.g. 2024 Structural: 476 symbols with meshes, 195 with only a dummy record, 193 with 2D lines only), so no box-only fallback is needed for them.
+4. Hosts: not decoded yet (see ACCEPTANCE.md work). 5. Performance: rvt2text on a 41.6 MB file 51 s -> 25 s cold / 6 s warm / 0.05 s cached; Rust record decoder in ~/src/rvt-core (~3x faster extraction, bit-identical).
+
+## 6. Finding 2026-10-11 23:40: element_brep on the revolution rosetta files (gt_geom/2024_fam_revolution_{sphere,torus,cone}_base)
+- `element_brep(file, id)` returns `faces: []` for the FamilyInstance in all three files (1 instance each, `instances` has the GInstance). So the revolution / cone / torus / sphere surface parameters (which the oracle FG/F rows prove exist: RevolvedFace, ConicalFace with axis, profile curve, halfangle, radius) never reach the viewer.
+- `element_geometry`: torus and cone instances return `mesh_approx` (saved graphics; viewer IoU 1.0 vs the oracle bbox), the SPHERE instance returns confidence `box` (`symbol_outline_only`) - no saved graphics at all, so it is drawn as a box.
+- Ask: for family instances whose geometry lives in the symbol (GInstance -> FamilySymbol), expose the symbol's Geometry nodes' faces through element_brep (surface dicts exactly as documented) together with the instance transform, and evaluate Sphere / Torus surfaces too (`sphere {origin,xdir,ydir,radius}`, `torus {origin,xdir,ydir,major_radius,minor_radius}`; occsurf.py tessellates both).

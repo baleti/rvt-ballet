@@ -656,6 +656,28 @@ def contained_match(lo, hi, blo, bhi, tol=0.15):
 ANALYTIC_CLASSES = {'SWall', 'Floor', 'Ceiling', 'RoofSoffit', 'BuildingPad', 'ProfileRoof', 'FootPrintRoof', 'RbsDuctCurve', 'RbsPipeCurve', 'RbsConduitCurve', 'CableTray', 'RbsFlexDuctCurve', 'RbsFlexPipeCurve', 'CurveElem'}
 USE_READER_MESH = True
 
+def reader_brep_extra(ctx, e, GG):
+    try:
+        from . import occsurf
+        b = GG.element_brep(ctx.src, e)
+        faces = [f for f in b.get('faces', []) if f['surface'].get('type') not in ('plane', 'cylinder') and f.get('loops_uv')]
+        if not faces: return None
+        out = Mesh()
+        for f in faces:
+            try: out.add(occsurf.tessellate_face(f['surface'], f['loops_uv']))
+            except Exception: continue
+        if not out: return None
+        inst = b.get('instances') or []
+        if inst:
+            tr = inst[0]['transform']; M = np.array(tr['m_3x3'], float); o = np.array(tr['m_or'], float); bb = ctx.bbox(e)
+            if bb is not None:
+                cands = [out.v @ M.T + o, out.v @ M + o]
+                fit = lambda W: float(np.mean(np.all((W >= bb[0] - 0.5) & (W <= bb[1] + 0.5), axis=1)))
+                out.v = max(cands, key=fit)
+        return out
+    except Exception:
+        return None
+
 def reader_mesh(ctx, e):
     """triangle mesh the reader decoded from Revit's saved graphics (rvt_geometry.element_geometry, confidence 'mesh_approx', world feet): the family-instance geometry. -> (Mesh, fid) or None"""
     if not USE_READER_MESH or not getattr(ctx, 'src', None): return None
@@ -668,10 +690,13 @@ def reader_mesh(ctx, e):
     T = [np.array(sl['triangles'], float).reshape(-1, 3) for sl in a['solids'] if sl.get('kind') == 'triangle_mesh' and sl.get('triangles')]
     if not T: return None
     P = np.vstack(T); m = Mesh(P, np.arange(len(P)).reshape(-1, 3))
-    bb = ctx.bbox(e)
+    bb = ctx.bbox(e); extra = False
+    if 'unsupported_faces' in (a.get('flags') or []):
+        ex = reader_brep_extra(ctx, e, GG)                       # faces the saved-graphics mesh skipped (cone / revolution / ruled / Hermite ...): tessellated through OpenCascade
+        if ex is not None and len(ex.f): m.add(ex); P = m.v; extra = True
     iou = box_iou(P.min(0), P.max(0), *bb) if bb is not None else 1.0
     if iou < 0.4: return None                                   # not the element's own geometry
-    return m, ('approx' if 'unsupported_faces' in (a.get('flags') or []) or iou < 0.9 else 'mesh')
+    return m, ('approx' if ('unsupported_faces' in (a.get('flags') or []) and not extra) or iou < 0.9 else 'mesh')
 
 def prefetch_reader_meshes(ctx, els, prog=None):
     ctx._rm = None; out = {}; t = time.time(); n = 0
