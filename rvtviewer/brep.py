@@ -108,3 +108,13 @@ def find_geometries(o, key_ok=lambda k: True, out=None, depth=0):
     elif isinstance(o, list):
         for v in o: find_geometries(v, key_ok, out, depth + 1)
     return out
+
+
+def reader_components(geo):
+    """shells of a Geometry body from the reader's rvt_mesh.components (None if the reader module is not available); thin adapter, falls back to this module's own tessellation"""
+    try:
+        from . import reader; reader._import()
+        import rvt_mesh
+        return rvt_mesh.components(_unwrap(geo))
+    except Exception:
+        return None

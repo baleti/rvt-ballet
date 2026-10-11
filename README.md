@@ -49,7 +49,7 @@ Box-only is almost entirely family instances (the reader does not decode family 
 | 2020 Residential | 43% (49) | 100% (6) | 100% (1) | 0% (2, median 1.09) |
 | 2026 Facades | 45% (78) | 100% (1) | - | 80% (5) |
 Walls: butt/miter joins from the stored join lists, hosted door/window/generic-void openings (doors/windows shrunk 0.2 ft per side, fitted on gt4), compound-structure layers, tops joined to roofs follow the roof. Floors: nested loops, stored Revit extent for flat slabs, open B-rep shells not accepted as solid. Weakest group: gable walls joined to roofs.
-Reader API status (GEOMETRY_API.md, rvt_brep.py): unchanged since first review, no family solids; nothing to wire (`tools/check_api.py` re-checks).
+Reader API status (GEOMETRY_API.md, rvt_brep.py, new rvt_mesh.py): still no family solids. Wired in: the reader's shell split (rvt_mesh.components) decides which B-rep bodies are closed solids (open shells become approximate); `tools/check_mesh.py` cross-checks its tessellation against ours (18/19 bodies agree on the 2020 MEP sample); `tools/check_api.py` compares API confidence per class.
 
 ### Safety
 Every conversion runs under `systemd-run --user --scope -p MemoryMax=6G -p MemorySwapMax=0` with nice (cli does it for `open`/`convert`; `tools/capped.sh CMD...` for scripts; RVT_MEM_CAP overrides, RVT_NO_CAP disables).

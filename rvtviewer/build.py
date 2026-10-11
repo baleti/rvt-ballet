@@ -615,6 +615,13 @@ def brep_geom(ctx, e, r):
     if not gs: return None
     m = Mesh(); npl = 0; nsk = 0
     for gm in gs:
+        comps = brep.reader_components(gm)               # the reader's shell split (rvt_mesh.components) when available: only closed shells count as solid
+        if comps is not None:
+            for c in comps:
+                if c['tris'] and c.get('closed') and not c['unsupported']:
+                    P = np.array(c['tris'], float).reshape(-1, 3); m.add(Mesh(P, np.arange(len(P)).reshape(-1, 3))); npl += c['n_faces']
+                else: nsk += 1
+            continue
         mm, n, sk = brep.geometry_mesh(gm); m.add(mm); npl += n; nsk += sk
     if not m: return None
     bb = ctx.bbox(e)
