@@ -20,6 +20,11 @@ async def main(d, port):
         print('PASS' if zoom else 'FAIL', 'wheel zooms'); ok &= zoom
         await b.ev("setNav('orbit')"); a, c = await delta(lambda: b.drag(700, 400, 760, 440, button='left')); orb2 = a[:3] != c[:3]
         print('PASS' if orb2 else 'FAIL', 'Orbit mode: left-drag orbits'); ok &= orb2
+        # ViewCube: click the centre of the cube -> the camera looks along a face axis
+        box = await b.ev("(()=>{const r=document.querySelector('#vcube').getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2]})()")
+        await b.click(box[0], box[1]); await asyncio.sleep(0.5)
+        d = json.loads(await b.ev("JSON.stringify(__camera.position.clone().sub(__controls.target).normalize().toArray())")); axial = sorted(abs(x) for x in d)[1] < 0.2
+        print('PASS' if axial else 'FAIL', 'ViewCube click looks along a face axis', d); ok &= axial
     finally: await b.close(); srv.terminate()
     print('ALL OK' if ok else 'SOME FAILED'); sys.exit(0 if ok else 1)
 asyncio.run(main(sys.argv[1], int(sys.argv[2])))

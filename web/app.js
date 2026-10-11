@@ -716,3 +716,26 @@ $('#bCmp').onclick = async () => {
 
 { let m = 'revit'; try { m = localStorage.getItem('rvtNav') || 'revit'; } catch (e) {} setNav(m);
   $('#navSel').onchange = e => setNav(e.target.value); window.setNav = setNav; }
+
+// ------------------------------------------------------------------ ViewCube (top-right): shows the camera orientation, click a face / edge-corner to look from there, home = isometric fit
+{
+  const cv = document.createElement('canvas'); cv.id = 'vcube'; cv.width = cv.height = 220; $('#view').appendChild(cv);
+  const r2 = new THREE.WebGLRenderer({canvas: cv, alpha: true, antialias: true}); r2.setSize(110, 110, false); r2.setPixelRatio(2);
+  const sc = new THREE.Scene(), cam2 = new THREE.PerspectiveCamera(30, 1, 0.1, 20);
+  const label = (t, dark) => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'); x.fillStyle = dark ? '#cfd6e2' : '#eef1f6'; x.fillRect(0, 0, 128, 128); x.strokeStyle = '#8a93a2'; x.lineWidth = 6; x.strokeRect(3, 3, 122, 122); x.fillStyle = '#1d232c'; x.font = 'bold 26px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(t, 64, 66); const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; return tx; };
+  // BoxGeometry face order: +x, -x, +y, -y, +z, -z  (three axes: y up; Revit front = -Y Revit = +z three)
+  const names = ['RIGHT', 'LEFT', 'TOP', 'BOTTOM', 'FRONT', 'BACK'];
+  const cube = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), names.map((n, i) => new THREE.MeshBasicMaterial({map: label(n, i === 3)}))); sc.add(cube);
+  sc.add(new THREE.LineSegments(new THREE.EdgesGeometry(cube.geometry), new THREE.LineBasicMaterial({color: 0x5a6578})));
+  const ray = new THREE.Raycaster();
+  function drawCube() { const d = camera.position.clone().sub(controls.target).normalize(); cam2.position.copy(d.multiplyScalar(3.4)); cam2.up.copy(camera.up); cam2.lookAt(0, 0, 0); r2.render(sc, cam2); }
+  function look(dir) { const d = camera.position.distanceTo(controls.target); camera.position.copy(controls.target).addScaledVector(dir.clone().normalize(), d); camera.up.set(0, 1, 0); if (Math.abs(dir.y) > 0.99) camera.up.set(0, 0, -1); controls.update(); dirty = true; }
+  cv.addEventListener('pointerdown', e => {
+    e.stopPropagation(); const rc = cv.getBoundingClientRect(); const m = new THREE.Vector2(((e.clientX - rc.left) / rc.width) * 2 - 1, -(((e.clientY - rc.top) / rc.height) * 2 - 1));
+    ray.setFromCamera(m, cam2); const hit = ray.intersectObject(cube)[0]; if (!hit) return;
+    const p = hit.point, ax = ['x', 'y', 'z'].map(k => Math.abs(p[k]) > 0.38);       // near an edge/corner: look from the diagonal, else from the face
+    const dir = new THREE.Vector3(ax[0] ? Math.sign(p.x) : 0, ax[1] ? Math.sign(p.y) : 0, ax[2] ? Math.sign(p.z) : 0); look(dir);
+  });
+  const home = document.createElement('button'); home.id = 'vhome'; home.textContent = '\u2302'; home.title = 'Home: isometric, fit all'; home.onclick = () => { camera.up.set(0, 1, 0); fitAll(); }; $('#view').appendChild(home);
+  controls.addEventListener('change', drawCube); setInterval(drawCube, 400); drawCube(); window.drawCube = drawCube;
+}
