@@ -172,8 +172,14 @@ def slab_geom(ctx, e, r):
     order = np.argsort(areas)[::-1]
     outer = closed[order[0]][:, :2]; ctr = outer.mean(0)[None, :]
     fz = [plane_z(p, ctr) for p in pls]
+    zl = float(closed[order[0]][:, 2].mean())      # the sketch plane is also a bounding layer (ceilings hang below their reference faces)
+    bbz = ctx.bbox(e)
+    if bbz is not None and bbz[0][2] - 1e-3 <= zl <= bbz[1][2] + 1e-3: fz.append(((lambda xy, c=zl: np.full(len(xy), c)), None))
     zc = [f(ctr)[0] for f, _ in fz]
     top = fz[int(np.argmax(zc))][0]; bot = fz[int(np.argmin(zc))][0]
+    flat = all(abs(n[2]) > 0.99999 for _, n in fz if n is not None)
+    if flat and bbz is not None and abs(max(zc) - bbz[1][2]) < 0.02 and bbz[0][2] < min(zc) - 1e-6:       # lowest layer is not among the reference faces: take it from the stored bbox
+        zb = float(bbz[0][2]); bot = lambda xy, c=zb: np.full(len(xy), c); zc = zc + [zb]
     if abs(max(zc) - min(zc)) < 1e-6: return None
     holes = [closed[i][:, :2] for i in order[1:] if areas[i] > 1e-6]
     m = geom.prism([outer] + holes, bot, top)
