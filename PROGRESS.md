@@ -14,3 +14,8 @@
 - Ducts/pipes/conduits/trays: line/arc driver + width/height/diameter, IoU 0.99.
 - Family instances: placeholder box at true bbox, oriented via instance transform when rotated.
 - Planar B-rep `Geometry` objects (Face/EdgeLoop/Edge with UV end points) decoded (`rvtviewer/brep.py`): real faces for stairs runs ('solid').
+
+## 2026-10-11 milestone 3
+- Curved walls, cylindrical B-rep faces, roofs as footprint prisms ('approx'), grids from datum planes, Family:Type names, sheet->view links, level dedupe, ghost isolate, help panel.
+- Verified vs Revit values (verify_gt.py), real-GPU run in an app-mode window on Hyprland workspace 178 (silent, no focus change), 150k-element synthetic stress test.
+- Open: family symbol solids (needs reader), roof slopes, room outlines, wall openings, true instancing.
