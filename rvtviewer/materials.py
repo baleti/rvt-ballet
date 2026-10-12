@@ -6,7 +6,7 @@ from . import reader
 
 TEX_CLASSES = ['none', 'brick', 'concrete', 'wood', 'stone', 'metal', 'glass', 'tile', 'plaster', 'grass', 'water', 'roof', 'insulation']
 _RULES = [   # (class, regex over name + class + category + texture path + schema)
-    ('glass', r'glass|glaz|window|mirror'), ('water', r'water|pool'), ('brick', r'brick|masonry|cmu|block\b'), ('tile', r'tile|ceramic|porcelain|terrazzo|mosaic'),
+    ('glass', r'glass|glaz|window|mirror'), ('water', r'water|pool'), ('stone', r'stone|granite|marble|slate|limestone|sandstone'), ('brick', r'brick|masonry|cmu|block\b'), ('tile', r'tile|ceramic|porcelain|terrazzo|mosaic'),
     ('wood', r'wood|timber|oak|pine|maple|walnut|birch|cherry|lumber|plywood|hardwood|laminate|veneer|door'), ('stone', r'stone|granite|marble|slate|limestone|sandstone|gravel|paving|rock'),
     ('concrete', r'concrete|cement|screed|cast.?in|precast|footing'), ('metal', r'metal|steel|alumin|iron|copper|bronze|brass|zinc|chrome|stainless|galvan'),
     ('plaster', r'plaster|gypsum|drywall|paint|stucco|render|gwb|wallboard|finish'), ('grass', r'grass|lawn|turf|soil|earth|planting|vegetation|landscap|topsoil|sod'),
