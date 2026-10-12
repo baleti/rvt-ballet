@@ -45,7 +45,7 @@ class Ctx:
             if r['class'] == 'FamilyInstance' and r['fields'].get('m_hostId') is not None:
                 h = self.eid_int(r['fields']['m_hostId'])
                 if h is not None and self.catname(e) in HOSTED_CUT_CATS: self.hosted[h].append(e)
-        self._bb = {}; self._cutcache = {}
+        self._bb = {}; self._cutcache = {}; self._why = {}
         self.roof_fields = {}      # roof id -> (footprint Path, bottom-surface height function (xy Nx2 -> z)), filled by roof_geom
         self.levels = {}      # id -> (name, elev ft)
         for e, r in self.recs.items():
@@ -738,10 +738,11 @@ def reader_brep_extra(ctx, e, GG):
         b = GG.element_brep(ctx.src, e)
         faces = [f for f in b.get('faces', []) if f['surface'].get('type') not in ('plane', 'cylinder') and f.get('loops_uv')]
         if not faces: return None
-        out = Mesh()
+        out = Mesh(); types = collections.Counter()
         for f in faces:
-            try: out.add(occsurf.tessellate_face(f['surface'], f['loops_uv']))
+            try: out.add(occsurf.tessellate_face(f['surface'], f['loops_uv'])); types[f['surface']['type']] += 1
             except Exception: continue
+        out.face_types = dict(types)
         if not out: return None
         inst = b.get('instances') or []
         if inst:  # (kept: pick the frame that lands inside the stored bbox)
@@ -773,12 +774,15 @@ def _em_geometry(GG, src, e):
     d = GG._docs.get(src)
     if d is None: d = GG._docs[src] = EM.Doc(src)               # (the document build uses worker pools: never under the address-space guard)
     m = _guarded(EM.element_mesh, d, int(e))
-    if not m or not m['tris']: return None
+    if not m: return {'confidence': 'none', 'flags': ['decode_failed_or_over_memory_guard']}
+    if not m['tris']: return {'confidence': 'none', 'flags': list(m.get('flags') or []) or ['no_saved_graphics']}
     P = np.array([p for t in m['tris'] for p in t])
+    mt = m.get('meta') or []
     return {'confidence': 'mesh_approx', 'flags': ['saved_graphics_tessellation'] + list(m['flags']), 'nid': list(m.get('nid') or []), 'fid': list(m.get('fid') or []),
+            'surf': [str(x[0]) for x in mt] if len(mt) == len(m['tris']) else None,
             'solids': [{'kind': 'triangle_mesh', 'triangles': P.round(6).tolist(), 'source': m['source']}]}
 
-def body_summary(P, nid, fid=None, limit=12):
+def body_summary(P, nid, fid=None, surf=None, limit=12):
     """per body of an element's saved-graphics mesh (nid = body id per triangle): triangles, faces (fid), area (ft2), watertight; kind from the id range (polymesh 1e6, symbol instance >= 2e7)"""
     nid = np.asarray(nid); T = P.reshape(-1, 3, 3); out = []
     for b in sorted(set(nid.tolist()))[:limit]:
@@ -787,7 +791,7 @@ def body_summary(P, nid, fid=None, limit=12):
         keys = np.round(t.reshape(-1, 3) * 1e4).astype(np.int64); _, inv = np.unique(keys, axis=0, return_inverse=True); inv = inv.reshape(-1, 3)
         E = np.sort(np.concatenate([inv[:, [0, 1]], inv[:, [1, 2]], inv[:, [2, 0]]]), axis=1); _, cnt = np.unique(E, axis=0, return_counts=True)
         out.append({'id': int(b), 'kind': 'polymesh' if b == 10 ** 6 else ('symbol instance' if b >= 2 * 10 ** 7 else 'own geometry'), 'tris': int(len(ix)), 'faces': int(len(set(np.asarray(fid)[ix].tolist()))) if fid is not None and len(fid) == len(nid) else None,
-                    'area': round(area, 3), 'closed': 'yes' if bool(np.all(cnt % 2 == 0)) else ('sealed' if float(np.linalg.norm(np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0]).sum(0))) < 1e-4 * max(area, 1e-9) else 'open'), 'lo': t.reshape(-1, 3).min(0).round(3).tolist(), 'hi': t.reshape(-1, 3).max(0).round(3).tolist()})
+                    'surfaces': (dict(collections.Counter(np.asarray(surf, dtype=object)[ix].tolist())) if surf is not None and len(surf) == len(nid) else None), 'area': round(area, 3), 'closed': 'yes' if bool(np.all(cnt % 2 == 0)) else ('sealed' if float(np.linalg.norm(np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0]).sum(0))) < 1e-4 * max(area, 1e-9) else 'open'), 'lo': t.reshape(-1, 3).min(0).round(3).tolist(), 'hi': t.reshape(-1, 3).max(0).round(3).tolist()})
     return out
 
 def reader_mesh(ctx, e):
@@ -804,21 +808,24 @@ def reader_mesh(ctx, e):
             except Exception: a = None
             if a is not None and a.get('confidence') == 'box': a = None
         if a is None: a = _em_geometry(GG, ctx.src, e) or {}          # straight from the reader's element_mesh: keeps the per-body (nid) / per-face (fid) ids
-    except Exception: return None
-    if a.get('confidence') != 'mesh_approx': return None
+    except Exception as ex_:
+        ctx._why[e] = 'reader error: %r' % ex_; return None
+    if a.get('confidence') != 'mesh_approx':
+        ctx._why[e] = 'reader: %s%s' % (a.get('confidence') or 'none', (' (' + ', '.join(a.get('flags') or []) + ')') if a.get('flags') else ''); return None
     T = [np.array(sl['triangles'], float).reshape(-1, 3) for sl in a['solids'] if sl.get('kind') == 'triangle_mesh' and sl.get('triangles')]
     if not T: return None
     P = np.vstack(T); m = Mesh(P, np.arange(len(P)).reshape(-1, 3))
     m.info = {'source': next((sl.get('source') for sl in a['solids'] if sl.get('source')), None), 'flags': list(a.get('flags') or []), 'bodies': len(a['solids']), 'tris': len(P) // 3}
-    if a.get('nid') is not None and len(a['nid']) == len(P) // 3: m.info['body_list'] = body_summary(P, a['nid'], a.get('fid')); m.info['bodies'] = len(set(a['nid']))
+    if a.get('nid') is not None and len(a['nid']) == len(P) // 3: m.info['body_list'] = body_summary(P, a['nid'], a.get('fid'), a.get('surf')); m.info['bodies'] = len(set(a['nid']))
+    if a.get('surf') is not None: m.info['surfaces'] = dict(collections.Counter(a['surf']))               # triangles per source surface type (plane, cylinder, cone, sphere, torus, revolution, ruled, hermite, bspline ...)
     bb = ctx.bbox(e); extra = False
     if 'unsupported_faces' in (a.get('flags') or []):
         ex = reader_brep_extra(ctx, e, GG)                       # faces the saved-graphics mesh skipped (cone / revolution / ruled / Hermite ...): tessellated through OpenCascade
-        if ex is not None and len(ex.f): m.add(ex); P = m.v; extra = True
+        if ex is not None and len(ex.f): m.add(ex); P = m.v; extra = True; m.info['extra_faces'] = getattr(ex, 'face_types', None); m.info['surfaces'] = {**m.info.get('surfaces', {}), **{'%s (OpenCascade)' % k: v for k, v in (getattr(ex, 'face_types', None) or {}).items()}}
     iou = box_iou(P.min(0), P.max(0), *bb) if bb is not None else 1.0
     inside = bb is None or (bool(np.all(P.min(0) >= bb[0] - 0.3)) and bool(np.all(P.max(0) <= bb[1] + 0.3)))      # the stored element bbox also covers swings / clearances: a mesh inside it is the element's own geometry
-    if ctx.recs[e]['class'] in MESH_FIRST and iou < 0.6: return None      # host elements: the saved graphics must match the stored box (curtain walls etc. fall back to the parametric builder)
-    if iou < 0.4 and not inside: return None                    # neither matching nor contained: not the element's own geometry
+    if ctx.recs[e]['class'] in MESH_FIRST and iou < 0.6: ctx._why[e] = 'saved graphics disagree with the stored box (IoU %.2f)' % iou; return None      # host elements: the saved graphics must match the stored box (curtain walls etc. fall back to the parametric builder)
+    if iou < 0.4 and not inside: ctx._why[e] = 'saved graphics are not this element\'s own geometry (IoU %.2f, outside box)' % iou; return None                    # neither matching nor contained: not the element's own geometry
     return m, ('approx' if ('unsupported_faces' in (a.get('flags') or []) and not extra) or (iou < 0.9 and not inside) else 'mesh')
 
 def prefetch_reader_meshes(ctx, els, prog=None):
@@ -834,6 +841,15 @@ def prefetch_reader_meshes(ctx, els, prog=None):
 CONTAINER_CLASSES = {'JoistSystem', 'BeamSystem'}          # layout containers: zero-height bbox, no graphics of their own (the members are separate FamilyInstances)
 
 def element_mesh(ctx, e, r):
+    res = _element_mesh(ctx, e, r)
+    if res is not None and getattr(res[0], 'info', None) is None:             # not from the saved graphics: say what it is and why
+        why = ctx._why.get(e)
+        src = {'param': 'parametric rebuild from stored parameters', 'bbox': 'box at the stored bounding box', 'line': 'curve', 'approx': 'approximate rebuild'}.get(res[1], res[1])
+        try: res[0].info = {'source': src, 'flags': [], 'reason': why or ('no saved-graphics path for class ' + r['class'] if res[1] in ('bbox', 'approx') else None)}
+        except Exception: pass
+    return res
+
+def _element_mesh(ctx, e, r):
     if r['class'] in CONTAINER_CLASSES: return None
     if (r['class'] not in ANALYTIC_CLASSES or r['class'] in MESH_FIRST) and (ctx.bbox(e) is not None or e not in ctx.eh or r['class'] in MESH_FIRST):
         rm = reader_mesh(ctx, e)

@@ -261,6 +261,20 @@ function fmtVal(k, v) {
   }
   return esc(v);
 }
+
+const SURF_COL = {plane: '#8aa', cylinder: '#6a9', cone: '#c96', sphere: '#c6c', torus: '#e86', revolution: '#d66', ruled: '#69d', hermite: '#9c6', bspline: '#c9a'};
+function geomBadge(e, g) {
+  // what is really drawn for this element: B-rep surface types, saved mesh, parametric rebuild or a box
+  const kind = {solid: 'decoded B-rep', mesh: 'Revit saved mesh (tessellated B-rep faces)', matched: 'parametric rebuild (extents match the stored box)', param: 'parametric rebuild', approx: 'approximate', bbox: 'BOX only', line: 'curve', none: 'nothing drawn'}[e.fid] || e.fid;
+  const chip = (k, n) => { const base = k.replace(/ \(OpenCascade\)/, ''); return `<span style="display:inline-block;margin:1px 3px 1px 0;padding:0 5px;border-radius:7px;background:${SURF_COL[base] || '#888'};color:#111;font-size:11px">${esc(k)}${n != null ? ' ' + n : ''}</span>`; };
+  let h = `<div class="dim" style="margin:4px 0"><b>${esc(kind)}</b>${g && g.source ? ' &middot; ' + esc(g.source) : ''}${g && g.bodies ? ' &middot; ' + g.bodies + ' body/bodies &middot; ' + g.tris + ' triangles' : ''}`;
+  if (g && g.surfaces) h += '<br>surface types (triangles): ' + Object.entries(g.surfaces).map(([k, n]) => chip(k, n)).join('');
+  if (g && g.reason) h += '<br>why not true geometry: ' + esc(g.reason);
+  if (g && (g.flags || []).length) h += '<br>flags: ' + g.flags.map(esc).join(', ');
+  h += '</div>';
+  if (g && (g.body_list || []).length) h += `<table class="kv" style="font-size:11px"><tr><td>body</td><td class="mono">surfaces / faces / triangles / area (ft2) / closed</td></tr>${g.body_list.map(b => `<tr><td>${esc(b.kind)} ${b.id % 10000000}</td><td class="mono">${b.surfaces ? Object.entries(b.surfaces).map(([k, n]) => chip(k, n)).join('') + ' / ' : ''}${b.faces == null ? '-' : b.faces} / ${b.tris} / ${b.area} / ${b.closed === 'yes' ? 'closed' : (b.closed === 'sealed' ? 'closed (T-junctions)' : 'open')}</td></tr>`).join('')}</table>`;
+  return h;
+}
 async function showInspector() {
   const el = $('#insp'); const ids = [...S.sel];
   if (!ids.length) { el.innerHTML = '<p class="dim">Click an element to inspect it.</p>'; return; }
@@ -277,7 +291,7 @@ async function showInspector() {
     .filter(r => r[1] != null && r[1] !== '').map(r => `<tr><td>${r[0]}</td><td class="mono">${esc(r[1])}</td></tr>`).join('');
   el.innerHTML = `<h2>${esc(e.name || e.type || e.cls + ' ' + e.id)}</h2><div class="dim">${esc(e.cat || '')}${e.family ? ' | ' + esc(e.family) : ''}${e.type ? ' : ' + esc(e.type) : ''}</div>
   <div style="margin:6px 0"><span class="fid f-${e.fid}">${e.fid}</span> <span class="dim">${esc(fidLabel)}</span></div>
-  ${info.ginfo ? `<div class="dim" style="margin:4px 0">geometry: ${esc(info.ginfo.source || 'saved graphics')} &middot; ${info.ginfo.bodies} body/bodies &middot; ${info.ginfo.tris} triangles${(info.ginfo.flags || []).length ? '<br>flags: ' + info.ginfo.flags.map(esc).join(', ') : ''}</div>${(info.ginfo.body_list || []).length ? `<table class="kv" style="font-size:11px"><tr><td>body</td><td class="mono">faces / triangles / area (ft2) / closed</td></tr>${info.ginfo.body_list.map(b => `<tr><td>${esc(b.kind)} ${b.id % 10000000}</td><td class="mono">${b.faces == null ? '-' : b.faces} / ${b.tris} / ${b.area} / ${b.closed === 'yes' ? 'closed' : (b.closed === 'sealed' ? 'closed (T-junctions)' : 'open')}</td></tr>`).join('')}</table>` : ''}` : ''}
+  ${geomBadge(e, info.ginfo)}
   <table class="kv">${rows}</table>
   ${(info.typeParams || []).length ? `<h3>Type parameters / profile dimensions (${info.typeParams.length})</h3><table class="kv">${info.typeParams.filter(p => !/^(UniqueId|IfcGUID|Family|Type Id|Type|Family and Type)$/.test(p[0])).map(p => `<tr><td>${esc(p[0])}</td><td class="mono">${fmtVal(p[0], p[1])}</td></tr>`).join('')}</table>` : ''}
   <h3>Parameters (${info.params.length})</h3><input id="pf" type="search" placeholder="filter parameters" style="width:100%;margin-bottom:5px">
@@ -439,7 +453,7 @@ function renderCov(tb) {
   });
 }
 function setupLegend() {
-  $('#legend').innerHTML = FID.slice(0, 7).map(f => `<div><i style="background:${FIDCOL[f]}"></i>${f}</div>`).join('');
+  $('#legend').innerHTML = FID.slice(0, 7).map(f => `<div title="${esc((S.meta.fidLabels || {})[f] || '')}"><i style="background:${FIDCOL[f]}"></i>${f}</div>`).join('') + '<div class="dim" style="margin-top:4px">inspector badge: B-rep surface types per body (plane, cylinder, cone, sphere, torus, revolution, ruled, hermite, bspline), saved mesh, parametric rebuild, or box</div>';
 }
 
 // ------------------------------------------------------------------ search
