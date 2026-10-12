@@ -30,3 +30,17 @@ Measured with tools/compare_gt.py (bbox IoU and volume ratio of the viewer's mes
 | SiteSurface | 2 | mesh | 1.00 | - |
 | BaseRailing | 6 | approx 4, box 2 | 0.42 | - |
 | CurtainGridLine | 7 | box | 0.00 | - |
+
+## Update 2026-10-12 (afternoon): walls with openings, doors/windows, curtain walls, railings
+Run with `tools/compare_gt.py` (volume = Revit solids of the shallowest depth present, so family instances compare against their own solids; bounding boxes of instances in the oracle include non-solid extents such as swing/clearance, so IoU of doors/windows is NOT a geometry measure, volume is).
+| oracle file | element | fidelity | volume ratio | note |
+|---|---|---|---|---|
+| 2024_wall_door1 / win1 / win2 (base+var) | wall with hosted door / window | mesh (saved graphics with the real cut) | 1.000 / 1.000 / 1.006 | opening shape comes from the reader's mesh, not from a fitted box |
+| 2024_wall_win2_base | window (glass + frame solids) | mesh | 1.000 (0.4191 vs 0.4190 ft3) | bbox IoU 0.26 only because Revit's bbox spans 1.5 ft of swing |
+| 2024_walls_open_k / k2 | 5 walls with openings | mesh | 1.000 | |
+| 2024_house_base | walls, floor, room | mesh | 1.000 | doors/windows now mesh (were box) |
+| 2024_house_base | doors + windows (7 instances) | mesh | 1.000-1.006 | |
+| 2024_prof_curtain_mullion_base | curtain wall, mullions (24), panels | mesh | 1.000 | CurtainGridLine now a line from m_pFullCurve, IoU 1.0 |
+| 2024_railing_base | BaseRailing / TopRail / rail instances | mesh | 1.000 | was approx/box before the reader's 2026-10-12 update |
+| 2024_wall_types_base | 7 layered wall types + curtain wall | mesh (parametric only for the curtain wall) | 1.000 | |
+Per-body fidelity: the inspector lists each body (kind, faces, triangles, area, closed/sealed/open) from the reader's nid/fid ids; "open" is the viewer's conservative edge test (T-junction walls may read open although the reader reports closed_shell and the volume matches).
