@@ -115,14 +115,15 @@ Samples 2020/2024/2026, family-heavy (2020 Residential, 2026 Facades) and MEP-he
 ### Conversion pipeline and timings (remote-host, 2026-10-12; tools/timings.py: each model in its own capped process)
 Stages (progress.json, shown in the UI): reading -> tables (+sqlite) -> preview (boxes, usable immediately) -> geometry (saved-graphics meshes decoded in forked workers, then the remaining builders in forked workers; disk-cached by reader stamp + geometry source) -> packing (meshes + materials).
 **First open is progressive**: `open` returns at once; the page shows a STILL PARSING banner (stage, counters such as `Reading saved graphics 233 / 535 elements`, live elapsed time and ETA, spinner driven by a local clock, so it never looks frozen), a PARTIAL MODEL watermark, levels/grids/boxes first, then finished meshes replacing translucent ghost boxes every ~12 s while the rest is decoded. When the model is complete the banner says so. A model that is already converted loads from the cache and says `Loaded from cache - reader version X - N elements in 0.x s`.
-| model | file | elements | cold open: reader decode + geometry (viewer caches bypassed) | stage seconds | cache-hit page load (headless, software GL) |
+| model | file | elements | cold open: decode + geometry (viewer caches bypassed) | stage seconds (quick table / reader / tables / geometry) | first picture (levels + boxes) |
 |---|---|---|---|---|---|
-| residential-2020 | 10 MB | 7277 | 19 s | reader 4, tables 1, geometry 13 | 1.8 s |
-| facades-2026 | 53 MB | 9645 | 48 s | reader 8, tables 2, geometry 37 | 1.4 s |
-| hvac-2024 | 22 MB | 12679 | 142 s | reader 10, tables 1, geometry 117 | 1.8 s |
-| structural-2024 | 28 MB | 16571 | 121 s | reader 13, tables 1, geometry 90, packing 1 | 2.4 s |
-| mep-2020 | 35 MB | 29132 | see note | | |
-The reader's own caches (xcache) are used as shipped; the reader's Rust fast paths (extract, schemas, g103) are on by default and make the cold decode seconds instead of minutes. The geometry stage (the reader's element_mesh in Python, now 6 forked workers) is what remains; rvt-core is porting it to Rust. The mep-2020 cold open was killed by an 8 GB memory cap on remote-host on 2026-10-12 (peak during the parallel mesh workers); it is measured on remote-host instead (see PROGRESS.md).
+| residential-2020 | 10 MB | 7277 | 8.9 s (was 19 s) | 0.03 / 0.8 / 0.2 / 6.8 | ~1 s |
+| facades-2026 | 53 MB | 9645 | 48 s (was 60 s) | 0.07 / 1.0 / 0.4 / 44 | ~1-3 s |
+| hvac-2024 | 22 MB | 12679 | 92 s (was 142 s) | 1.1 / 2.4 / 2.7 / 84 | ~1-3 s |
+| structural-2024 | 28 MB | 16571 | 30 s (was 121 s) | 0.1 / 1.2 / 0.9 / 23 | ~1 s |
+| mep-2020 | 35 MB | 29132 | 133 s (6.8 GB peak; the Python path was OOM-killed at 8 GB) | 3.9 / 5.5 / 5.5 / 115 | ~4 s |
+Cache-hit page load (headless, software GL, 1280x720): 1.4-2.4 s. Measured on remote-host under a load average of 7-10 from other sessions, 2026-10-12 (Rust fast path on; `RVT_NOFAST=1` forces the Python reader).
+The reader's own caches (xcache) are used as shipped; the reader's Rust fast paths (extract, schemas, g103) are on by default and make the cold decode seconds instead of minutes. The geometry stage (the reader's element_mesh in Python, now 6 forked workers) is what remains; rvt-core is porting it to Rust. The geometry stage is now mostly the Rust mesh stream plus the viewer's own per-mesh work (topology check, materials, body summary, ~9 s on Facades).
 
 ### Performance
 Synthetic 150k elements / 1.8M triangles (tools/synth.py): metadata+GLB load 1.2 s (software GL), visibility change 5 ms. Real Intel Iris Xe (app-mode Chromium): GPU pick 4.5 ms, full 120k-triangle render 13 ms at 1906x972.
