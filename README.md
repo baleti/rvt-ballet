@@ -31,7 +31,7 @@ Every element has a fidelity tag shown in the inspector, tree, tooltip, coverage
 `bboxAgreement` in meta.json / inspector = IoU between our mesh and the Revit-stored bounding box (location accuracy check).
 
 ### Fidelity table (tools/regress.py, building-geometry elements only: analytical/reference/room/annotation-like categories excluded)
-`exact` = solid (decoded B-rep) + matched (rebuilt from stored data AND extents agree with the bounding box Revit stored: IoU >= 0.97, or inside it spanning >= 93% of its two largest dimensions); `approximate` = rebuilt but not matching / footprint-only; `box only` = placeholder at the stored bounding box.
+`true + matched` (formerly "exact"; the word "exact" is reserved for the reader's ACCURATE definition: volume within 2 % of Revit or bbox IoU >= 0.95, see docs/ACCEPTANCE-STATUS.md) = solid (decoded B-rep) + matched (rebuilt from stored data AND extents agree with the bounding box Revit stored: IoU >= 0.97, or inside it spanning >= 93% of its two largest dimensions); `approximate` = rebuilt but not matching / footprint-only; `box only` = placeholder at the stored bounding box.
 | model | elements | true geometry (B-rep / saved mesh) | parametric, extents match | approximate | box only |
 |---|---|---|---|---|---|
 | residential-2020 | 218 | 93% | 0% | 2% | 6% |

@@ -597,7 +597,7 @@ async function openPicker() {
   const f = x => (x * 100).toFixed(0) + '%';
   el.innerHTML = `<div class="pk"><div style="display:flex;justify-content:space-between"><h3>Models</h3><button id="pkClose">close</button></div>
   <div style="display:flex;gap:6px;margin-bottom:8px"><input id="pkPath" type="text" placeholder="open another file: /path/to/model.rvt" style="flex:1"><button id="pkOpen">Open</button></div><div id="pkErr" class="dim"></div>
-  <table class="cov"><tr><th>model</th><th>MB</th><th>elements</th><th>exact</th><th>approx</th><th>box</th><th>converted</th><th></th></tr>` +
+  <table class="cov"><tr><th>model</th><th>MB</th><th>elements</th><th title="decoded saved-graphics mesh / B-rep plus parametric rebuilds whose extents match the stored box; NOT a claim of Revit accuracy (see ACCEPTANCE-STATUS.md for the accurate share per class)">true + matched</th><th>approx</th><th>box</th><th>converted</th><th></th></tr>` +
   lib.map(m => `<tr class="covrow" data-id="${esc(m.id)}"><td>${esc(m.file)}${m.id === S.mid ? ' <b>(open)</b>' : ''}</td><td>${m.size ? (m.size / 1e6).toFixed(0) : ''}</td><td>${m.elements}</td><td>${f(m.exact)}</td><td>${f(m.approx)}</td><td>${f(m.box)}</td><td>${m.built ? new Date(m.built * 1000).toLocaleString() : ''}</td><td>${m.stale ? '<span class="fid f-bbox" title="reader/converter changed since">stale</span>' : ''}</td></tr>`).join('') + '</table></div>';
   $('#pkClose').onclick = () => el.hidden = true;
   $('#pkOpen').onclick = async () => { const j = await (await fetch('/api/open', {method: 'POST', body: JSON.stringify({path: $('#pkPath').value.trim()})})).json(); if (!j.ok) { $('#pkErr').textContent = j.error || 'could not open'; return; } el.hidden = true; await switchModel(j.id, j.name); };
