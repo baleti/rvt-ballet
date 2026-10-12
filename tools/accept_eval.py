@@ -32,7 +32,7 @@ def main_mesh(path):
     os.makedirs(OUT, exist_ok=True)
     year = os.path.basename(os.path.dirname(path)); stem = os.path.splitext(os.path.basename(path))[0]
     reader._import(); import rvt_geometry as GG, gc
-    idx = GG.file_geometry_index(path); cls = collections.defaultdict(lambda: {'n': 0, 'true': 0, 'param_match': 0, 'approx': 0, 'box': 0, 'vol_n': 0, 'vol_ok': 0, 'vol_ratios': [], 'iou_n': 0, 'iou_ok': 0})
+    idx = GG.file_geometry_index(path); cls = collections.defaultdict(lambda: {'n': 0, 'true': 0, 'param_match': 0, 'approx': 0, 'box': 0, 'vol_n': 0, 'vol_ok': 0, 'vol_ratios': [], 'iou_n': 0, 'iou_ok': 0, 'acc': 0, 'toff': 0, 'unj': 0})
     skip = ('FamilySymbol', 'Family', 'FamSymSurrogate', 'FamilySurrogate')
     for k, (e, c) in enumerate(idx.items()):
         if c in build.ANALYTIC_CLASSES or c in skip: continue
@@ -44,7 +44,9 @@ def main_mesh(path):
         conf = a.get('confidence')
         if conf in (None, 'none'): continue
         d = cls[c]; d['n'] += 1
-        if conf == 'mesh_approx': d['true' if 'unsupported_faces' not in (a.get('flags') or []) else 'approx'] += 1
+        if conf == 'mesh_approx':
+            d['true' if 'unsupported_faces' not in (a.get('flags') or []) else 'approx'] += 1
+            if 'unsupported_faces' not in (a.get('flags') or []): d['unj'] += 1          # mesh mode has no viewer-side volume: unjudged
         elif conf == 'box': d['box'] += 1
         elif conf == 'exact': d['true'] += 1
         else: d['approx'] += 1
@@ -61,7 +63,7 @@ def main(path):
     els = build.build_table(ctx); ctx._rm = None
     build.ensure_roofs(ctx); gc.collect()
     vols, has_gt = gt4_volumes(path)
-    cls = collections.defaultdict(lambda: {'n': 0, 'true': 0, 'param_match': 0, 'approx': 0, 'box': 0, 'vol_n': 0, 'vol_ok': 0, 'vol_ratios': [], 'iou_n': 0, 'iou_ok': 0})
+    cls = collections.defaultdict(lambda: {'n': 0, 'true': 0, 'param_match': 0, 'approx': 0, 'box': 0, 'vol_n': 0, 'vol_ok': 0, 'vol_ratios': [], 'iou_n': 0, 'iou_ok': 0, 'acc': 0, 'toff': 0, 'unj': 0})
     for i, el in enumerate(els):
         if not el['cat'] or el['isType']: continue
         if os.environ.get('RVT_ANALYTIC_ONLY') and ctx.recs[el['id']]['class'] not in build.ANALYTIC_CLASSES: continue
@@ -84,10 +86,15 @@ def main(path):
         else: c['approx'] += 1
         del mesh, parts, r_
         if iou is not None: c['iou_n'] += 1; c['iou_ok'] += int(iou >= 0.95)
-        v = vols.get(el['id'])
+        v = vols.get(el['id']); ok = None                                       # reader definition (NOTES.md per-class table): ACCURATE = Revit Volume within 2 % or, without a volume, bbox IoU >= 0.95
         if v and v > 1e-6:
             vol = _vol(V, F)
-            c['vol_n'] += 1; c['vol_ok'] += int(abs(vol / v - 1) <= 0.02); c['vol_ratios'].append(round(float(vol / v), 4))
+            c['vol_n'] += 1; c['vol_ok'] += int(abs(vol / v - 1) <= 0.02); c['vol_ratios'].append(round(float(vol / v), 4)); ok = abs(vol / v - 1) <= 0.02
+        elif iou is not None: ok = iou >= 0.95
+        if fid in ('solid', 'mesh'):
+            if ok is None: c['unj'] += 1
+            elif ok: c['acc'] += 1
+            else: c['toff'] += 1
     out = {'file': os.path.basename(path), 'year': year, 'has_gt4': has_gt, 'elements': len(els), 'classes': {k: {**v, 'vol_ratios': v['vol_ratios'][:400]} for k, v in cls.items()}}
     json.dump(out, open(os.path.join(OUT, '%s_%s%s.json' % (year, stem, '__analytic' if os.environ.get('RVT_ANALYTIC_ONLY') else '')), 'w'))
     print('OK', year, stem, len(cls), 'classes')

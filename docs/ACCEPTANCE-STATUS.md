@@ -1,251 +1,161 @@
 # Geometry acceptance status (per class, per year; measured on all corpus .rvt files converted so far)
 
-files per year (big files evaluated in two low-memory halves count 0.5 each): 2020: 4, 2021: 4, 2022: 5.5, 2023: 4, 2024: 5.5, 2025: 5, 2026: 4.5
+files per year (big files evaluated in two low-memory halves count 0.5 each): 2020: 4, 2021: 4, 2022: 4
 
 Cell = elements n | true % | parametric-unproven % | approximate % | box-only % | IoU>=0.95 % | volume<=2% error % (n measurable). DONE = true>=95, box<=2, IoU>=95, volume>=95.
 
 | class | year | n | true | param | approx | box | IoU>=.95 | vol<=2% | DONE |
 |---|---|---|---|---|---|---|---|---|---|
-| SWall | 2020 | 159 | 0 | 59 | 41 | 0 | 42 | 63 (130) | no |
-| SWall | 2021 | 381 | 0 | 83 | 17 | 0 | 69 | 93 (313) | no |
-| SWall | 2022 | 547 | 0 | 85 | 15 | 0 | 70 | 83 (446) | no |
-| SWall | 2023 | 195 | 0 | 81 | 19 | 0 | 59 | 92 (161) | no |
-| SWall | 2024 | 99 | 0 | 62 | 36 | 2 | 58 | 51 (95) | no |
-| SWall | 2025 | 99 | 0 | 62 | 36 | 2 | 58 | 51 (95) | no |
-| SWall | 2026 | 145 | 0 | 61 | 37 | 1 | 56 | 50 (142) | no |
-| Floor | 2020 | 19 | 0 | 79 | 0 | 21 | 100 | 79 (19) | no |
-| Floor | 2021 | 43 | 0 | 91 | 0 | 9 | 100 | 81 (43) | no |
-| Floor | 2022 | 64 | 0 | 92 | 2 | 6 | 98 | 88 (64) | no |
-| Floor | 2023 | 26 | 0 | 85 | 0 | 15 | 100 | 77 (26) | no |
-| Floor | 2024 | 20 | 0 | 70 | 20 | 10 | 78 | 56 (18) | no |
-| Floor | 2025 | 20 | 0 | 70 | 20 | 10 | 78 | 56 (18) | no |
-| Floor | 2026 | 41 | 0 | 88 | 7 | 5 | 90 | 60 (40) | no |
-| Ceiling | 2020 | 10 | 0 | 100 | 0 | 0 | 100 | 100 (10) | no |
-| Ceiling | 2021 | 113 | 0 | 100 | 0 | 0 | 100 | 96 (113) | no |
-| Ceiling | 2022 | 156 | 0 | 100 | 0 | 0 | 100 | 97 (156) | no |
-| Ceiling | 2023 | 65 | 0 | 100 | 0 | 0 | 100 | 97 (65) | no |
-| ProfileRoof | 2020 | 4 | 0 | 75 | 25 | 0 | 100 | 25 (4) | no |
-| ProfileRoof | 2021 | 10 | 0 | 80 | 20 | 0 | 100 | 0 (4) | no |
-| ProfileRoof | 2022 | 10 | 0 | 80 | 20 | 0 | 100 | 0 (4) | no |
-| ProfileRoof | 2023 | 5 | 0 | 80 | 20 | 0 | 100 | 0 (2) | no |
-| ProfileRoof | 2024 | 5 | 0 | 80 | 20 | 0 | 80 | 80 (5) | no |
-| ProfileRoof | 2025 | 5 | 0 | 80 | 20 | 0 | 80 | 80 (5) | no |
-| ProfileRoof | 2026 | 5 | 0 | 80 | 20 | 0 | 80 | 80 (5) | no |
-| FamilyInstance | 2020 | 1977 | 72 | 0 | 17 | 11 | 66 | 16 (1922) | no |
-| FamilyInstance | 2021 | 11606 | 92 | 0 | 3 | 5 | 93 | 27 (11523) | no |
-| FamilyInstance | 2022 | 22833 | 92 | 0 | 2 | 6 | 93 | 27 (11523) | no |
-| FamilyInstance | 2023 | 17851 | 92 | 0 | 2 | 6 | 89 | 24 (6583) | no |
-| FamilyInstance | 2024 | 7105 | 84 | 0 | 12 | 4 | 77 | 26 (3775) | no |
-| FamilyInstance | 2025 | 3875 | 72 | 0 | 21 | 7 | 77 | 38 (2232) | no |
-| FamilyInstance | 2026 | 6384 | 82 | 0 | 12 | 6 | 70 | 7 (1400) | no |
-| StairsRun | 2020 | 6 | 67 | 0 | 17 | 17 | 67 | - (0) | no |
-| StairsRun | 2021 | 1 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| StairsRun | 2022 | 1 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| StairsRun | 2023 | 1 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| StairsElement | 2020 | 6 | 67 | 0 | 17 | 17 | 83 | - (0) | no |
-| StairsElement | 2021 | 1 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| StairsElement | 2022 | 1 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| StairsElement | 2023 | 1 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| BaseRailing | 2020 | 9 | 22 | 0 | 44 | 33 | 56 | - (0) | no |
-| BaseRailing | 2021 | 44 | 0 | 0 | 41 | 59 | 59 | - (0) | no |
-| BaseRailing | 2022 | 72 | 39 | 0 | 25 | 36 | 59 | - (0) | no |
-| BaseRailing | 2023 | 50 | 56 | 0 | 18 | 26 | 59 | - (0) | no |
-| BaseRailing | 2024 | 4 | 50 | 0 | 25 | 25 | 50 | - (0) | no |
-| BaseRailing | 2025 | 4 | 100 | 0 | 0 | 0 | 50 | - (0) | no |
-| BaseRailing | 2026 | 2 | 100 | 0 | 0 | 0 | - | - (0) | YES |
-| RbsDuctCurve | 2022 | 724 | 0 | 97 | 3 | 0 | 97 | - (0) | no |
-| RbsDuctCurve | 2024 | 1053 | 0 | 100 | 0 | 0 | 98 | - (0) | no |
-| RbsDuctCurve | 2025 | 1053 | 0 | 100 | 0 | 0 | 98 | - (0) | no |
-| RbsDuctCurve | 2026 | 1053 | 0 | 100 | 0 | 0 | 98 | - (0) | no |
-| RbsPipeCurve | 2022 | 491 | 0 | 100 | 0 | 0 | 100 | - (0) | no |
-| RbsConduitCurve | 2022 | 20 | 0 | 20 | 80 | 0 | 0 | - (0) | no |
-| RbsConduitCurve | 2024 | 530 | 0 | 21 | 79 | 0 | 0 | - (0) | no |
-| RbsConduitCurve | 2025 | 530 | 0 | 21 | 79 | 0 | 0 | - (0) | no |
-| CurtainGridLine | 2020 | 55 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| CurtainGridLine | 2021 | 769 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| CurtainGridLine | 2022 | 769 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| CurtainGridLine | 2023 | 393 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| RoomElem | 2020 | 25 | 100 | 0 | 0 | 0 | 100 | 12 (17) | no |
+| SWall | 2020 | 159 | 89 | 4 | 8 | 0 | 72 | 88 (130) | no |
+| SWall | 2021 | 381 | 82 | 8 | 10 | 0 | 81 | 99 (313) | no |
+| SWall | 2022 | 381 | 82 | 8 | 10 | 0 | 81 | 99 (313) | no |
+| Floor | 2020 | 19 | 100 | 0 | 0 | 0 | 100 | 95 (19) | no |
+| Floor | 2021 | 43 | 100 | 0 | 0 | 0 | 100 | 95 (43) | YES |
+| Floor | 2022 | 43 | 100 | 0 | 0 | 0 | 100 | 95 (43) | YES |
+| Ceiling | 2020 | 10 | 100 | 0 | 0 | 0 | 100 | 90 (10) | no |
+| Ceiling | 2021 | 113 | 100 | 0 | 0 | 0 | 100 | 99 (113) | YES |
+| Ceiling | 2022 | 113 | 100 | 0 | 0 | 0 | 100 | 99 (113) | YES |
+| ProfileRoof | 2020 | 4 | 100 | 0 | 0 | 0 | 100 | 100 (4) | YES |
+| ProfileRoof | 2021 | 12 | 100 | 0 | 0 | 0 | 100 | 50 (4) | no |
+| ProfileRoof | 2022 | 12 | 100 | 0 | 0 | 0 | 100 | 50 (4) | no |
+| FamilyInstance | 2020 | 1977 | 99 | 0 | 0 | 1 | 47 | 64 (1922) | no |
+| FamilyInstance | 2021 | 11606 | 100 | 0 | 0 | 0 | 88 | 87 (11523) | no |
+| FamilyInstance | 2022 | 11606 | 100 | 0 | 0 | 0 | 88 | 87 (11523) | no |
+| StairsRun | 2020 | 6 | 100 | 0 | 0 | 0 | 50 | - (0) | no |
+| StairsRun | 2021 | 1 | 100 | 0 | 0 | 0 | 0 | - (0) | no |
+| StairsRun | 2022 | 1 | 100 | 0 | 0 | 0 | 0 | - (0) | no |
+| StairsElement | 2020 | 6 | 100 | 0 | 0 | 0 | 67 | - (0) | no |
+| StairsElement | 2021 | 1 | 100 | 0 | 0 | 0 | 0 | - (0) | no |
+| StairsElement | 2022 | 1 | 100 | 0 | 0 | 0 | 0 | - (0) | no |
+| BaseRailing | 2020 | 9 | 100 | 0 | 0 | 0 | 56 | - (0) | no |
+| BaseRailing | 2021 | 44 | 100 | 0 | 0 | 0 | 55 | - (0) | no |
+| BaseRailing | 2022 | 44 | 100 | 0 | 0 | 0 | 55 | - (0) | no |
+| RoomElem | 2020 | 25 | 100 | 0 | 0 | 0 | 100 | 94 (17) | no |
 | RoomElem | 2021 | 189 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| RoomElem | 2022 | 515 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| RoomElem | 2023 | 417 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| RoomElem | 2024 | 236 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| RoomElem | 2025 | 197 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| RoomElem | 2026 | 106 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| SiteSurface | 2020 | 10 | 90 | 0 | 0 | 10 | 90 | - (0) | no |
+| RoomElem | 2022 | 189 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
+| SiteSurface | 2020 | 10 | 100 | 0 | 0 | 0 | 90 | - (0) | no |
 | SiteSurface | 2021 | 6 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
 | SiteSurface | 2022 | 6 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| SiteSurface | 2023 | 3 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
 | WallSweep | 2020 | 44 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
 | WallSweep | 2021 | 33 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
 | WallSweep | 2022 | 33 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| WallSweep | 2023 | 16 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| WallSweep | 2024 | 103 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| WallSweep | 2025 | 103 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| WallSweep | 2026 | 103 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| ContFooting | 2020 | 13 | 100 | 0 | 0 | 0 | 100 | 15 (13) | no |
-| ContFooting | 2021 | 4 | 100 | 0 | 0 | 0 | 100 | 25 (4) | no |
-| ContFooting | 2022 | 4 | 100 | 0 | 0 | 0 | 100 | 25 (4) | no |
-| ContFooting | 2023 | 4 | 100 | 0 | 0 | 0 | 100 | 25 (4) | no |
-| ContFooting | 2026 | 9 | 100 | 0 | 0 | 0 | 100 | 0 (9) | no |
+| ContFooting | 2020 | 13 | 100 | 0 | 0 | 0 | 100 | 100 (13) | YES |
+| ContFooting | 2021 | 4 | 100 | 0 | 0 | 0 | 100 | 100 (4) | YES |
+| ContFooting | 2022 | 4 | 100 | 0 | 0 | 0 | 100 | 100 (4) | YES |
 | Hub | 2020 | 765 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | Hub | 2021 | 1386 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | Hub | 2022 | 1386 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| Hub | 2023 | 929 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | ReferencePoint | 2020 | 765 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | ReferencePoint | 2021 | 1386 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | ReferencePoint | 2022 | 1386 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| ReferencePoint | 2023 | 929 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | AnalyticalModelBeam | 2020 | 435 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | AnalyticalModelBeam | 2021 | 509 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | AnalyticalModelBeam | 2022 | 509 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | AnalyticalModelColumn | 2020 | 262 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | AnalyticalModelColumn | 2021 | 583 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | AnalyticalModelColumn | 2022 | 583 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| SysMullionFamSym | 2022 | 508 | 100 | 0 | 0 | 0 | - | - (0) | YES |
-| SysMullionFamSym | 2023 | 508 | 100 | 0 | 0 | 0 | - | - (0) | YES |
-| AnalyticalMember | 2023 | 903 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | RebarInSystem | 2020 | 224 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
 | RebarInSystem | 2021 | 224 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
 | RebarInSystem | 2022 | 224 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| RebarInSystem | 2023 | 224 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| SysPanelFamSym | 2022 | 404 | 100 | 0 | 0 | 0 | - | - (0) | YES |
-| SysPanelFamSym | 2023 | 404 | 100 | 0 | 0 | 0 | - | - (0) | YES |
 | Rebar | 2020 | 133 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
 | Rebar | 2021 | 133 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
 | Rebar | 2022 | 133 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| Rebar | 2023 | 133 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| Rebar | 2026 | 14 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| ElementGroup | 2021 | 161 | 48 | 0 | 14 | 39 | 84 | - (0) | no |
-| ElementGroup | 2022 | 161 | 48 | 0 | 14 | 39 | 84 | - (0) | no |
-| ElementGroup | 2023 | 86 | 48 | 0 | 16 | 36 | 81 | - (0) | no |
-| ElementGroup | 2024 | 43 | 95 | 0 | 5 | 0 | 95 | - (0) | YES |
-| ElementGroup | 2025 | 43 | 95 | 0 | 5 | 0 | 95 | - (0) | YES |
-| ElementGroup | 2026 | 41 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| FilledRegion | 2020 | 73 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| FilledRegion | 2021 | 80 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| FilledRegion | 2022 | 90 | 11 | 0 | 0 | 89 | 0 | - (0) | no |
-| FilledRegion | 2023 | 83 | 12 | 0 | 0 | 88 | 0 | - (0) | no |
-| FilledRegion | 2024 | 21 | 29 | 0 | 0 | 71 | 0 | - (0) | no |
-| FilledRegion | 2025 | 18 | 17 | 0 | 0 | 83 | 0 | - (0) | no |
-| FilledRegion | 2026 | 16 | 38 | 0 | 0 | 62 | 0 | - (0) | no |
+| ElementGroup | 2021 | 161 | 100 | 0 | 0 | 0 | 61 | - (0) | no |
+| ElementGroup | 2022 | 161 | 100 | 0 | 0 | 0 | 61 | - (0) | no |
 | AnalyticalModelIsolatedFoundation | 2020 | 78 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | AnalyticalModelIsolatedFoundation | 2021 | 78 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | AnalyticalModelIsolatedFoundation | 2022 | 78 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
+| FilledRegion | 2020 | 73 | 100 | 0 | 0 | 0 | 0 | - (0) | no |
+| FilledRegion | 2021 | 80 | 100 | 0 | 0 | 0 | 0 | - (0) | no |
+| FilledRegion | 2022 | 80 | 100 | 0 | 0 | 0 | 0 | - (0) | no |
 | GStyleElem | 2020 | 43 | 0 | 0 | 0 | 100 | 42 | - (0) | no |
 | GStyleElem | 2021 | 60 | 0 | 0 | 0 | 100 | 57 | - (0) | no |
 | GStyleElem | 2022 | 66 | 0 | 0 | 0 | 100 | 53 | - (0) | no |
-| GStyleElem | 2023 | 59 | 0 | 0 | 0 | 100 | 66 | - (0) | no |
-| RbsFlexDuctCurve | 2022 | 113 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| RbsFlexDuctCurve | 2024 | 31 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| RbsFlexDuctCurve | 2025 | 31 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| RbsFlexDuctCurve | 2026 | 31 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| JoistSystem | 2020 | 29 | 0 | 0 | 0 | 100 | 52 | - (0) | no |
-| JoistSystem | 2021 | 31 | 0 | 0 | 0 | 100 | 55 | - (0) | no |
-| JoistSystem | 2022 | 31 | 0 | 0 | 0 | 100 | 55 | - (0) | no |
-| JoistSystem | 2023 | 30 | 0 | 0 | 0 | 100 | 53 | - (0) | no |
-| JoistSystem | 2026 | 76 | 0 | 0 | 0 | 100 | 7 | - (0) | no |
-| DPart | 2020 | 45 | 100 | 0 | 0 | 0 | 100 | 87 (45) | no |
-| DPart | 2021 | 45 | 100 | 0 | 0 | 0 | 100 | 87 (45) | no |
-| DPart | 2022 | 45 | 100 | 0 | 0 | 0 | 100 | 87 (45) | no |
-| DPart | 2023 | 45 | 100 | 0 | 0 | 0 | 100 | 87 (45) | no |
-| DPart | 2024 | 1 | 100 | 0 | 0 | 0 | 100 | 100 (1) | YES |
-| DPart | 2025 | 1 | 100 | 0 | 0 | 0 | 100 | 100 (1) | YES |
+| DPart | 2020 | 45 | 100 | 0 | 0 | 0 | 100 | 100 (45) | YES |
+| DPart | 2021 | 45 | 100 | 0 | 0 | 0 | 100 | 100 (45) | YES |
+| DPart | 2022 | 45 | 100 | 0 | 0 | 0 | 100 | 100 (45) | YES |
 | RebarSystem | 2020 | 45 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
 | RebarSystem | 2021 | 45 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
 | RebarSystem | 2022 | 45 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| RebarSystem | 2023 | 45 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| Viewer3d | 2020 | 23 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| Viewer3d | 2021 | 28 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| Viewer3d | 2022 | 28 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| Viewer3d | 2023 | 21 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| Viewer3d | 2024 | 17 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| Viewer3d | 2025 | 17 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| Viewer3d | 2026 | 20 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
 | LineLoad | 2020 | 35 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | LineLoad | 2021 | 35 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | LineLoad | 2022 | 35 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| LineLoad | 2023 | 35 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | BoundaryConditions | 2020 | 27 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | BoundaryConditions | 2021 | 27 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | BoundaryConditions | 2022 | 27 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| BoundaryConditions | 2023 | 27 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
+| Viewer3d | 2020 | 23 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
+| Viewer3d | 2021 | 28 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
+| Viewer3d | 2022 | 28 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
 | AnalyticalModelBrace | 2020 | 22 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | AnalyticalModelBrace | 2021 | 22 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | AnalyticalModelBrace | 2022 | 22 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| LegendComponent | 2020 | 5 | 20 | 0 | 0 | 80 | 100 | - (0) | no |
-| LegendComponent | 2022 | 8 | 100 | 0 | 0 | 0 | - | - (0) | YES |
-| LegendComponent | 2023 | 8 | 100 | 0 | 0 | 0 | - | - (0) | YES |
-| LegendComponent | 2024 | 22 | 45 | 0 | 0 | 55 | 100 | - (0) | no |
-| LegendComponent | 2025 | 22 | 45 | 0 | 0 | 55 | 100 | - (0) | no |
-| BaseRailingSym | 2022 | 28 | 100 | 0 | 0 | 0 | - | - (0) | YES |
-| BaseRailingSym | 2023 | 28 | 100 | 0 | 0 | 0 | - | - (0) | YES |
-| BaseRailingSym | 2024 | 2 | 100 | 0 | 0 | 0 | - | - (0) | YES |
-| BaseRailingSym | 2025 | 2 | 100 | 0 | 0 | 0 | - | - (0) | YES |
-| BaseRailingSym | 2026 | 2 | 100 | 0 | 0 | 0 | - | - (0) | YES |
-| Toposolid | 2024 | 24 | 96 | 0 | 0 | 4 | 100 | 0 (10) | no |
-| Toposolid | 2025 | 24 | 96 | 0 | 0 | 4 | 100 | 0 (10) | no |
-| Toposolid | 2026 | 14 | 100 | 0 | 0 | 0 | - | - (0) | YES |
-| Stairs | 2021 | 10 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| Stairs | 2022 | 26 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| Stairs | 2023 | 21 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| AnalyticalModelWall | 2020 | 25 | 4 | 0 | 0 | 96 | 4 | - (0) | no |
-| AnalyticalModelWall | 2021 | 15 | 7 | 0 | 0 | 93 | 7 | - (0) | no |
-| AnalyticalModelWall | 2022 | 15 | 7 | 0 | 0 | 93 | 7 | - (0) | no |
-| BasePoint | 2020 | 8 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| BasePoint | 2021 | 8 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| BasePoint | 2022 | 8 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| BasePoint | 2023 | 6 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| BasePoint | 2024 | 8 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| BasePoint | 2025 | 8 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| BasePoint | 2026 | 6 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
+| AnalyticalModelWall | 2020 | 25 | 100 | 0 | 0 | 0 | 4 | - (0) | no |
+| AnalyticalModelWall | 2021 | 15 | 100 | 0 | 0 | 0 | 7 | - (0) | no |
+| AnalyticalModelWall | 2022 | 15 | 100 | 0 | 0 | 0 | 7 | - (0) | no |
 | CategoryElem | 2020 | 7 | 0 | 0 | 0 | 100 | 43 | - (0) | no |
 | CategoryElem | 2021 | 13 | 0 | 0 | 0 | 100 | 46 | - (0) | no |
 | CategoryElem | 2022 | 14 | 0 | 0 | 0 | 100 | 36 | - (0) | no |
-| CategoryElem | 2023 | 11 | 0 | 0 | 0 | 100 | 64 | - (0) | no |
 | AreaLoad | 2020 | 10 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | AreaLoad | 2021 | 10 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | AreaLoad | 2022 | 10 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| AreaLoad | 2023 | 10 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| SweepHost | 2020 | 5 | 20 | 0 | 0 | 80 | 100 | 0 (1) | no |
-| SweepHost | 2021 | 3 | 0 | 0 | 0 | 100 | 100 | 0 (3) | no |
-| SweepHost | 2022 | 3 | 0 | 0 | 0 | 100 | 100 | 0 (3) | no |
-| SweepHost | 2023 | 2 | 0 | 0 | 0 | 100 | 100 | 0 (2) | no |
-| SweepHost | 2024 | 9 | 0 | 0 | 0 | 100 | 100 | 0 (9) | no |
-| SweepHost | 2025 | 9 | 0 | 0 | 0 | 100 | 100 | 0 (9) | no |
-| SweepHost | 2026 | 9 | 0 | 0 | 0 | 100 | 100 | 0 (9) | no |
-| StairsSym | 2022 | 16 | 100 | 0 | 0 | 0 | - | - (0) | YES |
-| StairsSym | 2023 | 16 | 100 | 0 | 0 | 0 | - | - (0) | YES |
-| ShaftOpening | 2020 | 4 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| ShaftOpening | 2021 | 10 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| ShaftOpening | 2022 | 10 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| ShaftOpening | 2023 | 6 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| ShaftOpening | 2026 | 1 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
-| VolumeOfInterest | 2024 | 10 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| VolumeOfInterest | 2025 | 10 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| VolumeOfInterest | 2026 | 11 | 0 | 0 | 0 | 100 | 100 | - (0) | no |
-| MassLevelData | 2020 | 2 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| MassLevelData | 2021 | 10 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| MassLevelData | 2022 | 10 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| MassLevelData | 2023 | 6 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
+| BasePoint | 2020 | 8 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
+| BasePoint | 2021 | 8 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
+| BasePoint | 2022 | 8 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
+| AnalyticalModelSlab | 2020 | 8 | 100 | 0 | 0 | 0 | 0 | - (0) | no |
+| AnalyticalModelSlab | 2021 | 8 | 100 | 0 | 0 | 0 | 0 | - (0) | no |
+| AnalyticalModelSlab | 2022 | 8 | 100 | 0 | 0 | 0 | 0 | - (0) | no |
 | PropertyLineSegment | 2020 | 8 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | PropertyLineSegment | 2021 | 8 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
 | PropertyLineSegment | 2022 | 8 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| PropertyLineSegment | 2023 | 4 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| SketchGrid | 2020 | 5 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| SketchGrid | 2021 | 7 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| SketchGrid | 2022 | 7 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| SketchGrid | 2023 | 5 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| SketchGrid | 2024 | 1 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| SketchGrid | 2025 | 1 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| SketchGrid | 2026 | 1 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| AnalyticalModelSlab | 2020 | 8 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| AnalyticalModelSlab | 2021 | 8 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| AnalyticalModelSlab | 2022 | 8 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| AnalyticalPanel | 2023 | 23 | 4 | 0 | 0 | 96 | 4 | - (0) | no |
-| CoordinateSystemDisplayElem | 2021 | 4 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| CoordinateSystemDisplayElem | 2022 | 4 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| CoordinateSystemDisplayElem | 2023 | 3 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| CoordinateSystemDisplayElem | 2024 | 4 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| CoordinateSystemDisplayElem | 2025 | 4 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
-| CoordinateSystemDisplayElem | 2026 | 3 | 0 | 0 | 0 | 100 | 0 | - (0) | no |
+| ShaftOpening | 2020 | 4 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
+| ShaftOpening | 2021 | 10 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
+| ShaftOpening | 2022 | 10 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
+| MassLevelData | 2020 | 2 | 100 | 0 | 0 | 0 | 0 | - (0) | no |
+| MassLevelData | 2021 | 10 | 100 | 0 | 0 | 0 | 0 | - (0) | no |
+| MassLevelData | 2022 | 10 | 100 | 0 | 0 | 0 | 0 | - (0) | no |
+| Stairs | 2021 | 10 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
+| Stairs | 2022 | 10 | 100 | 0 | 0 | 0 | 100 | - (0) | YES |
+
+## Same data in the reader table's definition (NOTES.md "Per-class / per-year geometry table"), side by side
+
+ACCURATE = mesh/solid whose volume is within 2 % of Revit's (or, without a Revit volume, bbox IoU >= 0.95); true-off = a mesh exists but fails that; own approx = our parametric/approximate rebuild (not claimed accurate); box = box only; unjudged = mesh without a reference to judge it. Reader columns are 176's numbers (partial run, other element sampling).
+
+| class | n | viewer accurate | true-off | own approx | box | unjudged | reader accurate | reader true-off | reader box |
+|---|---|---|---|---|---|---|---|---|---|
+| SWall | 921 | 0 | 0 | 17 | 0 | 0 | 81.7 | 5.8 | 12.5 |
+| Floor | 105 | 0 | 0 | 0 | 0 | 0 | 98.7 | 1.3 | 0.0 |
+| Ceiling | 236 | 0 | 0 | 0 | 0 | 0 | 99.7 | 0.0 | 0.3 |
+| ProfileRoof | 28 | 0 | 0 | 0 | 0 | 0 | 100.0 | 0.0 | 0.0 |
+| FamilyInstance | 25189 | 0 | 0 | 0 | 0 | 0 | 86.3 | 10.9 | 2.8 |
+| StairsRun | 8 | 0 | 0 | 0 | 0 | 0 | 33.3 | 22.2 | 44.4 |
+| StairsElement | 8 | 0 | 0 | 0 | 0 | 0 | 44.4 | 11.1 | 44.4 |
+| BaseRailing | 97 | 0 | 0 | 0 | 0 | 0 | 34.5 | 47.6 | 17.9 |
+| RoomElem | 403 | 0 | 0 | 0 | 0 | 0 | 85.5 | 0.4 | 14.0 |
+| SiteSurface | 22 | 0 | 0 | 0 | 0 | 0 | 95.5 | 0.0 | 4.5 |
+| WallSweep | 110 | 0 | 0 | 0 | 0 | 0 | 96.8 | 0.0 | 3.2 |
+| ContFooting | 21 | 0 | 0 | 0 | 0 | 0 | 100.0 | 0.0 | 0.0 |
+| Hub | 3537 | 0 | 0 | 0 | 100 | 0 | - | - | - |
+| ReferencePoint | 3537 | 0 | 0 | 0 | 100 | 0 | - | - | - |
+| AnalyticalModelBeam | 1453 | 0 | 0 | 0 | 100 | 0 | - | - | - |
+| AnalyticalModelColumn | 1428 | 0 | 0 | 0 | 100 | 0 | - | - | - |
+| RebarInSystem | 672 | 0 | 0 | 0 | 100 | 0 | - | - | - |
+| Rebar | 399 | 0 | 0 | 0 | 100 | 0 | - | - | - |
+| ElementGroup | 322 | 0 | 0 | 0 | 0 | 0 | - | - | - |
+| AnalyticalModelIsolatedFoundation | 234 | 0 | 0 | 0 | 100 | 0 | - | - | - |
+| FilledRegion | 233 | 0 | 0 | 0 | 0 | 0 | 0.0 | 0.0 | 100.0 |
+| GStyleElem | 169 | 0 | 0 | 0 | 100 | 0 | - | - | - |
+| DPart | 135 | 0 | 0 | 0 | 0 | 0 | 98.9 | 0.0 | 1.1 |
+| RebarSystem | 135 | 0 | 0 | 0 | 100 | 0 | - | - | - |
+| LineLoad | 105 | 0 | 0 | 0 | 100 | 0 | - | - | - |
+| BoundaryConditions | 81 | 0 | 0 | 0 | 100 | 0 | - | - | - |
+| Viewer3d | 79 | 0 | 0 | 0 | 100 | 0 | - | - | - |
+| AnalyticalModelBrace | 66 | 0 | 0 | 0 | 100 | 0 | - | - | - |
+| AnalyticalModelWall | 55 | 0 | 0 | 0 | 0 | 0 | 18.4 | 18.4 | 63.3 |
+| CategoryElem | 34 | 0 | 0 | 0 | 100 | 0 | - | - | - |
+| AreaLoad | 30 | 0 | 0 | 0 | 100 | 0 | - | - | - |
+| BasePoint | 24 | 0 | 0 | 0 | 100 | 0 | - | - | - |
+| AnalyticalModelSlab | 24 | 0 | 0 | 0 | 0 | 0 | 0.0 | 0.0 | 100.0 |
+| PropertyLineSegment | 24 | 0 | 0 | 0 | 100 | 0 | - | - | - |
+| ShaftOpening | 24 | 0 | 0 | 0 | 0 | 0 | 100.0 | 0.0 | 0.0 |
+| MassLevelData | 22 | 0 | 0 | 0 | 0 | 0 | 0.0 | 0.0 | 100.0 |
+| Stairs | 20 | 0 | 0 | 0 | 0 | 0 | 100.0 | 0.0 | 0.0 |
