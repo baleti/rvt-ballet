@@ -445,6 +445,15 @@ def curve_pts(c, maxdeg=10):
         x = np.array(c['m_xVec'], float); y = np.array(c['m_yVec'], float)
         k = max(2, int(abs(t1 - t0) / math.radians(maxdeg)) + 1); t = np.linspace(t0, t1, k + 1)
         return ctr + R * (np.cos(t)[:, None] * x + np.sin(t)[:, None] * y)
+    if c.get('m_NodeArray'):                                                       # Hermite spline (flex ducts / pipes): nodes with parameter, point and tangent dP/dt
+        N = c['m_NodeArray']; out = []
+        for a_, b_ in zip(N[:-1], N[1:]):
+            t0, t1 = float(a_['m_iParametr']), float(b_['m_iParametr']); dt = t1 - t0
+            if dt <= 0: continue
+            P0, P1 = np.array(a_['m_iPoint'], float), np.array(b_['m_iPoint'], float); T0, T1 = np.array(a_['m_iTangent'], float) * dt, np.array(b_['m_iTangent'], float) * dt
+            u = np.linspace(0, 1, 9 if not out else 9)[(1 if out else 0):, None]
+            out += list((2 * u ** 3 - 3 * u ** 2 + 1) * P0 + (-2 * u ** 3 + 3 * u ** 2) * P1 + (u ** 3 - 2 * u ** 2 + u) * T0 + (u ** 3 - u ** 2) * T1)
+        return np.array(out) if len(out) > 1 else None
     if 'm_ctrlPoints' in c:
         P = np.array([cp['m_Point'] for cp in c['m_ctrlPoints']], float); deg = int(c.get('m_Degree') or 3)
         if len(P) > deg and not c.get('m_Rational'):
@@ -795,7 +804,10 @@ def prefetch_reader_meshes(ctx, els, prog=None):
         if prog and n % 300 == 0: prog.set('geometry', 0.0, 'reading saved-graphics meshes %d' % n)
     ctx._rm = out
 
+CONTAINER_CLASSES = {'JoistSystem', 'BeamSystem'}          # layout containers: zero-height bbox, no graphics of their own (the members are separate FamilyInstances)
+
 def element_mesh(ctx, e, r):
+    if r['class'] in CONTAINER_CLASSES: return None
     if (r['class'] not in ANALYTIC_CLASSES or r['class'] in MESH_FIRST) and (ctx.bbox(e) is not None or e not in ctx.eh):
         rm = reader_mesh(ctx, e)
         if rm and r['class'] in MESH_FIRST and ctx.bbox(e) is None:          # no stored box to validate against: check the saved graphics against the parametric rebuild instead

@@ -59,9 +59,12 @@ def cached_load(path, log=print):
     fn = os.path.join(CACHE_DIR, 'raw-' + key + '.pkl')
     _import()
     if os.path.exists(fn):
-        t = time.time(); d = pickle.load(open(fn, 'rb')); log('raw cache hit (%.1fs)' % (time.time() - t)); return d
+        t = time.time()
+        try: d = pickle.load(open(fn, 'rb')); log('raw cache hit (%.1fs)' % (time.time() - t)); return d
+        except Exception as ex:                                  # truncated by a killed run: drop it and decode again
+            log('raw cache unreadable (%r): rebuilding' % ex); os.remove(fn)
     d = load(path, log)
-    pickle.dump(d, open(fn, 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
+    pickle.dump(d, open(fn + '.%d.tmp' % os.getpid(), 'wb'), protocol=pickle.HIGHEST_PROTOCOL); os.replace(fn + '.%d.tmp' % os.getpid(), fn)       # atomic: a killed run never leaves a half-written cache
     return d
 
 def category_names():
