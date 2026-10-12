@@ -43,13 +43,52 @@ def stale_mark(d):
         return '' if st.get('reader') == reader.reader_stamp() and st.get('viewer') == reader.viewer_stamp() else ' (stale: reader/viewer changed, reopen the .rvt to reconvert)'
     except Exception: return ''
 
+def dir_size(d):
+    return sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(d) for f in fs)
+
+def prepare(files):
+    """--prepare: fully convert + cache each model (Rust fast path, own capped process), ask the sheets session to pre-render all sheets/views (`rvt-sheets warm FILE`, see ~/src/rvt-sheets/HOOKS.md),
+    then print READY with the exact demo command and what is cached"""
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sheets_cli = os.path.expanduser('~/src/rvt-sheets/rvt-sheets'); summary = []
+    for f in files:
+        f = os.path.abspath(f)
+        if not os.path.isfile(f): print('not a file: ' + f); continue
+        d = model_dir(f); t = time.time(); line = {'file': f}
+        done = os.path.exists(os.path.join(d, 'meta.json')) and json.load(open(os.path.join(d, 'meta.json'))).get('phase') == 'done'
+        if done: print('[model] %s: already cached (%s)' % (os.path.basename(f), d)); line['model'] = 'cached'
+        else:
+            print('[model] converting %s (progress: see the banner when opened; this runs the capped converter) ...' % os.path.basename(f), flush=True)
+            r = subprocess.run([os.path.join(here, 'rvt-viewer'), 'convert', f, d])
+            if r.returncode != 0: print('[model] conversion FAILED (exit %d)' % r.returncode); line['model'] = 'FAILED'; summary.append(line); continue
+            line['model'] = 'converted in %.0f s' % (time.time() - t)
+        sm = {}
+        try: sm = json.load(open(os.path.join(d, 'summary.json')))
+        except Exception: pass
+        line['dir'] = d; line['size_mb'] = round(dir_size(d) / 1e6, 1); line['elements'] = sm.get('elements')
+        # sheets warm (owned by rvt-sheets; do not duplicate its caching)
+        t = time.time()
+        if os.path.exists(sheets_cli):
+            r = subprocess.run([sheets_cli, 'warm', f], capture_output=True, text=True); out = (r.stdout or '') + (r.stderr or '')
+            if r.returncode == 0: line['sheets'] = 'warmed in %.0f s' % (time.time() - t); print('[sheets] warm ok:\n' + out.strip()[-600:])
+            elif 'invalid choice' in out or 'usage' in out.lower() or 'unknown' in out.lower(): line['sheets'] = 'NOT warmed: rvt-sheets has no `warm` command yet (sheets render on first open)'; print('[sheets] ' + line['sheets'])
+            else: line['sheets'] = 'warm failed (exit %d)' % r.returncode; print('[sheets] ' + line['sheets'] + '\n' + out.strip()[-400:])
+        else: line['sheets'] = 'rvt-sheets not installed'; print('[sheets] not installed (%s)' % sheets_cli)
+        summary.append(line)
+    sc = os.path.expanduser('~/.cache/rvt-sheets'); nsc = len(os.listdir(sc)) if os.path.isdir(sc) else 0
+    print('\nCached:')
+    for l in summary: print('  %s: model %s (%s MB, %s elements) | sheets: %s' % (os.path.basename(l['file']), l.get('model'), l.get('size_mb'), l.get('elements'), l.get('sheets')))
+    print('  sheets cache directory ~/.cache/rvt-sheets: %d entries' % nsc)
+    for l in summary:
+        if l.get('model') != 'FAILED': print('\nREADY: %s %s --sheets' % (os.path.join(here, 'bin', 'rvt-view'), l['file']))
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog='rvt-viewer'); sub = ap.add_subparsers(dest='cmd', required=True)
-    o = sub.add_parser('open'); o.add_argument('files', nargs='+'); o.add_argument('--port', type=int, default=0); o.add_argument('--no-browser', action='store_true'); o.add_argument('--workspace'); o.add_argument('--rebuild', action='store_true'); o.add_argument('--sheets', action='store_true', help='open directly on the sheets page')
+    o = sub.add_parser('open'); o.add_argument('files', nargs='+'); o.add_argument('--port', type=int, default=0); o.add_argument('--no-browser', action='store_true'); o.add_argument('--workspace'); o.add_argument('--rebuild', action='store_true'); o.add_argument('--sheets', action='store_true', help='open directly on the sheets page'); o.add_argument('--prepare', action='store_true', help='demo prep: convert + cache the model(s), warm the sheets cache, print the exact demo command, do not serve')
     c = sub.add_parser('convert'); c.add_argument('file'); c.add_argument('out', nargs='?')
     s = sub.add_parser('serve'); s.add_argument('dirs', nargs='*'); s.add_argument('--port', type=int, default=0)
     a = ap.parse_args(argv)
     from . import server
+    if a.cmd == 'open' and a.prepare: return prepare(a.files)
     if a.cmd == 'convert':
         if not os.environ.get('RVT_CAPPED') and not os.environ.get('RVT_NO_CAP') and shutil.which('systemd-run'):
             # every conversion runs under a memory cap + nice (the reader can balloon on big files)

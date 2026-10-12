@@ -168,6 +168,14 @@ function showCached(ms) {
   setTimeout(() => { if (bar.className === 'cached') bar.hidden = true; }, 6000);
 }
 // ------------------------------------------------------------------ plug-ins (docs/PLUGINS.md)
+async function updateCachedBadge(models) {
+  // small badge: the model was served from the cache; and, when the sheets plug-in reports it (GET /sheets/api/<mid>/cache.json -> {cached, sheets, total}), its drawings too
+  const b = $('#cachedBadge'); const m = (models || []).find(x => x.id === S.mid); b.hidden = true;
+  if (!m || !m.cached) return;
+  let txt = 'model cached', cls = '';
+  try { const r = await fetch(`/sheets/api/${encodeURIComponent(S.mid)}/cache.json`); if (r.ok) { const c = await r.json(); if (c.cached) txt += ' \u00b7 sheets cached'; else if (c.total) { txt += ` \u00b7 sheets ${c.sheets || 0}/${c.total} cached`; cls = 'partial'; } } } catch (e) {}
+  b.textContent = txt; b.className = cls; b.hidden = false;
+}
 async function loadPlugins() {
   try { S.plugins = await (await fetch('/api/plugins')).json(); } catch (e) { S.plugins = []; }
   const top = $('#top'); top.querySelectorAll('.plug').forEach(b => b.remove());
@@ -679,7 +687,8 @@ requestAnimationFrame(frame);
   sel.onchange = () => loadModel(sel.value);
   const want = location.hash.slice(1).split('?')[0]; if (models.some(m => m.id === want)) sel.value = want;
   await loadPlugins();
-  if (models.length) { await loadModel(sel.value); if (new URLSearchParams(location.search).get('sheets') && sheetsPlugin()) openSheets(''); } else $('#status').textContent = 'no models';
+  S.modelList = models; sel.addEventListener('change', () => setTimeout(() => updateCachedBadge(S.modelList), 600));
+  if (models.length) { await loadModel(sel.value); updateCachedBadge(models); if (new URLSearchParams(location.search).get('sheets') && sheetsPlugin()) openSheets(''); } else $('#status').textContent = 'no models';
 })();
 window.setIsolate = setIsolate; window.pickAt = pickAt; window.selectEl = select; window.setSection = setSection; window.zoomTo = zoomTo;
 window.refreshState = refreshState;

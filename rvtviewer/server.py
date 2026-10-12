@@ -6,7 +6,12 @@ WEB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
 
 class Models:
     def __init__(self): self.m = {}       # id -> dict(dir, name)
-    def add(self, mid, d, name, building=False): self.m[mid] = {'dir': d, 'name': name, 'db': None, 'building': building}
+    def add(self, mid, d, name, building=False):
+        cached = False
+        if not building:
+            try: cached = json.load(open(os.path.join(d, 'meta.json'))).get('phase') == 'done'
+            except Exception: pass
+        self.m[mid] = {'dir': d, 'name': name, 'db': None, 'building': building, 'cached': cached}
     def db(self, mid):
         m = self.m[mid]
         if m['db'] is None:
@@ -77,7 +82,7 @@ def make_app(models):
         return resp
     app.middlewares.append(nocache)
     async def index(req): return web.FileResponse(os.path.join(WEB, 'index.html'))
-    async def list_models(req): return web.json_response([{'id': k, 'name': v['name'], 'building': v.get('building', False)} for k, v in models.m.items()])
+    async def list_models(req): return web.json_response([{'id': k, 'name': v['name'], 'building': v.get('building', False), 'cached': v.get('cached', False)} for k, v in models.m.items()])
     def mdir(req):
         mid = req.match_info['mid']
         if mid not in models.m: raise web.HTTPNotFound()
