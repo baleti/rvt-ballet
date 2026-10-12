@@ -86,7 +86,11 @@ def prepare(files):
         # sheets warm (owned by rvt-sheets; do not duplicate its caching)
         t = time.time()
         if os.path.exists(sheets_cli):
-            r = subprocess.run([sheets_cli, 'warm', f], capture_output=True, text=True); out = (r.stdout or '') + (r.stderr or '')
+            big = os.path.getsize(f) > float(os.environ.get('RVT_WARM_remote-host_MB', '15')) * 1e6 and os.path.exists(os.path.expanduser('~/.local/share/offload/h1run'))
+            r = subprocess.run([sheets_cli, 'warm', f] + (['--remote-host'] if big else []), capture_output=True, text=True); out = (r.stdout or '') + (r.stderr or '')
+            if big and r.returncode != 0 and 'warmed' not in out and os.environ.get('RVT_WARM_NO_LOCAL'): print('[sheets] remote-host warm failed, local warm disabled (RVT_WARM_NO_LOCAL)')
+            elif big and r.returncode != 0 and 'warmed' not in out:       # remote-host busy/unreachable: warm here, niced
+                print('[sheets] remote-host warm failed (%s): warming locally' % out.strip()[-160:]); r = subprocess.run(['nice', '-n', '15', sheets_cli, 'warm', f], capture_output=True, text=True); out = (r.stdout or '') + (r.stderr or '')
             if r.returncode == 0: line['sheets'] = 'warmed in %.0f s' % (time.time() - t); print('[sheets] warm ok:\n' + out.strip()[-600:])
             elif 'invalid choice' in out or 'usage' in out.lower() or 'unknown' in out.lower(): line['sheets'] = 'NOT warmed: rvt-sheets has no `warm` command yet (sheets render on first open)'; print('[sheets] ' + line['sheets'])
             else: line['sheets'] = 'warm failed (exit %d)' % r.returncode; print('[sheets] ' + line['sheets'] + '\n' + out.strip()[-400:])
