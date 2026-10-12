@@ -27,7 +27,9 @@ async def shoot(d, port, out):
 def main():
     os.makedirs(OUT, exist_ok=True); rebuild = '--rebuild' in sys.argv; rows = []; port = 8900
     for name, f in SET:
-        p = '%s/%s.rvt' % (C, f); t = time.time(); d = cli.ensure(p, rebuild, log=lambda *a: None); m = json.load(open(d + '/meta.json'))
+        p = '%s/%s.rvt' % (C, f); t = time.time()
+        try: d = cli.ensure(p, rebuild, log=lambda *a: None); m = json.load(open(d + '/meta.json'))
+        except BaseException as ex: rows.append('| %s | conversion failed: %s | | | | | |' % (name, repr(ex)[:60])); print(rows[-1], flush=True); continue
         cur = os.path.join(OUT, name + '.png'); prev = os.path.join(OUT, name + '.prev.png')
         if os.path.exists(cur): shutil.copy(cur, prev)
         port += 1; asyncio.run(shoot(d, port, cur))

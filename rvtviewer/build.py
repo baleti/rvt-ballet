@@ -741,13 +741,14 @@ def reader_mesh(ctx, e):
         ex = reader_brep_extra(ctx, e, GG)                       # faces the saved-graphics mesh skipped (cone / revolution / ruled / Hermite ...): tessellated through OpenCascade
         if ex is not None and len(ex.f): m.add(ex); P = m.v; extra = True
     iou = box_iou(P.min(0), P.max(0), *bb) if bb is not None else 1.0
-    if iou < 0.4: return None                                   # not the element's own geometry
-    return m, ('approx' if ('unsupported_faces' in (a.get('flags') or []) and not extra) or iou < 0.9 else 'mesh')
+    inside = bb is None or (bool(np.all(P.min(0) >= bb[0] - 0.3)) and bool(np.all(P.max(0) <= bb[1] + 0.3)))      # the stored element bbox also covers swings / clearances: a mesh inside it is the element's own geometry
+    if iou < 0.4 and not inside: return None                    # neither matching nor contained: not the element's own geometry
+    return m, ('approx' if ('unsupported_faces' in (a.get('flags') or []) and not extra) or (iou < 0.9 and not inside) else 'mesh')
 
 def prefetch_reader_meshes(ctx, els, prog=None):
     ctx._rm = None; out = {}; t = time.time(); n = 0
     for el in els:
-        if not el['cat'] or el['isType'] or ctx.recs[el['id']]['class'] in ANALYTIC_CLASSES or (ctx.bbox(el['id']) is None and el['id'] in ctx.eh) or el['cat'] in ('Planting', 'Entourage'): continue
+        if not el['cat'] or el['isType'] or ctx.recs[el['id']]['class'] in ANALYTIC_CLASSES or (ctx.bbox(el['id']) is None and el['id'] in ctx.eh): continue
         try: out[el['id']] = reader_mesh(ctx, el['id'])
         except Exception: out[el['id']] = None
         n += 1
@@ -755,7 +756,7 @@ def prefetch_reader_meshes(ctx, els, prog=None):
     ctx._rm = out
 
 def element_mesh(ctx, e, r):
-    if r['class'] not in ANALYTIC_CLASSES and (ctx.bbox(e) is not None or e not in ctx.eh) and ctx.catname(e) not in ('Planting', 'Entourage'):
+    if r['class'] not in ANALYTIC_CLASSES and (ctx.bbox(e) is not None or e not in ctx.eh):
         rm = reader_mesh(ctx, e)
         if rm: return rm
     if ctx.catname(e) in ('Planting', 'Entourage') and ctx.bbox(e) is not None and r['class'] == 'FamilyInstance': return geom.ellipsoid(*ctx.bbox(e)), 'bbox'
