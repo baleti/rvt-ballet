@@ -1338,7 +1338,7 @@ def write_summary(outdir, meta, src=None):
         if c in hid: continue                                    # analytical / reference / annotation-like categories are not building geometry
         for k, n in v.items(): tot[k] = tot.get(k, 0) + n
     tr, mt, ap, bx = tot.get('solid', 0) + tot.get('mesh', 0), tot.get('matched', 0), tot.get('param', 0) + tot.get('approx', 0), tot.get('bbox', 0); ex = tr + mt; n = max(ex + ap + bx, 1)
-    sm = {'file': meta['file'], 'src': src and os.path.abspath(src), 'size': os.path.getsize(src) if src and os.path.exists(src) else None, 'built': meta.get('built'), 'elements': len(meta['elements']),
+    sm = {'file': meta['file'], 'src': src and os.path.abspath(src), 'size': os.path.getsize(src) if src and os.path.exists(src) else None, 'mtime': os.path.getmtime(src) if src and os.path.exists(src) else None, 'built': meta.get('built'), 'elements': len(meta['elements']),
           'tris': sum(b['tris'] for b in meta['batches']), 'exact': ex / n, 'true': tr / n, 'matched': mt / n, 'approx': ap / n, 'box': bx / n, 'stamps': meta.get('stamps'), 'secs': meta.get('buildSecs')}
     json.dump(sm, open(os.path.join(outdir, 'summary.json'), 'w'))
 

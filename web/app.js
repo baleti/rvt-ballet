@@ -720,7 +720,9 @@ setInterval(async () => {
     const stale = r.reader !== S.meta.stamps.reader || r.viewer !== S.meta.stamps.viewer;
     let b = $('#stale'); if (!stale) { if (b) b.hidden = true; return; }
     if (!b) { b = document.createElement('div'); b.id = 'stale'; $('#view').appendChild(b); }
-    b.hidden = false; b.innerHTML = `Reader/converter updated${r.geometryApi ? ' (GEOMETRY_API.md present)' : ''}: this model was converted with an older version. <button id="reconv">Reconvert</button>`;
+    if (S.staleDismissed === S.mid) return;
+    b.hidden = false; b.innerHTML = `<span title="the reader or converter changed after this model was converted; the model shown is complete">newer reader available</span> <button id="reconv">Update model</button> <button id="staleX" title="hide">&times;</button>`;
+    $('#staleX').onclick = () => { S.staleDismissed = S.mid; b.hidden = true; };
     $('#reconv').onclick = async () => { b.hidden = true; const j = await (await fetch(`/api/m/${S.mid}/reconvert`, {method: 'POST'})).json(); if (j.ok) { window.__loaded = false; const sel = $('#modelSel'); if (![...sel.options].some(o => o.value === j.id)) sel.add(new Option(S.meta.file, j.id)); sel.value = j.id; await loadModel(j.id); } else b.innerHTML = 'No source file known for this model: reopen the .rvt with rvt-viewer open.'; };
   } catch (e) {}
 }, 20000);

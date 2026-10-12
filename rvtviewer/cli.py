@@ -8,6 +8,24 @@ def model_dir(path):
 
 BUILD_VERSION = 'b3'
 
+def best_cached(path):
+    """newest COMPLETE conversion of this very file (same path, size, mtime) made with any reader/viewer version, or None. A reader or converter change must never
+    turn a prepared demo into a cold conversion: the older complete model opens at once and the page offers the update."""
+    root = os.path.join(reader.CACHE_DIR, 'models'); ap = os.path.abspath(path); base = os.path.splitext(os.path.basename(path))[0] + '-'
+    try: sz = os.path.getsize(path); mt = os.path.getmtime(path)
+    except OSError: return None
+    best = None
+    for n in os.listdir(root) if os.path.isdir(root) else []:
+        if not n.startswith(base) or n.endswith('.tmp'): continue
+        d = os.path.join(root, n)
+        try:
+            sm = json.load(open(os.path.join(d, 'summary.json')))
+            if sm.get('src') != ap or sm.get('size') != sz or (sm.get('mtime') is not None and abs(sm['mtime'] - mt) > 1e-3): continue
+            if json.load(open(os.path.join(d, 'meta.json'))).get('phase') != 'done': continue
+            if best is None or (sm.get('built') or 0) > best[0]: best = (sm.get('built') or 0, d)
+        except Exception: continue
+    return best[1] if best else None
+
 def ensure(path, force=False, log=print):
     from . import build
     d = model_dir(path)
@@ -113,19 +131,21 @@ def main(argv=None):
                 try: open(os.path.join(tmp, 'progress.json'), 'w').write(json.dumps({'stage': 'error', 'msg': 'conversion failed - see the terminal output', 'pct': 0, 'stages': []}))
                 except OSError: pass
         threading.Thread(target=job, daemon=True).start(); return mid
-    def open_path(f):
+    def open_path(f, fresh=False):
         d = model_dir(f); mid = os.path.basename(d)
         if os.path.exists(os.path.join(d, 'meta.json')) and json.load(open(os.path.join(d, 'meta.json'))).get('phase') == 'done':
             models.add(mid, d, os.path.basename(f)); models.m[mid]['src'] = f; return mid
+        old = None if fresh or os.environ.get('RVT_FRESH') else best_cached(f)
+        if old:                                                          # an older complete conversion: open it now, the page offers the update (never a cold conversion in a demo)
+            print('cache hit (older reader/converter version, update offered in the page): %s' % old); mid = os.path.basename(old)
+            models.add(mid, old, os.path.basename(f)); models.m[mid]['src'] = f; return mid
         return start_job(f)
     models.open_path = open_path
     models.reconvert = lambda mid: start_job(models.m[mid]['src']) if models.m.get(mid, {}).get('src') else None
     if a.cmd == 'open':
         for f in a.files:
-            d = model_dir(f)
-            if os.path.exists(os.path.join(d, 'meta.json')) and not a.rebuild and json.load(open(os.path.join(d, 'meta.json'))).get('phase') == 'done':
-                print('cache hit: %s' % d); models.add(os.path.basename(d), d, os.path.basename(f)); models.m[os.path.basename(d)]['src'] = f
-            else: start_job(f)
+            if a.rebuild: start_job(f)
+            else: open_path(f)
     else:
         for d in a.dirs: models.add(os.path.basename(d.rstrip('/')), d, os.path.basename(d.rstrip('/')))
         root = os.path.join(reader.CACHE_DIR, 'models')
