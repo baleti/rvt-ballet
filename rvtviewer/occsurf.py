@@ -26,9 +26,16 @@ def _curve(c):
     if t == 'bspline':
         P = c['poles']; poles = TColgp_Array1OfPnt(1, len(P))
         for i, p in enumerate(P): poles.SetValue(i + 1, gp_Pnt(*[float(v) for v in p]))
-        kn = TColStd_Array1OfReal(1, len(c['knots'])); mu = TColStd_Array1OfInteger(1, len(c['mults']))
-        for i, k in enumerate(c['knots']): kn.SetValue(i + 1, float(k))
-        for i, m in enumerate(c['mults']): mu.SetValue(i + 1, int(m))
+        knots, mults = list(c['knots']), c.get('mults')
+        if mults is None:                                                           # the reader may give the full (repeated) knot vector instead of distinct knots + multiplicities
+            dk = []; mults = []
+            for k in knots:
+                if dk and abs(k - dk[-1]) < 1e-12: mults[-1] += 1
+                else: dk.append(k); mults.append(1)
+            knots = dk
+        kn = TColStd_Array1OfReal(1, len(knots)); mu = TColStd_Array1OfInteger(1, len(mults))
+        for i, k in enumerate(knots): kn.SetValue(i + 1, float(k))
+        for i, m in enumerate(mults): mu.SetValue(i + 1, int(m))
         if c.get('weights'):
             w = TColStd_Array1OfReal(1, len(P))
             for i, v in enumerate(c['weights']): w.SetValue(i + 1, float(v))

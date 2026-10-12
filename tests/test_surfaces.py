@@ -61,6 +61,12 @@ def test_ruled():
     assert abs(area(occsurf.tessellate_face(s)) - 5 * math.sqrt(5)) < 1e-4
 
 
+def test_ruled_full_knot_vector():
+    c1 = {'type': 'bspline', 'degree': 1, 'poles': [[0, 0, 0], [5, 0, 0]], 'knots': [0, 0, 1, 1]}
+    c2 = {'type': 'bspline', 'degree': 1, 'poles': [[0, 2, 1], [5, 2, 1]], 'knots': [0, 0, 1, 1]}
+    assert abs(area(occsurf.tessellate_face({'type': 'ruled', 'curve1': c1, 'curve2': c2})) - 5 * math.sqrt(5)) < 1e-4
+
+
 def test_hermite_flat_patch():
     nodes = [{'p': [x, y, 0.0], 'tu': [1, 0, 0], 'tv': [0, 1, 0], 'twist': [0, 0, 0]} for y in (0, 3) for x in (0, 4)]       # bilinear Hermite patch 4 x 3 with unit tangents
     s = {'type': 'hermite', 'uparams': [0, 4], 'vparams': [0, 3], 'nodes': nodes}
