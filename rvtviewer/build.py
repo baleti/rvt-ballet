@@ -808,7 +808,7 @@ def reader_mesh(ctx, e):
 def prefetch_reader_meshes(ctx, els, prog=None):
     ctx._rm = None; out = {}; t = time.time(); n = 0
     for el in els:
-        if not el['cat'] or el['isType'] or (ctx.recs[el['id']]['class'] in ANALYTIC_CLASSES and ctx.recs[el['id']]['class'] not in MESH_FIRST) or (ctx.bbox(el['id']) is None and el['id'] in ctx.eh): continue
+        if not el['cat'] or el['isType'] or (ctx.recs[el['id']]['class'] in ANALYTIC_CLASSES and ctx.recs[el['id']]['class'] not in MESH_FIRST) or (ctx.bbox(el['id']) is None and el['id'] in ctx.eh and ctx.recs[el['id']]['class'] not in MESH_FIRST): continue
         try: out[el['id']] = reader_mesh(ctx, el['id'])
         except Exception: out[el['id']] = None
         n += 1
@@ -819,7 +819,7 @@ CONTAINER_CLASSES = {'JoistSystem', 'BeamSystem'}          # layout containers: 
 
 def element_mesh(ctx, e, r):
     if r['class'] in CONTAINER_CLASSES: return None
-    if (r['class'] not in ANALYTIC_CLASSES or r['class'] in MESH_FIRST) and (ctx.bbox(e) is not None or e not in ctx.eh):
+    if (r['class'] not in ANALYTIC_CLASSES or r['class'] in MESH_FIRST) and (ctx.bbox(e) is not None or e not in ctx.eh or r['class'] in MESH_FIRST):
         rm = reader_mesh(ctx, e)
         if rm and r['class'] in MESH_FIRST and ctx.bbox(e) is None:          # no stored box to validate against: check the saved graphics against the parametric rebuild instead
             try:
