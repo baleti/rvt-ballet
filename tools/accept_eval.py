@@ -8,6 +8,12 @@ from rvtviewer import reader, build, cli
 OUT = os.path.join(reader.CACHE_DIR, 'accept')
 
 
+def _vol(V, F):
+    try:
+        sys.path.insert(0, os.path.expanduser('~/rvt-research')); import rvt_mesh
+        return float(rvt_mesh.mesh_volume([tuple(map(tuple, V[f])) for f in F])[0])
+    except Exception: return abs(np.einsum('ij,ij->i', V[F[:, 0]], np.cross(V[F[:, 1]], V[F[:, 2]])).sum() / 6)
+
 def gt4_volumes(path):
     year = os.path.basename(os.path.dirname(path)); stem = os.path.basename(path)
     f = os.path.expanduser('~/rvt-research/gt4/%s_%s.tsv' % (year, stem))
@@ -80,7 +86,7 @@ def main(path):
         if iou is not None: c['iou_n'] += 1; c['iou_ok'] += int(iou >= 0.95)
         v = vols.get(el['id'])
         if v and v > 1e-6:
-            vol = abs(np.einsum('ij,ij->i', V[F[:, 0]], np.cross(V[F[:, 1]], V[F[:, 2]])).sum() / 6)
+            vol = _vol(V, F)
             c['vol_n'] += 1; c['vol_ok'] += int(abs(vol / v - 1) <= 0.02); c['vol_ratios'].append(round(float(vol / v), 4))
     out = {'file': os.path.basename(path), 'year': year, 'has_gt4': has_gt, 'elements': len(els), 'classes': {k: {**v, 'vol_ratios': v['vol_ratios'][:400]} for k, v in cls.items()}}
     json.dump(out, open(os.path.join(OUT, '%s_%s%s.json' % (year, stem, '__analytic' if os.environ.get('RVT_ANALYTIC_ONLY') else '')), 'w'))

@@ -8,6 +8,13 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rvtviewer import reader, build
 
+def _vol(V, F):
+    """signed-volume with consistent orientation: the reader's rvt_mesh.mesh_volume (orients triangles through shared edges); plain sum as fallback"""
+    try:
+        sys.path.insert(0, os.path.expanduser('~/rvt-research')); import rvt_mesh
+        return float(rvt_mesh.mesh_volume([tuple(map(tuple, V[f])) for f in F])[0])
+    except Exception: return abs(np.einsum('ij,ij->i', V[F[:, 0]], np.cross(V[F[:, 1]], V[F[:, 2]])).sum() / 6)
+
 def _xyz(t): return [float(v) for v in t.split(',')]
 
 def load_oracle(gtdir, stem=None):
@@ -68,7 +75,7 @@ def main(mdir, gtdir):
         V = np.vstack([p[0] for p in parts]); F = np.vstack([p[1] + sum(len(q[0]) for q in parts[:k]) for k, p in enumerate(parts)])
         lo, hi = V.min(0), V.max(0); r = {'fid': fid, 'iou': round(build.box_iou(lo, hi, np.array(g['bb'][0]), np.array(g['bb'][1])), 3)}
         if g['vol']:
-            vol = abs(np.einsum('ij,ij->i', V[F[:, 0]], np.cross(V[F[:, 1]], V[F[:, 2]])).sum() / 6); r['vratio'] = round(vol / g['vol'], 3)
+            vol = _vol(V, F); r['vratio'] = round(vol / g['vol'], 3)
         for cand in (os.path.join(gtdir, '%d.obj' % el['id']), os.path.join(gtdir, stem, '%d.obj' % el['id'])):
             if os.path.exists(cand):
                 OV, OF = read_obj(cand); A = sample(V, F); B = sample(OV, OF)

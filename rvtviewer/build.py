@@ -745,6 +745,7 @@ def reader_mesh(ctx, e):
         if ex is not None and len(ex.f): m.add(ex); P = m.v; extra = True
     iou = box_iou(P.min(0), P.max(0), *bb) if bb is not None else 1.0
     inside = bb is None or (bool(np.all(P.min(0) >= bb[0] - 0.3)) and bool(np.all(P.max(0) <= bb[1] + 0.3)))      # the stored element bbox also covers swings / clearances: a mesh inside it is the element's own geometry
+    if ctx.recs[e]['class'] in MESH_FIRST and iou < 0.6: return None      # host elements: the saved graphics must match the stored box (curtain walls etc. fall back to the parametric builder)
     if iou < 0.4 and not inside: return None                    # neither matching nor contained: not the element's own geometry
     return m, ('approx' if ('unsupported_faces' in (a.get('flags') or []) and not extra) or (iou < 0.9 and not inside) else 'mesh')
 
