@@ -768,14 +768,18 @@ def _guarded(fn, *a, extra_gb=2.5):
     finally:
         resource.setrlimit(resource.RLIMIT_AS, old)
 
-CURVED_SURFACES = {'revolution', 'cone', 'sphere', 'torus', 'ruled', 'hermite', 'bspline'}
+CURVED_SURFACES = {'revolution', 'cone', 'sphere', 'torus'}      # analytic curved faces only; the check is expensive (refined_volume ~10 s for big meshes), so only meshes up to 1500 triangles, time-boxed to 3 s
 
 def topology_check(a, P):
     """the reader validates curved solids with analytic (refined) volume/area; compare the triangle mesh's own area with it: a mesh whose triangles span the wrong vertices has the right volume on paper but draws wrongly. -> (ok, mesh_area, analytic_area) or None"""
     if not a.get('tris_raw') or not a.get('meta_raw'): return None
     try:
         import rvt_mesh as RM
-        v_, closed, area_ref = RM.refined_volume(a['tris_raw'], a['meta_raw'], fid=a.get('fid'))[:3]
+        import signal
+        def _to(sig, frm): raise TimeoutError()
+        old = signal.signal(signal.SIGALRM, _to); signal.setitimer(signal.ITIMER_REAL, 3.0)
+        try: v_, closed, area_ref = RM.refined_volume(a['tris_raw'], a['meta_raw'], fid=a.get('fid'))[:3]
+        finally: signal.setitimer(signal.ITIMER_REAL, 0); signal.signal(signal.SIGALRM, old)
         T = P.reshape(-1, 3, 3); area = float(np.linalg.norm(np.cross(T[:, 1] - T[:, 0], T[:, 2] - T[:, 0]), axis=1).sum() / 2)
         return (abs(area / area_ref - 1) <= 0.08 if area_ref > 1e-9 else True), area, float(area_ref)
     except Exception: return None
@@ -791,7 +795,7 @@ def _em_geometry(GG, src, e):
     P = np.array([p for t in m['tris'] for p in t])
     mt = m.get('meta') or []
     return {'confidence': 'mesh_approx', 'flags': ['saved_graphics_tessellation'] + list(m['flags']), 'nid': list(m.get('nid') or []), 'fid': list(m.get('fid') or []),
-            'surf': [str(x[0]) for x in mt] if len(mt) == len(m['tris']) else None, 'tris_raw': m['tris'] if any(str(x[0]) in CURVED_SURFACES for x in mt[:20000]) else None, 'meta_raw': mt if any(str(x[0]) in CURVED_SURFACES for x in mt[:20000]) else None,
+            'surf': [str(x[0]) for x in mt] if len(mt) == len(m['tris']) else None, 'tris_raw': m['tris'] if (len(m['tris']) <= 1500 and any(str(x[0]) in CURVED_SURFACES for x in mt)) else None, 'meta_raw': mt if (len(m['tris']) <= 1500 and any(str(x[0]) in CURVED_SURFACES for x in mt)) else None,
             'solids': [{'kind': 'triangle_mesh', 'triangles': P.round(6).tolist(), 'source': m['source']}]}
 
 def body_summary(P, nid, fid=None, surf=None, limit=12):
@@ -1017,7 +1021,7 @@ def run_geometry(ctx, els, prog, workers=None, on_partial=None):
             for k, r in enumerate(pool.imap_unordered(_geo_chunk, chunks)):
                 res += r; done_el = min(n, (k + 1) * step)
                 prog.set('geometry', (k + 1) / len(chunks), 'geometry %d/%d chunks (%d workers)' % (k + 1, len(chunks), nw) if k % 10 == 0 else '', done=done_el, total=n)
-                if on_partial and k + 1 < len(chunks) and time.time() - last_partial > 12: on_partial(res, done_el, n); last_partial = time.time()
+                if on_partial and k + 1 < len(chunks) and time.time() - last_partial > float(os.environ.get('RVT_PARTIAL_SECS', '12')): on_partial(res, done_el, n); last_partial = time.time()
     res.sort(key=lambda t: t[0])
     try: pickle.dump(res, open(fn + '.tmp', 'wb'), protocol=5); os.replace(fn + '.tmp', fn)
     except Exception: pass
