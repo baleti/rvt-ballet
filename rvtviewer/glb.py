@@ -3,6 +3,10 @@ Normals are omitted on purpose (viewer shades flat with screen-space derivatives
 import json, struct
 import numpy as np
 
+def _lin(c):
+    """sRGB 0..1 (Revit colours, category colours) -> linear (glTF baseColorFactor is linear)"""
+    c = float(c); return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
 def to_yup_m(v):
     """Revit feet Z-up -> glTF metres Y-up"""
     v = np.asarray(v, float) * 0.3048
@@ -28,7 +32,7 @@ def write_glb(path, batches, extras=None):
         if b.get('mat') is not None:
             a_mt = len(accs); accs.append({'bufferView': add(np.ascontiguousarray(b['mat'], np.float32), 34962), 'componentType': 5126, 'count': len(pos), 'type': 'SCALAR'}); attrs['_MAT'] = a_mt
         a_ix = len(accs); accs.append({'bufferView': add(ix, 34963), 'componentType': 5125, 'count': len(ix), 'type': 'SCALAR'})
-        mats.append({'name': b['name'], 'pbrMetallicRoughness': {'baseColorFactor': list(b['color']), 'metallicFactor': 0.0, 'roughnessFactor': 0.85},
+        mats.append({'name': b['name'], 'pbrMetallicRoughness': {'baseColorFactor': [_lin(c) for c in b['color'][:3]] + [b['color'][3]], 'metallicFactor': 0.0, 'roughnessFactor': 0.85},
                      **({'alphaMode': 'BLEND'} if b['color'][3] < 1 else {}), 'doubleSided': True})
         meshes.append({'name': b['name'], 'primitives': [{'attributes': attrs, 'indices': a_ix, 'material': len(mats) - 1, 'mode': b.get('mode', 4)}], 'extras': {'batch': i}})
         nodes.append({'mesh': len(meshes) - 1, 'name': b['name'], 'extras': {'batch': i}})
