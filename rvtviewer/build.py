@@ -762,6 +762,11 @@ def prefetch_reader_meshes(ctx, els, prog=None):
 def element_mesh(ctx, e, r):
     if (r['class'] not in ANALYTIC_CLASSES or r['class'] in MESH_FIRST) and (ctx.bbox(e) is not None or e not in ctx.eh):
         rm = reader_mesh(ctx, e)
+        if rm and r['class'] in MESH_FIRST and ctx.bbox(e) is None:          # no stored box to validate against: check the saved graphics against the parametric rebuild instead
+            try:
+                pm = BUILDERS[r['class']](ctx, e, r)
+                if pm and pm[0] and box_iou(rm[0].v.min(0), rm[0].v.max(0), pm[0].v.min(0), pm[0].v.max(0)) < 0.5: rm = None
+            except Exception: pass
         if rm: return rm
     if ctx.catname(e) in ('Planting', 'Entourage') and ctx.bbox(e) is not None and r['class'] == 'FamilyInstance': return geom.ellipsoid(*ctx.bbox(e)), 'bbox'
     try:

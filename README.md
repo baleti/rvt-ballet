@@ -34,11 +34,10 @@ Every element has a fidelity tag shown in the inspector, tree, tooltip, coverage
 `exact` = solid (decoded B-rep) + matched (rebuilt from stored data AND extents agree with the bounding box Revit stored: IoU >= 0.97, or inside it spanning >= 93% of its two largest dimensions); `approximate` = rebuilt but not matching / footprint-only; `box only` = placeholder at the stored bounding box.
 | model | elements | true geometry (B-rep / saved mesh) | parametric, extents match | approximate | box only |
 |---|---|---|---|---|---|
-| residential-2020 | 218 | 30% | 19% | 19% | 32% |
-| hvac-2024 | 2630 | 42% | 40% | 13% | 6% |
-| facades-2026 | 523 | 49% | 9% | 34% | 8% |
-| structural-2024, mep-2020 | not re-measured with the 2026-10-12 reader: its cold decode exceeds the 6 GB memory cap (NEEDS-FROM-READER.md section 7); last measurement 56/5/21/19 and 63/20/3/15 |
-Only the first column is geometry decoded from the file's own faces; "parametric, extents match" (ducts, pipes, walls, floors rebuilt from stored curves/sections) matches Revit's stored bounding box but its exact shape is unproven.
+| residential-2020 | 218 | 93% | 0% | 2% | 6% |
+| structural-2024 | 1447 | 90% | 0% | 0% | 10% |
+| hvac-2024, facades-2026, mep-2020 | re-measuring with the 2026-10-12 reader (earlier: 42/40/13/6, 49/9/34/8, 63/20/3/15) |
+Walls, floors, ceilings and roofs now use the reader's saved-graphics meshes (they match Revit's volume within 2% for 92-100% of 2020 residential elements vs 57% / 0% for the parametric rebuild, which stays as fallback); doors/windows/trees count as true geometry when the mesh lies inside the stored bounding box. Only the first column is geometry decoded from the file's own faces; "parametric, extents match" (ducts, pipes, walls, floors rebuilt from stored curves/sections) matches Revit's stored bounding box but its exact shape is unproven.
 Family instances now come from the reader's saved-graphics triangle meshes (rvt_geometry 'mesh_approx': planar + cylindrical faces; ruled/revolved/NURBS faces still missing); box-only is what the reader has no saved graphics for. `tools/compare_gt.py` + the viewer's Compare button measure deviation against Revit oracle files (rvt-research/gt_geom). GEOMETRY_API.md reviewed: for every class it covers (walls, floors, ceilings, ducts..., instances as boxes) the API is 'approx'/'box' and the viewer's own builders already include joins, openings, layers and slopes, so nothing was switched to it; `tools/check_api.py FILE` compares both and flags classes where the API becomes 'exact'.
 
 ### Volume vs Revit (tools/verify_gt.py; share within 5% of Revit's Volume)
