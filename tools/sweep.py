@@ -36,6 +36,11 @@ def main(files):
             rec.update({k: sm.get(k) for k in ('elements', 'tris', 'true', 'matched', 'approx', 'box')}); rec['timings'] = mt.get('timings'); rec['sheets'] = len(mt.get('sheets') or []); rec['views'] = len(mt.get('views') or [])
             ms = json.load(open(os.path.join(out, 'materials.json')))['materials']; rec['materials'] = len(ms); rec['swatches'] = sum(1 for m in ms if m.get('swatch')); rec['mat_used'] = sum(1 for m in ms if m.get('elements'))
         except Exception as ex: rec.setdefault('err', repr(ex))
+        if rec['status'] == 'ok' and not os.environ.get('RVT_SWEEP_NOFUNC'):          # functional test through the real server + sheets plug-in
+            try:
+                ft = subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'functest.py'), out, os.environ.get('RVT_SWEEP_PORT', '8962')], capture_output=True, text=True, timeout=1800)
+                rec['func'] = json.loads(ft.stdout.strip().splitlines()[-1])
+            except Exception as ex: rec['func'] = {'ok': False, 'checks': {}, 'error': repr(ex)[:300]}
         open(OUT, 'a').write(json.dumps(rec) + '\n'); print(rec['status'], tag, rec['secs'], flush=True)
         shutil.rmtree(out, ignore_errors=True)
     print('SWEEPDONE', flush=True)
