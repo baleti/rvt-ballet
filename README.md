@@ -35,11 +35,11 @@ Every element has a fidelity tag shown in the inspector, tree, tooltip, coverage
 | model | elements | true geometry (B-rep / saved mesh) | parametric, extents match | approximate | box only |
 |---|---|---|---|---|---|
 | residential-2020 | 218 | 93% | 0% | 2% | 6% |
-| structural-2024 | 1447 | 90% | 0% | 0% | 10% |
-| mep-2020 | 7157 | 76% | 17% | 1% | 6% |
-| hvac-2024 | 2630 | 59% | 40% | 0% | 1% |
+| structural-2024 | 1371 | 95% | 0% | 0% | 5% |
+| mep-2020 | 6879 | 79% | 20% | 1% | 1% |
+| hvac-2024 | 2630 | 59% | 41% | 0% | 0% |
 | facades-2026 | 523 | 98% | 0% | 1% | 1% |
-Measured 2026-10-12 with the reader's updated mesh path (earlier values in git history). In MEP and HVAC the "parametric" share is ducts and pipes rebuilt from stored curves/sections: extents match Revit's bounding box but the exact shape is unproven.
+Measured 2026-10-12 (afternoon) with the reader's updated mesh path (earlier values in git history). Changes since the previous table: per-body (nid/fid) meshes, flex ducts from their Hermite curves (HVAC box 1% -> 0%), curtain grid lines as lines, joist/beam systems are layout containers without geometry and no longer counted (Structural 1447 -> 1371), MEP re-measured after its class census was rebuilt. Remaining box-only: Rebar (no saved graphics), family instances whose symbol has no graphics, reference points/hubs (see NEEDS-FROM-READER.md section 8). In MEP and HVAC the "parametric" share is ducts and pipes rebuilt from stored curves/sections: extents match Revit's bounding box but the exact shape is unproven.
 
 Walls, floors, ceilings and roofs now use the reader's saved-graphics meshes (they match Revit's volume within 2% for 92-100% of 2020 residential elements vs 57% / 0% for the parametric rebuild, which stays as fallback); doors/windows/trees count as true geometry when the mesh lies inside the stored bounding box. Only the first column is geometry decoded from the file's own faces; "parametric, extents match" (ducts, pipes, walls, floors rebuilt from stored curves/sections) matches Revit's stored bounding box but its exact shape is unproven.
 Family instances now come from the reader's saved-graphics triangle meshes (rvt_geometry 'mesh_approx': planar + cylindrical faces; ruled/revolved/NURBS faces still missing); box-only is what the reader has no saved graphics for. `tools/compare_gt.py` + the viewer's Compare button measure deviation against Revit oracle files (rvt-research/gt_geom). GEOMETRY_API.md reviewed: for every class it covers (walls, floors, ceilings, ducts..., instances as boxes) the API is 'approx'/'box' and the viewer's own builders already include joins, openings, layers and slopes, so nothing was switched to it; `tools/check_api.py FILE` compares both and flags classes where the API becomes 'exact'.

@@ -740,13 +740,24 @@ def reader_brep_extra(ctx, e, GG):
 
 MESH_FIRST = {'SWall', 'ArcWall', 'Floor', 'Ceiling', 'ProfileRoof', 'FootPrintRoof', 'RoofSoffit', 'BuildingPad'}      # saved-graphics meshes match Revit volumes within 2% far more often than the parametric rebuilds (2020 residential walls 92% vs 57%, roofs 100% vs 0%)
 
+def _guarded(fn, *a, extra_gb=2.5):
+    """call fn with the address space capped at (current + extra_gb): a runaway reader decode of one element raises MemoryError (-> None) instead of getting the whole process OOM-killed"""
+    import resource
+    cur = int(open('/proc/self/statm').read().split()[0]) * resource.getpagesize(); old = resource.getrlimit(resource.RLIMIT_AS)
+    try:
+        resource.setrlimit(resource.RLIMIT_AS, (cur + int(extra_gb * 2 ** 30), old[1]))
+        return fn(*a)
+    except MemoryError: return None
+    finally:
+        resource.setrlimit(resource.RLIMIT_AS, old)
+
 def _em_geometry(GG, src, e):
     """rvt_elemmesh.element_mesh result in the element_geometry vocabulary (one triangle_mesh solid) plus the per-triangle body (nid) and face (fid) ids"""
     import rvt_elemmesh as EM
     d = GG._docs.get(src)
-    if d is None: d = GG._docs[src] = EM.Doc(src)
-    m = EM.element_mesh(d, int(e))
-    if not m['tris']: return None
+    if d is None: d = GG._docs[src] = EM.Doc(src)               # (the document build uses worker pools: never under the address-space guard)
+    m = _guarded(EM.element_mesh, d, int(e))
+    if not m or not m['tris']: return None
     P = np.array([p for t in m['tris'] for p in t])
     return {'confidence': 'mesh_approx', 'flags': ['saved_graphics_tessellation'] + list(m['flags']), 'nid': list(m.get('nid') or []), 'fid': list(m.get('fid') or []),
             'solids': [{'kind': 'triangle_mesh', 'triangles': P.round(6).tolist(), 'source': m['source']}]}
