@@ -318,7 +318,15 @@ function updateLabels() {
     if (!l.group.visible || !l.group.parent) { l.d.style.display = 'none'; continue; }
     v.copy(l.pos).project(camera);
     if (v.z > 1 || v.z < -1 || Math.abs(v.x) > 1.05 || Math.abs(v.y) > 1.05) { l.d.style.display = 'none'; continue; }
-    l.d.style.display = ''; l.d.style.left = ((v.x + 1) / 2 * r.width) + 'px'; l.d.style.top = ((1 - v.y) / 2 * r.height) + 'px';
+    l.d.style.display = ''; l.x = (v.x + 1) / 2 * r.width; l.y = (1 - v.y) / 2 * r.height; l.d.style.left = l.x + 'px'; l.d.style.top = l.y + 'px';
+  }
+  // de-overlap: a label that would sit on top of an already placed one of the same kind is hidden (levels a few cm apart, crowded grid bubbles)
+  const placed = [];
+  for (const l of lbls) {
+    if (l.d.style.display === 'none') continue;
+    const kind = l.d.className, w = l.d.offsetWidth || 60, h = l.d.offsetHeight || 14;
+    if (placed.some(p => p.kind === kind && Math.abs(p.x - l.x) < (p.w + w) / 2 && Math.abs(p.y - l.y) < (p.h + h) / 2 * 0.95)) { l.d.style.display = 'none'; continue; }
+    placed.push({kind, x: l.x, y: l.y, w, h});
   }
 }
 
