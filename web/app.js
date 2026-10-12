@@ -663,7 +663,7 @@ requestAnimationFrame(frame);
   await loadPlugins();
   if (models.length) await loadModel(sel.value); else $('#status').textContent = 'no models';
 })();
-window.pickAt = pickAt; window.selectEl = select; window.setSection = setSection; window.zoomTo = zoomTo;
+window.setIsolate = setIsolate; window.pickAt = pickAt; window.selectEl = select; window.setSection = setSection; window.zoomTo = zoomTo;
 window.refreshState = refreshState;
 
 window.__renderer = renderer; window.__scene = scene; window.__camera = camera;
