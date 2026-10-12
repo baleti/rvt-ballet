@@ -744,10 +744,10 @@ def reader_brep_extra(ctx, e, GG):
             except Exception: continue
         if not out: return None
         inst = b.get('instances') or []
-        if inst:
+        if inst:  # (kept: pick the frame that lands inside the stored bbox)
             tr = inst[0]['transform']; M = np.array(tr['m_3x3'], float); o = np.array(tr['m_or'], float); bb = ctx.bbox(e)
             if bb is not None:
-                cands = [out.v @ M.T + o, out.v @ M + o]
+                cands = [out.v, out.v @ M.T + o, out.v @ M + o]                  # top-level faces are in world coordinates, instance faces in the symbol frame
                 fit = lambda W: float(np.mean(np.all((W >= bb[0] - 0.5) & (W <= bb[1] + 0.5), axis=1)))
                 out.v = max(cands, key=fit)
         return out
