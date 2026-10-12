@@ -12,6 +12,13 @@ model tree by category/level, search, visibility, section, measure. Pure Python 
 Needs the venv: `python -m venv --system-site-packages .venv && .venv/bin/pip install cadquery-ocp mapbox-earcut` (aiohttp, numpy, scipy from the system).
 First conversion of a big file takes minutes (the reader decodes every record); re-opening is seconds (raw + converted caches).
 
+## Features added 2026-10-12 (see docs/ for details)
+* Per-body geometry badge in the inspector: kind (decoded B-rep / saved mesh / parametric / box), surface types per body (plane, cylinder, cone, sphere, torus, revolution, ruled, hermite, bspline), triangles, area, closed/open, the reason when it is not true geometry; legend explains the badge. `docs/WHY-BOXY.md` lists what is still box/approximate per model and why.
+* Materials and textures: colours, transparency, shininess from the file's material table; per-body materials (graphics styles), layer/parameter fallbacks; Materials tab (usage counts, click to isolate), Colour-by-material, Textures toggle (built-in procedural patterns: the .rvt stores texture asset paths, not bitmaps, so textures are labelled "fallback"; inspector says colour/texture source per material).
+* Plug-ins: `docs/PLUGINS.md` (rvt-sheets mounts at /sheets/, drawing links, postMessage select/isolate).
+* `docs/SHOWCASE.md` + `tools/showcase.py`: which file shows which surface type; headless screenshots in screenshots/showcase/ (not committed).
+* Mesh quality check: reader meshes of curved solids whose triangle area disagrees with the analytic area are labelled approximate (torus), see NEEDS-FROM-READER.md section 10.
+
 ## Architecture
     .rvt --(rvt-research reader, rvtviewer/reader.py)--> records, headers, parameters
          --(rvtviewer/build.py + geom.py + brep.py + datums.py)--> element table, meshes per class, levels/grids/rooms/views
@@ -98,14 +105,17 @@ Floors: Volume within 5% for 87-100% (2020/18, 2026/55, 2026/58). Location check
 
 Samples 2020/2024/2026, family-heavy (2020 Residential, 2026 Facades) and MEP-heavy (2020 rme_advanced, 2024 HVAC, 2026 Plumbing) all convert and open. More files (2021-2025) converted OK via tools/batch.py, except 2021/24_rst_basic which the reader takes minutes on (reader-side).
 
-### Conversion pipeline and timings (this machine, 12 threads; tools/timing.py; reader time is session 176's pure-Python decoder)
-Stages (progress.json, shown in the UI): reading -> tables (+sqlite) -> preview (boxes, usable immediately) -> geometry (parallel worker processes, disk-cached by reader stamp + geometry source) -> packing.
-`open` returns at once: the server starts, the browser shows a progress card, then the box preview, then swaps in the full model without moving the camera. A reader/converter change marks open models stale (banner + Reconvert button).
-| file | cold (nothing cached) | reader cache warm | everything warm (re-convert) | my stages cold (tables / preview / geometry / packing) |
-|---|---|---|---|---|
-| 6 MB 2020 rst_basic | 20.5 s (reader 18.6) | 5.6 s | 1.3 s | 0.4 / 0.2 / 1.3 / 0.06 s |
-| 40 MB 2024 Snowdon Electrical | 47.2 s (reader 44.8) | 9.6 s | 2.5 s | 0.7 / 0.15 / 1.5 / 0.1 s |
-My own code is about 2.5 s of the 47 s cold run; the rest is the reader (single-threaded). Before this work my geometry stage alone took 12 s on the 35 MB MEP sample (now 2.4 s: parallel, pruned B-rep search, cached bounding boxes).
+### Conversion pipeline and timings (remote-host, 2026-10-12; tools/timings.py: each model in its own capped process)
+Stages (progress.json, shown in the UI): reading -> tables (+sqlite) -> preview (boxes, usable immediately) -> geometry (saved-graphics meshes decoded in forked workers, then the remaining builders in forked workers; disk-cached by reader stamp + geometry source) -> packing (meshes + materials).
+**First open is progressive**: `open` returns at once; the page shows a STILL PARSING banner (stage, counters such as `Reading saved graphics 233 / 535 elements`, live elapsed time and ETA, spinner driven by a local clock, so it never looks frozen), a PARTIAL MODEL watermark, levels/grids/boxes first, then finished meshes replacing translucent ghost boxes every ~12 s while the rest is decoded. When the model is complete the banner says so. A model that is already converted loads from the cache and says `Loaded from cache - reader version X - N elements in 0.x s`.
+| model | file | elements | cold open: reader decode + geometry (viewer caches bypassed) | stage seconds | cache-hit page load (headless, software GL) |
+|---|---|---|---|---|---|
+| residential-2020 | 10 MB | 7277 | 19 s | reader 4, tables 1, geometry 13 | 1.8 s |
+| facades-2026 | 53 MB | 9645 | 48 s | reader 8, tables 2, geometry 37 | 1.4 s |
+| hvac-2024 | 22 MB | 12679 | 142 s | reader 10, tables 1, geometry 117 | 1.8 s |
+| structural-2024 | 28 MB | 16571 | 121 s | reader 13, tables 1, geometry 90, packing 1 | 2.4 s |
+| mep-2020 | 35 MB | 29132 | see note | | |
+The reader's own caches (xcache) are used as shipped; the reader's Rust fast paths (extract, schemas, g103) are on by default and make the cold decode seconds instead of minutes. The geometry stage (the reader's element_mesh in Python, now 6 forked workers) is what remains; rvt-core is porting it to Rust. The mep-2020 cold open was killed by an 8 GB memory cap on remote-host on 2026-10-12 (peak during the parallel mesh workers); it is measured on remote-host instead (see PROGRESS.md).
 
 ### Performance
 Synthetic 150k elements / 1.8M triangles (tools/synth.py): metadata+GLB load 1.2 s (software GL), visibility change 5 ms. Real Intel Iris Xe (app-mode Chromium): GPU pick 4.5 ms, full 120k-triangle render 13 ms at 1906x972.
