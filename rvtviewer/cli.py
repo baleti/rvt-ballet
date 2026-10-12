@@ -76,7 +76,7 @@ def prepare(files):
         if done: print('[model] %s: already cached (%s)' % (os.path.basename(f), d)); line['model'] = 'cached'
         else:
             print('[model] converting %s (progress: see the banner when opened; this runs the capped converter) ...' % os.path.basename(f), flush=True)
-            r = subprocess.run([os.path.join(here, 'rvt-viewer'), 'convert', f, d])
+            r = subprocess.run([os.path.join(here, 'rvt-viewer'), 'convert', f, d], env=dict(os.environ, RVT_MAT_PY_MB=os.environ.get('RVT_MAT_PY_MB', '60')))      # offline prep: per-face materials (Python meshes) up to 60 MB
             if r.returncode != 0: print('[model] conversion FAILED (exit %d)' % r.returncode); line['model'] = 'FAILED'; summary.append(line); continue
             line['model'] = 'converted in %.0f s' % (time.time() - t)
         sm = {}
