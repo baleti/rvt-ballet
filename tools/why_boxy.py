@@ -26,7 +26,8 @@ def main(dirs):
             a = agg[(fid, cls)]; a[0] += 1; a[2].add(cat or '(none)')
             try: j = json.loads(info) if info else {}
             except Exception: j = {}
-            a[1][(j.get('reason') or j.get('source') or '?')[:150]] += 1
+            fl = [f for f in (j.get('flags') or []) if f in ('unsupported_faces', 'mesh_topology_suspect', 'symbol_no_graphics', 'void')]
+            a[1][(j.get('reason') or ((j.get('source') or '?') + (' [' + ', '.join(fl) + ']' if fl else '')))[:150]] += 1
         out += ['## %s  (%d drawn elements, %d not true geometry)' % (name, tot, sum(a[0] for a in agg.values())), '', '| fidelity | class | n | categories | reason(s) |', '|---|---|---|---|---|']
         for (fid, cls), a in sorted(agg.items(), key=lambda kv: (-kv[1][0], kv[0])):
             cats = ', '.join(sorted(a[2])[:3]) + (' hidden' if all(c in hid for c in a[2]) else '')
@@ -41,5 +42,5 @@ def main(dirs):
             '* **family instances in 2024-2026 files**: more symbols without saved graphics and more skipped faces than 2020 (see the reader table in docs/ACCEPTANCE-STATUS.md).']
     open(os.path.join(ROOT, 'docs', 'WHY-BOXY.md'), 'w').write('\n'.join(out) + '\n'); print('wrote docs/WHY-BOXY.md')
 if __name__ == '__main__':
-    dirs = [(os.path.basename(d.rstrip('/')), d) for d in sys.argv[1:]] or [(n, newest(s)) for n, s in REF if newest(s)]
+    dirs = [tuple(a.split('=', 1)) if '=' in a else (os.path.basename(a.rstrip('/')), a) for a in sys.argv[1:]] or [(n, newest(s)) for n, s in REF if newest(s)]
     main(dirs)

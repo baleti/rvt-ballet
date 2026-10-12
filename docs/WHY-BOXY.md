@@ -23,64 +23,68 @@ Per reference model: every class whose elements are not true geometry (decoded B
 | bbox | CategoryElem | 1 | Walls | reader: none (no_saved_graphics) (1) |
 | bbox | Property | 1 | Property Lines | reader: none (no_saved_graphics) (1) |
 
-## structural-2024  (2414 drawn elements, 89 not true geometry)
+## structural-2024  (2414 drawn elements, 113 not true geometry)
 
 | fidelity | class | n | categories | reason(s) |
 |---|---|---|---|---|
-| bbox | FamilyInstance | 57 | Generic Models, Structural Columns | ? (57) |
-| bbox | Rebar | 14 | Structural Rebar | ? (14) |
-| bbox | Viewer3d | 13 | Cameras hidden | ? (13) |
-| bbox | BasePoint | 2 | Project Base Point, Survey Point hidden | ? (2) |
-| bbox | VolumeOfInterest | 2 | Scope Boxes hidden | ? (2) |
-| bbox | CoordinateSystemDisplayElem | 1 | Internal Origin hidden | ? (1) |
+| bbox | FamilyInstance | 77 | Generic Models, Structural Columns, Structural Connections | reader: none (symbol_no_graphics) (57); reader: none (no_saved_graphics) (20) |
+| bbox | Rebar | 14 | Structural Rebar | reader: none (no_saved_graphics) (14) |
+| bbox | Viewer3d | 13 | Cameras hidden | reader: none (no_saved_graphics) (13) |
+| approx | ArcWall | 2 | Walls | own_geometry_in_bbox [mesh_topology_suspect] (2) |
+| approx | FamilyInstance | 2 | Structural Framing | own_geometry_in_bbox [mesh_topology_suspect] (2) |
+| bbox | BasePoint | 2 | Project Base Point, Survey Point hidden | reader: none (no_saved_graphics) (2) |
+| bbox | VolumeOfInterest | 2 | Scope Boxes hidden | reader: none (no_saved_graphics) (2) |
+| bbox | CoordinateSystemDisplayElem | 1 | Internal Origin hidden | reader: none (no_saved_graphics) (1) |
 
-## mep-2020  (10375 drawn elements, 1939 not true geometry)
-
-| fidelity | class | n | categories | reason(s) |
-|---|---|---|---|---|
-| matched | RbsDuctCurve | 706 | Ducts | ? (706) |
-| matched | RbsPipeCurve | 488 | Pipes | ? (488) |
-| bbox | Hub | 177 | Analytical Nodes hidden | ? (177) |
-| bbox | ReferencePoint | 177 | Analytical Nodes hidden | ? (177) |
-| bbox | AnalyticalModelColumn | 131 | Analytical Columns hidden | ? (131) |
-| matched | RbsFlexDuctCurve | 107 | Flex Ducts | ? (107) |
-| matched | SWall | 22 | Walls | ? (22) |
-| param | RbsDuctCurve | 22 | Ducts | ? (22) |
-| bbox | GStyleElem | 19 | Air Terminals, Analytical Columns, Callout Heads | ? (19) |
-| matched | CableTray | 17 | Cable Trays | ? (17) |
-| param | RbsConduitCurve | 15 | Conduits | ? (15) |
-| bbox | Viewer3d | 11 | Cameras hidden | ? (11) |
-| param | SWall | 11 | Walls | ? (11) |
-| bbox | CategoryElem | 7 | Curtain Panels, Duct Fittings, Mechanical Equipment | ? (7) |
-| bbox | ModelClipBox | 6 | Section Boxes | ? (6) |
-| param | RbsFlexDuctCurve | 6 | Flex Ducts | ? (6) |
-| bbox | MaterialElem | 4 | Curtain Wall Grids, Duct Fittings, Stairs | ? (4) |
-| matched | RbsConduitCurve | 4 | Conduits | ? (4) |
-| bbox | ElementGroup | 3 | Detail Groups | ? (3) |
-| bbox | BasePoint | 2 | Project Base Point, Survey Point hidden | ? (2) |
-| bbox | FillPatternElem | 2 | Floors | ? (2) |
-| bbox | FontElem | 1 | Analytical Nodes hidden | ? (1) |
-| bbox | PhaseFilterElem | 1 | Stairs | ? (1) |
-
-## hvac-2024  (2777 drawn elements, 1095 not true geometry)
+## mep-2020  (10375 drawn elements, 2006 not true geometry)
 
 | fidelity | class | n | categories | reason(s) |
 |---|---|---|---|---|
-| matched | RbsDuctCurve | 1048 | Ducts | ? (1048) |
-| matched | RbsFlexDuctCurve | 30 | Flex Ducts | ? (30) |
-| bbox | VolumeOfInterest | 5 | Scope Boxes hidden | ? (5) |
-| param | RbsDuctCurve | 5 | Ducts | ? (5) |
-| bbox | Viewer3d | 3 | Cameras hidden | ? (3) |
-| bbox | BasePoint | 2 | Project Base Point, Survey Point hidden | ? (2) |
-| bbox | CoordinateSystemDisplayElem | 1 | Internal Origin hidden | ? (1) |
-| param | RbsFlexDuctCurve | 1 | Flex Ducts | ? (1) |
+| matched | RbsDuctCurve | 706 | Ducts | parametric rebuild from stored parameters (706) |
+| matched | RbsPipeCurve | 488 | Pipes | parametric rebuild from stored parameters (488) |
+| bbox | Hub | 177 | Analytical Nodes hidden | reader: none (no_saved_graphics) (177) |
+| bbox | ReferencePoint | 177 | Analytical Nodes hidden | reader: none (no_saved_graphics) (177) |
+| bbox | AnalyticalModelColumn | 131 | Analytical Columns hidden | reader: none (no_saved_graphics) (131) |
+| matched | RbsFlexDuctCurve | 107 | Flex Ducts | parametric rebuild from stored parameters (107) |
+| approx | FamilyInstance | 67 | Conduit Fittings, Duct Fittings, Mechanical Equipment | symbol_instance [mesh_topology_suspect] (67) |
+| matched | SWall | 22 | Walls | saved graphics disagree with the stored box (IoU 0.00) (21); saved graphics disagree with the stored box (IoU 0.02) (1) |
+| param | RbsDuctCurve | 22 | Ducts | parametric rebuild from stored parameters (22) |
+| bbox | GStyleElem | 19 | Air Terminals, Analytical Columns, Callout Heads | reader: none (no_saved_graphics) (19) |
+| matched | CableTray | 17 | Cable Trays | parametric rebuild from stored parameters (17) |
+| param | RbsConduitCurve | 15 | Conduits | parametric rebuild from stored parameters (15) |
+| bbox | Viewer3d | 11 | Cameras hidden | reader: none (no_saved_graphics) (11) |
+| param | SWall | 11 | Walls | saved graphics disagree with the stored box (IoU 0.00) (10); saved graphics disagree with the stored box (IoU 0.02) (1) |
+| bbox | CategoryElem | 7 | Curtain Panels, Duct Fittings, Mechanical Equipment | reader: none (no_saved_graphics) (7) |
+| bbox | ModelClipBox | 6 | Section Boxes | reader: none (no_saved_graphics) (6) |
+| param | RbsFlexDuctCurve | 6 | Flex Ducts | parametric rebuild from stored parameters (6) |
+| bbox | MaterialElem | 4 | Curtain Wall Grids, Duct Fittings, Stairs | reader: none (no_saved_graphics) (4) |
+| matched | RbsConduitCurve | 4 | Conduits | parametric rebuild from stored parameters (4) |
+| bbox | ElementGroup | 3 | Detail Groups | reader: none (symbol_no_graphics, symbol_no_graphics, symbol_no_graphics) (2); reader: none (symbol_no_graphics, symbol_no_graphics, symbol_no_graphics, symbol_no_graphics, symbol_no_graphics, symbol_no_graphics, symbol_no_graphi (1) |
+| bbox | BasePoint | 2 | Project Base Point, Survey Point hidden | reader: none (no_saved_graphics) (2) |
+| bbox | FillPatternElem | 2 | Floors | reader: none (no_saved_graphics) (2) |
+| bbox | FontElem | 1 | Analytical Nodes hidden | reader: none (no_saved_graphics) (1) |
+| bbox | PhaseFilterElem | 1 | Stairs | reader: none (no_saved_graphics) (1) |
+
+## hvac-2024  (2777 drawn elements, 1399 not true geometry)
+
+| fidelity | class | n | categories | reason(s) |
+|---|---|---|---|---|
+| matched | RbsDuctCurve | 1048 | Ducts | parametric rebuild from stored parameters (1048) |
+| approx | FamilyInstance | 304 | Duct Fittings | symbol_instance [mesh_topology_suspect] (304) |
+| matched | RbsFlexDuctCurve | 30 | Flex Ducts | parametric rebuild from stored parameters (30) |
+| bbox | VolumeOfInterest | 5 | Scope Boxes hidden | reader: none (no_saved_graphics) (5) |
+| param | RbsDuctCurve | 5 | Ducts | parametric rebuild from stored parameters (5) |
+| bbox | Viewer3d | 3 | Cameras hidden | reader: none (no_saved_graphics) (3) |
+| bbox | BasePoint | 2 | Project Base Point, Survey Point hidden | reader: none (no_saved_graphics) (2) |
+| bbox | CoordinateSystemDisplayElem | 1 | Internal Origin hidden | reader: none (no_saved_graphics) (1) |
+| param | RbsFlexDuctCurve | 1 | Flex Ducts | parametric rebuild from stored parameters (1) |
 
 ## facades-2026  (727 drawn elements, 75 not true geometry)
 
 | fidelity | class | n | categories | reason(s) |
 |---|---|---|---|---|
 | bbox | ElementGroup | 39 | Model Groups | reader: none (no_saved_graphics) (39) |
-| approx | FamilyInstance | 22 | Generic Models | symbol_instance (22) |
+| approx | FamilyInstance | 22 | Generic Models | symbol_instance [mesh_topology_suspect] (22) |
 | bbox | Viewer3d | 4 | Cameras hidden | reader: none (no_saved_graphics) (4) |
 | bbox | VolumeOfInterest | 4 | Scope Boxes hidden | reader: none (no_saved_graphics) (4) |
 | bbox | BasePoint | 2 | Project Base Point, Survey Point hidden | reader: none (no_saved_graphics) (2) |
