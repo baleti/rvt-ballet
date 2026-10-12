@@ -1,7 +1,7 @@
 // materials: palette texture (colour/alpha, texture class + real-world scale, hash colour) and built-in procedural pattern array (the .rvt stores texture asset PATHS, not the bitmaps)
 import * as THREE from 'three';
 
-const CLASSES = ['none', 'brick', 'concrete', 'wood', 'stone', 'metal', 'glass', 'tile', 'plaster', 'grass', 'water', 'roof', 'insulation'];
+const CLASSES = ['none', 'brick', 'concrete', 'wood', 'stone', 'metal', 'glass', 'tile', 'plaster', 'grass', 'water', 'roof', 'insulation', 'siding', 'carpet'];
 const SZ = 128;
 function rng(seed) { let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 function noiseGrid(n, r) { const g = new Float32Array(n * n); for (let i = 0; i < g.length; i++) g[i] = r(); return g; }
@@ -19,9 +19,11 @@ function pattern(cls) {
   for (let y = 0; y < SZ; y++) for (let x = 0; x < SZ; x++) {
     const u = x / SZ, v = y / SZ; let val = 1;
     if (cls === 'brick') { const rows = 8, row = Math.floor(v * rows), off = (row % 2) * .5, bw = 1 / 4; const bx = ((u + off * bw * 2) % bw) / bw, by = (v * rows) % 1; const mort = (bx < .06 || by < .1) ? 1 : 0; const id = Math.floor((u + off * bw * 2) / bw) + row * 7; const tone = .85 + .3 * ((Math.sin(id * 12.9898) * 43758.5453) % 1 + 1) % 1 * .5; val = mort ? .62 : tone * (.92 + .16 * fbm(g, N, u * N, v * N, 3)); }
+    else if (cls === 'siding') { const rows = 8, by = (v * rows) % 1, row = Math.floor(v * rows); val = (by > .9 ? .6 : .82 + .2 * by) * (.96 + .08 * fbm(g, N, u * 2, v * N, 2)) * (.97 + .06 * ((row * 0.618) % 1)); }
+    else if (cls === 'carpet') val = .85 + .3 * fbm(g, N, u * N * 2 % N, v * N * 2 % N, 2) * (.7 + .6 * r());
     else if (cls === 'concrete') val = .86 + .28 * fbm(g, N, u * N, v * N, 5) + (r() < .01 ? -.15 : 0);
     else if (cls === 'plaster') val = .95 + .1 * fbm(g, N, u * N, v * N, 3);
-    else if (cls === 'wood') { const t = fbm(g, N, u * 3, v * N, 3) * 6 + u * 20; val = .8 + .35 * (Math.sin(t * 3.1) * .5 + .5) * (.8 + .4 * fbm(g2, N, u * N, v * 3, 2)); }
+    else if (cls === 'wood') { const t = fbm(g, N, u * 2, v * N, 3) * 2.5 + u * 40; val = .86 + .22 * (Math.sin(t * 3.1) * .5 + .5) * (.85 + .3 * fbm(g2, N, u * N, v * 2, 2)); }
     else if (cls === 'stone') { const cx = Math.floor(u * 4), cy = Math.floor(v * 4), id = cx + cy * 4; const bx = (u * 4) % 1, by = (v * 4) % 1; const edge = (bx < .04 || by < .04); val = edge ? .6 : (.8 + .35 * g[id % (N * N)]) * (.92 + .16 * fbm(g2, N, u * N, v * N, 4)); }
     else if (cls === 'metal') val = .88 + .2 * vnoise(g, N, u * 2, v * N) + .05 * Math.sin(v * 220);
     else if (cls === 'glass') val = .96 + .1 * Math.max(0, Math.sin((u + v) * Math.PI * 2) * .5);
@@ -45,7 +47,7 @@ export function patternTexture() {
 }
 // palette (float RGBA, width = number of materials): row0 = rgb colour + alpha, row1 = texture class, real-world tile size x/y (m), angle (rad),
 // row2 = distinct hash colour (colour-by-material mode), row3 = image layer (0 = none, n = layer n-1 of imageTextures), offset x/y (m)
-const DEF_FT = {brick: 2.2, concrete: 6, wood: 4, stone: 4, metal: 3, glass: 6, tile: 2, plaster: 8, grass: 4, water: 6, roof: 3, insulation: 3};
+const DEF_FT = {brick: 2.2, concrete: 6, wood: 4, stone: 4, metal: 3, glass: 6, tile: 2, plaster: 8, grass: 4, water: 6, roof: 3, insulation: 3, siding: 4, carpet: 3};
 export function paletteTexture(mats, layers) {
   const n = Math.max(1, mats.length), D = new Float32Array(n * 4 * 4);
   mats.forEach((m, i) => {

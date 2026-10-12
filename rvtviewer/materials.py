@@ -4,9 +4,9 @@ draws a built-in procedural texture of the matching class ('fallback'), scaled b
 import os, re
 from . import reader
 
-TEX_CLASSES = ['none', 'brick', 'concrete', 'wood', 'stone', 'metal', 'glass', 'tile', 'plaster', 'grass', 'water', 'roof', 'insulation']
+TEX_CLASSES = ['none', 'brick', 'concrete', 'wood', 'stone', 'metal', 'glass', 'tile', 'plaster', 'grass', 'water', 'roof', 'insulation', 'siding', 'carpet']
 _RULES = [   # (class, regex over name + class + category + texture path + schema)
-    ('glass', r'glass|glaz|window|mirror'), ('water', r'water|pool'), ('stone', r'stone|granite|marble|slate|limestone|sandstone'), ('brick', r'brick|masonry|cmu|block\b'), ('tile', r'tile|ceramic|porcelain|terrazzo|mosaic'),
+    ('siding', r'siding|clapboard|weatherboard|lap board|cladding.*board'), ('roof', r'shingle|shake'), ('carpet', r'carpet|rug|fabric|textile|upholster'), ('glass', r'glass|glaz|window|mirror'), ('water', r'water|pool'), ('stone', r'stone|granite|marble|slate|limestone|sandstone'), ('brick', r'brick|masonry|cmu|block\b'), ('tile', r'tile|ceramic|porcelain|terrazzo|mosaic'),
     ('wood', r'wood|timber|oak|pine|maple|walnut|birch|cherry|lumber|plywood|hardwood|laminate|veneer|door'), ('stone', r'stone|granite|marble|slate|limestone|sandstone|gravel|paving|rock'),
     ('concrete', r'concrete|cement|screed|cast.?in|precast|footing'), ('metal', r'metal|steel|alumin|iron|copper|bronze|brass|zinc|chrome|stainless|galvan'),
     ('plaster', r'plaster|gypsum|drywall|paint|stucco|render|gwb|wallboard|finish'), ('grass', r'grass|lawn|turf|soil|earth|planting|vegetation|landscap|topsoil|sod'),

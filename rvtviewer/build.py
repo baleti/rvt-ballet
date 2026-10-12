@@ -868,6 +868,7 @@ def body_summary(P, nid, fid=None, surf=None, limit=12):
     return out
 
 _GST = {}
+_SYM_NM = {}
 
 def body_materials(GG, src, e):
     """{nid: Revit material id}: the material of each saved-graphics body = graphics style of the Geometry node's category (own nodes: nid = node index; symbol instances: nid = 2e7 + k*1e5 + node index of the k-th drawn symbol)"""
@@ -893,12 +894,13 @@ def body_materials(GG, src, e):
     for z in inst:
         ii = EM._ob(z['m_instanceInfo']); sid = ii.get('m_symbolId')
         if not ii.get('m_Trf') or sid is None: continue
-        sr = d.rec(int(sid))
-        if sr is None: continue
-        sg, _si = nodes(sr['fields'])
-        if not sg: continue
+        key = (src, int(sid))
+        if key not in _SYM_NM:                                  # symbols repeat across instances: their node materials once per symbol
+            sr = d.rec(int(sid)); sg = nodes(sr['fields'])[0] if sr is not None else []
+            _SYM_NM[key] = node_mats(sg) if sg else None
+        if not _SYM_NM[key]: continue
         k += 1
-        for gi, m in enumerate(node_mats(sg)):
+        for gi, m in enumerate(_SYM_NM[key]):
             if m is not None: mp[2 * 10 ** 7 + k * 100000 + gi] = m
     return mp
 
@@ -1041,6 +1043,17 @@ def _mesh_workers():
     except Exception: pass
     return int(os.environ.get('RVT_WORKERS', n))
 
+def _stream_has_materials(fm, todo):
+    """does the Rust mesh stream return the per-triangle material ('mat') the Python element_mesh returns? (probe a few elements)"""
+    try:
+        VF = fast_module(); seen = 0
+        for e, a in VF.em_geometries(fm, todo[:6]):
+            if a.get('confidence') == 'mesh_approx':
+                if a.get('mat') is not None: return True
+                seen += 1
+        return seen == 0
+    except Exception: return False
+
 def prefetch_reader_meshes(ctx, els, prog=None, on_partial=None):
     """saved-graphics meshes of every element that takes them, decoded in forked workers (the reader document is built once in the parent and shared copy-on-write); partial results stream into the progressive display"""
     ctx._rm = None; out = {}; n = 0; last_p = time.time(); idx = {el['id']: i for i, el in enumerate(els)}
@@ -1053,6 +1066,8 @@ def prefetch_reader_meshes(ctx, els, prog=None, on_partial=None):
             on_partial([(idx[e_], r_[1], 'tri', [(r_[0].v, r_[0].f, None)] if not isinstance(r_[0], geom.Multi) else [(pm.v, pm.f, rgb, getattr(pm, 'mat', None)) for pm, rgb in r_[0].parts], getattr(r_[0], 'info', None)) for e_, r_ in out.items() if r_ is not None], n, total); last_p = time.time()
         if prog and (n % 40 == 0 or n == total): prog.set('geometry', 0.4 * n / max(1, total), 'reading saved-graphics meshes %d/%d%s' % (n, total, ' (%d workers)' % nw if nw > 1 else ''), done=n, total=total, sub='Reading saved graphics (decoding meshes)')
     fm = getattr(ctx, 'fm', None)
+    if fm is not None and todo and not _stream_has_materials(fm, todo) and os.path.getsize(ctx.src) <= float(os.environ.get('RVT_MAT_PY_MB', '25')) * 1e6:
+        print('the Rust mesh stream has no per-face materials yet: Python meshes for this file (<= %s MB)' % os.environ.get('RVT_MAT_PY_MB', '25')); fm = None      # interim, until rvt-core mirrors element_mesh 'mat'
     if fm is not None and todo:                              # Rust streaming meshes (parallel, results as they finish); analytic-builder classes still go through reader_mesh
         try:
             VF = fast_module(); stream = VF.em_geometries(fm, todo)
