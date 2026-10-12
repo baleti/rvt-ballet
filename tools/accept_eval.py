@@ -74,6 +74,7 @@ def main(path):
         except Exception: r_ = None
         if r_ is None: continue
         mesh, fid = r_
+        if fid == 'void': cls[el['cls']]['void'] = cls[el['cls']].get('void', 0) + 1; continue      # no 3D solid in Revit either (void-only / reference families): its own bucket, not box-only
         if getattr(mesh, 'kind', 'tri') != 'tri': continue
         parts = [(pm.v, pm.f) for pm, _ in (mesh.parts if hasattr(mesh, 'parts') else [(mesh, None)])]; kind = 'tri'
         c = cls[el['cls']]; c['n'] += 1

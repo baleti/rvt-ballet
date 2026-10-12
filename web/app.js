@@ -6,8 +6,8 @@ import {patternTexture, paletteTexture, imageTextures, CLASSES as TEXCLASSES} fr
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 const TW = 2048;                       // state texture width
-const FID = ['solid', 'mesh', 'matched', 'param', 'approx', 'bbox', 'line', 'none'];
-const FIDCOL = {solid: '#2e9e5b', mesh: '#1f8f6f', matched: '#6cc24a', param: '#3a7bd5', approx: '#1fa7b0', bbox: '#d08a2a', line: '#8a5fd0', none: '#666'};
+const FID = ['solid', 'mesh', 'matched', 'param', 'approx', 'bbox', 'line', 'void', 'none'];
+const FIDCOL = {solid: '#2e9e5b', mesh: '#1f8f6f', matched: '#6cc24a', param: '#3a7bd5', approx: '#1fa7b0', bbox: '#d08a2a', line: '#8a5fd0', void: '#999', none: '#666'};
 const S = {meta: null, mid: null, N: 0, sel: new Set(), hidden: new Uint8Array(0), catHidden: new Set(), lvlHidden: new Set(), isolate: null, showNoGeo: false,
            byCat: new Map(), catOf: [], tab: 'tree', fidMode: 0, measure: false, mpts: [], hoverI: -1, hits: []};
 window.S = S;
@@ -579,7 +579,7 @@ function renderCov(tb) {
   });
 }
 function setupLegend() {
-  $('#legend').innerHTML = FID.slice(0, 7).map(f => `<div title="${esc((S.meta.fidLabels || {})[f] || '')}"><i style="background:${FIDCOL[f]}"></i>${f}</div>`).join('') + '<div class="dim" style="margin-top:4px">inspector badge: B-rep surface types per body (plane, cylinder, cone, sphere, torus, revolution, ruled, hermite, bspline), saved mesh, parametric rebuild, or box</div>';
+  $('#legend').innerHTML = FID.slice(0, 8).map(f => `<div title="${esc((S.meta.fidLabels || {})[f] || '')}"><i style="background:${FIDCOL[f]}"></i>${f}</div>`).join('') + '<div class="dim" style="margin-top:4px">inspector badge: B-rep surface types per body (plane, cylinder, cone, sphere, torus, revolution, ruled, hermite, bspline), saved mesh, parametric rebuild, or box</div>';
 }
 
 // ------------------------------------------------------------------ search

@@ -4,8 +4,8 @@ import numpy as np
 from . import reader, geom, glb
 from .geom import Mesh
 
-FID_ORDER = ['solid', 'mesh', 'matched', 'param', 'approx', 'bbox', 'line', 'none']      # honesty ladder shown in the UI
-FID_LABEL = {'solid': 'decoded B-rep (true geometry from the element\'s own faces)', 'mesh': 'triangle mesh Revit saved with the element (true geometry; planar + cylindrical faces)', 'matched': 'rebuilt from stored data; extents agree with the bounding box Revit stored (IoU >= 0.97, or inside it spanning >= 93% of its two largest dimensions)', 'param': 'rebuilt from stored parameters (approximate: no joins/openings)', 'approx': 'footprint from stored curves, height range from the Revit bounding box (slopes not modelled)', 'bbox': 'placeholder at true bounding box', 'line': 'curve', 'none': 'no geometry'}
+FID_ORDER = ['solid', 'mesh', 'matched', 'param', 'approx', 'bbox', 'line', 'void', 'none']      # honesty ladder shown in the UI
+FID_LABEL = {'solid': 'decoded B-rep (true geometry from the element\'s own faces)', 'mesh': 'triangle mesh Revit saved with the element (true geometry; planar + cylindrical faces)', 'matched': 'rebuilt from stored data; extents agree with the bounding box Revit stored (IoU >= 0.97, or inside it spanning >= 93% of its two largest dimensions)', 'param': 'rebuilt from stored parameters (approximate: no joins/openings)', 'approx': 'footprint from stored curves, height range from the Revit bounding box (slopes not modelled)', 'bbox': 'placeholder at true bounding box', 'line': 'curve', 'void': 'no 3D solid in Revit either (void-only opening / reference family, Revit Volume 0): stored bounding box drawn as an outline', 'none': 'no geometry'}
 
 CAT_COLORS = {
     'Walls': (0.82, 0.80, 0.76), 'Floors': (0.70, 0.66, 0.60), 'Roofs': (0.60, 0.35, 0.30), 'Ceilings': (0.90, 0.90, 0.88),
@@ -1144,7 +1144,7 @@ def _element_mesh(ctx, e, r):
         try:
             res = fn(ctx, e, r)
             if res and res[0] and res[1] == 'bbox' and 'symbol_no_graphics' in str(ctx._why.get(e) or '') and getattr(res[0], 'kind', 'tri') == 'tri':
-                return feature_edges(res[0]), 'bbox'                 # oriented placeholder of a symbol without 3D graphics: outline only
+                return feature_edges(res[0]), 'void'                 # oriented placeholder of a symbol without 3D graphics: outline only
             if res and res[0]:
                 if r['class'] in ('Floor', 'Ceiling', 'RoofSoffit', 'BuildingPad', 'ProfileRoof', 'FootPrintRoof') and not isinstance(res[0], geom.Multi):
                     col = dominant_rgb(type_layers(ctx, type_of(ctx, e, r)))
@@ -1161,7 +1161,7 @@ def _element_mesh(ctx, e, r):
             if polys: return SegSet(polys), 'line'
         except Exception: pass
     if bb is not None and 'symbol_no_graphics' in str(ctx._why.get(e) or ''):      # the family symbol stores no 3D graphics (void-only openings, reference families): an outline, not a solid that would plug the hole it cuts
-        return box_edges(*bb), 'bbox'
+        return box_edges(*bb), 'void'
     if bb is not None: return geom.box(*bb), 'bbox'
     return None
 
