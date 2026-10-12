@@ -931,18 +931,50 @@ def build_grids(ctx):
 STAGES = ['reading', 'tables', 'preview', 'geometry', 'packing', 'done']
 
 class Progress:
-    """writes outdir/progress.json (stage, pct, message, per-stage seconds) atomically; the server exposes it so the UI can show a progress bar"""
-    def __init__(self, outdir, log):
-        self.dir = outdir; self.log = log; self.t0 = time.time(); self.times = {}; self.ts = time.time(); self.stage = None
-    def set(self, stage, pct=0.0, msg=''):
+    """writes outdir/progress.json (stage, pct, message, counters, ETA, per-stage seconds) atomically; the server exposes it so the UI can show a progress bar.
+    While the reader decodes (no counters of its own yet) a heartbeat thread keeps elapsed time and the reader's own progress file (~/.cache/rvt-progress/*.json, when present) fresh."""
+    def __init__(self, outdir, log, size_mb=None, src=None):
+        self.dir = outdir; self.log = log; self.t0 = time.time(); self.times = {}; self.ts = time.time(); self.stage = None; self.size_mb = size_mb; self.src = src
+        self.extra = {}; self.last = ('', 0.0, ''); self._hb = None
+    def eta_total(self):
+        """rough total seconds from earlier conversions (seconds per MB, ~/.cache/rvt-viewer/timing.json)"""
+        try: rate = json.load(open(os.path.join(reader.CACHE_DIR, 'timing.json'))).get('s_per_mb')
+        except Exception: rate = None
+        return round(self.size_mb * rate) if (rate and self.size_mb) else None
+    def set(self, stage, pct=0.0, msg='', **extra):
         now = time.time()
-        if self.stage and stage != self.stage: self.times[self.stage] = round(now - self.ts, 2); self.ts = now
-        self.stage = stage
-        d = {'stage': stage, 'stages': STAGES, 'pct': round(pct, 3), 'msg': msg, 'elapsed': round(now - self.t0, 1), 'times': self.times}
+        if self.stage and stage != self.stage: self.times[self.stage] = round(now - self.ts, 2); self.ts = now; self.extra = {}
+        self.stage = stage; self.extra.update(extra); self.last = (stage, pct, msg)
+        el = now - self.ts; eta = (el * (1 - pct) / pct) if (pct and 0.03 < pct < 1) else None
+        d = {'stage': stage, 'stages': STAGES, 'pct': round(pct, 3), 'msg': msg, 'elapsed': round(now - self.t0, 1), 'started': self.t0, 'stage_elapsed': round(el, 1), 'eta_stage': None if eta is None else round(eta, 1),
+             'eta_total': self.eta_total(), 'times': self.times, 'size_mb': self.size_mb, 'reader': reader.reader_stamp(), 'updated': now, **self.extra}
+        rp = self.reader_progress()
+        if rp: d['reader_progress'] = rp
         try:
             fn = os.path.join(self.dir, 'progress.json'); open(fn + '.tmp', 'w').write(json.dumps(d)); os.replace(fn + '.tmp', fn)
         except OSError: pass
         if msg: self.log('[%s] %s' % (stage, msg))
+    def reader_progress(self):
+        """the Rust/Python reader's own progress file for this input, if it writes one: ~/.cache/rvt-progress/<hash>.json with the input path inside"""
+        if not self.src: return None
+        try:
+            import glob
+            for f in glob.glob(os.path.expanduser('~/.cache/rvt-progress/*.json')):
+                if time.time() - os.path.getmtime(f) > 600: continue
+                d = json.load(open(f))
+                if os.path.abspath(str(d.get('file') or d.get('path') or d.get('input') or '')) == os.path.abspath(self.src): return d
+        except Exception: pass
+        return None
+    def start_heartbeat(self):
+        import threading
+        stop = threading.Event()
+        def beat():
+            while not stop.wait(1.0):
+                st, pct, msg = self.last
+                if st == 'reading': self.set(st, pct, '', **self.extra)
+        self._hb = stop; threading.Thread(target=beat, daemon=True).start()
+    def stop_heartbeat(self):
+        if self._hb: self._hb.set()
 
 _G = {}      # fork-shared state for the geometry workers
 
@@ -967,22 +999,25 @@ def geometry_cache_key():
     for f in ('geom.py', 'occ.py', 'brep.py', 'build_util.py'): h.update(open(os.path.join(d, f), 'rb').read())
     return h.hexdigest()[:12]
 
-def run_geometry(ctx, els, prog, workers=None):
+def run_geometry(ctx, els, prog, workers=None, on_partial=None):
     """per-element geometry, cached on disk by (reader stamp + geometry source) and computed in parallel worker processes (fork: the decoded model is shared copy-on-write)"""
     import pickle, multiprocessing as mp
     key = geometry_cache_key(); fn = os.path.join(reader.CACHE_DIR, 'geom-%s-%s.pkl' % (hashlib.md5(ctx.raw_key.encode()).hexdigest()[:10], key))
-    if os.path.exists(fn):
-        t = time.time(); res = pickle.load(open(fn, 'rb')); prog.set('geometry', 1.0, 'geometry cache hit (%.1fs)' % (time.time() - t)); return res
+    if os.path.exists(fn) and not os.environ.get('RVT_NO_GEOM_CACHE'):
+        t = time.time(); res = pickle.load(open(fn, 'rb')); prog.set('geometry', 1.0, 'geometry cache hit (%.1fs)' % (time.time() - t), done=len(els), total=len(els), cache_hit=True); return res
     ensure_roofs(ctx); prefetch_reader_meshes(ctx, els, prog)
     _G['ctx'] = ctx; _G['els'] = els
     n = len(els); step = 150; chunks = [(a, min(a + step, n)) for a in range(0, n, step)]
     nw = workers or max(1, min(6, (os.cpu_count() or 2) - 1)); res = []
     if nw == 1 or n < 400:
-        for k, c in enumerate(chunks): res += _geo_chunk(c); prog.set('geometry', (k + 1) / len(chunks), '')
+        for k, c in enumerate(chunks): res += _geo_chunk(c); prog.set('geometry', (k + 1) / len(chunks), '', done=min(n, (k + 1) * step), total=n)
     else:
+        last_partial = time.time(); done_el = 0
         with mp.get_context('fork').Pool(nw) as pool:
             for k, r in enumerate(pool.imap_unordered(_geo_chunk, chunks)):
-                res += r; prog.set('geometry', (k + 1) / len(chunks), 'geometry %d/%d chunks (%d workers)' % (k + 1, len(chunks), nw) if k % 10 == 0 else '')
+                res += r; done_el = min(n, (k + 1) * step)
+                prog.set('geometry', (k + 1) / len(chunks), 'geometry %d/%d chunks (%d workers)' % (k + 1, len(chunks), nw) if k % 10 == 0 else '', done=done_el, total=n)
+                if on_partial and k + 1 < len(chunks) and time.time() - last_partial > 12: on_partial(res, done_el, n); last_partial = time.time()
     res.sort(key=lambda t: t[0])
     try: pickle.dump(res, open(fn + '.tmp', 'wb'), protocol=5); os.replace(fn + '.tmp', fn)
     except Exception: pass
@@ -1000,7 +1035,7 @@ def pack_batches(els, res, previews=False):
             allv = np.vstack([p[0] for p in parts]); el['iou'] = round(box_iou(allv.min(0), allv.max(0), *el['bb']), 3); ious.setdefault(el['cat'], []).append(el['iou'])
             if fid == 'param' and (el['iou'] >= 0.97 or contained_match(allv.min(0), allv.max(0), *el['bb'])): fid = 'matched'
         el['fid'] = fid; covg[el['cat']][fid] += 1; covc[el['cls']][fid] += 1
-        transl = (fid == 'bbox' and el['cat'] in TRANSLUCENT_CATS) or 'void' in ((el['ginfo'] or {}).get('flags') or [])
+        transl = (fid == 'bbox' and el['cat'] in TRANSLUCENT_CATS) or fid == 'pending' or 'void' in ((el['ginfo'] or {}).get('flags') or [])
         for pv, pf, rgb in parts:
             hexc = None if rgb is None else '%02x%02x%02x' % tuple(int(x * 255) for x in rgb)
             a = acc.setdefault((el['cat'], kind, transl, hexc), {'pos': [], 'idx': [], 'eidx': [], 'ranges': [], 'nv': 0, 'nt': 0})
@@ -1010,7 +1045,7 @@ def pack_batches(els, res, previews=False):
     for (cat, kind, transl, hexc), a in acc.items():
         pos = glb.to_yup_m(np.vstack(a['pos'])); idx = np.concatenate(a['idx']).astype(np.uint32)
         c = (0.1, 0.1, 0.12) if kind == 'line' else (tuple(int(hexc[k:k + 2], 16) / 255 for k in (0, 2, 4)) if hexc else cat_color(cat))
-        alpha = 0.45 if cat in ('Windows', 'Curtain Panels') else ((0.08 if cat in ('Planting', 'Entourage') else 0.18) if transl else 1.0)
+        alpha = 0.45 if cat in ('Windows', 'Curtain Panels') else ((0.08 if cat in ('Planting', 'Entourage') else 0.14) if transl else 1.0)
         batches.append({'name': cat + ('' if kind == 'tri' else ' (lines)'), 'color': (*c, alpha), 'pos': pos, 'eidx': np.concatenate(a['eidx']), 'idx': idx, 'mode': 1 if kind == 'line' else 4})
         bmeta.append({'cat': cat, 'kind': kind, 'color': '#%02x%02x%02x' % tuple(int(x * 255) for x in c), 'alpha': alpha, 'ranges': a['ranges'], 'tris': a['nt']})
     return batches, bmeta, covg, covc, ious
@@ -1037,9 +1072,17 @@ def convert(path, outdir, log=print, workers=None):
     """rvt -> outdir. Stages (progress.json): reading (reader), tables (+sqlite), preview (boxes only: meta.json phase=preview + preview.glb, usable at once), geometry (parallel,
     cached), packing (model.glb, final meta.json phase=done)."""
     import pickle
-    os.makedirs(outdir, exist_ok=True); prog = Progress(outdir, log); T = {}
-    prog.set('reading', 0.0, 'decoding %s with the reader' % os.path.basename(path))
-    t = time.time(); raw = reader.cached_load(path, log); T['reader'] = round(time.time() - t, 2); ctx = Ctx(raw)
+    os.makedirs(outdir, exist_ok=True); prog = Progress(outdir, log, size_mb=os.path.getsize(path) / 1e6, src=path); T = {}; cold = [True]
+    def rlog(m):
+        log(m)
+        if 'raw cache hit' in m: cold[0] = False; prog.extra['raw_cache_hit'] = True
+    prog.set('reading', 0.0, 'decoding %s with the reader' % os.path.basename(path)); prog.start_heartbeat()
+    t = time.time(); raw = reader.cached_load(path, rlog); T['reader'] = round(time.time() - t, 2); ctx = Ctx(raw); prog.stop_heartbeat()
+    if cold[0]:                                                          # remember the cold decode speed for ETAs
+        try:
+            tf = os.path.join(reader.CACHE_DIR, 'timing.json'); old = json.load(open(tf)) if os.path.exists(tf) else {}
+            old['s_per_mb'] = round(T['reader'] / max(os.path.getsize(path) / 1e6, 0.5), 3); json.dump(old, open(tf, 'w'))
+        except Exception: pass
     ctx.src = path
     try: reader._import(); import rvt_geometry as GG; GG.file_geometry_index(path)        # load the reader's geometry context before the worker processes fork
     except Exception: pass
@@ -1095,9 +1138,20 @@ def convert(path, outdir, log=print, workers=None):
                                          'elements': [[el['id'], el['cls'], el['cat'], el['name'], el['type'], el['level'], el['fid'], el['isType'], el['family'], el['phase']] for el in pels], 'built': time.time(), 'buildSecs': 0})
     json.dump(meta, open(os.path.join(outdir, 'meta.json'), 'w'), separators=(',', ':'))
     T['preview'] = round(time.time() - t, 2)
-    prog.set('geometry', 0.0, 'building geometry')
-    t = time.time(); res = run_geometry(ctx, els, prog, workers); T['geometry'] = round(time.time() - t, 2)
-    prog.set('packing', 0.0, 'packing glTF')
+    prog.set('geometry', 0.0, 'building geometry', done=0, total=len(els))
+    prev_by_i = {t_[0]: t_ for t_ in pres}; rev = [0]
+    def on_partial(res_, done_el, n_):
+        """progressive display: finished elements as real meshes, the rest as translucent ghost boxes; replaces preview.glb + meta.json (phase stays 'preview') so the open page can refresh itself"""
+        got = {t_[0] for t_ in res_}; allr = list(res_) + [(i, 'pending', 'tri', prev_by_i[i][3], None) for i in prev_by_i if i not in got]
+        pe = [dict(e) for e in els]; b_, m_, cg_, _, _ = pack_batches(pe, allr)
+        glb.write_glb(os.path.join(outdir, 'preview.glb.tmp'), b_)
+        mt = dict(base_meta); mt.update({'phase': 'preview', 'batches': m_, 'bbox': model_bbox(pe), 'coverage': {k: dict(v) for k, v in cg_.items()}, 'coverageByClass': {}, 'bboxAgreement': {}, 'pending': sum(1 for i in prev_by_i if i not in got),
+                                         'elements': [[e['id'], e['cls'], e['cat'], e['name'], e['type'], e['level'], e['fid'], e['isType'], e['family'], e['phase']] for e in pe], 'built': time.time(), 'buildSecs': 0})
+        json.dump(mt, open(os.path.join(outdir, 'meta.json.tmp'), 'w'), separators=(',', ':'))
+        os.replace(os.path.join(outdir, 'preview.glb.tmp'), os.path.join(outdir, 'preview.glb')); os.replace(os.path.join(outdir, 'meta.json.tmp'), os.path.join(outdir, 'meta.json'))
+        rev[0] += 1; prog.set('geometry', prog.last[1], prog.last[2], partial_rev=rev[0], pending=mt['pending'])
+    t = time.time(); res = run_geometry(ctx, els, prog, workers, on_partial); T['geometry'] = round(time.time() - t, 2)
+    prog.set('packing', 0.0, 'packing glTF (meshes, materials)', done=len(els), total=len(els))
     t = time.time(); batches, bmeta, covg, covc, ious = pack_batches(els, res)
     glb.write_glb(os.path.join(outdir, 'model.glb'), batches)
     db.executemany('insert into ginfo values(?,?)', [(el['i'], json.dumps(el['ginfo'])) for el in els if el.get('ginfo')])

@@ -120,15 +120,47 @@ let dirty = true;
 
 // ------------------------------------------------------------------ load
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const STAGE_LABEL = {reading: 'Reading file / decoding records', tables: 'Building element tables', preview: 'Box preview', geometry: 'Building geometry', packing: 'Packing meshes + materials', done: 'Done'};
+let parseState = null, parseTick = null;
+function fmtT(s) { s = Math.max(0, Math.round(s)); return s >= 60 ? Math.floor(s / 60) + ' min ' + String(s % 60).padStart(2, '0') + ' s' : s + ' s'; }
 function showProgress(pr, floating) {
+  // full panel while there is no model to show yet, banner + watermark afterwards (the banner stays on every tab and while navigating)
+  parseState = pr; startParseTick(); renderParseBar();
   const el = $('#progress'); const st = pr.stages || []; const idx = Math.max(0, st.indexOf(pr.stage));
   const overall = pr.stage === 'done' ? 1 : (idx + (pr.pct || 0)) / Math.max(1, st.length - 1);
-  const labels = {reading: 'Reading file (decoding records)', tables: 'Building element tables', preview: 'Box preview', geometry: 'Building geometry', packing: 'Packing meshes', done: 'Done'};
-  el.hidden = false; el.className = floating ? 'float' : '';
-  el.innerHTML = (floating ? '' : '<h3>Opening model</h3>') + `<div class="pbar"><div style="width:${(overall * 100).toFixed(0)}%"></div></div>` +
-    (floating ? `<span>Refining geometry: ${esc(labels[pr.stage] || pr.stage)} ${Math.round(overall * 100)}%</span>` :
-     st.filter(x => x !== 'done').map((x, i) => `<div class="stg ${i < idx ? 'ok' : i === idx ? 'cur' : ''}">${i < idx ? '\u2713' : i === idx ? '\u25b6' : '\u00b7'} ${labels[x] || x}</div>`).join('') +
-     `<div class="dim">${esc(pr.msg || '')}<br>${(pr.elapsed || 0).toFixed(0)} s elapsed. The first open of a file decodes it with the reader (minutes for big files); later opens are instant.</div>`);
+  if (floating) { el.hidden = true; return; }
+  el.hidden = false; el.className = '';
+  el.innerHTML = '<h3>Opening model - still parsing</h3>' + `<div class="pbar"><div style="width:${(overall * 100).toFixed(0)}%"></div></div>` +
+    st.filter(x => x !== 'done').map((x, i) => `<div class="stg ${i < idx ? 'ok' : i === idx ? 'cur' : ''}">${i < idx ? '\u2713' : i === idx ? '\u25b6' : '\u00b7'} ${STAGE_LABEL[x] || x}${i === idx ? counters(pr) : ''}</div>`).join('') +
+    `<div class="dim" id="pelapsed"></div><div class="dim">The first open of a file decodes it with the reader (minutes for big files); later opens come from the cache in about a second. Levels, grids and boxes appear first, meshes fill in while this runs.</div>`;
+}
+function counters(pr) {
+  const rp = pr.reader_progress; let t = '';
+  if (pr.stage === 'geometry' && pr.total) t = ` ${(pr.done || 0).toLocaleString()} / ${pr.total.toLocaleString()} elements`;
+  else if (pr.stage === 'reading' && rp && (rp.total || rp.n_total)) t = ` ${(rp.done ?? rp.n ?? 0).toLocaleString()} / ${(rp.total || rp.n_total).toLocaleString()} records`;
+  else if (pr.stage === 'reading' && pr.size_mb) t = ` ${pr.size_mb.toFixed(0)} MB file`;
+  return t ? '<span class="dim">' + t + '</span>' : '';
+}
+function startParseTick() { if (!parseTick) parseTick = setInterval(() => { renderParseBar(); }, 1000); }   // local clock: the elapsed counter keeps moving even if the server is busy
+function renderParseBar() {
+  const pr = parseState, bar = $('#parsebar'), wm = $('#watermark');
+  if (!pr || pr.stage === 'done') { bar.hidden = true; wm.hidden = true; return; }
+  const now = Date.now() / 1000, elapsed = pr.started ? now - pr.started : pr.elapsed || 0, st = pr.stages || [], idx = Math.max(0, st.indexOf(pr.stage));
+  const overall = (idx + (pr.pct || 0)) / Math.max(1, st.length - 1);
+  let eta = null; const stEl = pr.stage_elapsed != null && pr.updated ? pr.stage_elapsed + (now - pr.updated) : null;
+  if (pr.eta_stage != null && pr.updated) eta = Math.max(0, pr.eta_stage - (now - pr.updated));
+  else if (pr.stage === 'reading' && pr.eta_total) eta = Math.max(0, pr.eta_total - elapsed);
+  bar.hidden = false; bar.className = '';
+  bar.innerHTML = `<span class="spin"></span><b>STILL PARSING</b><span>${esc(STAGE_LABEL[pr.stage] || pr.stage)}${counters(pr)}</span><div class="pb"><div style="width:${(overall * 100).toFixed(0)}%"></div></div>` +
+    `<span class="sm">${Math.round(overall * 100)}% &middot; ${fmtT(elapsed)} elapsed${eta != null ? ' &middot; about ' + fmtT(eta) + ' left' : ''}${pr.reader ? ' &middot; reader ' + esc(String(pr.reader).slice(0, 8)) : ''}</span>`;
+  const pe = $('#pelapsed'); if (pe) pe.textContent = fmtT(elapsed) + ' elapsed' + (eta != null ? ', about ' + fmtT(eta) + ' left' : '');
+  const pend = S.meta && S.meta.phase !== 'done' ? (S.meta.pending ?? null) : null;
+  if (S.meta && S.meta.phase !== 'done') { wm.hidden = false; wm.textContent = 'PARTIAL MODEL - geometry still loading' + (pend != null ? ', ' + pend.toLocaleString() + ' elements not shown yet (ghost boxes)' : ' (box preview)'); } else wm.hidden = true;
+}
+function showCached(ms) {
+  const bar = $('#parsebar'); const rv = String((S.meta.stamps || {}).reader || '').slice(0, 8);
+  bar.hidden = false; bar.className = 'cached'; bar.innerHTML = `<b>Loaded from cache</b><span>reader version ${esc(rv)} &middot; ${S.N.toLocaleString()} elements in ${(ms / 1000).toFixed(1)} s</span>`;
+  setTimeout(() => { if (bar.className === 'cached') bar.hidden = true; }, 6000);
 }
 async function loadModel(mid, opts = {}) {
   S.mid = mid; { const cur = location.hash.slice(1); if (!(cur === mid || cur.startsWith(mid + '?'))) { S.hashRestored = true; history.replaceState(null, '', '#' + mid); } } $('#status').textContent = 'loading...';
@@ -168,15 +200,21 @@ async function loadModel(mid, opts = {}) {
   $('#status').textContent = `${S.N.toLocaleString()} elements, ${tris.toLocaleString()} triangles - ${((performance.now() - t0) / 1000).toFixed(1)}s` + ((S.meta.phase || 'done') === 'done' ? '' : ' (box preview)');
   if (!opts.keepCamera && !S.hashRestored) { S.hashRestored = true; restoreHash(); }
   dirty = true; window.__loaded = true;
-  if ((S.meta.phase || 'done') !== 'done') refineLoop(mid);
+  if ((S.meta.phase || 'done') !== 'done') { renderParseBar(); refineLoop(mid, opts.partialRev || 0); }
+  else if (!opts.keepCamera && !parseState) showCached(performance.now() - t0);
+  else if (opts.keepCamera) { parseState = null; renderParseBar(); showFinished(performance.now() - t0); }
 }
-async function refineLoop(mid) {
-  // geometry is still being built: poll, then swap the preview for the full model without moving the camera
+function showFinished(ms) { const bar = $('#parsebar'); bar.hidden = false; bar.className = 'cached'; bar.innerHTML = `<b>Model complete</b><span>${S.N.toLocaleString()} elements, all geometry loaded</span>`; setTimeout(() => { if (bar.className === 'cached') bar.hidden = true; }, 6000); }
+async function refineLoop(mid, rev0 = 0) {
+  // geometry is still being built: poll every second; whenever the converter published a new partial result (finished meshes + ghost boxes for the rest) swap it in without moving the camera
+  let rev = rev0;
   for (;;) {
     await sleep(1000); if (S.mid !== mid) return;
     let pr; try { pr = await (await fetch(`/api/m/${mid}/progress`)).json(); } catch (e) { continue; }
-    if (pr.stage === 'done') break; if (pr.stage === 'error') { $('#progress').hidden = true; return; }
+    if (pr.stage === 'done') break;
+    if (pr.stage === 'error') { $('#progress').hidden = true; $('#parsebar').innerHTML = '<b>Conversion failed</b> ' + esc(pr.msg || ''); return; }
     showProgress(pr, true);
+    if ((pr.partial_rev || 0) > rev) { rev = pr.partial_rev; window.__loaded = false; await loadModel(mid, {keepCamera: true, partialRev: rev}); return; }
   }
   $('#progress').hidden = true; window.__loaded = false; await loadModel(mid, {keepCamera: true});
 }
