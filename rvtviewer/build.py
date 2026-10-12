@@ -784,11 +784,23 @@ def topology_check(a, P):
         return (abs(area / area_ref - 1) <= 0.08 if area_ref > 1e-9 else True), area, float(area_ref)
     except Exception: return None
 
+def _doc(GG, src):
+    """the reader's element-mesh document for src, shared with rvt_geometry (GG._docs): the Rust-backed rvt_fast.Doc (same results, records from Rust buffers + symbol memo) when it works, else rvt_elemmesh.Doc"""
+    d = GG._docs.get(src)
+    if d is not None: return d
+    import rvt_elemmesh as EM
+    if os.environ.get('RVT_FASTDOC') and not os.environ.get('RVT_NOFAST'):          # opt-in: forking after a Rust-backed Doc was used in the parent deadlocked (2026-10-12), so the default is the Python Doc + forked workers
+        try:
+            sys.path.append(os.path.expanduser('~/src/rvt-core/python')); import rvt_fast as F
+            if F.on(): d = F.Doc(src)
+        except Exception as ex: print('rvt_fast.Doc unavailable (%r): using the Python reader' % ex)
+    if d is None: d = EM.Doc(src)
+    GG._docs[src] = d; return d
+
 def _em_geometry(GG, src, e):
     """rvt_elemmesh.element_mesh result in the element_geometry vocabulary (one triangle_mesh solid) plus the per-triangle body (nid) and face (fid) ids"""
     import rvt_elemmesh as EM
-    d = GG._docs.get(src)
-    if d is None: d = GG._docs[src] = EM.Doc(src)               # (the document build uses worker pools: never under the address-space guard)
+    d = _doc(GG, src)                                            # (the document build uses worker pools: never under the address-space guard)
     m = _guarded(EM.element_mesh, d, int(e))
     if not m: return {'confidence': 'none', 'flags': ['decode_failed_or_over_memory_guard']}
     if not m['tris']: return {'confidence': 'none', 'flags': list(m.get('flags') or []) or ['no_saved_graphics']}
@@ -815,7 +827,7 @@ _GST = {}
 def body_materials(GG, src, e):
     """{nid: Revit material id}: the material of each saved-graphics body = graphics style of the Geometry node's category (own nodes: nid = node index; symbol instances: nid = 2e7 + k*1e5 + node index of the k-th drawn symbol)"""
     import rvt_elemmesh as EM, rvt_materials as RM
-    d = GG._docs.get(src); rec = d.rec(int(e))
+    d = _doc(GG, src); rec = d.rec(int(e))
     if rec is None: return {}
     def nodes(fl):
         g_, i_ = EM._geos_f(fl, 3)
@@ -940,16 +952,51 @@ def reader_mesh(ctx, e):
         except Exception as ex_: ctx._why.setdefault(e, 'materials: %r' % ex_)
     return m, fidv
 
+_PF = {}
+
+def _prefetch_chunk(ids):
+    ctx = _PF['ctx']; out = []
+    for e in ids:
+        try: r = reader_mesh(ctx, e)
+        except Exception: r = None
+        out.append((e, r, ctx._why.get(e)))
+    return out
+
+def _mesh_workers():
+    """forked mesh workers: <= 6, bounded by the cgroup memory limit (each worker grows to ~0.7 GB on big files)"""
+    n = max(1, min(6, (os.cpu_count() or 2) - 1))
+    try:
+        cg = open('/proc/self/cgroup').read().strip().split('::')[-1]; lim = open('/sys/fs/cgroup%s/memory.max' % cg).read().strip()
+        if lim != 'max': n = max(1, min(n, int((int(lim) / 2 ** 30 - 2.0) / 0.7)))
+    except Exception: pass
+    return int(os.environ.get('RVT_WORKERS', n))
+
 def prefetch_reader_meshes(ctx, els, prog=None, on_partial=None):
-    ctx._rm = None; out = {}; t = time.time(); n = 0; last_p = time.time(); idx = {el['id']: i for i, el in enumerate(els)}
-    todo = [el for el in els if not (not el['cat'] or el['isType'] or (ctx.recs[el['id']]['class'] in ANALYTIC_CLASSES and ctx.recs[el['id']]['class'] not in MESH_FIRST) or (ctx.bbox(el['id']) is None and el['id'] in ctx.eh and ctx.recs[el['id']]['class'] not in MESH_FIRST))]
-    for el in todo:
-        try: out[el['id']] = reader_mesh(ctx, el['id'])
-        except Exception: out[el['id']] = None
-        n += 1
-        if on_partial and n < len(todo) and time.time() - last_p > float(os.environ.get('RVT_PARTIAL_SECS', '12')):
-            on_partial([(idx[e_], r_[1], 'tri', [(r_[0].v, r_[0].f, None)], getattr(r_[0], 'info', None)) for e_, r_ in out.items() if r_ is not None], n, len(todo)); last_p = time.time()
-        if prog and (n % 40 == 0 or n == len(todo)): prog.set('geometry', 0.4 * n / max(1, len(todo)), 'reading saved-graphics meshes %d/%d' % (n, len(todo)), done=n, total=len(todo), sub='Reading saved graphics (decoding meshes)')
+    """saved-graphics meshes of every element that takes them, decoded in forked workers (the reader document is built once in the parent and shared copy-on-write); partial results stream into the progressive display"""
+    ctx._rm = None; out = {}; n = 0; last_p = time.time(); idx = {el['id']: i for i, el in enumerate(els)}
+    todo = [el['id'] for el in els if not (not el['cat'] or el['isType'] or (ctx.recs[el['id']]['class'] in ANALYTIC_CLASSES and ctx.recs[el['id']]['class'] not in MESH_FIRST) or (ctx.bbox(el['id']) is None and el['id'] in ctx.eh and ctx.recs[el['id']]['class'] not in MESH_FIRST))]
+    total = len(todo); nw = _mesh_workers(); pf = float(os.environ.get('RVT_PARTIAL_SECS', '12'))
+    def account(e, r):
+        nonlocal n, last_p
+        out[e] = r; n += 1
+        if on_partial and n < total and time.time() - last_p > pf:
+            on_partial([(idx[e_], r_[1], 'tri', [(r_[0].v, r_[0].f, None)] if not isinstance(r_[0], geom.Multi) else [(pm.v, pm.f, rgb, getattr(pm, 'mat', None)) for pm, rgb in r_[0].parts], getattr(r_[0], 'info', None)) for e_, r_ in out.items() if r_ is not None], n, total); last_p = time.time()
+        if prog and (n % 40 == 0 or n == total): prog.set('geometry', 0.4 * n / max(1, total), 'reading saved-graphics meshes %d/%d%s' % (n, total, ' (%d workers)' % nw if nw > 1 else ''), done=n, total=total, sub='Reading saved graphics (decoding meshes)')
+    if todo:
+        try: reader_mesh(ctx, todo[0])                       # builds the shared reader context (document, census, materials) in the parent before forking
+        except Exception: pass
+    if nw <= 1 or total < 80:
+        for e in todo:
+            try: account(e, reader_mesh(ctx, e))
+            except Exception: account(e, None)
+    else:
+        import multiprocessing as mp
+        _PF['ctx'] = ctx; chunk = 12; parts = [todo[k:k + chunk] for k in range(0, total, chunk)]
+        with mp.get_context('fork').Pool(nw) as pool:
+            for res in pool.imap_unordered(_prefetch_chunk, parts):
+                for e, r, why in res:
+                    if why: ctx._why[e] = why
+                    account(e, r)
     ctx._rm = out
 
 CONTAINER_CLASSES = {'JoistSystem', 'BeamSystem'}          # layout containers: zero-height bbox, no graphics of their own (the members are separate FamilyInstances)
