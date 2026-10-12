@@ -393,6 +393,22 @@ def symbol_cut_points(ctx, sid):
     except Exception: pts = None
     ctx._cutcache[sid] = pts; return pts
 
+def void_geometry(ctx, e, r):
+    """void family instances (cut bodies in m_complexCutGeoms, nothing in the saved graphics): the void shape itself at the instance transform. -> (Mesh, 'mesh') flagged 'void' (drawn translucent) or None"""
+    sid = ctx.eid_int(r['fields'].get('m_masterSymbolId')); fr_ = inst_frame(ctx, r); sr = ctx.recs.get(sid) if sid is not None else None
+    if not fr_ or not sr: return None
+    try:
+        reader._import(); import rvt_mesh
+        T = []
+        for gm in sr['fields'].get('m_complexCutGeoms') or []:
+            for comp in rvt_mesh.components(gm.get('obj', gm)):
+                if comp['tris'] and not comp['unsupported']: T.append(np.array(comp['tris'], float).reshape(-1, 3))
+    except Exception: return None
+    if not T: return None
+    P = np.vstack(T) @ fr_[0].T + fr_[1]; m = Mesh(P, np.arange(len(P)).reshape(-1, 3))
+    m.info = {'source': 'void_cut_body', 'flags': ['void'], 'bodies': len(T), 'tris': len(P) // 3}
+    return m, 'mesh'
+
 def wall_openings(ctx, e, org, x0, n, y0, d):
     """cutter boxes for the doors/windows hosted by wall e: the instance's stored bounding box projected into the wall frame (full wall thickness)"""
     from . import occ
@@ -828,6 +844,9 @@ def element_mesh(ctx, e, r):
             except Exception: pass
         if rm: return rm
     if ctx.catname(e) in ('Planting', 'Entourage') and ctx.bbox(e) is not None and r['class'] == 'FamilyInstance': return geom.ellipsoid(*ctx.bbox(e)), 'bbox'
+    if r['class'] == 'FamilyInstance':
+        vg = void_geometry(ctx, e, r)
+        if vg: return vg
     try:
         res = brep_geom(ctx, e, r)
         if res and res[0] and res[1] == 'solid': return res
@@ -948,7 +967,7 @@ def pack_batches(els, res, previews=False):
             allv = np.vstack([p[0] for p in parts]); el['iou'] = round(box_iou(allv.min(0), allv.max(0), *el['bb']), 3); ious.setdefault(el['cat'], []).append(el['iou'])
             if fid == 'param' and (el['iou'] >= 0.97 or contained_match(allv.min(0), allv.max(0), *el['bb'])): fid = 'matched'
         el['fid'] = fid; covg[el['cat']][fid] += 1; covc[el['cls']][fid] += 1
-        transl = fid == 'bbox' and el['cat'] in TRANSLUCENT_CATS
+        transl = (fid == 'bbox' and el['cat'] in TRANSLUCENT_CATS) or 'void' in ((el['ginfo'] or {}).get('flags') or [])
         for pv, pf, rgb in parts:
             hexc = None if rgb is None else '%02x%02x%02x' % tuple(int(x * 255) for x in rgb)
             a = acc.setdefault((el['cat'], kind, transl, hexc), {'pos': [], 'idx': [], 'eidx': [], 'ranges': [], 'nv': 0, 'nt': 0})
