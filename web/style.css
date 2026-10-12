@@ -57,3 +57,8 @@ input[type=range]{accent-color:var(--acc2)}
 #watermark{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:#7a1f1fcc;color:#fff;border:1px solid #ff8a8a;padding:5px 14px;border-radius:6px;font-weight:600;font-size:13px;z-index:4;pointer-events:none;letter-spacing:.3px;text-align:center}
 .drawlink{margin-left:6px;font-size:11px;color:var(--acc2)}
 #top{overflow-x:auto!important;overflow-y:hidden}
+
+main{position:relative}
+#sheetspane{position:absolute;inset:0;z-index:30;background:var(--bg);display:flex;flex-direction:column}
+#sheetspane .shbar{display:flex;gap:12px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel);font-size:13px}
+#sheetspane .sp{flex:1}#shFrame{flex:1;border:0;width:100%;background:#fff}

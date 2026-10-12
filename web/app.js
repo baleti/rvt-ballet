@@ -171,15 +171,33 @@ function showCached(ms) {
 async function loadPlugins() {
   try { S.plugins = await (await fetch('/api/plugins')).json(); } catch (e) { S.plugins = []; }
   const top = $('#top'); top.querySelectorAll('.plug').forEach(b => b.remove());
-  for (const p of S.plugins) { const b = document.createElement('button'); b.className = 'plug'; b.textContent = p.title; b.title = 'Open the ' + p.title + ' plug-in for this model'; b.onclick = () => window.open(p.mount + '#' + S.mid, '_blank'); top.appendChild(b); }
+  for (const p of S.plugins) {
+    const b = document.createElement('button'); b.className = 'plug';
+    if (p.error) { b.textContent = p.title + ' (unavailable)'; b.title = p.title + ' plug-in could not be loaded: ' + p.error; b.style.opacity = .55; b.onclick = () => alert(p.title + ' is not available.\n\n' + p.error); }
+    else { b.textContent = p.title; b.title = 'Open the ' + p.title + ' page for this model'; b.onclick = () => (p.mount === '/sheets/' ? openSheets('') : window.open(p.mount + '#' + S.mid, '_blank')); }
+    top.appendChild(b);
+  }
 }
-const sheetsPlugin = () => (S.plugins || []).find(p => p.mount === '/sheets/');
-function drawingLink(kind, id) { const p = sheetsPlugin(); return p ? ` <a href="${p.mount}#${encodeURIComponent(S.mid)}/${kind}/${id}" target="_blank" class="drawlink" title="open the drawing (sheets plug-in)" onclick="event.stopPropagation()">drawing</a>` : ''; }
+const sheetsPlugin = () => (S.plugins || []).find(p => p.mount === '/sheets/' && !p.error);
+function openSheets(sub) {
+  // the sheets page is embedded full size over the 3D view; "Model (3D)" returns
+  const p = sheetsPlugin(); if (!p || !S.mid) return;
+  const fr = $('#shFrame'), url = p.mount + '#' + encodeURIComponent(S.mid) + (sub || '');
+  const nSh = (S.meta.sheets || []).length, nV = (S.meta.views || []).length;
+  $('#shInfo').textContent = nSh ? `${nSh} sheets, ${nV} views` : `This file has no sheets${nV ? ' (' + nV + ' views only)' : ''}`;
+  $('#shNew').href = url;
+  if (!fr.getAttribute('src')) fr.src = url; else { try { fr.contentWindow.location.hash = url.split('#')[1]; } catch (e) { fr.src = url; } }
+  $('#sheetspane').hidden = false; S.sheetsOpen = true;
+}
+function closeSheets() { $('#sheetspane').hidden = true; S.sheetsOpen = false; dirty = true; }
+$('#shModel').onclick = closeSheets;
+function drawingLink(kind, id) { const p = sheetsPlugin(); return p ? ` <a href="#" class="drawlink" title="open the drawing (sheets page)" onclick="event.stopPropagation(); event.preventDefault(); window.openSheets('/${kind}/${id}')">drawing</a>` : ''; }
+window.openSheets = openSheets; window.closeSheets = closeSheets;
 // messages from plug-in pages (same origin): {type: 'rvt-select', elementId} selects + frames the element; {type: 'rvt-isolate', elementIds: [...]}
 window.addEventListener('message', async ev => {
   const d = ev.data || {}; if (!S.meta) return;
   const idx = id => { const i = S.meta.elements.findIndex(r => r[0] === +id); return i < 0 ? null : i; };
-  if (d.type === 'rvt-select') { const i = idx(d.elementId); if (i != null) { await select(i); await zoomTo([i]); } }
+  if (d.type === 'rvt-select' || d.type === 'rvt-sheets-select') { const i = idx(d.elementId); if (i != null) { closeSheets(); await select(i); await zoomTo([i]); } }
   if (d.type === 'rvt-isolate') { const ids = (d.elementIds || []).map(idx).filter(i => i != null); if (ids.length) { setIsolate(new Set(ids)); await zoomTo(ids); } }
 });
 async function loadModel(mid, opts = {}) {
@@ -661,7 +679,7 @@ requestAnimationFrame(frame);
   sel.onchange = () => loadModel(sel.value);
   const want = location.hash.slice(1).split('?')[0]; if (models.some(m => m.id === want)) sel.value = want;
   await loadPlugins();
-  if (models.length) await loadModel(sel.value); else $('#status').textContent = 'no models';
+  if (models.length) { await loadModel(sel.value); if (new URLSearchParams(location.search).get('sheets') && sheetsPlugin()) openSheets(''); } else $('#status').textContent = 'no models';
 })();
 window.setIsolate = setIsolate; window.pickAt = pickAt; window.selectEl = select; window.setSection = setSection; window.zoomTo = zoomTo;
 window.refreshState = refreshState;

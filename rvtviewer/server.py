@@ -63,6 +63,8 @@ def load_plugins(app, models):
             loaded.append({'name': getattr(mod, 'NAME', c['module']), 'title': c.get('title') or getattr(mod, 'TITLE', c['module']), 'mount': mount})
         except Exception as ex:
             print('plug-in %s not loaded: %r' % (c.get('module'), ex))
+            hint = ' (pip install shapely numba in the viewer venv)' if isinstance(ex, ImportError) else ''
+            loaded.append({'name': c['module'], 'title': c.get('title') or c['module'], 'mount': c.get('mount') or '', 'error': '%s: %s%s' % (type(ex).__name__, ex, hint)})
     return loaded
 
 

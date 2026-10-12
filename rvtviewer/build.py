@@ -757,9 +757,12 @@ def reader_brep_extra(ctx, e, GG):
 
 MESH_FIRST = {'SWall', 'ArcWall', 'Floor', 'Ceiling', 'ProfileRoof', 'FootPrintRoof', 'RoofSoffit', 'BuildingPad'}      # saved-graphics meshes match Revit volumes within 2% far more often than the parametric rebuilds (2020 residential walls 92% vs 57%, roofs 100% vs 0%)
 
-def _guarded(fn, *a, extra_gb=2.5):
+_GUARD_GB = [2.5]
+
+def _guarded(fn, *a, extra_gb=None):
     """call fn with the address space capped at (current + extra_gb): a runaway reader decode of one element raises MemoryError (-> None) instead of getting the whole process OOM-killed"""
     import resource
+    extra_gb = _GUARD_GB[0] if extra_gb is None else extra_gb
     cur = int(open('/proc/self/statm').read().split()[0]) * resource.getpagesize(); old = resource.getrlimit(resource.RLIMIT_AS)
     try:
         resource.setrlimit(resource.RLIMIT_AS, (cur + int(extra_gb * 2 ** 30), old[1]))
@@ -963,11 +966,12 @@ def _prefetch_chunk(ids):
     return out
 
 def _mesh_workers():
-    """forked mesh workers: <= 6, bounded by the cgroup memory limit (each worker grows to ~0.7 GB on big files)"""
+    """forked mesh workers: <= 6, bounded by the cgroup memory limit minus what the parent already holds (each worker grows by up to ~1 GB on big files)"""
     n = max(1, min(6, (os.cpu_count() or 2) - 1))
     try:
         cg = open('/proc/self/cgroup').read().strip().split('::')[-1]; lim = open('/sys/fs/cgroup%s/memory.max' % cg).read().strip()
-        if lim != 'max': n = max(1, min(n, int((int(lim) / 2 ** 30 - 2.0) / 0.7)))
+        rss = int(open('/proc/self/statm').read().split()[1]) * 4096 / 2 ** 30
+        if lim != 'max': n = max(1, min(n, int((int(lim) / 2 ** 30 - rss - 0.7) / 1.0)))
     except Exception: pass
     return int(os.environ.get('RVT_WORKERS', n))
 
@@ -991,6 +995,10 @@ def prefetch_reader_meshes(ctx, els, prog=None, on_partial=None):
             except Exception: account(e, None)
     else:
         import multiprocessing as mp
+        try:                                                  # per-worker address-space allowance so that nw workers together stay inside the memory cap
+            cg = open('/proc/self/cgroup').read().strip().split('::')[-1]; lim = open('/sys/fs/cgroup%s/memory.max' % cg).read().strip()
+            if lim != 'max': _GUARD_GB[0] = max(0.6, min(2.5, (int(lim) / 2 ** 30 - int(open('/proc/self/statm').read().split()[1]) * 4096 / 2 ** 30 - 0.7) / nw * 0.8))
+        except Exception: pass
         _PF['ctx'] = ctx; chunk = 12; parts = [todo[k:k + chunk] for k in range(0, total, chunk)]
         with mp.get_context('fork').Pool(nw) as pool:
             for res in pool.imap_unordered(_prefetch_chunk, parts):
