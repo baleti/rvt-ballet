@@ -30,10 +30,9 @@ def load_oracle(gtdir, stem=None):
             elif x[0] == 'G' and len(x) >= 3:
                 k = x[1].split('.')
                 try:
-                    if k[1] != '0': continue
-                    d = G.setdefault(int(k[0]), {}); vol = float(x[2].split('=')[1]); d['vol'] = d.get('vol', 0.0) + vol
+                    d = G.setdefault(int(k[0]), {}); vol = float(x[2].split('=')[1]); d.setdefault('vd', {}).setdefault(k[1], 0.0); d['vd'][k[1]] += vol
                 except (ValueError, IndexError): pass
-    return {i: {'bb': v.get('bb'), 'vol': v.get('vol')} for i, v in G.items() if v.get('bb')}
+    return {i: {'bb': v.get('bb'), 'vol': (v['vd'][min(v['vd'], key=int)] if v.get('vd') else None)} for i, v in G.items() if v.get('bb')}      # solids of the shallowest depth present (family instances are depth 1)
 
 def load_g(gtdir):
     G = {}
@@ -70,7 +69,7 @@ def main(mdir, gtdir):
     for i, el in enumerate(els):
         g = G.get(el['id'])
         if g is None or i not in got: continue
-        _, fid, kind, parts = got[i]
+        fid, kind, parts = got[i][1:4]
         if kind != 'tri': continue
         V = np.vstack([p[0] for p in parts]); F = np.vstack([p[1] + sum(len(q[0]) for q in parts[:k]) for k, p in enumerate(parts)])
         lo, hi = V.min(0), V.max(0); r = {'fid': fid, 'iou': round(build.box_iou(lo, hi, np.array(g['bb'][0]), np.array(g['bb'][1])), 3)}
