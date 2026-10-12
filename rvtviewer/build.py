@@ -905,7 +905,7 @@ def _split_by_material(m, nid, ntri0, mp, idx):
     mu = geom.Multi(parts); mu.info = getattr(m, 'info', None); return mu
 
 
-def reader_mesh(ctx, e):
+def reader_mesh(ctx, e, a_pre=None):
     """triangle mesh the reader decoded from Revit's saved graphics (rvt_geometry.element_geometry, confidence 'mesh_approx', world feet): the family-instance geometry. -> (Mesh, fid) or None"""
     if not USE_READER_MESH or not getattr(ctx, 'src', None): return None
     if getattr(ctx, '_rm', None) is not None: return ctx._rm.get(e)          # prefetched in the parent process (workers must not each load the reader's geometry context)
@@ -918,7 +918,7 @@ def reader_mesh(ctx, e):
             try: a = b_(gc_, int(e), rec_) if rec_ is not None else None
             except Exception: a = None
             if a is not None and a.get('confidence') == 'box': a = None
-        if a is None: a = _em_geometry(GG, ctx.src, e) or {}          # straight from the reader's element_mesh: keeps the per-body (nid) / per-face (fid) ids
+        if a is None: a = a_pre if a_pre is not None else (_em_geometry(GG, ctx.src, e) or {})          # straight from the reader's element_mesh (or the Rust stream): keeps the per-body (nid) / per-face (fid) ids
     except Exception as ex_:
         ctx._why[e] = 'reader error: %r' % ex_; return None
     if a.get('confidence') != 'mesh_approx':
@@ -957,6 +957,17 @@ def reader_mesh(ctx, e):
 
 _PF = {}
 
+def fast_module():
+    """~/src/rvt-core/python/rvt_viewer_fast (Rust fast paths: element table in ~1 s, streamed meshes, progress file) or None (RVT_NOFAST=1, missing extension, import error)"""
+    if os.environ.get('RVT_NOFAST'): return None
+    try:
+        sys.path.insert(0, os.path.expanduser('~/src/rvt-core/python')); sys.path.insert(0, reader.READER_DIR)
+        import rvt_fast as RF
+        if not RF.on(): return None
+        import rvt_viewer_fast as VF; return VF
+    except Exception as ex:
+        print('Rust fast path unavailable (%r): using the Python reader' % ex); return None
+
 def _prefetch_chunk(ids):
     ctx = _PF['ctx']; out = []
     for e in ids:
@@ -986,6 +997,18 @@ def prefetch_reader_meshes(ctx, els, prog=None, on_partial=None):
         if on_partial and n < total and time.time() - last_p > pf:
             on_partial([(idx[e_], r_[1], 'tri', [(r_[0].v, r_[0].f, None)] if not isinstance(r_[0], geom.Multi) else [(pm.v, pm.f, rgb, getattr(pm, 'mat', None)) for pm, rgb in r_[0].parts], getattr(r_[0], 'info', None)) for e_, r_ in out.items() if r_ is not None], n, total); last_p = time.time()
         if prog and (n % 40 == 0 or n == total): prog.set('geometry', 0.4 * n / max(1, total), 'reading saved-graphics meshes %d/%d%s' % (n, total, ' (%d workers)' % nw if nw > 1 else ''), done=n, total=total, sub='Reading saved graphics (decoding meshes)')
+    fm = getattr(ctx, 'fm', None)
+    if fm is not None and todo:                              # Rust streaming meshes (parallel, results as they finish); analytic-builder classes still go through reader_mesh
+        try:
+            VF = fast_module(); stream = VF.em_geometries(fm, todo)
+            for e, a in stream:
+                try: r = reader_mesh(ctx, e, a_pre=a)
+                except Exception: r = None
+                if ctx._why.get(e) is None and r is None and a.get('confidence') != 'mesh_approx': ctx._why[e] = 'reader: %s (%s)' % (a.get('confidence'), ', '.join(a.get('flags') or []))
+                account(e, r)
+            ctx._rm = out; return
+        except Exception as ex:
+            print('streaming meshes failed (%r): falling back to the Python reader' % ex); out.clear(); n = 0
     if todo:
         try: reader_mesh(ctx, todo[0])                       # builds the shared reader context (document, census, materials) in the parent before forking
         except Exception: pass
@@ -1087,6 +1110,26 @@ def build_grids(ctx):
     return out
 
 # ---------------------------------------------------------------- main
+
+def write_quick_preview(outdir, q, path):
+    """first picture within ~1-2 s of opening: the Rust element table (class, category, bounding box) -> levels, grids and one box per element; meta.json phase 'preview' with quick=True"""
+    names = reader.category_names(); els = []; res = []
+    for eid, v in q['elements'].items():
+        bb = v.get('bbox')
+        if not bb or v.get('category') in (None, -1) or str(v['class']).endswith('Symbol'): continue
+        lo, hi = np.array(bb[0], float), np.array(bb[1], float)
+        if np.any(hi < lo): continue
+        i = len(els); els.append({'id': int(eid), 'cls': v['class'], 'cat': names.get(str(v['category'])) or 'Category %s' % v['category'], 'name': '', 'type': '', 'level': None, 'fid': 'none', 'isType': False, 'family': '', 'phase': -1, 'bb': [lo, hi], 'i': i})
+        b = geom.box(lo, hi); res.append((i, 'bbox', 'tri', [(b.v, b.f, None)]))
+    pb, pm, pcovg, _, _ = pack_batches(els, res)
+    glb.write_glb(os.path.join(outdir, 'preview.glb.tmp'), pb)
+    levels = sorted([{'id': l['id'], 'name': l['name'], 'elev': l['elevation_ft'] * 0.3048} for l in q.get('levels') or []], key=lambda l: l['elev'])
+    meta = {'file': os.path.basename(path), 'levels': levels, 'grids': [], 'rooms': [], 'views': [], 'sheets': [], 'fidLabels': FID_LABEL, 'phases': [], 'defaultHidden': sorted({e['cat'] for e in els if default_hidden(e['cat'])}),
+            'stamps': {'reader': reader.reader_stamp(), 'viewer': reader.viewer_stamp()}, 'phase': 'preview', 'quick': True, 'batches': pm, 'bbox': model_bbox(els), 'coverage': {k: dict(v) for k, v in pcovg.items()}, 'coverageByClass': {}, 'bboxAgreement': {},
+            'elements': [[e['id'], e['cls'], e['cat'], e['name'], e['type'], e['level'], e['fid'], e['isType'], e['family'], e['phase']] for e in els], 'built': time.time(), 'buildSecs': 0}
+    json.dump(meta, open(os.path.join(outdir, 'meta.json.tmp'), 'w'), separators=(',', ':'))
+    os.replace(os.path.join(outdir, 'preview.glb.tmp'), os.path.join(outdir, 'preview.glb')); os.replace(os.path.join(outdir, 'meta.json.tmp'), os.path.join(outdir, 'meta.json'))
+    return len(els)
 
 STAGES = ['reading', 'tables', 'preview', 'geometry', 'packing', 'done']
 
@@ -1248,7 +1291,16 @@ def convert(path, outdir, log=print, workers=None):
         log(m)
         if 'raw cache hit' in m: cold[0] = False; prog.extra['raw_cache_hit'] = True
     prog.set('reading', 0.0, 'decoding %s with the reader' % os.path.basename(path)); prog.start_heartbeat()
-    t = time.time(); raw = reader.cached_load(path, rlog); T['reader'] = round(time.time() - t, 2); ctx = Ctx(raw); prog.stop_heartbeat()
+    VF = fast_module(); fm = None; t = time.time()
+    if VF is not None:
+        try:
+            fm = VF.open(path); q = fm.quick(); nq = write_quick_preview(outdir, q, path); T['quick'] = round(time.time() - t, 2)
+            prog.extra['quick_boxes'] = nq; prog.extra['fast_path'] = True; prog.set('reading', 0.0, 'element table in %.1fs: %d boxes, %d levels (full decode continues)' % (T['quick'], nq, len(q.get('levels') or [])), quick_rev=1)
+            raw = VF.load(path, rlog, model=fm)
+        except Exception as ex:
+            log('Rust fast path failed (%r): using the Python reader' % ex); fm = None; raw = reader.cached_load(path, rlog)
+    else: raw = reader.cached_load(path, rlog)
+    T['reader'] = round(time.time() - t, 2); ctx = Ctx(raw); ctx.fm = fm; prog.stop_heartbeat()
     if cold[0]:                                                          # remember the cold decode speed for ETAs
         try:
             tf = os.path.join(reader.CACHE_DIR, 'timing.json'); old = json.load(open(tf)) if os.path.exists(tf) else {}
@@ -1257,7 +1309,9 @@ def convert(path, outdir, log=print, workers=None):
     ctx.src = path
     from . import materials as MT
     ctx.mats = MT.load(path, log)
-    try: reader._import(); import rvt_geometry as GG; GG.file_geometry_index(path)        # load the reader's geometry context before the worker processes fork
+    try:
+        reader._import(); import rvt_geometry as GG; GG.file_geometry_index(path)        # load the reader's geometry context before the worker processes fork
+        if fm is not None: GG._docs[path] = fm.doc()                                       # element_brep / body_materials use the Rust-backed document
     except Exception: pass
     ctx.raw_key = '%s|%s|%s|%s' % (os.path.abspath(path), os.path.getmtime(path), os.path.getsize(path), reader.reader_stamp())
     from . import datums
@@ -1311,8 +1365,8 @@ def convert(path, outdir, log=print, workers=None):
                                          'elements': [[el['id'], el['cls'], el['cat'], el['name'], el['type'], el['level'], el['fid'], el['isType'], el['family'], el['phase']] for el in pels], 'built': time.time(), 'buildSecs': 0})
     json.dump(meta, open(os.path.join(outdir, 'meta.json'), 'w'), separators=(',', ':'))
     T['preview'] = round(time.time() - t, 2)
-    prog.set('geometry', 0.0, 'building geometry', done=0, total=len(els))
-    prev_by_i = {t_[0]: t_ for t_ in pres}; rev = [0]
+    prev_by_i = {t_[0]: t_ for t_ in pres}; rev = [1]
+    prog.set('geometry', 0.0, 'building geometry', done=0, total=len(els), partial_rev=1)       # rev 1: the full preview (names, levels, grids, rooms) replaces the quick one
     def on_partial(res_, done_el, n_):
         """progressive display: finished elements as real meshes, the rest as translucent ghost boxes; replaces preview.glb + meta.json (phase stays 'preview') so the open page can refresh itself"""
         got = {t_[0] for t_ in res_}; allr = list(res_) + [(i, 'pending', 'tri', prev_by_i[i][3], None) for i in prev_by_i if i not in got]

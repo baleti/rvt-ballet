@@ -99,7 +99,9 @@ def make_app(models):
         try: return web.json_response(json.load(open(fn)))
         except Exception: return web.json_response({'stage': 'starting', 'stages': ['reading', 'tables', 'preview', 'geometry', 'packing', 'done'], 'pct': 0, 'msg': 'starting', 'elapsed': 0})
     async def element(req):
-        mid, d = mdir(req); i = int(req.match_info['i']); db = models.db(mid)
+        mid, d = mdir(req); i = int(req.match_info['i'])
+        try: db = models.db(mid)
+        except Exception: return web.json_response({'el': {}, 'params': [], 'typeParams': [], 'ginfo': None, 'materials': [], 'pending': True})      # tables not written yet (quick preview)
         row = db.execute('select * from el where i=?', (i,)).fetchone()
         if not row: raise web.HTTPNotFound()
         prm = [(r['k'], r['v']) for r in db.execute('select k,v from prm where i=? order by k', (i,))]
