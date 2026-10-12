@@ -849,14 +849,16 @@ def reader_mesh(ctx, e):
     if 'mesh_topology_suspect' in m.info['flags']: ctx._why[e] = 'reader mesh area %.1f ft2 vs analytic %.1f ft2: triangles do not follow the surface' % (m.info['mesh_area'], m.info['analytic_area']); return m, 'approx'
     return m, ('approx' if ('unsupported_faces' in (a.get('flags') or []) and not extra) or (iou < 0.9 and not inside) else 'mesh')
 
-def prefetch_reader_meshes(ctx, els, prog=None):
-    ctx._rm = None; out = {}; t = time.time(); n = 0
-    for el in els:
-        if not el['cat'] or el['isType'] or (ctx.recs[el['id']]['class'] in ANALYTIC_CLASSES and ctx.recs[el['id']]['class'] not in MESH_FIRST) or (ctx.bbox(el['id']) is None and el['id'] in ctx.eh and ctx.recs[el['id']]['class'] not in MESH_FIRST): continue
+def prefetch_reader_meshes(ctx, els, prog=None, on_partial=None):
+    ctx._rm = None; out = {}; t = time.time(); n = 0; last_p = time.time(); idx = {el['id']: i for i, el in enumerate(els)}
+    todo = [el for el in els if not (not el['cat'] or el['isType'] or (ctx.recs[el['id']]['class'] in ANALYTIC_CLASSES and ctx.recs[el['id']]['class'] not in MESH_FIRST) or (ctx.bbox(el['id']) is None and el['id'] in ctx.eh and ctx.recs[el['id']]['class'] not in MESH_FIRST))]
+    for el in todo:
         try: out[el['id']] = reader_mesh(ctx, el['id'])
         except Exception: out[el['id']] = None
         n += 1
-        if prog and n % 300 == 0: prog.set('geometry', 0.0, 'reading saved-graphics meshes %d' % n)
+        if on_partial and n < len(todo) and time.time() - last_p > float(os.environ.get('RVT_PARTIAL_SECS', '12')):
+            on_partial([(idx[e_], r_[1], 'tri', [(r_[0].v, r_[0].f, None)], getattr(r_[0], 'info', None)) for e_, r_ in out.items() if r_ is not None], n, len(todo)); last_p = time.time()
+        if prog and (n % 40 == 0 or n == len(todo)): prog.set('geometry', 0.4 * n / max(1, len(todo)), 'reading saved-graphics meshes %d/%d' % (n, len(todo)), done=n, total=len(todo), sub='Reading saved graphics (decoding meshes)')
     ctx._rm = out
 
 CONTAINER_CLASSES = {'JoistSystem', 'BeamSystem'}          # layout containers: zero-height bbox, no graphics of their own (the members are separate FamilyInstances)
@@ -1009,7 +1011,7 @@ def run_geometry(ctx, els, prog, workers=None, on_partial=None):
     key = geometry_cache_key(); fn = os.path.join(reader.CACHE_DIR, 'geom-%s-%s.pkl' % (hashlib.md5(ctx.raw_key.encode()).hexdigest()[:10], key))
     if os.path.exists(fn) and not os.environ.get('RVT_NO_GEOM_CACHE'):
         t = time.time(); res = pickle.load(open(fn, 'rb')); prog.set('geometry', 1.0, 'geometry cache hit (%.1fs)' % (time.time() - t), done=len(els), total=len(els), cache_hit=True); return res
-    ensure_roofs(ctx); prefetch_reader_meshes(ctx, els, prog)
+    ensure_roofs(ctx); prefetch_reader_meshes(ctx, els, prog, on_partial)
     _G['ctx'] = ctx; _G['els'] = els
     n = len(els); step = 150; chunks = [(a, min(a + step, n)) for a in range(0, n, step)]
     nw = workers or max(1, min(6, (os.cpu_count() or 2) - 1)); res = []
@@ -1020,7 +1022,7 @@ def run_geometry(ctx, els, prog, workers=None, on_partial=None):
         with mp.get_context('fork').Pool(nw) as pool:
             for k, r in enumerate(pool.imap_unordered(_geo_chunk, chunks)):
                 res += r; done_el = min(n, (k + 1) * step)
-                prog.set('geometry', (k + 1) / len(chunks), 'geometry %d/%d chunks (%d workers)' % (k + 1, len(chunks), nw) if k % 10 == 0 else '', done=done_el, total=n)
+                prog.set('geometry', 0.4 + 0.6 * (k + 1) / len(chunks), 'geometry %d/%d chunks (%d workers)' % (k + 1, len(chunks), nw) if k % 10 == 0 else '', done=done_el, total=n, sub='Building meshes (%d workers)' % nw)
                 if on_partial and k + 1 < len(chunks) and time.time() - last_partial > float(os.environ.get('RVT_PARTIAL_SECS', '12')): on_partial(res, done_el, n); last_partial = time.time()
     res.sort(key=lambda t: t[0])
     try: pickle.dump(res, open(fn + '.tmp', 'wb'), protocol=5); os.replace(fn + '.tmp', fn)

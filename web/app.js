@@ -136,7 +136,7 @@ function showProgress(pr, floating) {
 }
 function counters(pr) {
   const rp = pr.reader_progress; let t = '';
-  if (pr.stage === 'geometry' && pr.total) t = ` ${(pr.done || 0).toLocaleString()} / ${pr.total.toLocaleString()} elements`;
+  if (pr.stage === 'geometry' && pr.total) t = ` ${pr.sub ? '- ' + esc(pr.sub) + ': ' : ''}${(pr.done || 0).toLocaleString()} / ${pr.total.toLocaleString()} elements`;
   else if (pr.stage === 'reading' && rp && (rp.total || rp.n_total)) t = ` ${(rp.done ?? rp.n ?? 0).toLocaleString()} / ${(rp.total || rp.n_total).toLocaleString()} records`;
   else if (pr.stage === 'reading' && pr.size_mb) t = ` ${pr.size_mb.toFixed(0)} MB file`;
   return t ? '<span class="dim">' + t + '</span>' : '';
