@@ -25,8 +25,8 @@ async def main(f, sheets, port):
         await asyncio.sleep(1.0); vis = await b.ev("!document.querySelector('#sheetspane').hidden"); print('PASS' if vis else 'FAIL', 'sheets pane visible', await b.ev("document.querySelector('#shInfo').innerText")); ok &= bool(vis)
         for _ in range(240):
             await asyncio.sleep(1.0)
-            n = await b.ev("(()=>{try{const d=document.querySelector('#shFrame').contentDocument; return d && d.body ? d.body.innerText.length + ':' + d.querySelectorAll('svg').length : '0:0'}catch(e){return 'x'}})()")
-            if n and ':' in str(n) and int(str(n).split(':')[0]) > 30: break
+            n = await b.ev("(()=>{try{const d=document.querySelector('#shFrame').contentDocument; if(!d||!d.body) return '0:0:'; const t=d.body.innerText; return t.length + ':' + d.querySelectorAll('svg,img,canvas').length + ':' + (/reading the \\.rvt|loading|decoding/i.test(t) ? 'busy' : 'ready')}catch(e){return 'x'}})()")
+            if n and str(n).endswith(':ready') and int(str(n).split(':')[0]) > 60: break
         T['sheets page ready'] = round(time.time() - t1, 1); print('sheets frame content:', n, T['sheets page ready'], 's'); await b.shot(os.path.join(out, tag + '-2-sheets.png'))
         await b.ev("document.querySelector('#shModel').click(); 0"); await asyncio.sleep(0.5); back = await b.ev("document.querySelector('#sheetspane').hidden"); print('PASS' if back else 'FAIL', 'Model button returns to 3D'); ok &= bool(back)
         errs = [l for l in b.logs if 'EXC' in l]; print('PASS' if not errs else 'FAIL', 'no JS exceptions', errs[:2]); ok &= not errs
