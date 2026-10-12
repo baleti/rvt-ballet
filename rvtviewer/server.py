@@ -14,6 +14,58 @@ class Models:
             m['db'].row_factory = sqlite3.Row
         return m['db']
 
+class PluginContext:
+    """what a plug-in sees of the viewer (documented in docs/PLUGINS.md). Callable: ctx(mid) -> path of the source .rvt (the `model_dir_resolver` of HOOKS.md)."""
+    def __init__(self, models): self.models = models
+    def __call__(self, mid): return self.source_path(mid)
+    def model_ids(self): return list(self.models.m)
+    def model_dir(self, mid):
+        if mid not in self.models.m: raise KeyError(mid)
+        return self.models.m[mid]['dir']
+    def source_path(self, mid):
+        """absolute path of the .rvt a model id was converted from (None if unknown)"""
+        m = self.models.m.get(mid) or {}
+        if m.get('src'): return m['src']
+        try: return json.load(open(os.path.join(m['dir'], 'summary.json'))).get('src')
+        except Exception: return None
+    def meta(self, mid):
+        """meta.json of the model (levels, grids, views, sheets, elements rows [id, class, category, name, type, level, fid, isType, family, phase], ...)"""
+        return json.load(open(os.path.join(self.model_dir(mid), 'meta.json')))
+    def sqlite(self, mid): return self.models.db(mid)           # tables el(i,id,cls,cat,name,type,family,level,uid,ifc,fid,bb,iou,type_i), prm(i,k,v), ginfo(i,info)
+    def element_index(self, mid, element_id):
+        """viewer element index (position in meta.elements) of a Revit element id, or None"""
+        r = self.models.db(mid).execute('select i from el where id=?', (int(element_id),)).fetchone(); return None if r is None else r[0]
+    @property
+    def reader(self):
+        """rvtviewer.reader: _import() puts ~/rvt-research on sys.path (rvt_geometry, rvt_elemmesh, rvt_materials, ...), cached_load(path), reader_stamp()"""
+        from . import reader; return reader
+
+
+def load_plugins(app, models):
+    """mount viewer plug-ins as aiohttp sub-apps. A plug-in is a python module with make_app(ctx) -> aiohttp.web.Application and optional NAME / TITLE / MOUNT ('/sheets/').
+    Sources: env RVT_PLUGINS (comma list of module names), ~/.config/rvt-viewer/plugins.json ({"plugins": [{"module": "rvtsheets.server", "path": "~/src/rvt-sheets", "mount": "/sheets/", "title": "Sheets"}]}),
+    and the built-in default rvtsheets.server from ~/src/rvt-sheets when that directory exists."""
+    import importlib, sys
+    cfg = []
+    for n in filter(None, os.environ.get('RVT_PLUGINS', '').split(',')): cfg.append({'module': n.strip()})
+    f = os.path.expanduser('~/.config/rvt-viewer/plugins.json')
+    if os.path.exists(f):
+        try: cfg += json.load(open(f)).get('plugins', [])
+        except Exception as ex: print('plugins.json unreadable:', ex)
+    if not cfg and os.path.isdir(os.path.expanduser('~/src/rvt-sheets/rvtsheets')): cfg.append({'module': 'rvtsheets.server', 'path': '~/src/rvt-sheets', 'mount': '/sheets/', 'title': 'Sheets'})
+    ctx = PluginContext(models); loaded = []
+    for c in cfg:
+        try:
+            if c.get('path') and os.path.expanduser(c['path']) not in sys.path: sys.path.insert(0, os.path.expanduser(c['path']))
+            mod = importlib.import_module(c['module']); mount = c.get('mount') or getattr(mod, 'MOUNT', None) or '/' + c['module'].split('.')[0] + '/'
+            if not mount.endswith('/'): mount += '/'
+            app.add_subapp(mount, mod.make_app(ctx))
+            loaded.append({'name': getattr(mod, 'NAME', c['module']), 'title': c.get('title') or getattr(mod, 'TITLE', c['module']), 'mount': mount})
+        except Exception as ex:
+            print('plug-in %s not loaded: %r' % (c.get('module'), ex))
+    return loaded
+
+
 def make_app(models):
     app = web.Application(client_max_size=1 << 20)
     @web.middleware
@@ -110,6 +162,9 @@ def make_app(models):
     app.router.add_get('/m/{mid}/compare.json', compare)
     app.router.add_get('/api/m/{mid}/el/{i}', element)
     app.router.add_get('/api/m/{mid}/search', search)
+    plugins = load_plugins(app, models)
+    async def list_plugins(req): return web.json_response(plugins)
+    app.router.add_get('/api/plugins', list_plugins)
     app.router.add_static('/', WEB, follow_symlinks=False)
     return app
 

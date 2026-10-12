@@ -55,3 +55,4 @@ input[type=range]{accent-color:var(--acc2)}
 #parsebar .pb{flex:1;min-width:140px;max-width:420px;height:8px;background:#0006;border-radius:4px;overflow:hidden}#parsebar .pb div{height:100%;background:#ffb938;transition:width .5s}
 #parsebar b{color:#fff}#parsebar .sm{opacity:.8}
 #watermark{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:#7a1f1fcc;color:#fff;border:1px solid #ff8a8a;padding:5px 14px;border-radius:6px;font-weight:600;font-size:13px;z-index:4;pointer-events:none;letter-spacing:.3px;text-align:center}
+.drawlink{margin-left:6px;font-size:11px;color:var(--acc2)}

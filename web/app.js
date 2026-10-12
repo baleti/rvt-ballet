@@ -162,6 +162,21 @@ function showCached(ms) {
   bar.hidden = false; bar.className = 'cached'; bar.innerHTML = `<b>Loaded from cache</b><span>reader version ${esc(rv)} &middot; ${S.N.toLocaleString()} elements in ${(ms / 1000).toFixed(1)} s</span>`;
   setTimeout(() => { if (bar.className === 'cached') bar.hidden = true; }, 6000);
 }
+// ------------------------------------------------------------------ plug-ins (docs/PLUGINS.md)
+async function loadPlugins() {
+  try { S.plugins = await (await fetch('/api/plugins')).json(); } catch (e) { S.plugins = []; }
+  const top = $('#top'); top.querySelectorAll('.plug').forEach(b => b.remove());
+  for (const p of S.plugins) { const b = document.createElement('button'); b.className = 'plug'; b.textContent = p.title; b.title = 'Open the ' + p.title + ' plug-in for this model'; b.onclick = () => window.open(p.mount + '#' + S.mid, '_blank'); top.appendChild(b); }
+}
+const sheetsPlugin = () => (S.plugins || []).find(p => p.mount === '/sheets/');
+function drawingLink(kind, id) { const p = sheetsPlugin(); return p ? ` <a href="${p.mount}#${encodeURIComponent(S.mid)}/${kind}/${id}" target="_blank" class="drawlink" title="open the drawing (sheets plug-in)" onclick="event.stopPropagation()">drawing</a>` : ''; }
+// messages from plug-in pages (same origin): {type: 'rvt-select', elementId} selects + frames the element; {type: 'rvt-isolate', elementIds: [...]}
+window.addEventListener('message', async ev => {
+  const d = ev.data || {}; if (!S.meta) return;
+  const idx = id => { const i = S.meta.elements.findIndex(r => r[0] === +id); return i < 0 ? null : i; };
+  if (d.type === 'rvt-select') { const i = idx(d.elementId); if (i != null) { await select(i); await zoomTo([i]); } }
+  if (d.type === 'rvt-isolate') { const ids = (d.elementIds || []).map(idx).filter(i => i != null); if (ids.length) { setIsolate(new Set(ids)); await zoomTo(ids); } }
+});
 async function loadModel(mid, opts = {}) {
   S.mid = mid; { const cur = location.hash.slice(1); if (!(cur === mid || cur.startsWith(mid + '?'))) { S.hashRestored = true; history.replaceState(null, '', '#' + mid); } } $('#status').textContent = 'loading...';
   const t0 = performance.now(); let meta = null;
@@ -445,8 +460,8 @@ function renderLevels(tb) {
 }
 function renderViews(tb) {
   const V = S.meta.views || [], Sh = S.meta.sheets || [];
-  tb.innerHTML = `<h3>Sheets (${Sh.length})</h3>` + Sh.map(s => `<div class="li"><b>${esc(s.number)}</b> ${esc(s.name)}<span class="cnt">${(s.views || []).length} views</span></div>` + ((s.views || []).length ? `<div class="dim" style="margin:-2px 0 3px 22px;font-size:11px">${s.views.map(esc).join(' &middot; ')}</div>` : '')).join('') +
-    `<h3>Views (${V.length})</h3>` + V.map((v, k) => `<div class="li" data-vk="${k}" style="${v.origin ? '' : 'opacity:.55'}" title="${v.origin ? 'click: open this view in the 3D scene' : 'no camera stored'}"><span>${esc(v.name)}</span><span class="cnt">${esc(v.kind)}${v.scale ? ' 1:' + Math.round(1 / v.scale) : ''}${v.template ? ' (template)' : ''}</span></div>`).join('');
+  tb.innerHTML = `<h3>Sheets (${Sh.length})</h3>` + Sh.map(s => `<div class="li"><b>${esc(s.number)}</b> ${esc(s.name)}${drawingLink('sheet', s.id)}<span class="cnt">${(s.views || []).length} views</span></div>` + ((s.views || []).length ? `<div class="dim" style="margin:-2px 0 3px 22px;font-size:11px">${s.views.map(esc).join(' &middot; ')}</div>` : '')).join('') +
+    `<h3>Views (${V.length})</h3>` + V.map((v, k) => `<div class="li" data-vk="${k}" style="${v.origin ? '' : 'opacity:.55'}" title="${v.origin ? 'click: open this view in the 3D scene' : 'no camera stored'}"><span>${esc(v.name)}${v.kind !== '3d' ? drawingLink('view', v.id) : ''}</span><span class="cnt">${esc(v.kind)}${v.scale ? ' 1:' + Math.round(1 / v.scale) : ''}${v.template ? ' (template)' : ''}</span></div>`).join('');
   tb.querySelectorAll('[data-vk]').forEach(d => d.onclick = () => openView(V[+d.dataset.vk]));
 }
 function renderRooms(tb) {
@@ -617,6 +632,7 @@ requestAnimationFrame(frame);
   const sel = $('#modelSel'); sel.innerHTML = models.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
   sel.onchange = () => loadModel(sel.value);
   const want = location.hash.slice(1).split('?')[0]; if (models.some(m => m.id === want)) sel.value = want;
+  await loadPlugins();
   if (models.length) await loadModel(sel.value); else $('#status').textContent = 'no models';
 })();
 window.pickAt = pickAt; window.selectEl = select; window.setSection = setSection; window.zoomTo = zoomTo;
