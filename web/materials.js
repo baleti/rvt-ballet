@@ -43,16 +43,36 @@ export function patternTexture() {
   patTex.wrapS = patTex.wrapT = THREE.RepeatWrapping; patTex.minFilter = THREE.LinearMipmapLinearFilter; patTex.magFilter = THREE.LinearFilter; patTex.generateMipmaps = true; patTex.needsUpdate = true;
   return patTex;
 }
-// palette: width = number of materials, 3 rows: row0 = rgb colour + alpha, row1 = texture class, real-world tile size (m), 0, 1, row2 = distinct hash colour (colour-by-material mode)
-export function paletteTexture(mats) {
-  const n = Math.max(1, mats.length), D = new Uint8Array(n * 3 * 4);
+// palette (float RGBA, width = number of materials): row0 = rgb colour + alpha, row1 = texture class, real-world tile size x/y (m), angle (rad),
+// row2 = distinct hash colour (colour-by-material mode), row3 = image layer (0 = none, n = layer n-1 of imageTextures), offset x/y (m)
+const DEF_FT = {brick: 2.2, concrete: 6, wood: 4, stone: 4, metal: 3, glass: 6, tile: 2, plaster: 8, grass: 4, water: 6, roof: 3, insulation: 3};
+export function paletteTexture(mats, layers) {
+  const n = Math.max(1, mats.length), D = new Float32Array(n * 4 * 4);
   mats.forEach((m, i) => {
-    D.set([m.rgb[0] * 255, m.rgb[1] * 255, m.rgb[2] * 255, m.alpha * 255], i * 4);
-    const cls = Math.max(0, CLASSES.indexOf(m.tex_class)); const scaleFt = m.tex_scale_ft && m.tex_scale_ft[0] ? m.tex_scale_ft[0] : ({brick: 2.2, concrete: 6, wood: 4, stone: 4, metal: 3, glass: 6, tile: 2, plaster: 8, grass: 4, water: 6, roof: 3, insulation: 3}[m.tex_class] || 4);
-    D.set([cls * 16, Math.min(255, scaleFt * .3048 * 20), 0, 255], (n + i) * 4);
-    const h = (i * 0.61803398875) % 1, c = hsl(h, .62, .52); D.set([c[0] * 255, c[1] * 255, c[2] * 255, 255], (2 * n + i) * 4);
+    D.set([m.rgb[0], m.rgb[1], m.rgb[2], m.alpha], i * 4);
+    const cls = Math.max(0, CLASSES.indexOf(m.tex_class)), s = m.tex_scale_ft && m.tex_scale_ft[0] ? m.tex_scale_ft : [DEF_FT[m.tex_class] || 4, DEF_FT[m.tex_class] || 4];
+    const mul = m.tex_tile_mul || 1; D.set([cls, s[0] * .3048 * mul, (s[1] || s[0]) * .3048 * mul, (m.tex_angle || 0) * Math.PI / 180], (n + i) * 4);
+    const h = (i * 0.61803398875) % 1, c = hsl(h, .62, .52); D.set([c[0], c[1], c[2], 1], (2 * n + i) * 4);
+    const o = m.tex_offset_ft || [0, 0]; D.set([layers && layers[i] != null ? layers[i] + 1 : 0, (o[0] || 0) * .3048, (o[1] || 0) * .3048, 0], (3 * n + i) * 4);
   });
-  const t = new THREE.DataTexture(D, n, 3, THREE.RGBAFormat, THREE.UnsignedByteType); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t;
+  const t = new THREE.DataTexture(D, n, 4, THREE.RGBAFormat, THREE.FloatType); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t;
+}
+// image textures (library bitmaps or Revit's flat swatches, 256 px PNGs from /m/<mid>/tex/<k>.png) -> one RGBA DataArrayTexture; returns {tex, layers: {material k: layer}}
+const IS = 256;
+export async function imageTextures(mid, mats) {
+  const ks = []; mats.forEach((m, k) => { if (m.tex_img) ks.push(k); });
+  const layers = {}, D = new Uint8Array(IS * IS * 4 * Math.max(1, ks.length));
+  const cv = document.createElement('canvas'); cv.width = cv.height = IS; const g = cv.getContext('2d', {willReadFrequently: true});
+  let L = 0;
+  for (const k of ks) {
+    try {
+      const im = new Image(); im.src = `/m/${mid}/tex/${k}.png`; await im.decode();
+      g.clearRect(0, 0, IS, IS); g.drawImage(im, 0, 0, IS, IS); D.set(g.getImageData(0, 0, IS, IS).data, L * IS * IS * 4); layers[k] = L++;
+    } catch (e) { /* missing image: material keeps its colour / procedural pattern */ }
+  }
+  const t = new THREE.DataArrayTexture(D, IS, IS, Math.max(1, L)); t.format = THREE.RGBAFormat; t.type = THREE.UnsignedByteType; t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = true; t.needsUpdate = true;
+  return {tex: t, layers};
 }
 function hsl(h, s, l) { const a = s * Math.min(l, 1 - l), f = n => { const k = (n + h * 12) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); }; return [f(0), f(8), f(4)]; }
 export { CLASSES, hsl };

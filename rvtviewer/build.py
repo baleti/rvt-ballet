@@ -15,7 +15,8 @@ CAT_COLORS = {
     'Stairs': (0.75, 0.72, 0.65), 'Railings': (0.60, 0.60, 0.62), 'Furniture': (0.78, 0.60, 0.45), 'Plumbing Fixtures': (0.85, 0.88, 0.92),
     'Lighting Fixtures': (0.98, 0.90, 0.50), 'Mechanical Equipment': (0.45, 0.70, 0.55), 'Electrical Equipment': (0.90, 0.55, 0.30),
     'Curtain Panels': (0.60, 0.80, 0.90), 'Curtain Wall Mullions': (0.50, 0.52, 0.55), 'Structural Rebar': (0.75, 0.30, 0.25), 'Topography': (0.55, 0.62, 0.45),
-    'Lines': (0.2, 0.2, 0.2),
+    'Lines': (0.2, 0.2, 0.2), 'Planting': (0.36, 0.52, 0.30), 'Entourage': (0.55, 0.56, 0.60), 'Pads': (0.62, 0.60, 0.55), 'Site': (0.55, 0.55, 0.50), 'Parking': (0.45, 0.45, 0.47),
+    'Generic Models': (0.72, 0.70, 0.68), 'Casework': (0.80, 0.70, 0.55), 'Specialty Equipment': (0.70, 0.70, 0.72), 'Columns': (0.80, 0.78, 0.74), 'Fascias': (0.85, 0.84, 0.80), 'Gutters': (0.70, 0.70, 0.72),
 }
 def cat_color(name):
     c = CAT_COLORS.get(name)
@@ -647,6 +648,46 @@ def line_geom(ctx, e, r):
     pts = curve_pts(g(r['fields'], 'm_pCurveDriver', 'm_pCrv'))
     return (LineSet(pts), 'line') if pts is not None and len(pts) > 1 else None
 
+def record_curves(fields):
+    """every stored line / arc node of a record (m_origin + m_dirVec + m_endParams, or m_center + m_radius + m_xVec/m_yVec + m_endParams) -> list of point arrays"""
+    out = []
+    def walk(n):
+        if isinstance(n, list):
+            for x in n: walk(x)
+            return
+        if not isinstance(n, dict): return
+        n = n.get('obj', n)
+        if not isinstance(n, dict): return
+        try:
+            if 'm_endParams' in n and 'm_dirVec' in n and 'm_origin' in n:
+                o = np.array(n['m_origin'], float); d = np.array(n['m_dirVec'], float); t0, t1 = n['m_endParams'][:2]; out.append(np.array([o + d * t0, o + d * t1])); return
+            if 'm_endParams' in n and 'm_radius' in n and 'm_center' in n:
+                c = np.array(n['m_center'], float); x = np.array(n['m_xVec'], float); y = np.array(n['m_yVec'], float); rr = float(n['m_radius']); t0, t1 = n['m_endParams'][:2]
+                t = np.linspace(t0, t1, max(3, int(abs(t1 - t0) / 0.1) + 2)); out.append(c + rr * np.cos(t)[:, None] * x + rr * np.sin(t)[:, None] * y); return
+        except Exception: return
+        for v in n.values():
+            if isinstance(v, (dict, list)): walk(v)
+    walk(fields)
+    seen = set(); res = []
+    for p in out:
+        k = tuple(np.round(p[[0, -1]], 5).ravel()); k2 = tuple(np.round(p[[-1, 0]], 5).ravel())
+        if k in seen or k2 in seen or np.linalg.norm(p[-1] - p[0]) < 1e-9 and len(p) == 2: continue
+        seen.add(k); res.append(p)
+    return res
+
+class SegSet(LineSet):
+    """several polylines as one set of GL line segments"""
+    def __init__(self, polys):
+        vs = []; fs = []; n = 0
+        for p in polys:
+            p = np.asarray(p, float); vs.append(p); fs.append(np.c_[np.arange(len(p) - 1), np.arange(1, len(p))] + n); n += len(p)
+        self.v = np.vstack(vs) if vs else np.zeros((0, 3)); self.f = (np.vstack(fs) if fs else np.zeros((0, 2))).astype(np.int32)
+
+def curve_lines_geom(ctx, e, r):
+    """2D-ish datum elements (property lines and their segments): the stored curves as lines, never a box"""
+    polys = record_curves(r['fields'])
+    return (SegSet(polys), 'line') if polys else None
+
 def grid_line_geom(ctx, e, r):
     """curtain grid line: the full (host-wide) line stored in m_pFullCurve (a line in the curtain wall's plane)"""
     pts = curve_pts(g(r['fields'], 'm_pFullCurve'))
@@ -689,7 +730,7 @@ def instance_box(ctx, e, r):
     return m, 'bbox'
 
 LINE_CLASSES = {'CurveElem'}
-BUILDERS = {'ArcWall': wall_geom, 'ProfileRoof': roof_geom, 'FootPrintRoof': roof_geom, 'SWall': wall_geom, 'Floor': slab_geom, 'Ceiling': slab_geom, 'RoofSoffit': slab_geom, 'BuildingPad': slab_geom, 'RbsDuctCurve': mep_geom, 'RbsPipeCurve': mep_geom, 'RbsConduitCurve': mep_geom, 'CableTray': mep_geom,
+BUILDERS = {'Property': curve_lines_geom, 'PropertyLineSegment': curve_lines_geom, 'ArcWall': wall_geom, 'ProfileRoof': roof_geom, 'FootPrintRoof': roof_geom, 'SWall': wall_geom, 'Floor': slab_geom, 'Ceiling': slab_geom, 'RoofSoffit': slab_geom, 'BuildingPad': slab_geom, 'RbsDuctCurve': mep_geom, 'RbsPipeCurve': mep_geom, 'RbsConduitCurve': mep_geom, 'CableTray': mep_geom,
             'RbsFlexDuctCurve': mep_geom, 'RbsFlexPipeCurve': mep_geom, 'CurveElem': line_geom, 'CurtainGridLine': grid_line_geom, 'FamilyInstance': instance_box}
 HIDE_DEFAULT_CATS = {'Center line', '<Sketch>', 'Work Plane Grid', 'Cameras', 'Scope Boxes', 'Boundary Conditions', 'Area Loads', 'Line Loads', 'Point Loads', 'Division Profiles',
                      'Survey Point', 'Project Base Point', 'Internal Origin', 'Guide Grid', 'Reference Planes', 'Parts', 'Spaces', 'Rooms', 'Areas', 'Mass Floor', 'RVT Links', 'Analytical Nodes', 'Reference Points', 'Grids', 'Levels', 'Sections', 'Viewports'}
@@ -810,6 +851,7 @@ def _em_geometry(GG, src, e):
     P = np.array([p for t in m['tris'] for p in t])
     mt = m.get('meta') or []
     return {'confidence': 'mesh_approx', 'flags': ['saved_graphics_tessellation'] + list(m['flags']), 'nid': list(m.get('nid') or []), 'fid': list(m.get('fid') or []),
+            'mat': [int(x) if x is not None else -1 for x in m['mat']] if m.get('mat') is not None and len(m['mat']) == len(m['tris']) else None,
             'surf': [str(x[0]) for x in mt] if len(mt) == len(m['tris']) else None, 'tris_raw': m['tris'] if (len(m['tris']) <= 1500 and any(str(x[0]) in CURVED_SURFACES for x in mt)) else None, 'meta_raw': mt if (len(m['tris']) <= 1500 and any(str(x[0]) in CURVED_SURFACES for x in mt)) else None,
             'solids': [{'kind': 'triangle_mesh', 'triangles': P.round(6).tolist(), 'source': m['source']}]}
 
@@ -883,16 +925,26 @@ def param_material(ctx, e, r):
             if isinstance(v, int) and not isinstance(v, bool):
                 v = ctx.eid_int(v) if v >= (1 << (8 * ctx.W - 1)) else v
                 if v in idx: return v
+    for src_id in (e, type_of(ctx, e, r)):                    # unnamed built-in ElementId parameters stored on the record (e.g. a toposurface's material): any value that is a Material
+        rr = r if src_id == e else (ctx.recs.get(src_id) if src_id is not None else None)
+        pv = (rr or {}).get('fields', {}).get('m_pParamValueSetElementId') if rr else None
+        pv = pv.get('obj', pv) if isinstance(pv, dict) else None
+        for it in ((pv or {}).get('m_paramSet') or []):
+            v = ctx.eid_int(it.get('m_value')) if isinstance(it, dict) else None
+            if v in idx: return v
     return None
 
 
-def _split_by_material(m, nid, ntri0, mp, idx):
-    """-> geom.Multi of per-material sub-meshes (each .mat = position in the material list), or the mesh itself with .mat set when one material covers it; None when no body has a material"""
+def _split_by_material(m, nid, ntri0, mp, idx, tri_mat=None):
+    """-> geom.Multi of per-material sub-meshes (each .mat = position in the material list), or the mesh itself with .mat set when one material covers it; None when no body has a material.
+    tri_mat: Revit material id per reader triangle (-1 = unassigned); bodies' materials (mp: nid -> material id) fill the unassigned ones"""
     import numpy as _np
-    if not mp or not idx: return None
+    if (not mp and tri_mat is None) or not idx: return None
     tm = _np.full(len(m.f), -1, int); nid = _np.asarray(nid)
-    for b, mid in mp.items():
+    for b, mid in (mp or {}).items():
         if mid in idx: tm[:ntri0][nid == b] = idx[mid]
+    if tri_mat is not None:
+        tv = _np.array([idx.get(int(x), -1) for x in tri_mat], int)[:ntri0]; tm[:len(tv)] = _np.where(tv >= 0, tv, tm[:len(tv)])
     if ntri0 < len(m.f):                                    # extra B-rep faces (no body id): take the most common material
         known = tm[:ntri0][tm[:ntri0] >= 0]
         tm[ntri0:] = _np.bincount(known).argmax() if len(known) else -1
@@ -947,7 +999,10 @@ def reader_mesh(ctx, e, a_pre=None):
     if mats and mats['list']:
         try:
             mp = body_materials(GG, ctx.src, e) if a.get('nid') is not None else {}
-            res = _split_by_material(m, a.get('nid'), len(a['nid']) if a.get('nid') is not None else 0, mp, mats['index']) if mp else None
+            tri_mat = a.get('mat') if a.get('mat') is not None and len(a['mat']) == len(P) // 3 else None       # per-triangle material from the reader (face render style first): beats the per-body guess
+            if tri_mat is not None: m.info['material_source'] = 'per face (reader)'
+            elif mp: m.info['material_source'] = 'per body (graphics style of the geometry node)'
+            res = _split_by_material(m, a.get('nid'), len(a['nid']) if a.get('nid') is not None else 0, mp, mats['index'], tri_mat) if (mp or tri_mat is not None) else None
             if res is not None:
                 m = res
                 for bi in (m.info or {}).get('body_list') or []:
@@ -1083,6 +1138,11 @@ def _element_mesh(ctx, e, r):
     if part: return part[0], 'approx'
     if ctx.catname(e) in ('Planting', 'Entourage') and ctx.bbox(e) is not None: return geom.ellipsoid(*ctx.bbox(e)), 'bbox'          # some faces of the decoded body are of an unsupported surface type
     bb = ctx.bbox(e)
+    if bb is not None and float(np.min(bb[1] - bb[0])) < 1e-4:          # flat placeholder (a zero-thickness box is a filled plane): the stored curves as lines instead
+        try:
+            polys = record_curves(r['fields'])
+            if polys: return SegSet(polys), 'line'
+        except Exception: pass
     if bb is not None: return geom.box(*bb), 'bbox'
     return None
 
@@ -1384,6 +1444,7 @@ def convert(path, outdir, log=print, workers=None):
     db.executemany('insert into ginfo values(?,?)', [(el['i'], json.dumps(el['ginfo'])) for el in els if el.get('ginfo')])
     db.execute('create table if not exists elmat(i integer, m integer)'); db.executemany('insert into elmat values(?,?)', [(el['i'], m_) for el in els for m_ in (el.get('mats') or [])]); db.execute('create index if not exists elmat_m on elmat(m)')
     use = collections.Counter(m_ for el in els for m_ in (el.get('mats') or []))
+    MT.write_images(outdir, ctx.mats, log)
     json.dump({'materials': [{**m_, 'elements': use.get(k, 0)} for k, m_ in enumerate(ctx.mats['list'])], 'textureClasses': MT.TEX_CLASSES}, open(os.path.join(outdir, 'materials.json'), 'w'), separators=(',', ':'))
     db.executemany('update el set fid=?, iou=? where i=?', [(el['fid'], el.get('iou'), el['i']) for el in els if el['fid'] != 'none']); db.commit(); db.close()
     meta = dict(base_meta); meta.update({'phase': 'done', 'batches': bmeta, 'bbox': model_bbox(els), 'coverage': {k: dict(v) for k, v in covg.items()}, 'coverageByClass': {k: dict(v) for k, v in covc.items()},

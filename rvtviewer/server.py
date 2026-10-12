@@ -180,6 +180,13 @@ def make_app(models):
         mid, d = mdir(req); k = int(req.match_info['k'])
         try: return web.json_response([r[0] for r in models.db(mid).execute('select distinct i from elmat where m=?', (k,))])
         except Exception: return web.json_response([])
+    async def mat_image(req):
+        mid, d = mdir(req); kind = req.match_info['kind']; k = req.match_info['k']
+        if kind not in ('swatch', 'tex') or not k.isdigit(): raise web.HTTPNotFound()
+        fn = os.path.join(d, kind, k + '.png')
+        if not os.path.exists(fn): raise web.HTTPNotFound()
+        return web.FileResponse(fn, headers={'Cache-Control': 'max-age=3600'})
+    app.router.add_get('/m/{mid}/{kind}/{k}.png', mat_image)
     app.router.add_get('/m/{mid}/materials.json', materials_json)
     app.router.add_get('/api/m/{mid}/material/{k}', material_elements)
     app.router.add_get('/api/m/{mid}/el/{i}', element)
