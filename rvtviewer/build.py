@@ -822,7 +822,8 @@ def topology_check(a, P):
         import signal
         def _to(sig, frm): raise TimeoutError()
         old = signal.signal(signal.SIGALRM, _to); signal.setitimer(signal.ITIMER_REAL, 3.0)
-        try: v_, closed, area_ref = RM.refined_volume(a['tris_raw'], a['meta_raw'], fid=a.get('fid'))[:3]
+        VF = fast_module(); rv = getattr(VF, 'refined_volume', None) if VF is not None else None          # Rust drop-in (same result to 1e-9, ~50x faster) when available
+        try: v_, closed, area_ref = (rv or RM.refined_volume)(a['tris_raw'], a['meta_raw'], fid=a.get('fid'))[:3]
         finally: signal.setitimer(signal.ITIMER_REAL, 0); signal.signal(signal.SIGALRM, old)
         T = P.reshape(-1, 3, 3); area = float(np.linalg.norm(np.cross(T[:, 1] - T[:, 0], T[:, 2] - T[:, 0]), axis=1).sum() / 2)
         return ((0.6 <= area / area_ref <= 1.5) if area_ref > 1e-9 else True), area, float(area_ref)      # tolerance is wide on purpose: the analytic area omits some caps (duct fittings read 1.1-1.3 with correct meshes); the torus reads 1.6, facade members up to 3.3
@@ -1100,7 +1101,7 @@ def prefetch_reader_meshes(ctx, els, prog=None, on_partial=None):
                     account(e, r)
     ctx._rm = out
 
-CONTAINER_CLASSES = {'JoistSystem', 'BeamSystem'}          # layout containers: zero-height bbox, no graphics of their own (the members are separate FamilyInstances)
+CONTAINER_CLASSES = {'JoistSystem', 'BeamSystem', 'ElementGroup'}          # layout containers: zero-height bbox, no graphics of their own (the members are separate FamilyInstances)
 
 LAYERED_CLASSES = {'SWall', 'ArcWall', 'Floor', 'Ceiling', 'ProfileRoof', 'FootPrintRoof', 'RoofSoffit', 'BuildingPad'}
 
