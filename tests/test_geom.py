@@ -29,6 +29,16 @@ def test_glb_roundtrip(tmp_path=None):
     glb.write_glb(p, [{'name': 'a', 'color': (1, 0, 0, 1), 'pos': glb.to_yup_m(m.v), 'eidx': np.zeros(len(m.v)), 'idx': m.f.reshape(-1)}])
     b = open(p, 'rb').read(); assert b[:4] == b'glTF'; n = struct.unpack_from('<I', b, 12)[0]; js = json.loads(b[20:20 + n]); assert js['meshes'][0]['primitives'][0]['attributes']['_EIDX'] == 1
 
+def test_hermite_curve_points():
+    from rvtviewer import build
+    c = {'m_NodeArray': [{'m_iParametr': 0.0, 'm_iPoint': [0, 0, 0], 'm_iTangent': [1, 0, 0]}, {'m_iParametr': 2.0, 'm_iPoint': [2, 0, 0], 'm_iTangent': [1, 0, 0]}]}
+    P = build.curve_pts(c); assert P is not None and abs(P[-1][0] - 2) < 1e-9 and np.allclose(P[:, 1:], 0) and np.all(np.diff(P[:, 0]) > 0)
+def test_body_summary_closed_box():
+    from rvtviewer import build
+    m = geom.box((0, 0, 0), (1, 2, 3)); P = m.v[m.f].reshape(-1, 3)
+    b = build.body_summary(P, [7] * len(m.f), list(range(len(m.f))))
+    assert len(b) == 1 and b[0]['closed'] == 'yes' and abs(b[0]['area'] - 22) < 1e-6
+
 if __name__ == '__main__':
     for k, v in list(globals().items()):
         if k.startswith('test_'): v(); print('ok', k)
