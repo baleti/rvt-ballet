@@ -724,13 +724,16 @@ def reader_brep_extra(ctx, e, GG):
     except Exception:
         return None
 
+MESH_FIRST = {'SWall', 'ArcWall', 'Floor', 'Ceiling', 'ProfileRoof', 'FootPrintRoof', 'RoofSoffit', 'BuildingPad'}      # saved-graphics meshes match Revit volumes within 2% far more often than the parametric rebuilds (2020 residential walls 92% vs 57%, roofs 100% vs 0%)
+
 def reader_mesh(ctx, e):
     """triangle mesh the reader decoded from Revit's saved graphics (rvt_geometry.element_geometry, confidence 'mesh_approx', world feet): the family-instance geometry. -> (Mesh, fid) or None"""
     if not USE_READER_MESH or not getattr(ctx, 'src', None): return None
     if getattr(ctx, '_rm', None) is not None: return ctx._rm.get(e)          # prefetched in the parent process (workers must not each load the reader's geometry context)
     try:
         reader._import(); import rvt_geometry as GG
-        a = GG.element_geometry(ctx.src, e)
+        if ctx.recs[e]['class'] in MESH_FIRST: a = GG._mesh_geometry(ctx.src, e, GG.get_ctx(ctx.src).rec(e)) or {}       # the analytic builder would answer first for these classes: ask for the saved graphics directly
+        else: a = GG.element_geometry(ctx.src, e)
     except Exception: return None
     if a.get('confidence') != 'mesh_approx': return None
     T = [np.array(sl['triangles'], float).reshape(-1, 3) for sl in a['solids'] if sl.get('kind') == 'triangle_mesh' and sl.get('triangles')]
@@ -748,7 +751,7 @@ def reader_mesh(ctx, e):
 def prefetch_reader_meshes(ctx, els, prog=None):
     ctx._rm = None; out = {}; t = time.time(); n = 0
     for el in els:
-        if not el['cat'] or el['isType'] or ctx.recs[el['id']]['class'] in ANALYTIC_CLASSES or (ctx.bbox(el['id']) is None and el['id'] in ctx.eh): continue
+        if not el['cat'] or el['isType'] or (ctx.recs[el['id']]['class'] in ANALYTIC_CLASSES and ctx.recs[el['id']]['class'] not in MESH_FIRST) or (ctx.bbox(el['id']) is None and el['id'] in ctx.eh): continue
         try: out[el['id']] = reader_mesh(ctx, el['id'])
         except Exception: out[el['id']] = None
         n += 1
@@ -756,7 +759,7 @@ def prefetch_reader_meshes(ctx, els, prog=None):
     ctx._rm = out
 
 def element_mesh(ctx, e, r):
-    if r['class'] not in ANALYTIC_CLASSES and (ctx.bbox(e) is not None or e not in ctx.eh):
+    if (r['class'] not in ANALYTIC_CLASSES or r['class'] in MESH_FIRST) and (ctx.bbox(e) is not None or e not in ctx.eh):
         rm = reader_mesh(ctx, e)
         if rm: return rm
     if ctx.catname(e) in ('Planting', 'Entourage') and ctx.bbox(e) is not None and r['class'] == 'FamilyInstance': return geom.ellipsoid(*ctx.bbox(e)), 'bbox'
