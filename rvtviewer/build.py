@@ -1143,6 +1143,8 @@ def _element_mesh(ctx, e, r):
     if fn:
         try:
             res = fn(ctx, e, r)
+            if res and res[0] and res[1] == 'bbox' and 'symbol_no_graphics' in str(ctx._why.get(e) or '') and getattr(res[0], 'kind', 'tri') == 'tri':
+                return feature_edges(res[0]), 'bbox'                 # oriented placeholder of a symbol without 3D graphics: outline only
             if res and res[0]:
                 if r['class'] in ('Floor', 'Ceiling', 'RoofSoffit', 'BuildingPad', 'ProfileRoof', 'FootPrintRoof') and not isinstance(res[0], geom.Multi):
                     col = dominant_rgb(type_layers(ctx, type_of(ctx, e, r)))
@@ -1158,8 +1160,25 @@ def _element_mesh(ctx, e, r):
             polys = record_curves(r['fields'])
             if polys: return SegSet(polys), 'line'
         except Exception: pass
+    if bb is not None and 'symbol_no_graphics' in str(ctx._why.get(e) or ''):      # the family symbol stores no 3D graphics (void-only openings, reference families): an outline, not a solid that would plug the hole it cuts
+        return box_edges(*bb), 'bbox'
     if bb is not None: return geom.box(*bb), 'bbox'
     return None
+
+def feature_edges(m):
+    """edges of a triangle mesh where the two adjacent faces are not coplanar (a box -> its 12 edges) as a SegSet"""
+    V = np.asarray(m.v, float); F = np.asarray(m.f).reshape(-1, 3)
+    N = np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]]); N /= np.linalg.norm(N, axis=1, keepdims=True) + 1e-12
+    key = lambda p: tuple(np.round(p, 5)); adj = {}
+    for t, f in enumerate(F):
+        for a, b in ((f[0], f[1]), (f[1], f[2]), (f[2], f[0])):
+            k = tuple(sorted((key(V[a]), key(V[b])))); adj.setdefault(k, []).append(t)
+    segs = [[np.array(k[0]), np.array(k[1])] for k, ts in adj.items() if len(ts) != 2 or abs(float(N[ts[0]] @ N[ts[1]])) < 0.999]
+    return SegSet(segs)
+
+def box_edges(lo, hi):
+    c = [np.array([(hi if i & 1 else lo)[0], (hi if i & 2 else lo)[1], (hi if i & 4 else lo)[2]]) for i in range(8)]
+    return SegSet([[c[a], c[b]] for a, b in ((0, 1), (2, 3), (4, 5), (6, 7), (0, 2), (1, 3), (4, 6), (5, 7), (0, 4), (1, 5), (2, 6), (3, 7))])
 
 # ---------------------------------------------------------------- datum / spatial
 

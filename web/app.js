@@ -371,6 +371,7 @@ function geomBadge(e, g) {
   if (g && g.surfaces) h += '<br>surface types (triangles): ' + Object.entries(g.surfaces).map(([k, n]) => chip(k, n)).join('');
   if (g && g.reason) h += '<br>why not true geometry: ' + esc(g.reason);
   if (g && (g.flags || []).length) h += '<br>flags: ' + g.flags.map(esc).join(', ');
+  if (g && g.material_source) h += '<br>materials: ' + esc(g.material_source);
   h += '</div>';
   if (g && (g.body_list || []).length) h += `<table class="kv" style="font-size:11px"><tr><td>body</td><td class="mono">surfaces / faces / triangles / area (ft2) / closed</td></tr>${g.body_list.map(b => `<tr><td>${esc(b.kind)} ${b.id % 10000000}</td><td class="mono">${b.surfaces ? Object.entries(b.surfaces).map(([k, n]) => chip(k, n)).join('') + ' / ' : ''}${b.faces == null ? '-' : b.faces} / ${b.tris} / ${b.area} / ${b.closed === 'yes' ? 'closed' : (b.closed === 'sealed' ? 'closed (T-junctions)' : 'open')}</td></tr>`).join('')}</table>`;
   return h;

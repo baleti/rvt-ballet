@@ -59,8 +59,10 @@ def asset_extras(src):
                 r = {'scale_ft': [d('texture_RealWorldScaleX'), d('texture_RealWorldScaleY')], 'offset_ft': [d('texture_RealWorldOffsetX') or 0.0, d('texture_RealWorldOffsetY') or 0.0],
                      'angle_deg': (props.get('texture_WAngle') or {}).get('m_value') or 0.0, 'prop': p.get('m_sName'),
                      'path': '|'.join(dict.fromkeys(x.replace('\\', '/') for x in str((props.get('unifiedbitmap_Bitmap') or {}).get('m_value') or '').split('|') if x)) or None}
-                if p.get('m_sName') == 'generic_diffuse': return r
-                best = best or r
+                nm = str(p.get('m_sName') or ''); r['colour'] = nm.endswith(('diffuse', '_color', '_colour'))      # bump / pattern / cutout maps are not colour images
+                if nm == 'generic_diffuse': return r
+                if best is None or (r['colour'] and not best['colour']): best = r
+        if best is not None and not best['colour']: best = dict(best, path=None)
         return best
     for eid, r in G.get_ctx(src).recs.items():
         if r['class'] != 'AppearanceAssetElem': continue
@@ -122,7 +124,7 @@ def write_images(outdir, mats, log=print):
         png = mats.get('thumbs', {}).get(m['id'])
         if png:
             open(os.path.join(outdir, 'swatch', '%d.png' % k), 'wb').write(png); m['swatch'] = True
-        lib = library_texture(m.get('tex_path'))
+        lib = library_texture(m.get('tex_path')) if m.get('tex_colour') else None
         try:
             if lib:
                 Image.open(lib).convert('RGB').resize((256, 256), Image.LANCZOS).save(os.path.join(outdir, 'tex', '%d.png' % k)); m['tex_img'] = 'library'; nlib += 1
@@ -158,7 +160,7 @@ def load(src, log=print):
         col = a.get('diffuse') or m.get('color') or [180, 180, 180]
         if m.get('use_render_appearance') is False or not a.get('diffuse'): col = m.get('color') or col
         csrc = 'from file (appearance diffuse)' if a.get('diffuse') else 'from file (material colour)'
-        if ax.get('prop') == 'generic_diffuse':          # the diffuse is a bitmap (its colour value is a placeholder, often white): average of a flat swatch, else the material's shading colour
+        if ax.get('colour') and ax.get('path'):          # the diffuse is a bitmap (its colour value is a placeholder, often white): average of a flat swatch, else the material's shading colour
             mc = swatch_mean(ax['thumb']) if ax.get('thumb') and flat_swatch(ax['thumb']) else None
             if mc: col = mc; csrc = "from file (average of Revit's swatch; the diffuse is a bitmap)"
             elif m.get('color'): col = m['color']; csrc = 'from file (material shading colour; the diffuse is a bitmap)'
@@ -167,7 +169,7 @@ def load(src, log=print):
         scale = [v for v in (ax.get('scale_ft') or []) if v] or [x for x in (tex.get('scale') or []) if x]
         rec = {'id': mid, 'name': m.get('name') or str(mid), 'class': m.get('class'), 'category': m.get('category'), 'rgb': [round(c / 255.0, 3) for c in col[:3]], 'alpha': round(1.0 - float(tr), 3),
                'smooth': m.get('smoothness'), 'shin': m.get('shininess'), 'metal': bool(a.get('metal')), 'glossiness': a.get('glossiness'), 'schema': a.get('schema'), 'asset': a.get('name'),
-               'tex_class': cls, 'tex_path': ax.get('path') or tex.get('path'), 'tex_prop': ax.get('prop'), 'tex_scale_ft': scale[:2] or None, 'tex_angle': ax.get('angle_deg', tex.get('angle')), 'tex_offset_ft': ax.get('offset_ft'),
+               'tex_class': cls, 'tex_path': (ax.get('path') if 'prop' in ax else tex.get('path')), 'tex_prop': ax.get('prop'), 'tex_colour': bool(ax.get('colour') and ax.get('path')), 'tex_scale_ft': scale[:2] or None, 'tex_angle': ax.get('angle_deg', tex.get('angle')), 'tex_offset_ft': ax.get('offset_ft'),
                'color_source': csrc,
                'texture_source': ('texture asset ' + str(tex.get('path')) + ' is not stored in the .rvt: built-in procedural "' + cls + '" (fallback)') if tex.get('path') and cls != 'none' else
                                  ('no texture asset: procedural "' + cls + '" chosen from the material name (fallback)' if cls != 'none' else 'no texture')}
