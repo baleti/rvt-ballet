@@ -143,6 +143,16 @@ def _fmt_ft(s):
     return ' x '.join('%.3g ft' % x for x in s if x)
 
 
+PRISM_COLOUR = ('opaque_albedo', 'layered_diffuse', 'metal_f0', 'transparent_color', 'glazing_transmission_color')
+def prism_colour(a):
+    """colour of a Prism (Advanced) appearance asset, 0..255 RGB, or None"""
+    pr = (a or {}).get('properties') or {}
+    for k in PRISM_COLOUR:
+        v = pr.get(k)
+        if isinstance(v, (list, tuple)) and len(v) >= 3 and all(isinstance(x, (int, float)) for x in v[:3]): return [round(float(x) * 255) for x in v[:3]]
+    return None
+
+
 def load(src, log=print):
     """-> {'list': [record], 'index': {revit material id: position}} ; record: id, name, class, category, rgb [0..1], alpha, smooth, shin, metal, tex_class, tex_path, tex_scale_ft [x, y], tex_angle, schema, source flags"""
     try:
@@ -157,9 +167,9 @@ def load(src, log=print):
         ax = ext.get(m.get('appearance_asset_id')) or {}
         if ax.get('thumb'): thumbs[mid] = ax['thumb']
         a = m.get('appearance') or {}; tex = m.get('texture') or {}
-        col = a.get('diffuse') or m.get('color') or [180, 180, 180]
-        if m.get('use_render_appearance') is False or not a.get('diffuse'): col = m.get('color') or col
-        csrc = 'from file (appearance diffuse)' if a.get('diffuse') else 'from file (material colour)'
+        col = a.get('diffuse') or prism_colour(a) or m.get('color') or [180, 180, 180]
+        if m.get('use_render_appearance') is False or not (a.get('diffuse') or prism_colour(a)): col = m.get('color') or col
+        csrc = 'from file (appearance diffuse)' if a.get('diffuse') else ('from file (advanced appearance colour)' if prism_colour(a) else 'from file (material colour)')
         if ax.get('colour') and ax.get('path'):          # the diffuse is a bitmap (its colour value is a placeholder, often white): average of a flat swatch, else the material's shading colour
             mc = swatch_mean(ax['thumb']) if ax.get('thumb') and flat_swatch(ax['thumb']) else None
             if mc: col = mc; csrc = "from file (average of Revit's swatch; the diffuse is a bitmap)"
