@@ -17,9 +17,9 @@ class Multi:
     def __bool__(self): return bool(self.parts)
 
 class Mesh:
-    __slots__ = ('v', 'f', 'info', 'face_types')
+    __slots__ = ('v', 'f', 'info', 'face_types', 'mat')
     def __init__(self, v=None, f=None):
-        self.info = None; self.face_types = None
+        self.info = None; self.face_types = None; self.mat = None
         self.v = np.zeros((0, 3)) if v is None else np.asarray(v, float).reshape(-1, 3)
         self.f = np.zeros((0, 3), np.int32) if f is None else np.asarray(f, np.int32).reshape(-1, 3)
     def __bool__(self): return len(self.f) > 0

@@ -810,6 +810,86 @@ def body_summary(P, nid, fid=None, surf=None, limit=12):
                     'surfaces': (dict(collections.Counter(np.asarray(surf, dtype=object)[ix].tolist())) if surf is not None and len(surf) == len(nid) else None), 'area': round(area, 3), 'closed': 'yes' if bool(np.all(cnt % 2 == 0)) else ('sealed' if float(np.linalg.norm(np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0]).sum(0))) < 1e-4 * max(area, 1e-9) else 'open'), 'lo': t.reshape(-1, 3).min(0).round(3).tolist(), 'hi': t.reshape(-1, 3).max(0).round(3).tolist()})
     return out
 
+_GST = {}
+
+def body_materials(GG, src, e):
+    """{nid: Revit material id}: the material of each saved-graphics body = graphics style of the Geometry node's category (own nodes: nid = node index; symbol instances: nid = 2e7 + k*1e5 + node index of the k-th drawn symbol)"""
+    import rvt_elemmesh as EM, rvt_materials as RM
+    d = GG._docs.get(src); rec = d.rec(int(e))
+    if rec is None: return {}
+    def nodes(fl):
+        g_, i_ = EM._geos_f(fl, 3)
+        if not g_ and not i_: g_, i_ = EM._geos(fl)
+        return g_, i_
+    def node_mats(geos):
+        out = []
+        for g_ in geos:
+            cat = RM._eid((g_.get('m_GInfo') or {}).get('m_categoryId'))
+            if cat is None: out.append(None); continue
+            if (src, cat) not in _GST: _GST[(src, cat)] = RM.gstyle_material(src, cat)
+            out.append(_GST[(src, cat)])
+        return out
+    geos, inst = nodes(rec['fields']); mp = {i: m for i, m in enumerate(node_mats(geos)) if m is not None}
+    inst = [z for z in inst if not (isinstance(z.get('m_forbiddenTarget'), dict) and z['m_forbiddenTarget'].get('m_targets'))] or inst
+    inst = [z for z in inst if d.cls(EM._ob(z['m_instanceInfo']).get('m_symbolId')) != 'FamilyInstance']
+    k = 0
+    for z in inst:
+        ii = EM._ob(z['m_instanceInfo']); sid = ii.get('m_symbolId')
+        if not ii.get('m_Trf') or sid is None: continue
+        sr = d.rec(int(sid))
+        if sr is None: continue
+        sg, _si = nodes(sr['fields'])
+        if not sg: continue
+        k += 1
+        for gi, m in enumerate(node_mats(sg)):
+            if m is not None: mp[2 * 10 ** 7 + k * 100000 + gi] = m
+    return mp
+
+
+def dominant_layer_material(ctx, tid):
+    """Revit id of the material of the widest compound-structure layer that has one (walls, floors, roofs, ceilings)"""
+    r = ctx.recs.get(tid) if tid is not None else None
+    cs = g(r['fields'], 'm_pCompoundStructure') if r else None
+    best = None
+    for L in (cs or {}).get('m_layers') or []:
+        w = float(L.get('m_layerWidth') or 0); mid = ctx.eid_int(L.get('m_materialId'))
+        if w > 1e-6 and mid in ((getattr(ctx, 'mats', None) or {}).get('index') or {}) and (best is None or w > best[0]): best = (w, mid)
+    return best[1] if best else None
+
+
+def param_material(ctx, e, r):
+    """material named by an element/type parameter (Material, Structural Material, Finish, Glass, ...) -> Revit material id or None"""
+    from . import materials as MT
+    idx = (getattr(ctx, 'mats', None) or {}).get('index') or {}
+    for src_id in (e, type_of(ctx, e, r)):
+        p = ctx.par.get(src_id, {}).get('params', {}) if src_id is not None else {}
+        for k in MT.MATERIAL_PARAMS:
+            v = p.get(k)
+            if isinstance(v, int) and not isinstance(v, bool):
+                v = ctx.eid_int(v) if v >= (1 << (8 * ctx.W - 1)) else v
+                if v in idx: return v
+    return None
+
+
+def _split_by_material(m, nid, ntri0, mp, idx):
+    """-> geom.Multi of per-material sub-meshes (each .mat = position in the material list), or the mesh itself with .mat set when one material covers it; None when no body has a material"""
+    import numpy as _np
+    if not mp or not idx: return None
+    tm = _np.full(len(m.f), -1, int); nid = _np.asarray(nid)
+    for b, mid in mp.items():
+        if mid in idx: tm[:ntri0][nid == b] = idx[mid]
+    if ntri0 < len(m.f):                                    # extra B-rep faces (no body id): take the most common material
+        known = tm[:ntri0][tm[:ntri0] >= 0]
+        tm[ntri0:] = _np.bincount(known).argmax() if len(known) else -1
+    if (tm < 0).all(): return None
+    kinds = sorted(set(tm.tolist()))
+    if len(kinds) == 1 and kinds[0] >= 0: m.mat = kinds[0]; return m
+    parts = []
+    for k in kinds:
+        f_ = m.f[tm == k]; used, inv = _np.unique(f_, return_inverse=True); sub = Mesh(m.v[used], inv.reshape(-1, 3)); sub.mat = k if k >= 0 else None; parts.append((sub, None))
+    mu = geom.Multi(parts); mu.info = getattr(m, 'info', None); return mu
+
+
 def reader_mesh(ctx, e):
     """triangle mesh the reader decoded from Revit's saved graphics (rvt_geometry.element_geometry, confidence 'mesh_approx', world feet): the family-instance geometry. -> (Mesh, fid) or None"""
     if not USE_READER_MESH or not getattr(ctx, 'src', None): return None
@@ -846,8 +926,19 @@ def reader_mesh(ctx, e):
     inside = bb is None or (bool(np.all(P.min(0) >= bb[0] - 0.3)) and bool(np.all(P.max(0) <= bb[1] + 0.3)))      # the stored element bbox also covers swings / clearances: a mesh inside it is the element's own geometry
     if ctx.recs[e]['class'] in MESH_FIRST and iou < 0.6: ctx._why[e] = 'saved graphics disagree with the stored box (IoU %.2f)' % iou; return None      # host elements: the saved graphics must match the stored box (curtain walls etc. fall back to the parametric builder)
     if iou < 0.4 and not inside: ctx._why[e] = 'saved graphics are not this element\'s own geometry (IoU %.2f, outside box)' % iou; return None                    # neither matching nor contained: not the element's own geometry
-    if 'mesh_topology_suspect' in m.info['flags']: ctx._why[e] = 'reader mesh area %.1f ft2 vs analytic %.1f ft2: triangles do not follow the surface' % (m.info['mesh_area'], m.info['analytic_area']); return m, 'approx'
-    return m, ('approx' if ('unsupported_faces' in (a.get('flags') or []) and not extra) or (iou < 0.9 and not inside) else 'mesh')
+    fidv = ('approx' if 'mesh_topology_suspect' in m.info['flags'] else ('approx' if ('unsupported_faces' in (a.get('flags') or []) and not extra) or (iou < 0.9 and not inside) else 'mesh'))
+    if fidv == 'approx' and 'mesh_topology_suspect' in m.info['flags']: ctx._why[e] = 'reader mesh area %.1f ft2 vs analytic %.1f ft2: triangles do not follow the surface' % (m.info['mesh_area'], m.info['analytic_area'])
+    mats = getattr(ctx, 'mats', None)
+    if mats and mats['list']:
+        try:
+            mp = body_materials(GG, ctx.src, e) if a.get('nid') is not None else {}
+            res = _split_by_material(m, a.get('nid'), len(a['nid']) if a.get('nid') is not None else 0, mp, mats['index']) if mp else None
+            if res is not None:
+                m = res
+                for bi in (m.info or {}).get('body_list') or []:
+                    if bi['id'] in mp and mp[bi['id']] in mats['index']: bi['material'] = mats['index'][mp[bi['id']]]
+        except Exception as ex_: ctx._why.setdefault(e, 'materials: %r' % ex_)
+    return m, fidv
 
 def prefetch_reader_meshes(ctx, els, prog=None, on_partial=None):
     ctx._rm = None; out = {}; t = time.time(); n = 0; last_p = time.time(); idx = {el['id']: i for i, el in enumerate(els)}
@@ -863,8 +954,16 @@ def prefetch_reader_meshes(ctx, els, prog=None, on_partial=None):
 
 CONTAINER_CLASSES = {'JoistSystem', 'BeamSystem'}          # layout containers: zero-height bbox, no graphics of their own (the members are separate FamilyInstances)
 
+LAYERED_CLASSES = {'SWall', 'ArcWall', 'Floor', 'Ceiling', 'ProfileRoof', 'FootPrintRoof', 'RoofSoffit', 'BuildingPad'}
+
 def element_mesh(ctx, e, r):
     res = _element_mesh(ctx, e, r)
+    mats = getattr(ctx, 'mats', None)
+    if res is not None and mats and mats['list'] and getattr(res[0], 'kind', 'tri') == 'tri' and not isinstance(res[0], geom.Multi) and getattr(res[0], 'mat', None) is None:
+        try:
+            mid = dominant_layer_material(ctx, type_of(ctx, e, r)) if r['class'] in LAYERED_CLASSES else param_material(ctx, e, r)
+            if mid in mats['index']: res[0].mat = mats['index'][mid]
+        except Exception: pass
     if res is not None and getattr(res[0], 'info', None) is None:             # not from the saved graphics: say what it is and why
         why = ctx._why.get(e)
         src = {'param': 'parametric rebuild from stored parameters', 'bbox': 'box at the stored bounding box', 'line': 'curve', 'approx': 'approximate rebuild'}.get(res[1], res[1])
@@ -993,7 +1092,7 @@ def _geo_chunk(rng):
         except Exception: res = None
         if res is None: continue
         mesh, fid = res
-        parts = [(pm.v, pm.f, rgb) for pm, rgb in (mesh.parts if isinstance(mesh, geom.Multi) else [(mesh, None)])]
+        parts = [(pm.v, pm.f, rgb, getattr(pm, 'mat', None)) for pm, rgb in (mesh.parts if isinstance(mesh, geom.Multi) else [(mesh, None)])]
         out.append((i, fid, getattr(mesh, 'kind', 'tri'), parts, getattr(mesh, 'info', None)))
     return out
 
@@ -1002,7 +1101,7 @@ def geometry_cache_key():
     d = os.path.dirname(os.path.abspath(__file__)); h = _h.md5(reader.reader_stamp().encode())
     src = open(os.path.join(d, 'build.py')).read(); a = src.index('# ---------------------------------------------------------------- geometry builders'); b = src.index('# ---------------------------------------------------------------- datum / spatial')
     h.update(src[a:b].encode())
-    for f in ('geom.py', 'occ.py', 'brep.py', 'build_util.py'): h.update(open(os.path.join(d, f), 'rb').read())
+    for f in ('geom.py', 'occ.py', 'brep.py', 'build_util.py', 'materials.py'): h.update(open(os.path.join(d, f), 'rb').read())
     return h.hexdigest()[:12]
 
 def run_geometry(ctx, els, prog, workers=None, on_partial=None):
@@ -1029,10 +1128,11 @@ def run_geometry(ctx, els, prog, workers=None, on_partial=None):
     except Exception: pass
     return res
 
-def pack_batches(els, res, previews=False):
-    """merge per-element parts into one indexed mesh per (category, kind, translucency, colour)"""
+def pack_batches(els, res, previews=False, mats=None):
+    """merge per-element parts into one indexed mesh per (category, kind, translucency, colour); parts may carry a material (position in `mats`): its colour / transparency are used and the
+    per-vertex _MAT attribute lets the viewer draw procedural textures and 'colour by material'"""
     acc = {}; covg = collections.defaultdict(collections.Counter); covc = collections.defaultdict(collections.Counter); ious = {}
-    got = {t[0]: t for t in res}
+    got = {t[0]: t for t in res}; ML = (mats or {}).get('list') or []
     for i, el in enumerate(els):
         t = got.get(i)
         if t is None: covg[el['cat'] or '(none)']['none'] += 1; el['fid'] = 'none'; continue
@@ -1042,17 +1142,27 @@ def pack_batches(els, res, previews=False):
             if fid == 'param' and (el['iou'] >= 0.97 or contained_match(allv.min(0), allv.max(0), *el['bb'])): fid = 'matched'
         el['fid'] = fid; covg[el['cat']][fid] += 1; covc[el['cls']][fid] += 1
         transl = (fid == 'bbox' and el['cat'] in TRANSLUCENT_CATS) or fid == 'pending' or 'void' in ((el['ginfo'] or {}).get('flags') or [])
-        for pv, pf, rgb in parts:
+        used = set()
+        for part in parts:
+            pv, pf, rgb = part[0], part[1], part[2]; mi = part[3] if len(part) > 3 else None
+            tr = transl; mrec = ML[mi] if (mi is not None and mi < len(ML) and fid not in ('bbox', 'pending')) else None
+            if mrec is not None:
+                used.add(mi)
+                if rgb is None: rgb = tuple(mrec['rgb'])
+                if mrec['alpha'] < 0.97 and not transl: tr = round(max(0.08, mrec['alpha']) * 20) / 20          # glass etc.: its own translucent batch
             hexc = None if rgb is None else '%02x%02x%02x' % tuple(int(x * 255) for x in rgb)
-            a = acc.setdefault((el['cat'], kind, transl, hexc), {'pos': [], 'idx': [], 'eidx': [], 'ranges': [], 'nv': 0, 'nt': 0})
-            a['pos'].append(pv); a['idx'].append(pf.reshape(-1) + a['nv']); a['eidx'].append(np.full(len(pv), i, np.float32))
+            a = acc.setdefault((el['cat'], kind, tr, hexc), {'pos': [], 'idx': [], 'eidx': [], 'mat': [], 'ranges': [], 'nv': 0, 'nt': 0})
+            a['pos'].append(pv); a['idx'].append(pf.reshape(-1) + a['nv']); a['eidx'].append(np.full(len(pv), i, np.float32)); a['mat'].append(np.full(len(pv), -1 if mrec is None else mi, np.float32))
             a['ranges'] += [i, a['nt'], len(pf)]; a['nv'] += len(pv); a['nt'] += len(pf)
+        el['mats'] = sorted(used)
     batches = []; bmeta = []
-    for (cat, kind, transl, hexc), a in acc.items():
+    for (cat, kind, tr, hexc), a in acc.items():
         pos = glb.to_yup_m(np.vstack(a['pos'])); idx = np.concatenate(a['idx']).astype(np.uint32)
         c = (0.1, 0.1, 0.12) if kind == 'line' else (tuple(int(hexc[k:k + 2], 16) / 255 for k in (0, 2, 4)) if hexc else cat_color(cat))
-        alpha = 0.45 if cat in ('Windows', 'Curtain Panels') else ((0.08 if cat in ('Planting', 'Entourage') else 0.14) if transl else 1.0)
-        batches.append({'name': cat + ('' if kind == 'tri' else ' (lines)'), 'color': (*c, alpha), 'pos': pos, 'eidx': np.concatenate(a['eidx']), 'idx': idx, 'mode': 1 if kind == 'line' else 4})
+        if isinstance(tr, float) and not isinstance(tr, bool): alpha = tr
+        else: alpha = 0.45 if cat in ('Windows', 'Curtain Panels') else ((0.08 if cat in ('Planting', 'Entourage') else 0.14) if tr else 1.0)
+        matv = np.concatenate(a['mat']) if ML and kind == 'tri' else None
+        batches.append({'name': cat + ('' if kind == 'tri' else ' (lines)'), 'color': (*c, alpha), 'pos': pos, 'eidx': np.concatenate(a['eidx']), 'idx': idx, 'mode': 1 if kind == 'line' else 4, 'mat': matv})
         bmeta.append({'cat': cat, 'kind': kind, 'color': '#%02x%02x%02x' % tuple(int(x * 255) for x in c), 'alpha': alpha, 'ranges': a['ranges'], 'tris': a['nt']})
     return batches, bmeta, covg, covc, ious
 
@@ -1090,6 +1200,8 @@ def convert(path, outdir, log=print, workers=None):
             old['s_per_mb'] = round(T['reader'] / max(os.path.getsize(path) / 1e6, 0.5), 3); json.dump(old, open(tf, 'w'))
         except Exception: pass
     ctx.src = path
+    from . import materials as MT
+    ctx.mats = MT.load(path, log)
     try: reader._import(); import rvt_geometry as GG; GG.file_geometry_index(path)        # load the reader's geometry context before the worker processes fork
     except Exception: pass
     ctx.raw_key = '%s|%s|%s|%s' % (os.path.abspath(path), os.path.getmtime(path), os.path.getsize(path), reader.reader_stamp())
@@ -1138,7 +1250,7 @@ def convert(path, outdir, log=print, workers=None):
     for i, el in enumerate(els):
         if el['cat'] and not el['isType'] and el['bb'] is not None: pres.append((i, 'bbox', 'tri', [(geom.box(*el['bb']).v, geom.box(*el['bb']).f, None)]))
     pels = [dict(e) for e in els]
-    pb, pm, pcovg, _, _ = pack_batches(pels, pres)
+    pb, pm, pcovg, _, _ = pack_batches(pels, pres, mats=ctx.mats)
     glb.write_glb(os.path.join(outdir, 'preview.glb'), pb)
     meta = dict(base_meta); meta.update({'phase': 'preview', 'batches': pm, 'bbox': model_bbox(pels), 'coverage': {k: dict(v) for k, v in pcovg.items()}, 'coverageByClass': {}, 'bboxAgreement': {},
                                          'elements': [[el['id'], el['cls'], el['cat'], el['name'], el['type'], el['level'], el['fid'], el['isType'], el['family'], el['phase']] for el in pels], 'built': time.time(), 'buildSecs': 0})
@@ -1149,7 +1261,7 @@ def convert(path, outdir, log=print, workers=None):
     def on_partial(res_, done_el, n_):
         """progressive display: finished elements as real meshes, the rest as translucent ghost boxes; replaces preview.glb + meta.json (phase stays 'preview') so the open page can refresh itself"""
         got = {t_[0] for t_ in res_}; allr = list(res_) + [(i, 'pending', 'tri', prev_by_i[i][3], None) for i in prev_by_i if i not in got]
-        pe = [dict(e) for e in els]; b_, m_, cg_, _, _ = pack_batches(pe, allr)
+        pe = [dict(e) for e in els]; b_, m_, cg_, _, _ = pack_batches(pe, allr, mats=ctx.mats)
         glb.write_glb(os.path.join(outdir, 'preview.glb.tmp'), b_)
         mt = dict(base_meta); mt.update({'phase': 'preview', 'batches': m_, 'bbox': model_bbox(pe), 'coverage': {k: dict(v) for k, v in cg_.items()}, 'coverageByClass': {}, 'bboxAgreement': {}, 'pending': sum(1 for i in prev_by_i if i not in got),
                                          'elements': [[e['id'], e['cls'], e['cat'], e['name'], e['type'], e['level'], e['fid'], e['isType'], e['family'], e['phase']] for e in pe], 'built': time.time(), 'buildSecs': 0})
@@ -1158,9 +1270,12 @@ def convert(path, outdir, log=print, workers=None):
         rev[0] += 1; prog.set('geometry', prog.last[1], prog.last[2], partial_rev=rev[0], pending=mt['pending'])
     t = time.time(); res = run_geometry(ctx, els, prog, workers, on_partial); T['geometry'] = round(time.time() - t, 2)
     prog.set('packing', 0.0, 'packing glTF (meshes, materials)', done=len(els), total=len(els))
-    t = time.time(); batches, bmeta, covg, covc, ious = pack_batches(els, res)
+    t = time.time(); batches, bmeta, covg, covc, ious = pack_batches(els, res, mats=ctx.mats)
     glb.write_glb(os.path.join(outdir, 'model.glb'), batches)
     db.executemany('insert into ginfo values(?,?)', [(el['i'], json.dumps(el['ginfo'])) for el in els if el.get('ginfo')])
+    db.execute('create table if not exists elmat(i integer, m integer)'); db.executemany('insert into elmat values(?,?)', [(el['i'], m_) for el in els for m_ in (el.get('mats') or [])]); db.execute('create index if not exists elmat_m on elmat(m)')
+    use = collections.Counter(m_ for el in els for m_ in (el.get('mats') or []))
+    json.dump({'materials': [{**m_, 'elements': use.get(k, 0)} for k, m_ in enumerate(ctx.mats['list'])], 'textureClasses': MT.TEX_CLASSES}, open(os.path.join(outdir, 'materials.json'), 'w'), separators=(',', ':'))
     db.executemany('update el set fid=?, iou=? where i=?', [(el['fid'], el.get('iou'), el['i']) for el in els if el['fid'] != 'none']); db.commit(); db.close()
     meta = dict(base_meta); meta.update({'phase': 'done', 'batches': bmeta, 'bbox': model_bbox(els), 'coverage': {k: dict(v) for k, v in covg.items()}, 'coverageByClass': {k: dict(v) for k, v in covc.items()},
                                          'bboxAgreement': {k: [round(float(np.mean(v)), 3), len(v)] for k, v in ious.items()}, 'built': time.time(),

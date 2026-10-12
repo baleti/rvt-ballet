@@ -24,10 +24,13 @@ def write_glb(path, batches, extras=None):
         lo = pos.min(0).tolist(); hi = pos.max(0).tolist()
         a_pos = len(accs); accs.append({'bufferView': add(pos, 34962), 'componentType': 5126, 'count': len(pos), 'type': 'VEC3', 'min': lo, 'max': hi})
         a_ei = len(accs); accs.append({'bufferView': add(ei, 34962), 'componentType': 5126, 'count': len(ei), 'type': 'SCALAR'})
+        attrs = {'POSITION': a_pos, '_EIDX': a_ei}
+        if b.get('mat') is not None:
+            a_mt = len(accs); accs.append({'bufferView': add(np.ascontiguousarray(b['mat'], np.float32), 34962), 'componentType': 5126, 'count': len(pos), 'type': 'SCALAR'}); attrs['_MAT'] = a_mt
         a_ix = len(accs); accs.append({'bufferView': add(ix, 34963), 'componentType': 5125, 'count': len(ix), 'type': 'SCALAR'})
         mats.append({'name': b['name'], 'pbrMetallicRoughness': {'baseColorFactor': list(b['color']), 'metallicFactor': 0.0, 'roughnessFactor': 0.85},
                      **({'alphaMode': 'BLEND'} if b['color'][3] < 1 else {}), 'doubleSided': True})
-        meshes.append({'name': b['name'], 'primitives': [{'attributes': {'POSITION': a_pos, '_EIDX': a_ei}, 'indices': a_ix, 'material': len(mats) - 1, 'mode': b.get('mode', 4)}], 'extras': {'batch': i}})
+        meshes.append({'name': b['name'], 'primitives': [{'attributes': attrs, 'indices': a_ix, 'material': len(mats) - 1, 'mode': b.get('mode', 4)}], 'extras': {'batch': i}})
         nodes.append({'mesh': len(meshes) - 1, 'name': b['name'], 'extras': {'batch': i}})
     js = {'asset': {'version': '2.0', 'generator': 'rvt-viewer'}, 'scene': 0, 'scenes': [{'nodes': list(range(len(nodes)))}], 'nodes': nodes,
           'meshes': meshes, 'materials': mats, 'accessors': accs, 'bufferViews': views, 'buffers': [{'byteLength': off}]}
