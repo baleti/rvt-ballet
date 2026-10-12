@@ -768,6 +768,18 @@ def _guarded(fn, *a, extra_gb=2.5):
     finally:
         resource.setrlimit(resource.RLIMIT_AS, old)
 
+CURVED_SURFACES = {'revolution', 'cone', 'sphere', 'torus', 'ruled', 'hermite', 'bspline'}
+
+def topology_check(a, P):
+    """the reader validates curved solids with analytic (refined) volume/area; compare the triangle mesh's own area with it: a mesh whose triangles span the wrong vertices has the right volume on paper but draws wrongly. -> (ok, mesh_area, analytic_area) or None"""
+    if not a.get('tris_raw') or not a.get('meta_raw'): return None
+    try:
+        import rvt_mesh as RM
+        v_, closed, area_ref = RM.refined_volume(a['tris_raw'], a['meta_raw'], fid=a.get('fid'))[:3]
+        T = P.reshape(-1, 3, 3); area = float(np.linalg.norm(np.cross(T[:, 1] - T[:, 0], T[:, 2] - T[:, 0]), axis=1).sum() / 2)
+        return (abs(area / area_ref - 1) <= 0.08 if area_ref > 1e-9 else True), area, float(area_ref)
+    except Exception: return None
+
 def _em_geometry(GG, src, e):
     """rvt_elemmesh.element_mesh result in the element_geometry vocabulary (one triangle_mesh solid) plus the per-triangle body (nid) and face (fid) ids"""
     import rvt_elemmesh as EM
@@ -779,7 +791,7 @@ def _em_geometry(GG, src, e):
     P = np.array([p for t in m['tris'] for p in t])
     mt = m.get('meta') or []
     return {'confidence': 'mesh_approx', 'flags': ['saved_graphics_tessellation'] + list(m['flags']), 'nid': list(m.get('nid') or []), 'fid': list(m.get('fid') or []),
-            'surf': [str(x[0]) for x in mt] if len(mt) == len(m['tris']) else None,
+            'surf': [str(x[0]) for x in mt] if len(mt) == len(m['tris']) else None, 'tris_raw': m['tris'] if any(str(x[0]) in CURVED_SURFACES for x in mt[:20000]) else None, 'meta_raw': mt if any(str(x[0]) in CURVED_SURFACES for x in mt[:20000]) else None,
             'solids': [{'kind': 'triangle_mesh', 'triangles': P.round(6).tolist(), 'source': m['source']}]}
 
 def body_summary(P, nid, fid=None, surf=None, limit=12):
@@ -817,6 +829,10 @@ def reader_mesh(ctx, e):
     P = np.vstack(T); m = Mesh(P, np.arange(len(P)).reshape(-1, 3))
     m.info = {'source': next((sl.get('source') for sl in a['solids'] if sl.get('source')), None), 'flags': list(a.get('flags') or []), 'bodies': len(a['solids']), 'tris': len(P) // 3}
     if a.get('nid') is not None and len(a['nid']) == len(P) // 3: m.info['body_list'] = body_summary(P, a['nid'], a.get('fid'), a.get('surf')); m.info['bodies'] = len(set(a['nid']))
+    tc = topology_check(a, P)
+    if tc is not None:
+        m.info['mesh_area'] = round(tc[1], 3); m.info['analytic_area'] = round(tc[2], 3)
+        if not tc[0]: m.info['flags'] = m.info['flags'] + ['mesh_topology_suspect']
     if a.get('surf') is not None: m.info['surfaces'] = dict(collections.Counter(a['surf']))               # triangles per source surface type (plane, cylinder, cone, sphere, torus, revolution, ruled, hermite, bspline ...)
     bb = ctx.bbox(e); extra = False
     if 'unsupported_faces' in (a.get('flags') or []):
@@ -826,6 +842,7 @@ def reader_mesh(ctx, e):
     inside = bb is None or (bool(np.all(P.min(0) >= bb[0] - 0.3)) and bool(np.all(P.max(0) <= bb[1] + 0.3)))      # the stored element bbox also covers swings / clearances: a mesh inside it is the element's own geometry
     if ctx.recs[e]['class'] in MESH_FIRST and iou < 0.6: ctx._why[e] = 'saved graphics disagree with the stored box (IoU %.2f)' % iou; return None      # host elements: the saved graphics must match the stored box (curtain walls etc. fall back to the parametric builder)
     if iou < 0.4 and not inside: ctx._why[e] = 'saved graphics are not this element\'s own geometry (IoU %.2f, outside box)' % iou; return None                    # neither matching nor contained: not the element's own geometry
+    if 'mesh_topology_suspect' in m.info['flags']: ctx._why[e] = 'reader mesh area %.1f ft2 vs analytic %.1f ft2: triangles do not follow the surface' % (m.info['mesh_area'], m.info['analytic_area']); return m, 'approx'
     return m, ('approx' if ('unsupported_faces' in (a.get('flags') or []) and not extra) or (iou < 0.9 and not inside) else 'mesh')
 
 def prefetch_reader_meshes(ctx, els, prog=None):
