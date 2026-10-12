@@ -731,20 +731,50 @@ def reader_brep_extra(ctx, e, GG):
 
 MESH_FIRST = {'SWall', 'ArcWall', 'Floor', 'Ceiling', 'ProfileRoof', 'FootPrintRoof', 'RoofSoffit', 'BuildingPad'}      # saved-graphics meshes match Revit volumes within 2% far more often than the parametric rebuilds (2020 residential walls 92% vs 57%, roofs 100% vs 0%)
 
+def _em_geometry(GG, src, e):
+    """rvt_elemmesh.element_mesh result in the element_geometry vocabulary (one triangle_mesh solid) plus the per-triangle body (nid) and face (fid) ids"""
+    import rvt_elemmesh as EM
+    d = GG._docs.get(src)
+    if d is None: d = GG._docs[src] = EM.Doc(src)
+    m = EM.element_mesh(d, int(e))
+    if not m['tris']: return None
+    P = np.array([p for t in m['tris'] for p in t])
+    return {'confidence': 'mesh_approx', 'flags': ['saved_graphics_tessellation'] + list(m['flags']), 'nid': list(m.get('nid') or []), 'fid': list(m.get('fid') or []),
+            'solids': [{'kind': 'triangle_mesh', 'triangles': P.round(6).tolist(), 'source': m['source']}]}
+
+def body_summary(P, nid, fid=None, limit=12):
+    """per body of an element's saved-graphics mesh (nid = body id per triangle): triangles, faces (fid), area (ft2), watertight; kind from the id range (polymesh 1e6, symbol instance >= 2e7)"""
+    nid = np.asarray(nid); T = P.reshape(-1, 3, 3); out = []
+    for b in sorted(set(nid.tolist()))[:limit]:
+        ix = np.nonzero(nid == b)[0]; t = T[ix]
+        area = float(np.linalg.norm(np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0]), axis=1).sum() / 2)
+        keys = np.round(t.reshape(-1, 3) * 1e4).astype(np.int64); _, inv = np.unique(keys, axis=0, return_inverse=True); inv = inv.reshape(-1, 3)
+        E = np.sort(np.concatenate([inv[:, [0, 1]], inv[:, [1, 2]], inv[:, [2, 0]]]), axis=1); _, cnt = np.unique(E, axis=0, return_counts=True)
+        out.append({'id': int(b), 'kind': 'polymesh' if b == 10 ** 6 else ('symbol instance' if b >= 2 * 10 ** 7 else 'own geometry'), 'tris': int(len(ix)), 'faces': int(len(set(np.asarray(fid)[ix].tolist()))) if fid is not None and len(fid) == len(nid) else None,
+                    'area': round(area, 3), 'closed': 'yes' if bool(np.all(cnt % 2 == 0)) else ('sealed' if float(np.linalg.norm(np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0]).sum(0))) < 1e-4 * max(area, 1e-9) else 'open'), 'lo': t.reshape(-1, 3).min(0).round(3).tolist(), 'hi': t.reshape(-1, 3).max(0).round(3).tolist()})
+    return out
+
 def reader_mesh(ctx, e):
     """triangle mesh the reader decoded from Revit's saved graphics (rvt_geometry.element_geometry, confidence 'mesh_approx', world feet): the family-instance geometry. -> (Mesh, fid) or None"""
     if not USE_READER_MESH or not getattr(ctx, 'src', None): return None
     if getattr(ctx, '_rm', None) is not None: return ctx._rm.get(e)          # prefetched in the parent process (workers must not each load the reader's geometry context)
     try:
         reader._import(); import rvt_geometry as GG
-        if ctx.recs[e]['class'] in MESH_FIRST: a = GG._mesh_geometry(ctx.src, e, GG.get_ctx(ctx.src).rec(e)) or {}       # the analytic builder would answer first for these classes: ask for the saved graphics directly
-        else: a = GG.element_geometry(ctx.src, e)
+        cl = ctx.recs[e]['class']
+        a = None; b_ = GG.BUILDERS.get(cl)
+        if b_ is not None and cl not in MESH_FIRST:                  # the reader's analytic builder answers first for its classes (as in element_geometry)
+            gc_ = GG.get_ctx(ctx.src); rec_ = gc_.rec(e)
+            try: a = b_(gc_, int(e), rec_) if rec_ is not None else None
+            except Exception: a = None
+            if a is not None and a.get('confidence') == 'box': a = None
+        if a is None: a = _em_geometry(GG, ctx.src, e) or {}          # straight from the reader's element_mesh: keeps the per-body (nid) / per-face (fid) ids
     except Exception: return None
     if a.get('confidence') != 'mesh_approx': return None
     T = [np.array(sl['triangles'], float).reshape(-1, 3) for sl in a['solids'] if sl.get('kind') == 'triangle_mesh' and sl.get('triangles')]
     if not T: return None
     P = np.vstack(T); m = Mesh(P, np.arange(len(P)).reshape(-1, 3))
     m.info = {'source': next((sl.get('source') for sl in a['solids'] if sl.get('source')), None), 'flags': list(a.get('flags') or []), 'bodies': len(a['solids']), 'tris': len(P) // 3}
+    if a.get('nid') is not None and len(a['nid']) == len(P) // 3: m.info['body_list'] = body_summary(P, a['nid'], a.get('fid')); m.info['bodies'] = len(set(a['nid']))
     bb = ctx.bbox(e); extra = False
     if 'unsupported_faces' in (a.get('flags') or []):
         ex = reader_brep_extra(ctx, e, GG)                       # faces the saved-graphics mesh skipped (cone / revolution / ruled / Hermite ...): tessellated through OpenCascade
