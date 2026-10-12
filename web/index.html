@@ -22,11 +22,13 @@
   <button id="bHelp" title="Controls">?</button>
   <button id="bCmp" title="Compare geometry with Revit oracle files (gt_geom)">Compare</button>
   <button id="bFid" title="Colour by geometry fidelity">Fidelity colours</button>
+  <button id="bMat" title="Colour by material (one distinct colour per material)">Colour by material</button>
+  <button id="bTex" class="on" title="Procedural textures (built-in fallback patterns chosen from the material)">Textures</button>
 </header>
 <div id="parsebar" hidden></div>
 <main>
   <aside id="left">
-    <nav id="tabs"><button data-t="tree" class="on">Model</button><button data-t="levels">Levels</button><button data-t="views">Views</button><button data-t="rooms">Rooms</button><button data-t="search">Results</button><button data-t="cov">Coverage</button></nav>
+    <nav id="tabs"><button data-t="tree" class="on">Model</button><button data-t="levels">Levels</button><button data-t="views">Views</button><button data-t="rooms">Rooms</button><button data-t="search">Results</button><button data-t="cov">Coverage</button><button data-t="mat">Materials</button></nav>
     <div id="tabbody"></div>
   </aside>
   <div id="view"><canvas id="gl"></canvas><div id="labels"></div><div id="tip"></div>

@@ -107,7 +107,10 @@ def make_app(models):
         try:
             g_ = db.execute('select info from ginfo where i=?', (i,)).fetchone(); gi = json.loads(g_[0]) if g_ else None
         except Exception: pass
-        return web.json_response({'el': dict(row), 'params': prm, 'typeParams': tp, 'ginfo': gi})
+        mats = []
+        try: mats = [r[0] for r in db.execute('select distinct m from elmat where i=?', (i,))]
+        except Exception: pass
+        return web.json_response({'el': dict(row), 'params': prm, 'typeParams': tp, 'ginfo': gi, 'materials': mats})
     async def search(req):
         """parameter-value / name search: ?q=text[&limit=500]; returns element indices with the matching parameter"""
         mid, d = mdir(req); q = req.query.get('q', '').strip(); lim = int(req.query.get('limit', 2000)); db = models.db(mid)
@@ -160,6 +163,16 @@ def make_app(models):
     app.router.add_get('/m/{mid}/preview.glb', preview)
     app.router.add_get('/api/m/{mid}/progress', progress)
     app.router.add_get('/m/{mid}/compare.json', compare)
+    async def materials_json(req):
+        mid, d = mdir(req); fn = os.path.join(d, 'materials.json')
+        if not os.path.exists(fn): raise web.HTTPNotFound()
+        return web.FileResponse(fn)
+    async def material_elements(req):
+        mid, d = mdir(req); k = int(req.match_info['k'])
+        try: return web.json_response([r[0] for r in models.db(mid).execute('select distinct i from elmat where m=?', (k,))])
+        except Exception: return web.json_response([])
+    app.router.add_get('/m/{mid}/materials.json', materials_json)
+    app.router.add_get('/api/m/{mid}/material/{k}', material_elements)
     app.router.add_get('/api/m/{mid}/el/{i}', element)
     app.router.add_get('/api/m/{mid}/search', search)
     plugins = load_plugins(app, models)

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/loaders/GLTFLoader.js';
+import {patternTexture, paletteTexture, CLASSES as TEXCLASSES} from '/materials.js';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
@@ -35,26 +36,30 @@ const world = new THREE.Group(); scene.add(world);
 const overlay = new THREE.Group(); scene.add(overlay);
 let selBoxDummy;
 let stateTex, stateData;
-const U = {tState: {value: null}, uMode: {value: 0}};
+const U = {tState: {value: null}, uMode: {value: 0}, tMat: {value: null}, tPat: {value: null}, uTex: {value: 1}};
 
 function patch(mat) {
   mat.flatShading = true;
   mat.onBeforeCompile = sh => {
-    sh.uniforms.tState = U.tState; sh.uniforms.uMode = U.uMode;
-    sh.vertexShader = 'attribute float _eidx; varying float vE;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvE=_eidx;');
-    sh.fragmentShader = `varying float vE; uniform sampler2D tState; uniform float uMode;
+    sh.uniforms.tState = U.tState; sh.uniforms.uMode = U.uMode; sh.uniforms.tMat = U.tMat; sh.uniforms.tPat = U.tPat; sh.uniforms.uTex = U.uTex;
+    sh.vertexShader = 'attribute float _eidx; attribute float _mat; varying float vE; varying float vM; varying vec3 vWP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvE=_eidx; vM=_mat; vWP=(modelMatrix*vec4(transformed,1.)).xyz;');
+    sh.fragmentShader = `varying float vE; varying float vM; varying vec3 vWP; uniform sampler2D tState; uniform sampler2D tMat; uniform highp sampler2DArray tPat; uniform float uMode; uniform float uTex;
 vec4 fidCol(float f){ if(f<.5) return vec4(.18,.62,.36,1.); if(f<1.5) return vec4(.12,.56,.44,1.); if(f<2.5) return vec4(.42,.76,.29,1.); if(f<3.5) return vec4(.23,.48,.84,1.); if(f<4.5) return vec4(.12,.65,.69,1.); if(f<5.5) return vec4(.82,.54,.16,1.); if(f<6.5) return vec4(.54,.37,.82,1.); return vec4(.5,.5,.5,1.);}
 ` + sh.fragmentShader
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
 float eI = floor(vE+.5); vec4 stt = texelFetch(tState, ivec2(int(mod(eI,${TW}.)), int(eI/${TW}.)), 0);
 float fl = floor(stt.r*255.+.5); if(mod(fl,2.)>.5) discard;`)
       .replace('#include <color_fragment>', `#include <color_fragment>
-if(uMode>1.5){ float dv=floor(stt.b*255.+.5); diffuseColor.rgb = dv<.5?vec3(.55):dv<1.5?vec3(.18,.7,.3):dv<2.5?vec3(.9,.8,.2):dv<3.5?vec3(.95,.55,.15):vec3(.9,.2,.2); } else if(uMode>.5) diffuseColor.rgb = fidCol(floor(stt.g*255.+.5)).rgb;
+{ float mI = floor(vM+.5); int mi = int(max(mI,0.)); vec4 mp = texelFetch(tMat, ivec2(mi,1), 0); float cls = floor(mp.r*255./16.+.5); float sc = max(mp.g*255./20., .05);
+  vec3 nn = normalize(cross(dFdx(vWP), dFdy(vWP))); vec3 ww = pow(abs(nn), vec3(4.)); ww /= (ww.x+ww.y+ww.z+1e-5);
+  float tt = texture(tPat, vec3(vWP.zy/sc, cls)).r*ww.x + texture(tPat, vec3(vWP.xz/sc, cls)).r*ww.y + texture(tPat, vec3(vWP.xy/sc, cls)).r*ww.z;
+  if(mI>-.5){ if(uMode>2.5 && uMode<3.5) diffuseColor.rgb = texelFetch(tMat, ivec2(mi,2), 0).rgb; else if(uTex>.5 && uMode<.5 && cls>.5) diffuseColor.rgb *= clamp(2.*tt,.3,1.6); } }
+if(uMode>1.5 && uMode<2.5){ float dv=floor(stt.b*255.+.5); diffuseColor.rgb = dv<.5?vec3(.55):dv<1.5?vec3(.18,.7,.3):dv<2.5?vec3(.9,.8,.2):dv<3.5?vec3(.95,.55,.15):vec3(.9,.2,.2); } else if(uMode>.5 && uMode<1.5) diffuseColor.rgb = fidCol(floor(stt.g*255.+.5)).rgb;
 if(mod(floor(fl/8.),2.)>.5){ if(mod(floor(gl_FragCoord.x)+2.*floor(gl_FragCoord.y),5.)>.5) discard; diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.6), .5); }
 if(mod(floor(fl/2.),2.)>.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.,.69,.1), .75);
 else if(mod(floor(fl/4.),2.)>.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.3,.7,1.), .5);`);
   };
-  mat.customProgramCacheKey = () => 'rvtpatch1';
+  mat.customProgramCacheKey = () => 'rvtpatch2';
   return mat;
 }
 
@@ -197,6 +202,8 @@ async function loadModel(mid, opts = {}) {
   initState(S.N); refreshState();
   $('#status').textContent = 'loading geometry...';
   world.clear(); overlay.clear(); S.bbCache = null;
+  try { S.matData = await (await fetch(`/m/${mid}/materials.json`)).json(); } catch (e) { S.matData = null; }
+  S.mats = (S.matData && S.matData.materials) || []; U.tMat.value = paletteTexture(S.mats.length ? S.mats : [{rgb: [.7, .7, .7], alpha: 1, tex_class: 'none'}]); U.tPat.value = patternTexture();
   const gltf = await new GLTFLoader().loadAsync(`/m/${mid}/${(S.meta.phase || 'done') === 'done' ? 'model' : 'preview'}.glb`);
   let tris = 0;
   gltf.scene.traverse(o => {
@@ -208,6 +215,7 @@ async function loadModel(mid, opts = {}) {
     } else {
       const lm = new THREE.LineBasicMaterial({color: old.color}); lm.onBeforeCompile = patch(new THREE.MeshStandardMaterial()).onBeforeCompile; lm.customProgramCacheKey = () => 'rvtline1'; o.material = lm;
     }
+    if (o.isMesh && !o.geometry.attributes._mat) o.geometry.setAttribute('_mat', new THREE.BufferAttribute(new Float32Array(o.geometry.attributes.position.count).fill(-1), 1));
     o.frustumCulled = false; o.userData.bi = o.userData.batch ?? o.parent?.userData?.batch ?? 0;
   });
   world.add(gltf.scene); buildElRanges();
@@ -345,6 +353,7 @@ async function showInspector() {
   el.innerHTML = `<h2>${esc(e.name || e.type || e.cls + ' ' + e.id)}</h2><div class="dim">${esc(e.cat || '')}${e.family ? ' | ' + esc(e.family) : ''}${e.type ? ' : ' + esc(e.type) : ''}</div>
   <div style="margin:6px 0"><span class="fid f-${e.fid}">${e.fid}</span> <span class="dim">${esc(fidLabel)}</span></div>
   ${geomBadge(e, info.ginfo)}
+  ${(info.materials || []).length ? `<h3>Materials (${info.materials.length})</h3>` + info.materials.map(k => S.mats[k] ? matLine(S.mats[k]) : '').join('') : ''}
   <table class="kv">${rows}</table>
   ${(info.typeParams || []).length ? `<h3>Type parameters / profile dimensions (${info.typeParams.length})</h3><table class="kv">${info.typeParams.filter(p => !/^(UniqueId|IfcGUID|Family|Type Id|Type|Family and Type)$/.test(p[0])).map(p => `<tr><td>${esc(p[0])}</td><td class="mono">${fmtVal(p[0], p[1])}</td></tr>`).join('')}</table>` : ''}
   <h3>Parameters (${info.params.length})</h3><input id="pf" type="search" placeholder="filter parameters" style="width:100%;margin-bottom:5px">
@@ -367,10 +376,27 @@ function buildTabs() {
   document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.t; renderTab(); });
   renderTab();
 }
+
+// ------------------------------------------------------------------ materials tab / inspector
+const rgbCss = c => `rgb(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)})`;
+function matLine(m) {
+  return `<div style="margin:3px 0"><i style="display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:middle;margin-right:6px;background:${rgbCss(m.rgb)};outline:1px solid #0006"></i><b>${esc(m.name)}</b> <span class="dim">${esc(m.class || '')}${m.alpha < 0.97 ? ' &middot; transparency ' + Math.round((1 - m.alpha) * 100) + '%' : ''}${m.shin != null ? ' &middot; shininess ' + m.shin : ''}${m.smooth != null ? ' &middot; smoothness ' + m.smooth : ''}${m.metal ? ' &middot; metal' : ''}</span><br>` +
+    `<span class="dim" style="font-size:11px">colour: ${esc(m.color_source)}<br>texture: ${esc(m.texture_source)}${m.tex_class !== 'none' ? ' [' + esc(m.tex_class) + ']' : ''}${m.schema ? '<br>appearance: ' + esc(m.schema) + (m.asset ? ' / ' + esc(m.asset) : '') : ''}</span></div>`;
+}
+function renderMaterials(tb) {
+  const M = S.mats || []; if (!M.length) { tb.innerHTML = '<p class="dim">No material table in this model (convert again to extract materials).</p>'; return; }
+  const used = M.map((m, k) => [k, m]).filter(([k, m]) => m.elements > 0).sort((a, b) => b[1].elements - a[1].elements), unused = M.length - used.length;
+  tb.innerHTML = `<h3>Materials in use (${used.length}) <span class="dim">of ${M.length} in the file</span></h3><div class="dim" style="margin-bottom:6px">Colour, transparency and shininess come from the file. The .rvt stores texture asset paths but not the bitmaps, so textures are built-in procedural patterns chosen from the material (labelled fallback). Click a row to isolate its elements. Buttons above: <b>Colour by material</b>, <b>Textures</b>.</div>` +
+    used.map(([k, m]) => `<div class="li matrow" data-k="${k}" title="isolate the elements using this material"><span><i style="display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:middle;margin-right:6px;background:${rgbCss(m.rgb)};outline:1px solid #0006"></i>${esc(m.name)} <span class="dim">${m.tex_class !== 'none' ? '[' + esc(m.tex_class) + ' fallback]' : ''}</span></span><span class="cnt">${m.elements}</span></div>`).join('') +
+    (unused ? `<div class="dim" style="margin-top:6px">${unused} more materials are defined but not used by any drawn element.</div>` : '');
+  tb.querySelectorAll('.matrow').forEach(r => r.onclick = async () => {
+    const ids = await (await fetch(`/api/m/${S.mid}/material/${r.dataset.k}`)).json(); setIsolate(new Set(ids)); await zoomTo(ids.slice(0, 400));
+  });
+}
 function renderTab() {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === S.tab));
   const tb = $('#tabbody'); tb.innerHTML = '';
-  ({tree: renderTree, levels: renderLevels, views: renderViews, rooms: renderRooms, search: renderResults, cov: renderCov}[S.tab])(tb);
+  ({tree: renderTree, levels: renderLevels, views: renderViews, rooms: renderRooms, search: renderResults, cov: renderCov, mat: renderMaterials}[S.tab])(tb);
 }
 const openNodes = new Set();
 let treeMode = 'category';
@@ -567,7 +593,9 @@ $('#bIsolate').onclick = () => { if (S.isolate) setIsolate(null); else if (S.sel
 $('#bHide').onclick = () => { S.sel.forEach(i => S.hidden[i] = 1); S.sel.clear(); refreshState(); showInspector(); renderIfTree(); };
 $('#bShowAll').onclick = () => { S.hidden.fill(0); S.catHidden.clear(); S.lvlHidden.clear(); S.isolate = null; $('#bIsolate').classList.remove('on'); secOn = false; $('#secui').hidden = true; applySection(); refreshState(); renderTab(); };
 function renderIfTree() { if (S.tab === 'tree') renderTab(); }
-$('#bFid').onclick = () => { S.fidMode ^= 1; U.uMode.value = S.fidMode; $('#bFid').classList.toggle('on', !!S.fidMode); $('#legend').hidden = !S.fidMode; dirty = true; };
+$('#bMat').onclick = () => { S.matMode = !S.matMode; if (S.matMode) { S.fidMode = 0; $('#bFid').classList.remove('on'); $('#legend').hidden = true; } U.uMode.value = S.matMode ? 3 : (S.fidMode || 0); $('#bMat').classList.toggle('on', S.matMode); dirty = true; };
+$('#bTex').onclick = () => { U.uTex.value = U.uTex.value ? 0 : 1; $('#bTex').classList.toggle('on', !!U.uTex.value); dirty = true; };
+$('#bFid').onclick = () => { S.fidMode ^= 1; if (S.fidMode) { S.matMode = false; $('#bMat').classList.remove('on'); } U.uMode.value = S.fidMode; $('#bFid').classList.toggle('on', !!S.fidMode); $('#legend').hidden = !S.fidMode; dirty = true; };
 $('#bFit').onclick = () => S.sel.size ? zoomTo([...S.sel]) : fitAll();
 $('#bTop').onclick = () => fitAll(new THREE.Vector3(0, 1, 0.001));
 $('#bFront').onclick = () => fitAll(new THREE.Vector3(0, 0.15, 1));
