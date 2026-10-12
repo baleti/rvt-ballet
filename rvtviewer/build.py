@@ -739,6 +739,7 @@ def reader_mesh(ctx, e):
     T = [np.array(sl['triangles'], float).reshape(-1, 3) for sl in a['solids'] if sl.get('kind') == 'triangle_mesh' and sl.get('triangles')]
     if not T: return None
     P = np.vstack(T); m = Mesh(P, np.arange(len(P)).reshape(-1, 3))
+    m.info = {'source': next((sl.get('source') for sl in a['solids'] if sl.get('source')), None), 'flags': list(a.get('flags') or []), 'bodies': len(a['solids']), 'tris': len(P) // 3}
     bb = ctx.bbox(e); extra = False
     if 'unsupported_faces' in (a.get('flags') or []):
         ex = reader_brep_extra(ctx, e, GG)                       # faces the saved-graphics mesh skipped (cone / revolution / ruled / Hermite ...): tessellated through OpenCascade
@@ -845,7 +846,7 @@ def _geo_chunk(rng):
         if res is None: continue
         mesh, fid = res
         parts = [(pm.v, pm.f, rgb) for pm, rgb in (mesh.parts if isinstance(mesh, geom.Multi) else [(mesh, None)])]
-        out.append((i, fid, getattr(mesh, 'kind', 'tri'), parts))
+        out.append((i, fid, getattr(mesh, 'kind', 'tri'), parts, getattr(mesh, 'info', None)))
     return out
 
 def geometry_cache_key():
@@ -884,7 +885,7 @@ def pack_batches(els, res, previews=False):
     for i, el in enumerate(els):
         t = got.get(i)
         if t is None: covg[el['cat'] or '(none)']['none'] += 1; el['fid'] = 'none'; continue
-        _, fid, kind, parts = t
+        fid, kind, parts = t[1], t[2], t[3]; el['ginfo'] = t[4] if len(t) > 4 else None
         if fid in ('param', 'solid') and el['bb'] is not None:
             allv = np.vstack([p[0] for p in parts]); el['iou'] = round(box_iou(allv.min(0), allv.max(0), *el['bb']), 3); ious.setdefault(el['cat'], []).append(el['iou'])
             if fid == 'param' and (el['iou'] >= 0.97 or contained_match(allv.min(0), allv.max(0), *el['bb'])): fid = 'matched'
@@ -958,7 +959,7 @@ def convert(path, outdir, log=print, workers=None):
     if os.path.exists(dbp): os.remove(dbp)
     db = sqlite3.connect(dbp)
     db.executescript('create table el(i integer primary key, id integer, cls text, cat text, name text, type text, family text, level text, uid text, ifc text, fid text, bb text, iou real, type_i integer);'
-                     'create table prm(i integer, k text, v text);')
+                     'create table prm(i integer, k text, v text); create table ginfo(i integer primary key, info text);')
     db.executemany('insert into el values(?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [(el['i'], el['id'], el['cls'], el['cat'], el['name'], el['type'], el['family'], el.get('level'), el['uid'], el['ifc'], 'none',
                     '[[%r,%r,%r],[%r,%r,%r]]' % (*el['bb'][0].tolist(), *el['bb'][1].tolist()) if el['bb'] else None, None, idx_of.get(el['typeId'])) for el in els])
     rows = []; sg = 1 << (8 * ctx.W - 1)
@@ -989,6 +990,7 @@ def convert(path, outdir, log=print, workers=None):
     prog.set('packing', 0.0, 'packing glTF')
     t = time.time(); batches, bmeta, covg, covc, ious = pack_batches(els, res)
     glb.write_glb(os.path.join(outdir, 'model.glb'), batches)
+    db.executemany('insert into ginfo values(?,?)', [(el['i'], json.dumps(el['ginfo'])) for el in els if el.get('ginfo')])
     db.executemany('update el set fid=?, iou=? where i=?', [(el['fid'], el.get('iou'), el['i']) for el in els if el['fid'] != 'none']); db.commit(); db.close()
     meta = dict(base_meta); meta.update({'phase': 'done', 'batches': bmeta, 'bbox': model_bbox(els), 'coverage': {k: dict(v) for k, v in covg.items()}, 'coverageByClass': {k: dict(v) for k, v in covc.items()},
                                          'bboxAgreement': {k: [round(float(np.mean(v)), 3), len(v)] for k, v in ious.items()}, 'built': time.time(),

@@ -51,7 +51,11 @@ def make_app(models):
         prm = [(r['k'], r['v']) for r in db.execute('select k,v from prm where i=? order by k', (i,))]
         tp = []
         if row['type_i'] is not None and row['type_i'] != i: tp = [(r['k'], r['v']) for r in db.execute('select k,v from prm where i=? order by k', (row['type_i'],))]
-        return web.json_response({'el': dict(row), 'params': prm, 'typeParams': tp})
+        gi = None
+        try:
+            g_ = db.execute('select info from ginfo where i=?', (i,)).fetchone(); gi = json.loads(g_[0]) if g_ else None
+        except Exception: pass
+        return web.json_response({'el': dict(row), 'params': prm, 'typeParams': tp, 'ginfo': gi})
     async def search(req):
         """parameter-value / name search: ?q=text[&limit=500]; returns element indices with the matching parameter"""
         mid, d = mdir(req); q = req.query.get('q', '').strip(); lim = int(req.query.get('limit', 2000)); db = models.db(mid)

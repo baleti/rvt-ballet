@@ -277,6 +277,7 @@ async function showInspector() {
     .filter(r => r[1] != null && r[1] !== '').map(r => `<tr><td>${r[0]}</td><td class="mono">${esc(r[1])}</td></tr>`).join('');
   el.innerHTML = `<h2>${esc(e.name || e.type || e.cls + ' ' + e.id)}</h2><div class="dim">${esc(e.cat || '')}${e.family ? ' | ' + esc(e.family) : ''}${e.type ? ' : ' + esc(e.type) : ''}</div>
   <div style="margin:6px 0"><span class="fid f-${e.fid}">${e.fid}</span> <span class="dim">${esc(fidLabel)}</span></div>
+  ${info.ginfo ? `<div class="dim" style="margin:4px 0">geometry: ${esc(info.ginfo.source || 'saved graphics')} &middot; ${info.ginfo.bodies} body/bodies &middot; ${info.ginfo.tris} triangles${(info.ginfo.flags || []).length ? '<br>flags: ' + info.ginfo.flags.map(esc).join(', ') : ''}</div>` : ''}
   <table class="kv">${rows}</table>
   ${(info.typeParams || []).length ? `<h3>Type parameters / profile dimensions (${info.typeParams.length})</h3><table class="kv">${info.typeParams.filter(p => !/^(UniqueId|IfcGUID|Family|Type Id|Type|Family and Type)$/.test(p[0])).map(p => `<tr><td>${esc(p[0])}</td><td class="mono">${fmtVal(p[0], p[1])}</td></tr>`).join('')}</table>` : ''}
   <h3>Parameters (${info.params.length})</h3><input id="pf" type="search" placeholder="filter parameters" style="width:100%;margin-bottom:5px">
