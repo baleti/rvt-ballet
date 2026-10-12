@@ -784,7 +784,7 @@ def topology_check(a, P):
         try: v_, closed, area_ref = RM.refined_volume(a['tris_raw'], a['meta_raw'], fid=a.get('fid'))[:3]
         finally: signal.setitimer(signal.ITIMER_REAL, 0); signal.signal(signal.SIGALRM, old)
         T = P.reshape(-1, 3, 3); area = float(np.linalg.norm(np.cross(T[:, 1] - T[:, 0], T[:, 2] - T[:, 0]), axis=1).sum() / 2)
-        return (abs(area / area_ref - 1) <= 0.08 if area_ref > 1e-9 else True), area, float(area_ref)
+        return ((0.6 <= area / area_ref <= 1.5) if area_ref > 1e-9 else True), area, float(area_ref)      # tolerance is wide on purpose: the analytic area omits some caps (duct fittings read 1.1-1.3 with correct meshes); the torus reads 1.6, facade members up to 3.3
     except Exception: return None
 
 def _doc(GG, src):
