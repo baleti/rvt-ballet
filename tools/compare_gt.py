@@ -70,6 +70,8 @@ def main(mdir, gtdir):
         g = G.get(el['id'])
         if g is None or i not in got: continue
         fid, kind, parts = got[i][1:4]
+        if kind == 'line':
+            V = np.vstack([p[0] for p in parts]); out[i] = {'fid': fid, 'iou': round(build.box_iou(V.min(0) - 1e-3, V.max(0) + 1e-3, np.array(g['bb'][0]) - 1e-3, np.array(g['bb'][1]) + 1e-3), 3)}; continue
         if kind != 'tri': continue
         V = np.vstack([p[0] for p in parts]); F = np.vstack([p[1] + sum(len(q[0]) for q in parts[:k]) for k, p in enumerate(parts)])
         lo, hi = V.min(0), V.max(0); r = {'fid': fid, 'iou': round(build.box_iou(lo, hi, np.array(g['bb'][0]), np.array(g['bb'][1])), 3)}

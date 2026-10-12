@@ -622,6 +622,11 @@ def line_geom(ctx, e, r):
     pts = curve_pts(g(r['fields'], 'm_pCurveDriver', 'm_pCrv'))
     return (LineSet(pts), 'line') if pts is not None and len(pts) > 1 else None
 
+def grid_line_geom(ctx, e, r):
+    """curtain grid line: the full (host-wide) line stored in m_pFullCurve (a line in the curtain wall's plane)"""
+    pts = curve_pts(g(r['fields'], 'm_pFullCurve'))
+    return (LineSet(pts), 'line') if pts is not None and len(pts) > 1 else None
+
 def inst_frame(ctx, r):
     ii = g(r['fields'], 'm_pInstanceInfo'); trf = g(ii, 'm_Trf') if ii else None
     if not trf: return None
@@ -660,7 +665,7 @@ def instance_box(ctx, e, r):
 
 LINE_CLASSES = {'CurveElem'}
 BUILDERS = {'ArcWall': wall_geom, 'ProfileRoof': roof_geom, 'FootPrintRoof': roof_geom, 'SWall': wall_geom, 'Floor': slab_geom, 'Ceiling': slab_geom, 'RoofSoffit': slab_geom, 'BuildingPad': slab_geom, 'RbsDuctCurve': mep_geom, 'RbsPipeCurve': mep_geom, 'RbsConduitCurve': mep_geom, 'CableTray': mep_geom,
-            'RbsFlexDuctCurve': mep_geom, 'RbsFlexPipeCurve': mep_geom, 'CurveElem': line_geom, 'FamilyInstance': instance_box}
+            'RbsFlexDuctCurve': mep_geom, 'RbsFlexPipeCurve': mep_geom, 'CurveElem': line_geom, 'CurtainGridLine': grid_line_geom, 'FamilyInstance': instance_box}
 HIDE_DEFAULT_CATS = {'Center line', '<Sketch>', 'Work Plane Grid', 'Cameras', 'Scope Boxes', 'Boundary Conditions', 'Area Loads', 'Line Loads', 'Point Loads', 'Division Profiles',
                      'Survey Point', 'Project Base Point', 'Internal Origin', 'Guide Grid', 'Reference Planes', 'Parts', 'Spaces', 'Rooms', 'Areas', 'Mass Floor', 'RVT Links', 'Analytical Nodes', 'Reference Points', 'Grids', 'Levels', 'Sections', 'Viewports'}
 TRANSLUCENT_CATS = {'Planting', 'Entourage', 'Mass', 'Rooms', 'Spaces', 'Areas', 'Scope Boxes', 'Mass Floor', 'RVT Links'}
