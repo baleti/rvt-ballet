@@ -1,6 +1,6 @@
 #!/bin/bash
 # remote-host job (via h1run, env occ): (1) convert the reference models with the final code and write fidelity coverage to ~/.cache/rvt-viewer/h1-coverage.json, (2) the per-class acceptance sweep (tools/accept_h1.sh)
-D="$(dirname "$(readlink -f "$0")")/.."; export RVT_NOFAST=${RVT_NOFAST:-1}
+D="$(dirname "$(readlink -f "$0")")/.."; [ -n "$RVT_NOFAST" ] && export RVT_NOFAST
 python - "$D" <<'PY'
 import sys, os, json, time
 D = sys.argv[1]; sys.path.insert(0, D)
