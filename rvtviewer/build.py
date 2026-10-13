@@ -816,6 +816,11 @@ def _guarded(fn, *a, extra_gb=None):
 
 CURVED_SURFACES = {'revolution', 'cone', 'sphere', 'torus'}      # analytic curved faces only; the check is expensive (refined_volume ~10 s for big meshes), so only meshes up to 1500 triangles, time-boxed to 3 s
 
+_RUST_ISSUES = {}
+def _note_rust_issue(what, ex):
+    k = (what, repr(ex)[:120])
+    if k not in _RUST_ISSUES: _RUST_ISSUES[k] = 1; print('Rust fast path %s failed (%r): Python reference used' % (what, ex), flush=True)
+
 def topology_check(a, P):
     """the reader validates curved solids with analytic (refined) volume/area; compare the triangle mesh's own area with it: a mesh whose triangles span the wrong vertices has the right volume on paper but draws wrongly. -> (ok, mesh_area, analytic_area) or None"""
     if not a.get('tris_raw') or not a.get('meta_raw'): return None
@@ -825,7 +830,12 @@ def topology_check(a, P):
         def _to(sig, frm): raise TimeoutError()
         old = signal.signal(signal.SIGALRM, _to); signal.setitimer(signal.ITIMER_REAL, 3.0)
         VF = fast_module(); rv = getattr(VF, 'refined_volume', None) if VF is not None else None          # Rust drop-in (same result to 1e-9, ~50x faster) when available
-        try: v_, closed, area_ref = (rv or RM.refined_volume)(a['tris_raw'], a['meta_raw'], fid=a.get('fid'))[:3]
+        try:
+            try: v_, closed, area_ref = (rv or RM.refined_volume)(a['tris_raw'], a['meta_raw'], fid=a.get('fid'))[:3]
+            except (KeyboardInterrupt, SystemExit, TimeoutError): raise
+            except BaseException as ex_:                       # a Rust panic (pyo3 PanicException is a BaseException): the Python reference instead
+                if rv is None: raise
+                _note_rust_issue('refined_volume', ex_); v_, closed, area_ref = RM.refined_volume(a['tris_raw'], a['meta_raw'], fid=a.get('fid'))[:3]
         finally: signal.setitimer(signal.ITIMER_REAL, 0); signal.signal(signal.SIGALRM, old)
         T = P.reshape(-1, 3, 3); area = float(np.linalg.norm(np.cross(T[:, 1] - T[:, 0], T[:, 2] - T[:, 0]), axis=1).sum() / 2)
         return ((0.6 <= area / area_ref <= 1.5) if area_ref > 1e-9 else True), area, float(area_ref)      # tolerance is wide on purpose: the analytic area omits some caps (duct fittings read 1.1-1.3 with correct meshes); the torus reads 1.6, facade members up to 3.3
@@ -1072,7 +1082,7 @@ def _stream_has_materials(fm, todo):
                 if a.get('mat') is not None: return True
                 seen += 1
         return seen == 0
-    except Exception: return False
+    except BaseException: return False
 
 def prefetch_reader_meshes(ctx, els, prog=None, on_partial=None):
     """saved-graphics meshes of every element that takes them, decoded in forked workers (the reader document is built once in the parent and shared copy-on-write); partial results stream into the progressive display"""
@@ -1098,7 +1108,8 @@ def prefetch_reader_meshes(ctx, els, prog=None, on_partial=None):
                 if ctx._why.get(e) is None and r is None and a.get('confidence') != 'mesh_approx': ctx._why[e] = 'reader: %s (%s)' % (a.get('confidence'), ', '.join(a.get('flags') or []))
                 account(e, r)
             ctx._rm = out; return
-        except Exception as ex:
+        except (KeyboardInterrupt, SystemExit): raise
+        except BaseException as ex:                            # incl. Rust panics
             print('streaming meshes failed (%r): falling back to the Python reader' % ex); out.clear(); n = 0
     if todo:
         try: reader_mesh(ctx, todo[0])                       # builds the shared reader context (document, census, materials) in the parent before forking
@@ -1420,7 +1431,8 @@ def convert(path, outdir, log=print, workers=None):
             fm = VF.open(path); q = fm.quick(); nq = write_quick_preview(outdir, q, path); T['quick'] = round(time.time() - t, 2)
             prog.extra['quick_boxes'] = nq; prog.extra['fast_path'] = True; prog.set('reading', 0.0, 'element table in %.1fs: %d boxes, %d levels (full decode continues)' % (T['quick'], nq, len(q.get('levels') or [])), quick_rev=1)
             raw = VF.load(path, rlog, model=fm)
-        except Exception as ex:
+        except (KeyboardInterrupt, SystemExit): raise
+        except BaseException as ex:                                    # incl. Rust panics
             log('Rust fast path failed (%r): using the Python reader' % ex); fm = None; raw = reader.cached_load(path, rlog)
     else: raw = reader.cached_load(path, rlog)
     T['reader'] = round(time.time() - t, 2); ctx = Ctx(raw); ctx.fm = fm; prog.stop_heartbeat()

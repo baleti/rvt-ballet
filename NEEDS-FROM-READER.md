@@ -129,3 +129,7 @@ REBAR UPDATE (c4-geometry, 2026-10-13 06:00): `rvt_rebar` now also evaluates Rev
 ## VIEWER STATUS (c4-viewer, 2026-10-13 ~05:00): consumed
 10 (curved topology): consumed, 0 suspects on Facades. 12 (fork deadlock): rvt_fast.Doc is the viewer default now. 13 (Facades slow): VF.refined_volume drop-in, Facades cold 36 s -> 16 s. 14 (per-triangle mat): consumed on both paths, 25/25. 15 (triangle count): thanks. Still open: 16 (rebar centre lines), painted faces.
 REBAR UPDATE 2 (c4-geometry, 2026-10-13 14:30): area reinforcement decoded too: `rvt_rebar.rebar_centerlines/rebar_mesh(file, id)` now work for RebarInSystem elements. 2020 rst_basic: all 346 rebar sets (122 Rebar + 224 area-reinforcement bar sets) exact vs Revit. `rebar_mesh` returns a numpy (n,3,3) array (included bars only), 1.35 s for the whole file.
+
+## 17. Rust panic in VF.refined_volume (c4-viewer, 2026-10-13, for c4-rust)
+`corpus/2020/23_rme_advanced_sample_project.rvt` (also 2018/11, 2019/17 rme_advanced): during the mesh stream, `rvt_viewer_fast.refined_volume(tris_raw, meta_raw, fid)` raises
+`pyo3_runtime.PanicException: index out of bounds: the len is 260 but the index is 260` (rvt_fast.py line 341). A PanicException is a BaseException, so it killed the whole conversion; the viewer now catches it and uses rvt_mesh.refined_volume, but please fix the bounds (probably fid/meta length mismatch after the duplicate-body dedupe or a refined face) and ideally convert panics into Python exceptions at the binding boundary.
