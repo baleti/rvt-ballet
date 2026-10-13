@@ -9,7 +9,7 @@ async def main(d, port):
         await b.goto('http://127.0.0.1:%d/' % port); await b.wait('window.__loaded===true', 120)
         n = await b.ev('S.N'); tris = await b.ev("document.querySelector('#status').textContent")
         if not n: bad.append('no elements')
-        pts = await b.ev("""(()=>{const r=document.querySelector('#gl').getBoundingClientRect();const o=[];for(let y=r.top+20;y<r.bottom-20;y+=100)for(let x=r.left+20;x<r.right-20;x+=100){const h=pickAt(x,y);if(h)o.push(h.id)}return o})()""")
+        pts = await b.ev("""(()=>{const r=document.querySelector('#gl').getBoundingClientRect();const o=[];for(let y=r.top+r.height*.2;y<r.bottom-r.height*.2;y+=r.height/10)for(let x=r.left+r.width*.2;x<r.right-r.width*.2;x+=r.width/10){const h=pickAt(x,y);if(h)o.push(h.id)}return o})()""")
         if not pts or any(i < 0 or i >= n for i in pts): bad.append('picking returned no / invalid element ids')
         info = json.loads(await b.ev("fetch('/api/m/'+S.mid+'/el/'+%d).then(r=>r.text())" % (pts[0] if pts else 0))) if pts else {}
         if pts and 'el' not in info: bad.append('inspector API failed')

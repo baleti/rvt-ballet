@@ -16,6 +16,8 @@ CAT_COLORS = {
     'Lighting Fixtures': (0.98, 0.90, 0.50), 'Mechanical Equipment': (0.45, 0.70, 0.55), 'Electrical Equipment': (0.90, 0.55, 0.30),
     'Curtain Panels': (0.60, 0.80, 0.90), 'Curtain Wall Mullions': (0.50, 0.52, 0.55), 'Structural Rebar': (0.75, 0.30, 0.25), 'Topography': (0.55, 0.62, 0.45),
     'Lines': (0.2, 0.2, 0.2), 'Planting': (0.36, 0.52, 0.30), 'Entourage': (0.55, 0.56, 0.60), 'Pads': (0.62, 0.60, 0.55), 'Site': (0.55, 0.55, 0.50), 'Parking': (0.45, 0.45, 0.47),
+    'Air Terminals': (0.86, 0.87, 0.90), 'Duct Accessories': (0.55, 0.62, 0.70), 'Pipe Accessories': (0.45, 0.60, 0.48), 'Sprinklers': (0.85, 0.30, 0.25), 'Plumbing Equipment': (0.75, 0.78, 0.82),
+    'Electrical Fixtures': (0.92, 0.80, 0.45), 'Communication Devices': (0.80, 0.75, 0.60), 'Fire Alarm Devices': (0.88, 0.35, 0.30), 'Conduit Fittings': (0.80, 0.60, 0.25), 'Cable Tray Fittings': (0.85, 0.70, 0.28),
     'Generic Models': (0.72, 0.70, 0.68), 'Casework': (0.80, 0.70, 0.55), 'Specialty Equipment': (0.70, 0.70, 0.72), 'Columns': (0.80, 0.78, 0.74), 'Fascias': (0.85, 0.84, 0.80), 'Gutters': (0.70, 0.70, 0.72),
 }
 def cat_color(name):
@@ -732,7 +734,7 @@ def instance_box(ctx, e, r):
 LINE_CLASSES = {'CurveElem'}
 BUILDERS = {'LineLoad': line_geom, 'Property': curve_lines_geom, 'PropertyLineSegment': curve_lines_geom, 'ArcWall': wall_geom, 'ProfileRoof': roof_geom, 'FootPrintRoof': roof_geom, 'SWall': wall_geom, 'Floor': slab_geom, 'Ceiling': slab_geom, 'RoofSoffit': slab_geom, 'BuildingPad': slab_geom, 'RbsDuctCurve': mep_geom, 'RbsPipeCurve': mep_geom, 'RbsConduitCurve': mep_geom, 'CableTray': mep_geom,
             'RbsFlexDuctCurve': mep_geom, 'RbsFlexPipeCurve': mep_geom, 'CurveElem': line_geom, 'CurtainGridLine': grid_line_geom, 'FamilyInstance': instance_box}
-HIDE_DEFAULT_CATS = {'Center line', '<Sketch>', 'Work Plane Grid', 'Cameras', 'Scope Boxes', 'Boundary Conditions', 'Area Loads', 'Line Loads', 'Point Loads', 'Division Profiles',
+HIDE_DEFAULT_CATS = {'Spaces', 'HVAC Zones', 'Center line', '<Sketch>', 'Work Plane Grid', 'Cameras', 'Scope Boxes', 'Boundary Conditions', 'Area Loads', 'Line Loads', 'Point Loads', 'Division Profiles',
                      'Survey Point', 'Project Base Point', 'Internal Origin', 'Guide Grid', 'Reference Planes', 'Parts', 'Spaces', 'Rooms', 'Areas', 'Mass Floor', 'RVT Links', 'Analytical Nodes', 'Reference Points', 'Grids', 'Levels', 'Sections', 'Viewports'}
 TRANSLUCENT_CATS = {'Planting', 'Entourage', 'Mass', 'Rooms', 'Spaces', 'Areas', 'Scope Boxes', 'Mass Floor', 'RVT Links'}
 
@@ -796,7 +798,7 @@ def reader_brep_extra(ctx, e, GG):
     except Exception:
         return None
 
-MESH_FIRST = {'SWall', 'ArcWall', 'Floor', 'Ceiling', 'ProfileRoof', 'FootPrintRoof', 'RoofSoffit', 'BuildingPad'}      # saved-graphics meshes match Revit volumes within 2% far more often than the parametric rebuilds (2020 residential walls 92% vs 57%, roofs 100% vs 0%)
+MESH_FIRST = {'SWall', 'ArcWall', 'Floor', 'Ceiling', 'ProfileRoof', 'FootPrintRoof', 'RoofSoffit', 'BuildingPad', 'RbsDuctCurve', 'RbsPipeCurve', 'RbsConduitCurve', 'CableTray', 'RbsFlexDuctCurve', 'RbsFlexPipeCurve'}      # saved-graphics meshes match Revit volumes within 2% far more often than the parametric rebuilds (2020 residential walls 92% vs 57%, roofs 100% vs 0%)
 
 _GUARD_GB = [2.5]
 
@@ -980,7 +982,18 @@ def reader_mesh(ctx, e, a_pre=None):
         ctx._why[e] = 'reader: %s%s' % (a.get('confidence') or 'none', (' (' + ', '.join(a.get('flags') or []) + ')') if a.get('flags') else ''); return None
     T = [np.array(sl['triangles'], float).reshape(-1, 3) for sl in a['solids'] if sl.get('kind') == 'triangle_mesh' and sl.get('triangles')]
     if not T: return None
-    P = np.vstack(T); m = Mesh(P, np.arange(len(P)).reshape(-1, 3))
+    P = np.vstack(T)
+    if a.get('nid') is not None and len(a['nid']) == len(P) // 3 and len(set(a['nid'])) > 1:      # coincident duplicate bodies (e.g. duct lining on the duct surface): keep the first, they z-fight
+        nid = np.asarray(a['nid']); TT = P.reshape(-1, 3, 3); seen = {}; drop = set()
+        for b in dict.fromkeys(nid.tolist()):
+            t = TT[nid == b]; k = (len(t), tuple(np.round(t.reshape(-1, 3).min(0), 3)), tuple(np.round(t.reshape(-1, 3).max(0), 3)))
+            if k in seen: drop.add(b)
+            else: seen[k] = b
+        if drop:
+            keep = ~np.isin(nid, list(drop)); P = TT[keep].reshape(-1, 3)
+            a = dict(a, **{k_: [x for x, kp in zip(a[k_], keep) if kp] for k_ in ('nid', 'fid', 'mat', 'surf') if a.get(k_) is not None and len(a[k_]) == len(keep)})
+            a['flags'] = list(a.get('flags') or []) + ['duplicate_bodies_dropped']
+    m = Mesh(P, np.arange(len(P)).reshape(-1, 3))
     m.info = {'source': next((sl.get('source') for sl in a['solids'] if sl.get('source')), None), 'flags': list(a.get('flags') or []), 'bodies': len(a['solids']), 'tris': len(P) // 3}
     if a.get('nid') is not None and len(a['nid']) == len(P) // 3: m.info['body_list'] = body_summary(P, a['nid'], a.get('fid'), a.get('surf')); m.info['bodies'] = len(set(a['nid']))
     tc = topology_check(a, P)
