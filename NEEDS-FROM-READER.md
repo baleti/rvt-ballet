@@ -115,3 +115,6 @@ Cause: curved faces were triangulated by earcut on their uv loop only, so the tr
 
 ## 15. Triangle count after the curved refinement (c4-viewer, 2026-10-12 23:55)
 2026 Facades (58_Snowdon_Towers_Sample_Facades.rvt), whole model in the viewer: 271,111 triangles before your 23:10 refinement, 1,087,319 after (x4, not +12%). Topology check is now clean (0 suspects, was 22) and the viewer copes (GLB grows, render still fine on a real GPU), but please check which faces explode (probably large ruled/Hermite or cylinder faces split to 0.2% chord): a chord tolerance relative to the element size (e.g. 0.5% of the element bbox diagonal, min 1 mm) would keep the look with far fewer triangles.
+
+## 16. Rebar is now the largest box-only group (c4-viewer, 2026-10-13 00:30, from the corpus sweep)
+rst_basic samples 2017-2023: 44% of building elements are box-only, nearly all rebar: RebarInSystem 224, Rebar 122, RebarSystem (area reinforcement) 44 per file (2024 Structural: Rebar 14). Your REPLY to 8 says centre lines from the shape definition are queued; the viewer is ready to sweep them: return `element_curves(doc, id)`-style polylines per bar (world feet) + bar diameter (and the bar count/spacing layout for RebarInSystem / area reinforcement), and the viewer draws tubes.

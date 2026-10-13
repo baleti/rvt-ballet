@@ -730,7 +730,7 @@ def instance_box(ctx, e, r):
     return m, 'bbox'
 
 LINE_CLASSES = {'CurveElem'}
-BUILDERS = {'Property': curve_lines_geom, 'PropertyLineSegment': curve_lines_geom, 'ArcWall': wall_geom, 'ProfileRoof': roof_geom, 'FootPrintRoof': roof_geom, 'SWall': wall_geom, 'Floor': slab_geom, 'Ceiling': slab_geom, 'RoofSoffit': slab_geom, 'BuildingPad': slab_geom, 'RbsDuctCurve': mep_geom, 'RbsPipeCurve': mep_geom, 'RbsConduitCurve': mep_geom, 'CableTray': mep_geom,
+BUILDERS = {'LineLoad': line_geom, 'Property': curve_lines_geom, 'PropertyLineSegment': curve_lines_geom, 'ArcWall': wall_geom, 'ProfileRoof': roof_geom, 'FootPrintRoof': roof_geom, 'SWall': wall_geom, 'Floor': slab_geom, 'Ceiling': slab_geom, 'RoofSoffit': slab_geom, 'BuildingPad': slab_geom, 'RbsDuctCurve': mep_geom, 'RbsPipeCurve': mep_geom, 'RbsConduitCurve': mep_geom, 'CableTray': mep_geom,
             'RbsFlexDuctCurve': mep_geom, 'RbsFlexPipeCurve': mep_geom, 'CurveElem': line_geom, 'CurtainGridLine': grid_line_geom, 'FamilyInstance': instance_box}
 HIDE_DEFAULT_CATS = {'Center line', '<Sketch>', 'Work Plane Grid', 'Cameras', 'Scope Boxes', 'Boundary Conditions', 'Area Loads', 'Line Loads', 'Point Loads', 'Division Profiles',
                      'Survey Point', 'Project Base Point', 'Internal Origin', 'Guide Grid', 'Reference Planes', 'Parts', 'Spaces', 'Rooms', 'Areas', 'Mass Floor', 'RVT Links', 'Analytical Nodes', 'Reference Points', 'Grids', 'Levels', 'Sections', 'Viewports'}
@@ -1101,7 +1101,7 @@ def prefetch_reader_meshes(ctx, els, prog=None, on_partial=None):
                     account(e, r)
     ctx._rm = out
 
-CONTAINER_CLASSES = {'JoistSystem', 'BeamSystem', 'ElementGroup'}          # layout containers: zero-height bbox, no graphics of their own (the members are separate FamilyInstances)
+CONTAINER_CLASSES = {'JoistSystem', 'BeamSystem', 'ElementGroup', 'GStyleElem'}          # layout containers: zero-height bbox, no graphics of their own (the members are separate FamilyInstances)
 
 LAYERED_CLASSES = {'SWall', 'ArcWall', 'Floor', 'Ceiling', 'ProfileRoof', 'FootPrintRoof', 'RoofSoffit', 'BuildingPad'}
 
