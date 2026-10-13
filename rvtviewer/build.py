@@ -1186,7 +1186,7 @@ def _element_mesh(ctx, e, r):
     if fn:
         try:
             res = fn(ctx, e, r)
-            if res and res[0] and res[1] == 'bbox' and 'symbol_no_graphics' in str(ctx._why.get(e) or '') and getattr(res[0], 'kind', 'tri') == 'tri':
+            if res and res[0] and res[1] == 'bbox' and _no_3d(ctx, e, r) and getattr(res[0], 'kind', 'tri') == 'tri':
                 return feature_edges(res[0]), 'void'                 # oriented placeholder of a symbol without 3D graphics: outline only
             if res and res[0]:
                 if r['class'] in ('Floor', 'Ceiling', 'RoofSoffit', 'BuildingPad', 'ProfileRoof', 'FootPrintRoof') and not isinstance(res[0], geom.Multi):
@@ -1203,7 +1203,7 @@ def _element_mesh(ctx, e, r):
             polys = record_curves(r['fields'])
             if polys: return SegSet(polys), 'line'
         except Exception: pass
-    if bb is not None and 'symbol_no_graphics' in str(ctx._why.get(e) or ''):      # the family symbol stores no 3D graphics (void-only openings, reference families): an outline, not a solid that would plug the hole it cuts
+    if bb is not None and _no_3d(ctx, e, r):      # the family symbol stores no 3D graphics (void-only openings, reference families): an outline, not a solid that would plug the hole it cuts
         return box_edges(*bb), 'void'
     if bb is not None: return geom.box(*bb), 'bbox'
     return None
@@ -1218,6 +1218,11 @@ def feature_edges(m):
             k = tuple(sorted((key(V[a]), key(V[b])))); adj.setdefault(k, []).append(t)
     segs = [[np.array(k[0]), np.array(k[1])] for k, ts in adj.items() if len(ts) != 2 or abs(float(N[ts[0]] @ N[ts[1]])) < 0.999]
     return SegSet(segs)
+
+def _no_3d(ctx, e, r):
+    """family instance whose symbol (and itself) stores no 3D graphics: Revit has no solid for it either (Volume 0, no geometry in its export; reader WHY-BOXY 2026-10-13)"""
+    w = str(ctx._why.get(e) or '')
+    return 'symbol_no_graphics' in w or (r['class'] == 'FamilyInstance' and 'no_saved_graphics' in w)
 
 def box_edges(lo, hi):
     c = [np.array([(hi if i & 1 else lo)[0], (hi if i & 2 else lo)[1], (hi if i & 4 else lo)[2]]) for i in range(8)]
