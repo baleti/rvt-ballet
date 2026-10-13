@@ -879,6 +879,15 @@ def _em_geometry(GG, src, e):
             'surf': [str(x[0]) for x in mt] if len(mt) == len(m['tris']) else None, 'tris_raw': m['tris'] if (len(m['tris']) <= 1500 and any(str(x[0]) in CURVED_SURFACES for x in mt)) else None, 'meta_raw': mt if (len(m['tris']) <= 1500 and any(str(x[0]) in CURVED_SURFACES for x in mt)) else None,
             'solids': [{'kind': 'triangle_mesh', 'triangles': P.round(6).tolist(), 'source': m['source']}]}
 
+def _body_summary_fast(P, nid, fid, surf):
+    """Rust body_summary (identical output) when available; any failure (incl. a Rust panic) uses the Python version"""
+    VF = fast_module(); bs = getattr(VF, 'body_summary', None) if VF is not None else None
+    if bs is not None:
+        try: return bs(P, nid, fid, surf)
+        except (KeyboardInterrupt, SystemExit): raise
+        except BaseException as ex: _note_rust_issue('body_summary', ex)
+    return body_summary(P, nid, fid, surf)
+
 def body_summary(P, nid, fid=None, surf=None, limit=12):
     """per body of an element's saved-graphics mesh (nid = body id per triangle): triangles, faces (fid), area (ft2), watertight; kind from the id range (polymesh 1e6, symbol instance >= 2e7).
     Vertex welding and edge counting are done once for the whole element (one sort), then split per body."""
@@ -1022,7 +1031,7 @@ def reader_mesh(ctx, e, a_pre=None):
             a['flags'] = list(a.get('flags') or []) + ['duplicate_bodies_dropped']
     m = Mesh(P, np.arange(len(P)).reshape(-1, 3))
     m.info = {'source': next((sl.get('source') for sl in a['solids'] if sl.get('source')), None), 'flags': list(a.get('flags') or []), 'bodies': len(a['solids']), 'tris': len(P) // 3}
-    if a.get('nid') is not None and len(a['nid']) == len(P) // 3: m.info['body_list'] = body_summary(P, a['nid'], a.get('fid'), a.get('surf')); m.info['bodies'] = len(set(a['nid']))
+    if a.get('nid') is not None and len(a['nid']) == len(P) // 3: m.info['body_list'] = _body_summary_fast(P, a['nid'], a.get('fid'), a.get('surf')); m.info['bodies'] = len(set(a['nid']))
     tc = topology_check(a, P)
     if tc is not None:
         m.info['mesh_area'] = round(tc[1], 3); m.info['analytic_area'] = round(tc[2], 3)
