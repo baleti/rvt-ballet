@@ -1353,7 +1353,7 @@ def pack_batches(els, res, previews=False, mats=None):
         pos = glb.to_yup_m(np.vstack(a['pos'])); idx = np.concatenate(a['idx']).astype(np.uint32)
         c = (0.1, 0.1, 0.12) if kind == 'line' else (tuple(int(hexc[k:k + 2], 16) / 255 for k in (0, 2, 4)) if hexc else cat_color(cat))
         if isinstance(tr, float) and not isinstance(tr, bool): alpha = tr
-        else: alpha = 0.45 if cat in ('Windows', 'Curtain Panels') else ((0.08 if cat in ('Planting', 'Entourage') else 0.14) if tr else 1.0)
+        else: alpha = 0.45 if (cat in ('Windows', 'Curtain Panels') and not hexc) else ((0.08 if cat in ('Planting', 'Entourage') else 0.14) if tr else 1.0)      # a known material decides (glass carries its own transparency)
         matv = np.concatenate(a['mat']) if ML and kind == 'tri' else None
         batches.append({'name': cat + ('' if kind == 'tri' else ' (lines)'), 'color': (*c, alpha), 'pos': pos, 'eidx': np.concatenate(a['eidx']), 'idx': idx, 'mode': 1 if kind == 'line' else 4, 'mat': matv})
         bmeta.append({'cat': cat, 'kind': kind, 'color': '#%02x%02x%02x' % tuple(int(x * 255) for x in c), 'alpha': alpha, 'ranges': a['ranges'], 'tris': a['nt']})
