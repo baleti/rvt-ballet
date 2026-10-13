@@ -47,6 +47,7 @@
 - Tests: tools/functest.py (server + sheets plug-in functional checks per model), tools/sweep.py (+ sweep_table.py -> docs/SWEEP.md) queued on remote-host for all 77 corpus files.
 
 ## 2026-10-13 (c4-viewer): geometry completeness + robustness
+- CORPUS SWEEP (remote-host, docs/SWEEP.md): 78 / 78 files 2017-2026 convert and pass the functional test (meta, glb, materials, inspector, search, sheets + view SVG).
 - Box-only gone on the reference models: rebar from the reader's shape definitions (2020 rst_basic box-only 44% -> 0%), 'void' class for instances with no 3D solid in Revit (void openings, reference families, QTY markers: outline only, not box-only), model groups / area-reinforcement systems / graphics styles are containers. Structural 2024: 100% true geometry; Facades 2026 99.8% true, 0 box; HVAC 2024 100% true (ducts mesh-first from saved graphics, cold 92 s -> 23-32 s).
 - Speed: Rust refined_volume drop-in (Facades cold 36 s -> 16 s), vectorised body_summary (Structural geometry 7.7 -> 6.1 s), rvt_fast.Doc default (fork deadlock fixed upstream).
 - Robustness: Rust panics fall back to the Python reference (found: refined_volume panic on rme_advanced, NEEDS 17); workers bounded by the memory cap; sweep conversions each in a capped scope.

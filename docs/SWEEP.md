@@ -1,7 +1,84 @@
 # Corpus sweep: every corpus file converted as `rvt-view` does (tools/sweep.py)
 
-ok 1 / 1 files; failures listed with their reason. Columns: true geometry / parametric matched / approximate / box only (building elements).
+ok 78 / 78 files; failures listed with their reason. Columns: true geometry / parametric matched / approximate / box only (building elements).
 
 | year | file | MB | convert | s | elements | tris | true | matched | approx | box | sheets/views | materials used (swatches) | functional checks |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2026 | 77_Construction-DefaultMetric.rte | 5.2 | ok | 3.6 | 5714 | 36 | 0% | 0% | 0% | 0% | 0/39 | 0 (73) | PASS |
+| 2017 | 00_rst_basic_sample_project.rvt | 6.0 | ok | 10.6 | 13934 | 136616 | 56% | 0% | 0% | 44% | 8/76 | 17 (76) | PASS |
+| 2017 | 01_rst_advanced_sample_project.rvt | 13.1 | ok | 26.4 | 13486 | 242240 | 95% | 0% | 0% | 5% | 9/57 | 8 (194) | PASS |
+| 2017 | 02_Arch_Link_Model.rvt | 14.2 | ok | 86.2 | 16906 | 755962 | 98% | 0% | 0% | 1% | 2/66 | 52 (186) | PASS |
+| 2017 | 03_rac_advanced_sample_project.rvt | 15.3 | ok | 38.8 | 17132 | 1330553 | 97% | 0% | 0% | 2% | 2/64 | 50 (167) | PASS |
+| 2017 | 04_rme_basic_sample_project.rvt | 27.9 | ok | 47.0 | 27393 | 2153919 | 97% | 0% | 2% | 0% | 8/155 | 35 (175) | PASS |
+| 2017 | 05_rme_advanced_sample_project.rvt | 33.1 | ok | 87.8 | 29016 | 1993906 | 98% | 0% | 2% | 0% | 8/158 | 35 (175) | PASS |
+| 2018 | 06_rst_basic_sample_project.rvt | 5.8 | ok | 10.8 | 13997 | 136475 | 56% | 0% | 0% | 44% | 8/76 | 17 (76) | PASS |
+| 2018 | 07_rst_advanced_sample_project.rvt | 13.3 | ok | 22.3 | 13551 | 242252 | 95% | 0% | 0% | 5% | 9/57 | 8 (194) | PASS |
+| 2018 | 08_Arch_Link_Model.rvt | 14.3 | ok | 85.0 | 16972 | 755962 | 98% | 0% | 0% | 1% | 2/66 | 52 (186) | PASS |
+| 2018 | 09_rac_advanced_sample_project.rvt | 15.5 | ok | 47.8 | 17198 | 1330541 | 97% | 0% | 0% | 2% | 2/64 | 50 (167) | PASS |
+| 2018 | 10_rme_basic_sample_project.rvt | 28.4 | ok | 41.3 | 27459 | 2153717 | 97% | 0% | 2% | 0% | 8/155 | 35 (175) | PASS |
+| 2018 | 11_rme_advanced_sample_project.rvt | 33.7 | ok | 40.5 | 29081 | 1993920 | 98% | 0% | 2% | 0% | 8/158 | 35 (175) | PASS |
+| 2019 | 12_rst_basic_sample_project.rvt | 5.9 | ok | 10.5 | 13810 | 136547 | 56% | 0% | 0% | 44% | 8/76 | 17 (76) | PASS |
+| 2019 | 13_rst_advanced_sample_project.rvt | 13.5 | ok | 30.2 | 13543 | 242228 | 96% | 0% | 0% | 4% | 9/57 | 8 (194) | PASS |
+| 2019 | 14_Arch_Link_Model.rvt | 14.5 | ok | 38.3 | 16971 | 1337780 | 98% | 0% | 0% | 1% | 2/66 | 52 (186) | PASS |
+| 2019 | 15_rac_advanced_sample_project.rvt | 15.6 | ok | 41.3 | 17197 | 1330093 | 99% | 0% | 0% | 0% | 2/64 | 50 (167) | PASS |
+| 2019 | 16_rme_basic_sample_project.rvt | 28.5 | ok | 42.9 | 27471 | 2153971 | 97% | 0% | 2% | 0% | 8/155 | 34 (175) | PASS |
+| 2019 | 17_rme_advanced_sample_project.rvt | 34.0 | ok | 43.8 | 29101 | 1993970 | 98% | 0% | 2% | 0% | 8/158 | 34 (175) | PASS |
+| 2020 | 18_rst_basic_sample_project.rvt | 5.9 | ok | 10.5 | 13853 | 136463 | 56% | 0% | 0% | 44% | 8/76 | 17 (76) | PASS |
+| 2020 | 19_Commercial_Sample_Project.rvt | 7.4 | ok | 21.6 | 7042 | 110428 | 97% | 1% | 2% | 1% | 4/45 | 43 (103) | PASS |
+| 2020 | 20_Residential_Sample_Project.rvt | 10.2 | ok | 9.8 | 7277 | 91318 | 100% | 0% | 0% | 0% | 4/41 | 58 (124) | PASS |
+| 2020 | 21_rst_advanced_sample_project.rvt | 13.6 | ok | 23.6 | 13586 | 242276 | 95% | 0% | 0% | 5% | 9/57 | 8 (194) | PASS |
+| 2020 | 22_rme_basic_sample_project.rvt | 29.1 | ok | 41.5 | 27511 | 2153777 | 97% | 0% | 2% | 0% | 8/155 | 35 (175) | PASS |
+| 2020 | 23_rme_advanced_sample_project.rvt | 34.8 | ok | 39.0 | 29132 | 1993966 | 98% | 0% | 2% | 0% | 8/157 | 35 (175) | PASS |
+| 2021 | 24_rst_basic_sample_project.rvt | 6.2 | ok | 10.8 | 13924 | 136547 | 56% | 0% | 0% | 44% | 8/76 | 17 (76) | PASS |
+| 2021 | 25_rst_advanced_sample_project.rvt | 14.4 | ok | 23.1 | 13659 | 242192 | 96% | 0% | 0% | 4% | 9/57 | 8 (194) | PASS |
+| 2021 | 26_Arch_Link_Model.rvt | 15.1 | ok | 38.4 | 17084 | 1337792 | 98% | 0% | 0% | 1% | 2/66 | 52 (186) | PASS |
+| 2021 | 27_Technical_school-current_m.rvt | 16.3 | ok | 41.1 | 17313 | 1329561 | 99% | 0% | 0% | 1% | 2/64 | 50 (167) | PASS |
+| 2021 | 28_rme_basic_sample_project.rvt | 30.4 | ok | 64.8 | 27583 | 2153983 | 97% | 0% | 2% | 0% | 8/155 | 34 (175) | PASS |
+| 2021 | 29_rme_advanced_sample_project.rvt | 36.5 | ok | 63.0 | 29204 | 1993970 | 98% | 0% | 2% | 0% | 8/157 | 34 (175) | PASS |
+| 2021 | 60_Precast_Detailing-DefaultMetricCHS.rte | 16.3 | ok | 16.7 | 9918 | 276 | 0% | 0% | 0% | 100% | 0/27 | 0 (160) | PASS |
+| 2021 | 61_Precast_Detailing-DefaultMetricCSY.rte | 16.5 | ok | 6.6 | 9919 | 276 | 0% | 0% | 0% | 100% | 0/27 | 0 (160) | PASS |
+| 2021 | 62_Construction-DefaultMetric.rte | 5.0 | ok | 5.9 | 5426 | 240 | 0% | 0% | 0% | 100% | 0/39 | 0 (73) | PASS |
+| 2022 | 30_rst_basic_sample_project.rvt | 6.5 | ok | 11.1 | 14035 | 136583 | 56% | 0% | 0% | 44% | 8/76 | 17 (76) | PASS |
+| 2022 | 31_rst_advanced_sample_project.rvt | 14.4 | ok | 52.3 | 13733 | 266252 | 96% | 0% | 0% | 4% | 9/57 | 8 (194) | PASS |
+| 2022 | 32_Arch_Link_Model.rvt | 15.1 | ok | 40.1 | 17157 | 1337780 | 98% | 0% | 0% | 1% | 2/66 | 52 (186) | PASS |
+| 2022 | 33_Technical_school-current_m.rvt | 16.3 | ok | 35.8 | 17386 | 1330189 | 99% | 0% | 0% | 1% | 2/64 | 50 (167) | PASS |
+| 2022 | 34_rme_basic_sample_project.rvt | 30.5 | ok | 55.0 | 27656 | 2153983 | 97% | 0% | 2% | 0% | 8/155 | 34 (175) | PASS |
+| 2022 | 35_rme_advanced_sample_project.rvt | 36.7 | ok | 53.3 | 29276 | 1993970 | 98% | 0% | 2% | 0% | 8/157 | 34 (175) | PASS |
+| 2022 | 63_Precast_Detailing-DefaultMetricCHS.rte | 16.4 | ok | 11.4 | 9991 | 276 | 0% | 0% | 0% | 100% | 0/27 | 0 (160) | PASS |
+| 2022 | 64_Precast_Detailing-DefaultMetricCSY.rte | 16.6 | ok | 11.8 | 9992 | 276 | 0% | 0% | 0% | 100% | 0/27 | 0 (160) | PASS |
+| 2022 | 65_Construction-DefaultMetric.rte | 5.0 | ok | 2.8 | 5502 | 240 | 0% | 0% | 0% | 100% | 0/39 | 0 (73) | PASS |
+| 2023 | 36_rst_basic_sample_project.rvt | 6.5 | ok | 11.3 | 13820 | 137674 | 56% | 0% | 0% | 44% | 8/76 | 18 (79) | PASS |
+| 2023 | 37_rst_advanced_sample_project.rvt | 14.4 | ok | 22.2 | 13727 | 247824 | 95% | 0% | 0% | 4% | 9/57 | 9 (194) | PASS |
+| 2023 | 38_Arch_Link_Model.rvt | 15.6 | ok | 40.4 | 17350 | 1341785 | 99% | 0% | 0% | 0% | 2/66 | 52 (188) | PASS |
+| 2023 | 39_Technical_school-current_m.rvt | 16.4 | ok | 29.8 | 17477 | 1334415 | 99% | 0% | 0% | 1% | 2/64 | 50 (168) | PASS |
+| 2023 | 40_rme_basic_sample_project.rvt | 30.8 | ok | 55.1 | 27750 | 2157461 | 97% | 0% | 2% | 0% | 8/155 | 34 (175) | PASS |
+| 2023 | 41_rme_advanced_sample_project.rvt | 37.1 | ok | 51.8 | 29370 | 1997628 | 98% | 0% | 2% | 0% | 8/157 | 34 (175) | PASS |
+| 2023 | 66_Precast_Detailing-DefaultMetricCHS.rte | 15.7 | ok | 6.9 | 10088 | 300 | 0% | 0% | 0% | 100% | 0/27 | 0 (160) | PASS |
+| 2023 | 67_Precast_Detailing-DefaultMetricCSY.rte | 15.9 | ok | 6.1 | 10090 | 300 | 0% | 0% | 0% | 100% | 0/27 | 0 (160) | PASS |
+| 2023 | 68_Construction-DefaultMetric.rte | 5.0 | ok | 2.8 | 5591 | 240 | 0% | 0% | 0% | 100% | 0/39 | 0 (73) | PASS |
+| 2024 | 42_Snowdon_Towers_Sample_HVAC.rvt | 22.0 | ok | 14.9 | 12679 | 661626 | 59% | 41% | 0% | 0% | 18/69 | 0 (39) | PASS |
+| 2024 | 43_Snowdon_Towers_Sample_Structural.rvt | 27.9 | ok | 17.7 | 16571 | 594865 | 97% | 0% | 0% | 3% | 12/104 | 5 (79) | PASS |
+| 2024 | 44_Snowdon_Towers_Sample_Electrical.rvt | 40.3 | ok | 50.2 | 19769 | 2236556 | 100% | 0% | 0% | 0% | 26/118 | 18 (48) | PASS |
+| 2024 | 45_Snowdon_Towers_Sample_Plumbing.rvt | 41.6 | ok | 54.7 | 25738 | 3146974 | 100% | 0% | 0% | 0% | 27/120 | 4 (72) | PASS |
+| 2024 | 46_Snowdon_Towers_Sample_Facades.rvt | 52.7 | ok | 13.2 | 9534 | 295281 | 100% | 0% | 0% | 0% | 2/47 | 20 (74) | PASS |
+| 2024 | 47_Snowdon_Towers_Sample_Site.rvt | 54.4 | ok | 17.0 | 11711 | 141710 | 100% | 0% | 0% | 0% | 3/100 | 12 (76) | PASS |
+| 2024 | 69_Precast_Detailing-DefaultMetricCHS.rte | 16.7 | ok | 4.4 | 10101 | 48 | 0% | 0% | 0% | 0% | 0/27 | 0 (160) | PASS |
+| 2024 | 70_Precast_Detailing-DefaultMetricCSY.rte | 16.9 | ok | 4.3 | 10110 | 48 | 0% | 0% | 0% | 0% | 0/27 | 0 (160) | PASS |
+| 2024 | 71_Construction-DefaultMetric.rte | 5.3 | ok | 2.7 | 5603 | 36 | 0% | 0% | 0% | 0% | 0/39 | 0 (73) | PASS |
+| 2025 | 48_Snowdon_Towers_Sample_HVAC.rvt | 22.2 | ok | 15.3 | 12716 | 661626 | 59% | 41% | 0% | 0% | 18/69 | 0 (39) | PASS |
+| 2025 | 49_Snowdon_Towers_Sample_Structural.rvt | 27.9 | ok | 21.2 | 16612 | 594865 | 97% | 0% | 0% | 3% | 12/104 | 5 (79) | PASS |
+| 2025 | 50_Snowdon_Towers_Sample_Electrical.rvt | 40.5 | ok | 54.5 | 19810 | 2236556 | 100% | 0% | 0% | 0% | 26/118 | 18 (48) | PASS |
+| 2025 | 51_Snowdon_Towers_Sample_Plumbing.rvt | 41.7 | ok | 54.9 | 25750 | 3145918 | 100% | 0% | 0% | 0% | 27/120 | 4 (72) | PASS |
+| 2025 | 52_Snowdon_Towers_Sample_Facades.rvt | 52.7 | ok | 12.9 | 9571 | 295281 | 100% | 0% | 0% | 0% | 2/47 | 20 (74) | PASS |
+| 2025 | 53_Snowdon_Towers_Sample_Site.rvt | 54.3 | ok | 17.6 | 11750 | 141548 | 100% | 0% | 0% | 0% | 3/100 | 12 (76) | PASS |
+| 2025 | 72_Precast_Detailing-DefaultMetricCHS.rte | 16.8 | ok | 4.6 | 10142 | 48 | 0% | 0% | 0% | 0% | 0/27 | 0 (160) | PASS |
+| 2025 | 73_Precast_Detailing-DefaultMetricCSY.rte | 17.0 | ok | 4.6 | 10151 | 48 | 0% | 0% | 0% | 0% | 0/27 | 0 (160) | PASS |
+| 2025 | 74_Construction-DefaultMetric.rte | 5.3 | ok | 2.7 | 5640 | 36 | 0% | 0% | 0% | 0% | 0/39 | 0 (73) | PASS |
+| 2026 | 54_Snowdon_Towers_Sample_HVAC.rvt | 22.2 | ok | 15.2 | 12791 | 661626 | 59% | 41% | 0% | 0% | 18/69 | 0 (39) | PASS |
+| 2026 | 55_Snowdon_Towers_Sample_Structural.rvt | 27.7 | ok | 20.1 | 16678 | 594913 | 97% | 0% | 0% | 3% | 12/104 | 5 (79) | PASS |
+| 2026 | 56_Snowdon_Towers_Sample_Electrical.rvt | 41.6 | ok | 57.5 | 19901 | 2236556 | 100% | 0% | 0% | 0% | 26/118 | 18 (48) | PASS |
+| 2026 | 57_Snowdon_Towers_Sample_Plumbing.rvt | 41.7 | ok | 55.9 | 25837 | 3146022 | 100% | 0% | 0% | 0% | 27/120 | 4 (72) | PASS |
+| 2026 | 58_Snowdon_Towers_Sample_Facades.rvt | 52.6 | ok | 34.6 | 9645 | 295281 | 100% | 0% | 0% | 0% | 2/47 | 20 (74) | PASS |
+| 2026 | 59_Snowdon_Towers_Sample_Site.rvt | 60.7 | ok | 48.6 | 11834 | 144113 | 100% | 0% | 0% | 0% | 3/100 | 12 (76) | PASS |
+| 2026 | 75_Precast_Detailing-DefaultMetricCHS.rte | 16.7 | ok | 4.2 | 10217 | 48 | 0% | 0% | 0% | 0% | 0/27 | 0 (160) | PASS |
+| 2026 | 76_Precast_Detailing-DefaultMetricCSY.rte | 16.9 | ok | 4.4 | 10226 | 48 | 0% | 0% | 0% | 0% | 0/27 | 0 (160) | PASS |
+| 2026 | 77_Construction-DefaultMetric.rte | 5.2 | ok | 2.7 | 5714 | 36 | 0% | 0% | 0% | 0% | 0/39 | 0 (73) | PASS |
