@@ -1345,7 +1345,7 @@ def run_geometry(ctx, els, prog, workers=None, on_partial=None):
     ensure_roofs(ctx); prefetch_reader_meshes(ctx, els, prog, on_partial)
     _G['ctx'] = ctx; _G['els'] = els
     n = len(els); step = 150; chunks = [(a, min(a + step, n)) for a in range(0, n, step)]
-    nw = workers or max(1, min(6, (os.cpu_count() or 2) - 1)); res = []
+    nw = workers or _mesh_workers(); res = []                  # bounded by the memory cap (forked workers dirty copy-on-write pages of the parent)
     if nw == 1 or n < 400:
         for k, c in enumerate(chunks): res += _geo_chunk(c); prog.set('geometry', (k + 1) / len(chunks), '', done=min(n, (k + 1) * step), total=n)
     else:
