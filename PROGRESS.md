@@ -45,3 +45,10 @@
 - Toposurface material from unnamed ElementId parameters (grass/asphalt/gravel now right), property lines as lines, symbol-without-graphics instances (void openings, reference families) as outlines.
 - Demo: an older complete conversion opens instantly after reader changes (small 'newer reader available' chip); DEMO.md; label de-overlap.
 - Tests: tools/functest.py (server + sheets plug-in functional checks per model), tools/sweep.py (+ sweep_table.py -> docs/SWEEP.md) queued on remote-host for all 77 corpus files.
+
+## 2026-10-13 (c4-viewer): geometry completeness + robustness
+- Box-only gone on the reference models: rebar from the reader's shape definitions (2020 rst_basic box-only 44% -> 0%), 'void' class for instances with no 3D solid in Revit (void openings, reference families, QTY markers: outline only, not box-only), model groups / area-reinforcement systems / graphics styles are containers. Structural 2024: 100% true geometry; Facades 2026 99.8% true, 0 box; HVAC 2024 100% true (ducts mesh-first from saved graphics, cold 92 s -> 23-32 s).
+- Speed: Rust refined_volume drop-in (Facades cold 36 s -> 16 s), vectorised body_summary (Structural geometry 7.7 -> 6.1 s), rvt_fast.Doc default (fork deadlock fixed upstream).
+- Robustness: Rust panics fall back to the Python reference (found: refined_volume panic on rme_advanced, NEEDS 17); workers bounded by the memory cap; sweep conversions each in a capped scope.
+- Colour fidelity: sRGB -> linear glTF colours, Prism (Advanced) appearance colours, opaque window frames, MEP category colours, Spaces hidden by default.
+- Tests: functest (server + sheets) per corpus file on remote-host (58/58 non-MEP-advanced files pass so far), uisweep (browser render) 9/9 one model per year 2017-2026.
