@@ -836,7 +836,7 @@ def _doc(GG, src):
     d = GG._docs.get(src)
     if d is not None: return d
     import rvt_elemmesh as EM
-    if os.environ.get('RVT_FASTDOC') and not os.environ.get('RVT_NOFAST'):          # opt-in: forking after a Rust-backed Doc was used in the parent deadlocked (2026-10-12), so the default is the Python Doc + forked workers
+    if os.environ.get('RVT_FASTDOC', '1') != '0' and not os.environ.get('RVT_NOFAST'):          # default since rvt-core fixed the fork deadlock (2026-10-13); RVT_FASTDOC=0 selects the Python Doc
         try:
             sys.path.append(os.path.expanduser('~/src/rvt-core/python')); import rvt_fast as F
             if F.on(): d = F.Doc(src)
@@ -1080,6 +1080,7 @@ def prefetch_reader_meshes(ctx, els, prog=None, on_partial=None):
             on_partial([(idx[e_], r_[1], 'tri', [(r_[0].v, r_[0].f, None)] if not isinstance(r_[0], geom.Multi) else [(pm.v, pm.f, rgb, getattr(pm, 'mat', None)) for pm, rgb in r_[0].parts], getattr(r_[0], 'info', None)) for e_, r_ in out.items() if r_ is not None], n, total); last_p = time.time()
         if prog and (n % 40 == 0 or n == total): prog.set('geometry', 0.4 * n / max(1, total), 'reading saved-graphics meshes %d/%d%s' % (n, total, ' (%d workers)' % nw if nw > 1 else ''), done=n, total=total, sub='Reading saved graphics (decoding meshes)')
     fm = getattr(ctx, 'fm', None)
+    if os.environ.get('RVT_NOSTREAM'): fm = None                  # test switch: the forked-worker path on the shared document
     if fm is not None and todo and not _stream_has_materials(fm, todo) and os.path.getsize(ctx.src) <= float(os.environ.get('RVT_MAT_PY_MB', '25')) * 1e6:
         print('the Rust mesh stream has no per-face materials yet: Python meshes for this file (<= %s MB)' % os.environ.get('RVT_MAT_PY_MB', '25')); fm = None      # interim, until rvt-core mirrors element_mesh 'mat'
     if fm is not None and todo:                              # Rust streaming meshes (parallel, results as they finish); analytic-builder classes still go through reader_mesh
