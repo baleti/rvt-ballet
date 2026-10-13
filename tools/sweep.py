@@ -23,9 +23,10 @@ def main(files):
         t = time.time(); rec = {'src': f, 'year': y, 'file': os.path.basename(f), 'mb': round(os.path.getsize(f) / 1e6, 1)}
         env = dict(os.environ, RVT_CAPPED='1')                       # the job's own slice/scope is the memory cap
         try:
-            p = subprocess.run([sys.executable, '-c', 'import sys; sys.path.insert(0,%r); from rvtviewer.cli import main; main(sys.argv[1:])' % ROOT, 'convert', f, out],
+            cap = ['systemd-run', '--user', '--scope', '-q', '--slice=' + os.environ['RVT_SWEEP_SLICE'], '-p', 'MemoryMax=' + os.environ.get('RVT_SWEEP_MEM', '6G'), '-p', 'MemorySwapMax=0'] if os.environ.get('RVT_SWEEP_SLICE') and shutil.which('systemd-run') else []
+            p = subprocess.run(cap + [sys.executable, '-c', 'import sys; sys.path.insert(0,%r); from rvtviewer.cli import main; main(sys.argv[1:])' % ROOT, 'convert', f, out],
                                capture_output=True, text=True, timeout=TIMEOUT, env=env)
-            rec['status'] = 'ok' if p.returncode == 0 and os.path.exists(os.path.join(out, 'summary.json')) else ('killed' if p.returncode in (-9, 137) else 'fail')
+            rec['status'] = 'ok' if p.returncode == 0 and os.path.exists(os.path.join(out, 'summary.json')) else ('killed' if p.returncode in (-9, 137) or (cap and p.returncode != 0 and not (p.stderr or '').strip()) else 'fail')
             rec['rc'] = p.returncode
             if rec['status'] != 'ok': rec['err'] = ((p.stderr or '') + (p.stdout or ''))[-1500:]
         except subprocess.TimeoutExpired as ex:
