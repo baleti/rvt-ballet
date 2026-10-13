@@ -1242,6 +1242,14 @@ def write_quick_preview(outdir, q, path):
 
 STAGES = ['reading', 'tables', 'preview', 'geometry', 'packing', 'done']
 
+def _rss_note():
+    """' (rss X.X GB, peak Y.Y GB)' of this process when RVT_LOG_RSS is set"""
+    if not os.environ.get('RVT_LOG_RSS'): return ''
+    try:
+        st = dict(l.split(':', 1) for l in open('/proc/self/status') if l.startswith(('VmRSS', 'VmHWM')))
+        return ' (rss %.2f GB, peak %.2f GB)' % (int(st['VmRSS'].split()[0]) / 2 ** 20, int(st['VmHWM'].split()[0]) / 2 ** 20)
+    except Exception: return ''
+
 class Progress:
     """writes outdir/progress.json (stage, pct, message, counters, ETA, per-stage seconds) atomically; the server exposes it so the UI can show a progress bar.
     While the reader decodes (no counters of its own yet) a heartbeat thread keeps elapsed time and the reader's own progress file (~/.cache/rvt-progress/*.json, when present) fresh."""
@@ -1265,7 +1273,7 @@ class Progress:
         try:
             fn = os.path.join(self.dir, 'progress.json'); open(fn + '.tmp', 'w').write(json.dumps(d)); os.replace(fn + '.tmp', fn)
         except OSError: pass
-        if msg: self.log('[%s] %s' % (stage, msg))
+        if msg: self.log('[%s] %s%s' % (stage, msg, _rss_note()))
     def reader_progress(self):
         """the Rust/Python reader's own progress file for this input, if it writes one: ~/.cache/rvt-progress/<hash>.json with the input path inside"""
         if not self.src: return None

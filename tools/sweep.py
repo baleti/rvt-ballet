@@ -28,7 +28,7 @@ def main(files):
                                capture_output=True, text=True, timeout=TIMEOUT, env=env)
             rec['status'] = 'ok' if p.returncode == 0 and os.path.exists(os.path.join(out, 'summary.json')) else ('killed' if p.returncode in (-9, 137) or (cap and p.returncode != 0 and not (p.stderr or '').strip()) else 'fail')
             rec['rc'] = p.returncode
-            if rec['status'] != 'ok': rec['err'] = ((p.stderr or '') + (p.stdout or ''))[-1500:]
+            if rec['status'] != 'ok': rec['err'] = ((p.stdout or '')[-800:] + '\n--- stderr ---\n' + (p.stderr or '')[-2500:])
         except subprocess.TimeoutExpired as ex:
             rec['status'] = 'timeout'; rec['err'] = str((ex.stdout or b'')[-600:])
         rec['secs'] = round(time.time() - t, 1)
