@@ -8,6 +8,25 @@ def model_dir(path):
 
 BUILD_VERSION = 'b3'
 
+def check_input(path):
+    """-> None when `path` looks like a readable Revit file, else a one-line human reason (no traceback in a demo)"""
+    if not os.path.exists(path): return 'file not found: %s' % path
+    if os.path.isdir(path): return 'this is a folder, not a .rvt/.rte/.rfa file: %s' % path
+    try:
+        with open(path, 'rb') as f: head = f.read(8)
+    except OSError as ex: return 'cannot read %s: %s' % (path, ex.strerror)
+    if os.path.getsize(path) == 0: return '%s is empty (0 bytes)' % os.path.basename(path)
+    if head != b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1': return '%s is not a Revit file (no OLE2 header; Revit .rvt/.rte/.rfa files start with D0CF11E0A1B11AE1)' % os.path.basename(path)
+    return None
+
+def friendly_error(ex):
+    """short, specific reason for a failed conversion"""
+    t = '%s: %s' % (type(ex).__name__, ex)
+    if 'gzip' in t or 'zlib' in t or 'Incorrect header' in t or 'truncated' in t.lower(): return 'the file looks truncated or corrupted (%s)' % t[:120]
+    if 'NotOleFile' in t: return 'not a Revit file (%s)' % t[:120]
+    if isinstance(ex, MemoryError): return 'out of memory while reading this file'
+    return t[:200]
+
 def best_cached(path):
     """newest COMPLETE conversion of this very file (same path, size, mtime) made with any reader/viewer version, or None. A reader or converter change must never
     turn a prepared demo into a cold conversion: the older complete model opens at once and the page offers the update."""
@@ -110,6 +129,13 @@ def main(argv=None):
     s = sub.add_parser('serve'); s.add_argument('dirs', nargs='*'); s.add_argument('--port', type=int, default=0)
     a = ap.parse_args(argv)
     from . import server
+    if a.cmd in ('open', 'convert'):
+        bad = [(f, check_input(f)) for f in (a.files if a.cmd == 'open' else [a.file])]
+        bad = [(f, m) for f, m in bad if m]
+        if bad:
+            for f, m in bad: print('rvt-view: ' + m, file=sys.stderr)
+            if a.cmd == 'convert' or len(bad) == len(a.files): sys.exit(2)
+            a.files = [f for f in a.files if f not in {b[0] for b in bad}]
     if a.cmd == 'open' and a.prepare: return prepare(a.files)
     if a.cmd == 'convert':
         if not os.environ.get('RVT_CAPPED') and not os.environ.get('RVT_NO_CAP') and shutil.which('systemd-run'):
@@ -118,7 +144,14 @@ def main(argv=None):
             os.execvpe('systemd-run', ['systemd-run', '--user', '--scope', '-q', '-p', 'MemoryMax=' + os.environ.get('RVT_MEM_CAP', '6G'), '-p', 'MemorySwapMax=0', 'nice', '-n', '10', sys.executable, '-c',
                        "import sys; sys.path.insert(0,%r); from rvtviewer.cli import main; main(sys.argv[1:])" % os.path.dirname(os.path.dirname(os.path.abspath(__file__)))] + (list(argv) if argv is not None else sys.argv[1:]), env)
         from . import build
-        out = a.out or model_dir(a.file); build.convert(a.file, out); print(out); return
+        out = a.out or model_dir(a.file)
+        try: build.convert(a.file, out)
+        except Exception as ex:
+            msg = friendly_error(ex); print('rvt-view: cannot convert %s: %s' % (os.path.basename(a.file), msg), file=sys.stderr)
+            try: json.dump({'stage': 'error', 'msg': 'Cannot open this file: ' + msg, 'pct': 0, 'stages': []}, open(os.path.join(out, 'progress.json'), 'w'))
+            except OSError: pass
+            sys.exit(1)
+        print(out); return
     models = server.Models()
     import threading
 
@@ -132,7 +165,9 @@ def main(argv=None):
             if p.wait() == 0 and os.path.exists(os.path.join(tmp, 'meta.json')):
                 shutil.rmtree(d, ignore_errors=True); os.rename(tmp, d); models.m[mid]['dir'] = d; models.m[mid]['building'] = False; models.m[mid]['db'] = None
             else:
-                try: open(os.path.join(tmp, 'progress.json'), 'w').write(json.dumps({'stage': 'error', 'msg': 'conversion failed - see the terminal output', 'pct': 0, 'stages': []}))
+                try:
+                    pj = os.path.join(tmp, 'progress.json'); cur = json.load(open(pj)) if os.path.exists(pj) else {}
+                    if cur.get('stage') != 'error': open(pj, 'w').write(json.dumps({'stage': 'error', 'msg': 'conversion failed - see the terminal output', 'pct': 0, 'stages': []}))
                 except OSError: pass
         threading.Thread(target=job, daemon=True).start(); return mid
     def open_path(f, fresh=False):
