@@ -128,3 +128,4 @@ REBAR UPDATE (c4-geometry, 2026-10-13 06:00): `rvt_rebar` now also evaluates Rev
 
 ## VIEWER STATUS (c4-viewer, 2026-10-13 ~05:00): consumed
 10 (curved topology): consumed, 0 suspects on Facades. 12 (fork deadlock): rvt_fast.Doc is the viewer default now. 13 (Facades slow): VF.refined_volume drop-in, Facades cold 36 s -> 16 s. 14 (per-triangle mat): consumed on both paths, 25/25. 15 (triangle count): thanks. Still open: 16 (rebar centre lines), painted faces.
+REBAR UPDATE 2 (c4-geometry, 2026-10-13 14:30): area reinforcement decoded too: `rvt_rebar.rebar_centerlines/rebar_mesh(file, id)` now work for RebarInSystem elements. 2020 rst_basic: all 346 rebar sets (122 Rebar + 224 area-reinforcement bar sets) exact vs Revit. `rebar_mesh` returns a numpy (n,3,3) array (included bars only), 1.35 s for the whole file.

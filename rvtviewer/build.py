@@ -859,15 +859,21 @@ def _em_geometry(GG, src, e):
             'solids': [{'kind': 'triangle_mesh', 'triangles': P.round(6).tolist(), 'source': m['source']}]}
 
 def body_summary(P, nid, fid=None, surf=None, limit=12):
-    """per body of an element's saved-graphics mesh (nid = body id per triangle): triangles, faces (fid), area (ft2), watertight; kind from the id range (polymesh 1e6, symbol instance >= 2e7)"""
+    """per body of an element's saved-graphics mesh (nid = body id per triangle): triangles, faces (fid), area (ft2), watertight; kind from the id range (polymesh 1e6, symbol instance >= 2e7).
+    Vertex welding and edge counting are done once for the whole element (one sort), then split per body."""
     nid = np.asarray(nid); T = P.reshape(-1, 3, 3); out = []
-    for b in sorted(set(nid.tolist()))[:limit]:
-        ix = np.nonzero(nid == b)[0]; t = T[ix]
-        area = float(np.linalg.norm(np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0]), axis=1).sum() / 2)
-        keys = np.round(t.reshape(-1, 3) * 1e4).astype(np.int64); _, inv = np.unique(keys, axis=0, return_inverse=True); inv = inv.reshape(-1, 3)
-        E = np.sort(np.concatenate([inv[:, [0, 1]], inv[:, [1, 2]], inv[:, [2, 0]]]), axis=1); _, cnt = np.unique(E, axis=0, return_counts=True)
-        out.append({'id': int(b), 'kind': 'polymesh' if b == 10 ** 6 else ('symbol instance' if b >= 2 * 10 ** 7 else 'own geometry'), 'tris': int(len(ix)), 'faces': int(len(set(np.asarray(fid)[ix].tolist()))) if fid is not None and len(fid) == len(nid) else None,
-                    'surfaces': (dict(collections.Counter(np.asarray(surf, dtype=object)[ix].tolist())) if surf is not None and len(surf) == len(nid) else None), 'area': round(area, 3), 'closed': 'yes' if bool(np.all(cnt % 2 == 0)) else ('sealed' if float(np.linalg.norm(np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0]).sum(0))) < 1e-4 * max(area, 1e-9) else 'open'), 'lo': t.reshape(-1, 3).min(0).round(3).tolist(), 'hi': t.reshape(-1, 3).max(0).round(3).tolist()})
+    cr = np.cross(T[:, 1] - T[:, 0], T[:, 2] - T[:, 0]); ta = np.linalg.norm(cr, axis=1) / 2
+    keys = np.round(T.reshape(-1, 3) * 1e4).astype(np.int64); _, inv = np.unique(keys, axis=0, return_inverse=True); inv = inv.reshape(-1, 3)
+    bodies = sorted(set(nid.tolist()))[:limit]; bidx = {b: k for k, b in enumerate(bodies)}
+    tb = np.array([bidx.get(x, -1) for x in nid.tolist()]); E = np.sort(np.concatenate([inv[:, [0, 1]], inv[:, [1, 2]], inv[:, [2, 0]]]), axis=1); eb = np.tile(tb, 3)
+    ok = eb >= 0; ek = np.c_[eb[ok], E[ok]]; uk, cnt = np.unique(ek, axis=0, return_counts=True); odd = np.zeros(len(bodies), bool)
+    if len(uk): np.logical_or.at(odd, uk[:, 0], cnt % 2 == 1)
+    fida = np.asarray(fid) if fid is not None and len(fid) == len(nid) else None; surfa = np.asarray(surf, dtype=object) if surf is not None and len(surf) == len(nid) else None
+    for k, b in enumerate(bodies):
+        ix = np.nonzero(tb == k)[0]; t = T[ix]; area = float(ta[ix].sum())
+        closed = 'yes' if not odd[k] else ('sealed' if float(np.linalg.norm(cr[ix].sum(0))) < 1e-4 * max(area, 1e-9) else 'open')
+        out.append({'id': int(b), 'kind': 'polymesh' if b == 10 ** 6 else ('symbol instance' if b >= 2 * 10 ** 7 else 'own geometry'), 'tris': int(len(ix)), 'faces': int(len(set(fida[ix].tolist()))) if fida is not None else None,
+                    'surfaces': dict(collections.Counter(surfa[ix].tolist())) if surfa is not None else None, 'area': round(area, 3), 'closed': closed, 'lo': t.reshape(-1, 3).min(0).round(3).tolist(), 'hi': t.reshape(-1, 3).max(0).round(3).tolist()})
     return out
 
 _GST = {}
