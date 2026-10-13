@@ -17,7 +17,7 @@ def main(files):
     for f in files:
         f = os.path.abspath(f)
         if f in done: continue
-        y = os.path.basename(os.path.dirname(f)); tag = '%s_%s' % (y, os.path.splitext(os.path.basename(f))[0])
+        y = os.path.basename(os.path.dirname(f)) if 'samples-rfa' not in f else 'rfa-' + os.path.basename(f).rsplit('-', 1)[-1][:4]; tag = '%s_%s' % (y, os.path.splitext(os.path.basename(f))[0])
         out = os.path.join(WORK, tag)
         if os.path.exists(out): shutil.rmtree(out)
         t = time.time(); rec = {'src': f, 'year': y, 'file': os.path.basename(f), 'mb': round(os.path.getsize(f) / 1e6, 1)}
@@ -47,5 +47,5 @@ def main(files):
     print('SWEEPDONE', flush=True)
 
 if __name__ == '__main__':
-    fs = sys.argv[1:] or sorted(glob.glob(os.path.expanduser('~/rvt-research/corpus/*/*.rvt')) + glob.glob(os.path.expanduser('~/rvt-research/corpus/*/*.rte')), key=lambda p: os.path.getsize(p))
+    fs = sys.argv[1:] or sorted(glob.glob(os.path.expanduser('~/rvt-research/corpus/*/*.rvt')) + glob.glob(os.path.expanduser('~/rvt-research/corpus/*/*.rte')) + glob.glob(os.path.expanduser('~/rvt-research/samples-rfa/*.rfa')), key=lambda p: os.path.getsize(p))
     main(fs)

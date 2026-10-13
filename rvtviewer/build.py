@@ -112,7 +112,8 @@ def dominant_rgb(layers):
     best = max(layers, key=lambda L: (L[2] is not None, L[0]))     # widest layer that has a material
     return best[2]
 
-CLASS_CAT = {'SiteSurface': 'Topography', 'ArcWall': 'Walls', 'SWall': 'Walls', 'Floor': 'Floors', 'Ceiling': 'Ceilings', 'ProfileRoof': 'Roofs', 'FootPrintRoof': 'Roofs', 'RbsDuctCurve': 'Ducts', 'RbsPipeCurve': 'Pipes'}      # elements the file stores without an ElementHeader (no category / bbox)
+CLASS_CAT = {'SiteSurface': 'Topography', 'ArcWall': 'Walls', 'SWall': 'Walls', 'Floor': 'Floors', 'Ceiling': 'Ceilings', 'ProfileRoof': 'Roofs', 'FootPrintRoof': 'Roofs', 'RbsDuctCurve': 'Ducts', 'RbsPipeCurve': 'Pipes',
+             'ExtrusionElem': 'Family forms', 'SweepElem': 'Family forms', 'BlendElem': 'Family forms', 'RevolutionElem': 'Family forms', 'SweptBlendElem': 'Family forms'}      # elements the file stores without an ElementHeader (no category / bbox); family-editor forms (.rfa) carry no category
 
 def sym_name(ctx, r):
     n = g(r['fields'], 'm_symbolInfo', 'm_name')
@@ -1357,7 +1358,7 @@ def geometry_cache_key():
     import hashlib as _h
     d = os.path.dirname(os.path.abspath(__file__)); h = _h.md5(reader.reader_stamp().encode())
     src = open(os.path.join(d, 'build.py')).read(); a = src.index('# ---------------------------------------------------------------- geometry builders'); b = src.index('# ---------------------------------------------------------------- datum / spatial')
-    h.update(src[a:b].encode())
+    h.update(src[a:b].encode()); h.update(repr(sorted(CLASS_CAT.items())).encode())          # which classes get geometry at all depends on CLASS_CAT
     for f in ('geom.py', 'occ.py', 'brep.py', 'build_util.py', 'materials.py'): h.update(open(os.path.join(d, f), 'rb').read())
     return h.hexdigest()[:12]
 
