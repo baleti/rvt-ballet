@@ -690,6 +690,17 @@ def curve_lines_geom(ctx, e, r):
     polys = record_curves(r['fields'])
     return (SegSet(polys), 'line') if polys else None
 
+def rebar_geom(ctx, e, r):
+    """reinforcement bars from the rebar shape definition (reader rvt_rebar: centre lines swept with the bar diameter; exact vs Revit on the 2020 samples)"""
+    try:
+        reader._import(); import rvt_rebar as RR
+        T = RR.rebar_mesh(ctx.src, int(e))
+    except Exception as ex: ctx._why[e] = 'rebar: %r' % ex; return None
+    if T is None or not len(T): return None
+    P = np.asarray(T, float).reshape(-1, 3); m = Mesh(P, np.arange(len(P)).reshape(-1, 3))
+    m.info = {'source': 'rebar shape definition (centre lines + bar diameter, reader rvt_rebar)', 'flags': [], 'bodies': 1, 'tris': len(P) // 3}
+    return m, 'mesh'
+
 def grid_line_geom(ctx, e, r):
     """curtain grid line: the full (host-wide) line stored in m_pFullCurve (a line in the curtain wall's plane)"""
     pts = curve_pts(g(r['fields'], 'm_pFullCurve'))
@@ -732,7 +743,7 @@ def instance_box(ctx, e, r):
     return m, 'bbox'
 
 LINE_CLASSES = {'CurveElem'}
-BUILDERS = {'LineLoad': line_geom, 'Property': curve_lines_geom, 'PropertyLineSegment': curve_lines_geom, 'ArcWall': wall_geom, 'ProfileRoof': roof_geom, 'FootPrintRoof': roof_geom, 'SWall': wall_geom, 'Floor': slab_geom, 'Ceiling': slab_geom, 'RoofSoffit': slab_geom, 'BuildingPad': slab_geom, 'RbsDuctCurve': mep_geom, 'RbsPipeCurve': mep_geom, 'RbsConduitCurve': mep_geom, 'CableTray': mep_geom,
+BUILDERS = {'Rebar': rebar_geom, 'RebarInSystem': rebar_geom, 'LineLoad': line_geom, 'Property': curve_lines_geom, 'PropertyLineSegment': curve_lines_geom, 'ArcWall': wall_geom, 'ProfileRoof': roof_geom, 'FootPrintRoof': roof_geom, 'SWall': wall_geom, 'Floor': slab_geom, 'Ceiling': slab_geom, 'RoofSoffit': slab_geom, 'BuildingPad': slab_geom, 'RbsDuctCurve': mep_geom, 'RbsPipeCurve': mep_geom, 'RbsConduitCurve': mep_geom, 'CableTray': mep_geom,
             'RbsFlexDuctCurve': mep_geom, 'RbsFlexPipeCurve': mep_geom, 'CurveElem': line_geom, 'CurtainGridLine': grid_line_geom, 'FamilyInstance': instance_box}
 HIDE_DEFAULT_CATS = {'Spaces', 'HVAC Zones', 'Center line', '<Sketch>', 'Work Plane Grid', 'Cameras', 'Scope Boxes', 'Boundary Conditions', 'Area Loads', 'Line Loads', 'Point Loads', 'Division Profiles',
                      'Survey Point', 'Project Base Point', 'Internal Origin', 'Guide Grid', 'Reference Planes', 'Parts', 'Spaces', 'Rooms', 'Areas', 'Mass Floor', 'RVT Links', 'Analytical Nodes', 'Reference Points', 'Grids', 'Levels', 'Sections', 'Viewports'}
@@ -1132,7 +1143,7 @@ def prefetch_reader_meshes(ctx, els, prog=None, on_partial=None):
                     account(e, r)
     ctx._rm = out
 
-CONTAINER_CLASSES = {'JoistSystem', 'BeamSystem', 'ElementGroup', 'GStyleElem'}          # layout containers: zero-height bbox, no graphics of their own (the members are separate FamilyInstances)
+CONTAINER_CLASSES = {'JoistSystem', 'BeamSystem', 'ElementGroup', 'GStyleElem', 'RebarSystem'}          # layout containers: zero-height bbox, no graphics of their own (the members are separate FamilyInstances)
 
 LAYERED_CLASSES = {'SWall', 'ArcWall', 'Floor', 'Ceiling', 'ProfileRoof', 'FootPrintRoof', 'RoofSoffit', 'BuildingPad'}
 
