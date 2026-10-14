@@ -25,6 +25,8 @@ It converts and caches each model, pre-renders all sheets and views, and prints 
     ~/src/rvt-viewer/bin/rvt-view ~/rvt-research/corpus/2026/58_Snowdon_Towers_Sample_Facades.rvt
 * Revit 2026 file; curtain walls, mullions and curved panels from cones, revolutions, ruled and Hermite surfaces decoded from the file.
 
+**Facades sheets**: their drawings are big (about 25 minutes to pre-render). Check `curl localhost:PORT/sheets/api/<id>/cache.json` or the toolbar badge ("sheets cached"); if it says not cached, open Facades WITHOUT `--sheets` (the 3D model is instant) or run `~/src/rvt-sheets/rvt-sheets warm <file> --remote-host` first.
+
 ## If something goes wrong
 * Window does not appear: the command prints `serving http://127.0.0.1:PORT/...`; open that URL in any browser.
 * A model looks unfinished: the banner says STILL PARSING with a live counter; boxes turn into meshes as they decode.
