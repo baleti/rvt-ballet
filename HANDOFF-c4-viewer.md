@@ -1,0 +1,27 @@
+# HANDOFF c4-viewer (account claude4), written at the 80% weekly stop, resume 2026-10-18 08:04
+
+## State (everything committed; tree clean; tag `demo-ready` = HEAD 7cd6534, verified)
+* Demo: `~/src/rvt-viewer/bin/rvt-view /full/path/FILE.rvt --sheets`. Script + results table: DEMO.md. Verified end to end 2026-10-14 on 2020 Residential, 2024 Snowdon Structural, 2026 Snowdon Facades (all three have models AND sheets cached now; Facades sheets confirmed `cached: true`).
+* Corpus functional test: 121 / 121 pass (78 corpus files 2017-2026, 11 .rfa in ~/rvt-research/samples-rfa, 32 writer scenes in ~/rvt-research/write-lab/scenes). Table in DEMO.md (between RESULTS markers) and docs/SWEEP.md.
+* No services running, no remote-host jobs of mine running, no VMs/overlays started by me. Test servers I started on remote-host were killed.
+
+## What was done this stretch (see PROGRESS.md for detail)
+Per-face materials (reader `mat`, 25/25 vs Revit), swatch images from the file, texture bitmaps from the local library copy ~/.cache/rvt-textures (local only, never commit), real-world scale units, sRGB->linear colours, Prism colours, rebar from rvt_rebar (hidden by default like Revit), `void` fidelity class (no solid in Revit), MEP mesh-first (HVAC 100% true), Rust drop-ins (refined_volume, body_summary), panic-safe fallbacks, rvt_fast.Doc default, bad-input handling, .rfa forms, instant open from an older complete cache, label de-overlap, uitest11/uisweep/functest/sweep/demo_table tools.
+
+## Remaining work (in order)
+1. After any reader/rust change: `bin/rvt-view --prepare <3 demo files>` (convert + sheets warm; set RVT_WARM_NO_LOCAL=1 so big sheets never render on remote-host; warm falls to `rvt-sheets warm FILE --remote-host`), then the smoke test (`tools/demo_smoke.sh FILE PORT`, `sh tests/run.sh MODELDIR`) and `tools/uitest10.py FILE --sheets --port N`; move `git tag -f demo-ready` only after they pass.
+2. Regenerate docs/ACCEPTANCE-STATUS.md + README fidelity table: the remote-host job `tools/h1_all.sh` (acceptance sweep) never completed (OOM / starved earlier). Run when remote-host slice is free: `h1run run vaccept --env occ --dir ~/src/rvt-viewer -- bash tools/h1_all.sh`, `h1run pull .cache/rvt-viewer/accept`, `python3 tools/accept_table.py`. accept_eval still compares family instances at Medium detail: compare at Fine first (reader's definition) and treat `void` as its own bucket (void already counted separately in accept_eval). c4-geometry also publishes its own accuracy table (fid8); reconcile the two.
+3. Texture fidelity: materials with no library bitmap still use procedural fallbacks (labelled). Possible: tint (`common_Tint_color`), bump maps, per-face UV rotation for walls, texture offset check on more files.
+4. Painted faces (Document.IsPainted) not decoded by the reader yet (c4-geometry NEEDS); viewer will take them via `mat` once present.
+5. Curtain walls / stairs / railings / rooms / topography polish from reader meshes (README coverage table), wall joins/mitres from real cut bodies, section planes and profile cross-sections polish (item 4 of the brief); view fidelity in the 3D viewer (Views tab) is functional but not compared against Revit exports.
+6. Triangle budget: Facades is ~1.09M triangles (reader refinement; c4-geometry note 15 says now +15%, reconvert and recheck); Technical school / Arch Link files ~1.3M triangles: check frame rate on real GPU on remote-host workspace 178 (silent launch only).
+7. Open problems: (a) Rust `refined_volume` panic on rme_advanced (NEEDS-FROM-READER 17, c4-rust; viewer falls back to Python); (b) MEP rme_advanced conversion peaks ~6-7 GB (sweep needs `RVT_SWEEP_MEM=6G`+ and an otherwise free remote-host slice); (c) QTY / reference families drawn as outlines (`void`), rebar hidden by default; (d) headless GL smoke picks are slow on >1M triangle models (pick grid is bounded in tests/smoke.py).
+
+## Commands to restart / check
+* Sweep (remote-host, resumable, skips done files; delete ~/.cache/rvt-viewer/sweep.jsonl entries to redo): `h1run run vsweep --env occ --dir ~/src/rvt-viewer -- bash -c 'RVT_SWEEP_SLICE=rvt-offload.slice RVT_SWEEP_MEM=6G RVT_WORKERS=2 python tools/sweep.py [FILES]'`; `h1run tail vsweep`; `h1run pull .cache/rvt-viewer/sweep.jsonl`; `python3 tools/sweep_table.py` (docs/SWEEP.md), `python3 tools/demo_table.py` (DEMO.md). h1run refuses below 11 GB MemAvailable; remote-host needs occ-env with aiohttp, shapely, numba (installed 2026-10-13) and ~/.cache/rvt-textures (rsynced).
+* Browser checks (remote-host, capped): `systemd-run --user --scope -q -p MemoryMax=3G -p CPUQuota=300% nice -n 19 .venv/bin/python tools/uisweep.py MODELDIR...`; uitest6/7/11 take `MODELDIR PORT OUTPREFIX`. Never `pkill -f` with a pattern that appears in your own command line (it kills your shell).
+* Tests: `sh tests/run.sh MODELDIR` (unit + smoke), `tools/functest.py MODELDIR PORT`.
+* Debug switches: RVT_NOFAST=1 (Python reader), RVT_FASTDOC=0, RVT_NOSTREAM=1, RVT_NO_GEOM_CACHE=1, RVT_LOG_RSS=1, RVT_WORKERS=n, RVT_FRESH=1 (ignore older complete caches), RVT_TEXTURE_LIB.
+
+## Peers / files
+NEEDS-FROM-READER.md (viewer requests; 16 = rebar done by reader, 17 = Rust panic open), HOOKS.md in rvt-sheets (sheets integration done: warm, cache.json), ~/rvt-research/RUST_INTEGRATION.md (Rust drop-ins in use: em_geometries, refined_volume, body_summary; fork deadlock fixed). Rules: no ODA, no em dashes, corpus + Autodesk textures local only, never push, remote-host is the daily driver.
