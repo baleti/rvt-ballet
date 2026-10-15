@@ -61,3 +61,9 @@
 - c2-rust tip adopted: body_materials skipped when every triangle has a reader material (Residential glb byte-identical, geometry stage 3.3 -> 1.7 s).
 - Share links with `hc=` now refresh the tree checkboxes. demo_smoke.sh picks the model by file name.
 - Checked: tint (common_Tint) is unused in the 3 demo files (one white tint): not worth wiring. 2026 Site converts in 6.9 s on remote-host (the sweep's 41 s was contention).
+- Section caps (poche): where a section plane / box cuts a solid, the cut is filled dark like a Revit section (stencil parity per clip plane, since reader winding is not consistent); 'caps' checkbox; box caps skipped above 1.5M triangles.
+- CategoryElem (Revit category objects) never drawn: Residential's 'Walls' category object carried a foundation wall's bbox and z-fought it (moire); Residential now 100% true geometry, 0 box.
+- Fit frames the visible elements (percentile box), not the whole site.
+- convert: OCP / scipy / matplotlib imported in a thread after the quick preview (c2-rust NEEDS 19).
+- Writer scenes: stale saved graphics on copied columns reported to c2-writer (NEEDS-FROM-ORACLE.md).
+- demo-ready = d28ff71 (smoke on all three demo files).
