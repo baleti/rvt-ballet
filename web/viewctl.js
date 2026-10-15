@@ -14,6 +14,7 @@ const dirty = () => controls.dispatchEvent({type: 'change'});
 const MODEL_LAYERS = new Set(['cut', 'projection', 'underlay', 'symbolic', 'symbolic_fill', 'cut_fill', 'surface_fill', 'room_fill', 'mask']);
 const LAYER_LABEL = {cut: 'Cut linework', projection: 'Projection linework', underlay: 'Underlay', symbolic: 'Symbolic lines', symbolic_fill: 'Symbolic fills', cut_fill: 'Cut hatches/fills',
   surface_fill: 'Surface hatches', room_fill: 'Room fills', mask: 'Masking regions', annotation: 'Annotation symbols', annotation_fill: 'Annotation fills', text: 'Text', datum: 'Grids and levels'};
+const PATTERNS = {solid: null, dash: [3.2, 1.6], dot: [0.4, 1.2], dashdot: [3.2, 1.2, 0.4, 1.2], long: [6.4, 1.6]};      // paper mm
 const SCALES = [1, 5, 10, 20, 25, 50, 75, 96, 100, 200, 240, 500];
 
 const DEFAULT_STATE = () => ({scale: null, detail: null, cut: null, phase: null, pfilter: null, template: true, filters: true, crop: true, layers: {}, cats: {}, elems: {}, classes: {}, parts: {}, annoScale: 1, textOn: true, textSize: 1, font: '', textColor: '',
@@ -23,12 +24,12 @@ window.__vc = V;
 
 // ------------------------------------------------------------------ materials
 const crop = {value: new THREE.Vector4(-1e9, -1e9, 1e9, 1e9)};     // local metres u0 v0 u1 v1
-const U = {uCrop: crop, uCropOn: {value: 1}, uRes: {value: new THREE.Vector2(1, 1)}, uPxPerMm: {value: 1}, uMinPx: {value: 1}, uOpacity: {value: 1}};
+const U = {uCrop: crop, uCropOn: {value: 1}, uRes: {value: new THREE.Vector2(1, 1)}, uPxPerMm: {value: 1}, uMinPx: {value: 1}, uOpacity: {value: 1}, uRankMode: {value: 1}};
 const lineMat = new THREE.ShaderMaterial({
-  uniforms: U, transparent: true, depthWrite: false, depthTest: false, side: THREE.DoubleSide,
+  uniforms: U, transparent: true, depthWrite: true, depthTest: true, depthFunc: THREE.LessEqualDepth, side: THREE.DoubleSide,
   vertexShader: `
-    attribute vec3 aA; attribute vec3 aB; attribute vec2 aC; attribute vec4 aCol; attribute float aW; attribute float aClip;
-    uniform vec2 uRes; uniform float uPxPerMm; uniform float uMinPx; varying vec4 vCol; varying vec2 vLoc; varying float vClip;
+    attribute vec3 aA; attribute vec3 aB; attribute vec2 aC; attribute vec4 aCol; attribute float aW; attribute float aClip; attribute float aRank;
+    uniform float uRankMode; uniform vec2 uRes; uniform float uPxPerMm; uniform float uMinPx; varying vec4 vCol; varying vec2 vLoc; varying float vClip;
     void main() {
       vec4 ca = projectionMatrix * modelViewMatrix * vec4(aA, 1.0), cb = projectionMatrix * modelViewMatrix * vec4(aB, 1.0);
       vCol = aCol; vClip = aClip; vLoc = mix(aA.xy, aB.xy, aC.x);
@@ -39,6 +40,7 @@ const lineMat = new THREE.ShaderMaterial({
       vec4 c = mix(ca, cb, aC.x); vec2 p = c.xy / c.w * uRes * 0.5;
       p += n * aC.y * wpx * 0.5 + dir * (aC.x * 2.0 - 1.0) * wpx * 0.5;
       gl_Position = vec4(p / (uRes * 0.5) * c.w, c.z, c.w);
+      if (uRankMode > 0.5) gl_Position.z = (0.9 - 1.8 * aRank) * gl_Position.w;
     }`,
   fragmentShader: `
     uniform vec4 uCrop; uniform float uCropOn; uniform float uOpacity; varying vec4 vCol; varying vec2 vLoc; varying float vClip;
@@ -48,9 +50,9 @@ const lineMat = new THREE.ShaderMaterial({
     }`,
 });
 const fillMat = new THREE.ShaderMaterial({
-  uniforms: U, transparent: true, depthWrite: false, depthTest: false, side: THREE.DoubleSide,
-  vertexShader: `attribute vec4 aCol; attribute float aClip; varying vec4 vCol; varying vec2 vLoc; varying float vClip;
-    void main() { vCol = aCol; vClip = aClip; vLoc = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  uniforms: U, transparent: true, depthWrite: true, depthTest: true, depthFunc: THREE.LessEqualDepth, side: THREE.DoubleSide,
+  vertexShader: `attribute vec4 aCol; attribute float aClip; attribute float aRank; uniform float uRankMode; varying vec4 vCol; varying vec2 vLoc; varying float vClip;
+    void main() { vCol = aCol; vClip = aClip; vLoc = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); if (uRankMode > 0.5) gl_Position.z = (0.9 - 1.8 * aRank) * gl_Position.w; }`,
   fragmentShader: lineMat.fragmentShader,
 });
 
@@ -107,7 +109,8 @@ function build(sc) {
     const cat = p.cat != null ? p.cat : e.cat;
     meta[pi] = {eid, cat, layer, cls: e.cls, t: p.t, part: p.part, clip: MODEL_LAYERS.has(layer) ? 1 : 0};
     lyrs.add(layer);
-    const st = p.style || {w: 0.18, rgb: [0, 0, 0]}, pat = st.dash && st.dash.length ? st.dash.map(x => Math.max(x * mpmm, 1e-4)) : null;
+    const st = p.style || {w: 0.18, rgb: [0, 0, 0]}, ov = V.state.cats[catKey(cat)]?.dash ?? V.state.cats[catKey(e.parent)]?.dash;
+    const dsh = ov === undefined || ov === '' ? st.dash : (PATTERNS[ov] || null), pat = dsh && dsh.length ? dsh.map(x => Math.max(x * mpmm, 1e-4)) : null;
     const k = V.state.annoScale || 1, an = k !== 1 && p.paper && p.anchor && sc.view.right ? anchorUV(sc.view, p.anchor) : null;
     const sx = q => an ? [(an[0] + (q[0] - an[0]) * k), (an[1] + (q[1] - an[1]) * k)] : q;
     const addPoly = pts => {
@@ -125,7 +128,12 @@ function build(sc) {
       tris.push({p: pi, xy: triangulate((p.loops || []).map(l => l.map(q => [q[0] * FT, q[1] * FT]))), col: c});
     } else if (p.t === 'text' && p.text && p.origin) texts.push(pi);
   });
-  return {segs, tris, texts, meta, layers: [...lyrs]};
+  // painter order = rvt-sheets svg order (detail 'order' first, then layer order, then primitive order); masks hide what was drawn before them
+  const LO = {underlay: 0, room_fill: 1, symbolic_fill: 2, cut_fill: 3, surface_fill: 4, projection: 5, cut: 6, symbolic: 7, annotation_fill: 8, mask: -1};
+  const hasOrder = sc.prims.some(p => p.order != null), lo = p => LO[p.layer] ?? 99;
+  const idx = sc.prims.map((_, i) => i).sort((a, b) => { const pa = sc.prims[a], pb = sc.prims[b]; if (hasOrder) { const d = (pa.order ?? -2) - (pb.order ?? -2); if (d) return d; } return lo(pa) - lo(pb) || a - b; });
+  const rank = new Float32Array(sc.prims.length); idx.forEach((pi, k) => rank[pi] = k / Math.max(1, idx.length));
+  return {segs, tris, texts, meta, rank, layers: [...lyrs]};
 }
 
 // ------------------------------------------------------------------ text
@@ -147,7 +155,7 @@ function textTexture(lines, font, bold, italic) {
 // ------------------------------------------------------------------ scene object
 function disposeGroup() {
   if (!V.group) return;
-  scene.remove(V.group);
+  V.group.parent && V.group.parent.remove(V.group);
   V.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose?.(); });
   V.group = null; V.lines = V.fills = null; V.textObjs = [];
 }
@@ -164,28 +172,29 @@ function makeScene(sc) {
   const B = build(sc); V.B = B;
   const g = new THREE.Group(); g.matrixAutoUpdate = false; const fm = frameMatrix(sc.view); V.Z = fm.Z; V.base = fm.m.clone(); g.userData.vc = true;
   // stroke geometry: 4 vertices / segment
-  const n = B.segs.length, A = new Float32Array(n * 12), Bv = new Float32Array(n * 12), C = new Float32Array(n * 8), col = new Float32Array(n * 16), W = new Float32Array(n * 4), K = new Float32Array(n * 4), idx = new Uint32Array(n * 6);
+  const n = B.segs.length, RK = new Float32Array(n * 4), A = new Float32Array(n * 12), Bv = new Float32Array(n * 12), C = new Float32Array(n * 8), col = new Float32Array(n * 16), W = new Float32Array(n * 4), K = new Float32Array(n * 4), idx = new Uint32Array(n * 6);
   const corners = [[0, -1], [0, 1], [1, -1], [1, 1]];
   B.segs.forEach((s, i) => {
     for (let k = 0; k < 4; k++) {
-      const o = i * 4 + k; A.set([s.a[0], s.a[1], 0], o * 3); Bv.set([s.b[0], s.b[1], 0], o * 3); C.set(corners[k], o * 2); K[o] = B.meta[s.p].clip;
+      const o = i * 4 + k; A.set([s.a[0], s.a[1], 0], o * 3); Bv.set([s.b[0], s.b[1], 0], o * 3); C.set(corners[k], o * 2); K[o] = B.meta[s.p].clip; RK[o] = B.rank[s.p];
     }
     idx.set([i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 1, i * 4 + 3, i * 4 + 2], i * 6);
   });
   const lg = new THREE.BufferGeometry();
   lg.setAttribute('position', new THREE.BufferAttribute(A, 3));            // required by three (bounds); the shader uses aA/aB
   lg.setAttribute('aA', new THREE.BufferAttribute(A, 3)); lg.setAttribute('aB', new THREE.BufferAttribute(Bv, 3)); lg.setAttribute('aC', new THREE.BufferAttribute(C, 2));
-  lg.setAttribute('aCol', new THREE.BufferAttribute(col, 4)); lg.setAttribute('aW', new THREE.BufferAttribute(W, 1)); lg.setAttribute('aClip', new THREE.BufferAttribute(K, 1)); lg.setIndex(new THREE.BufferAttribute(idx, 1));
+  lg.setAttribute('aCol', new THREE.BufferAttribute(col, 4)); lg.setAttribute('aW', new THREE.BufferAttribute(W, 1)); lg.setAttribute('aClip', new THREE.BufferAttribute(K, 1)); lg.setAttribute('aRank', new THREE.BufferAttribute(RK, 1)); lg.setIndex(new THREE.BufferAttribute(idx, 1));
   const lines = new THREE.Mesh(lg, lineMat); lines.frustumCulled = false; lines.renderOrder = 1001; lines.onBeforeRender = (r, s, cam) => updateUniforms(cam);
   g.add(lines); V.lines = lines;
   // fills
   let nv = 0; B.tris.forEach(t => nv += t.xy.length / 2);
-  const P = new Float32Array(nv * 3), FC = new Float32Array(nv * 4), FK = new Float32Array(nv); let o = 0; B.tris.forEach(t => { t.off = o; t.n = t.xy.length / 2; for (let i = 0; i < t.n; i++, o++) { P.set([t.xy[2 * i], t.xy[2 * i + 1], 0], o * 3); FK[o] = B.meta[t.p].clip; } });
-  const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.BufferAttribute(P, 3)); fg.setAttribute('aCol', new THREE.BufferAttribute(FC, 4)); fg.setAttribute('aClip', new THREE.BufferAttribute(FK, 1));
-  const fills = new THREE.Mesh(fg, fillMat); fills.frustumCulled = false; fills.renderOrder = 1000; g.add(fills); V.fills = fills;
+  const P = new Float32Array(nv * 3), FC = new Float32Array(nv * 4), FK = new Float32Array(nv), FR = new Float32Array(nv); let o = 0; B.tris.forEach(t => { t.off = o; t.n = t.xy.length / 2; for (let i = 0; i < t.n; i++, o++) { P.set([t.xy[2 * i], t.xy[2 * i + 1], 0], o * 3); FK[o] = B.meta[t.p].clip; FR[o] = B.rank[t.p]; } });
+  const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.BufferAttribute(P, 3)); fg.setAttribute('aCol', new THREE.BufferAttribute(FC, 4)); fg.setAttribute('aClip', new THREE.BufferAttribute(FK, 1)); fg.setAttribute('aRank', new THREE.BufferAttribute(FR, 1));
+  const fills = new THREE.Mesh(fg, fillMat); fills.frustumCulled = false; fills.renderOrder = 1000; fills.onBeforeRender = r => { if (U.uRankMode.value > 0.5) r.clearDepth(); }; g.add(fills); V.fills = fills;
   // texts
   V.textObjs = B.texts.map(pi => makeText(sc.prims[pi], pi)); V.textObjs.forEach(t => g.add(t.obj));
-  g.matrix.copy(V.base); g.matrixWorldNeedsUpdate = true; scene.add(g); V.group = g;
+  g.matrix.copy(V.base); g.matrixWorldNeedsUpdate = true; (window.__overlay || scene).add(g); V.group = g;       // inside the app's overlay group: hidden during the id-pick pass
+  
   V.sc = sc;
   const cu = sc.view.crop_uv; V.cropUV = cu;
   applyStyles(); dirty();
@@ -195,8 +204,8 @@ function makeText(p, pi) {
   const lines = String(p.text).split('\n'), tx = textTexture(lines, V.state.font || p.font, p.bold, p.italic);
   const em = (p.size || 0.0098) * EM * FT;          // metres per em (size is Revit text size in model feet; em = size / 0.72)
   // ShaderMaterial (not MeshBasicMaterial): the app clips the model with global clip planes (plan cut plane, crop box) that must not clip annotation text
-  const mat = new THREE.ShaderMaterial({uniforms: {uMap: {value: tx.tex}, uColor: {value: new THREE.Vector3(0, 0, 0)}, uOpacity: {value: 1}}, transparent: true, depthWrite: false, depthTest: false, side: THREE.DoubleSide,
-    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  const mat = new THREE.ShaderMaterial({uniforms: {uMap: {value: tx.tex}, uColor: {value: new THREE.Vector3(0, 0, 0)}, uOpacity: {value: 1}, uRankMode: U.uRankMode}, transparent: true, depthWrite: false, depthTest: true, depthFunc: THREE.LessEqualDepth, side: THREE.DoubleSide,
+    vertexShader: 'uniform float uRankMode; varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); if (uRankMode > 0.5) gl_Position.z = -0.9 * gl_Position.w; }',
     fragmentShader: 'uniform sampler2D uMap; uniform vec3 uColor; uniform float uOpacity; varying vec2 vUv; void main() { float a = texture2D(uMap, vUv).a; if (a < 0.02) discard; gl_FragColor = vec4(uColor, a * uOpacity); }'});
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(tx.w * em, tx.h * em), mat); mesh.renderOrder = 1002;
   // plane centre relative to the anchor (rvt-sheets svg.text rules): anchored notes/labels: origin = anchor on the alignment side, vertical top / middle / bottom of the block;
@@ -278,9 +287,9 @@ function applyStyles() {
     t.obj.visible = v; t.obj.scale.setScalar(st.textSize * (eo.tscale ?? co.tscale ?? po.tscale ?? 1));
     let c = st.textColor || eo.color || co.color || po.color || (dark && st.contrast ? '#eeeeee' : '#000000');
     if (m.eid === selEid && selEid != null) c = '#ffb020';
-    t.mesh.material.uniforms.uColor.value.set(...hex2rgb(c)); t.mesh.material.depthTest = !st.onTop; t.mesh.material.uniforms.uOpacity.value = st.opacity;
+    t.mesh.material.uniforms.uColor.value.set(...hex2rgb(c)); t.mesh.material.uniforms.uOpacity.value = st.opacity;
   });
-  lineMat.depthTest = fillMat.depthTest = !st.onTop;
+  U.uRankMode.value = st.onTop ? 1 : 0;
   if (window.__world) window.__world.visible = !!st.model;
   // the view's own grids / levels (extents, heads per view) replace the viewer's whole-model grid and level planes
   const hideNative = st.nativeOff && st.layers.datum !== false && B.layers.includes('datum');
@@ -386,12 +395,12 @@ async function showPicked(h) {
 
 // ------------------------------------------------------------------ scene loading
 const viewQuery = () => { const s = V.state, q = new URLSearchParams(); if (s.scale) q.set('scale', s.scale); if (s.detail) q.set('detail', s.detail); if (s.cut != null) q.set('cut', s.cut / FT); if (s.phase) q.set('phase', s.phase); if (s.pfilter) q.set('phaseFilter', s.pfilter); if (!s.template) q.set('template', 0); if (!s.filters) q.set('filters', 0); return q.toString(); };
-async function loadScene(vid, keepState = false) {
+async function loadScene(vid, refresh = false) {
   V.loading = true; setStatus(`loading view ${vid}...`);
   try {
-    const r = await fetch(`/api/m/${V.mid}/vc/scene/${vid}?${viewQuery()}`);
+    const r = await fetch(`/api/m/${V.mid}/vc/scene/${vid}?${viewQuery()}${refresh ? '&refresh=1' : ''}`);
     const sc = await r.json(); if (sc.error) throw new Error(sc.error);
-    V.vid = vid; makeScene(sc); renderPanel();
+    V.stale = r.headers.get('X-Vc-Stale') === '1'; V.vid = vid; makeScene(sc); renderPanel();
     setStatus(`${sc.view.name}: ${sc.prims.length} primitives, 1:${sc.view.scale} (${sc.seconds}s)`);
   } catch (e) { setStatus('view control: ' + e.message); }
   V.loading = false;
@@ -425,7 +434,7 @@ function injectCss() {
 #vcStatus{color:var(--dim);margin-top:6px}`; document.head.appendChild(st);
 }
 const rowOf = (key, label, o) => `<div class="vcrow" data-k="${esc(key)}"><input type="checkbox" ${o.vis !== false ? 'checked' : ''} data-a="vis"><span class="nm" title="${esc(label)}">${esc(label)}</span>
-  <span class="cnt">${o.n ?? ''}</span><input type="color" value="${o.color || '#000000'}" data-a="color" title="override colour"><input type="number" step="0.25" min="0" value="${o.wscale ?? 1}" data-a="wscale" title="line weight multiplier" style="width:46px"><span data-a="reset" title="reset overrides" style="cursor:pointer">&#8634;</span></div>`;
+  <span class="cnt">${o.n ?? ''}</span><input type="color" value="${o.color || '#000000'}" data-a="color" title="override colour"><input type="number" step="0.25" min="0" value="${o.wscale ?? 1}" data-a="wscale" title="line weight multiplier" style="width:46px"><select data-a="dash" title="line pattern override" style="width:44px;font-size:10px"><option value="">pat</option>${Object.keys(PATTERNS).map(k => `<option ${o.dash === k ? 'selected' : ''}>${k}</option>`).join('')}</select><span data-a="reset" title="reset overrides" style="cursor:pointer">&#8634;</span></div>`;
 
 function renderTree() {
   const box = $('#vcTree'); if (!box || !V.sc) return;
@@ -460,8 +469,8 @@ function renderTree() {
     html = list.map(([id, e]) => `<div class="vcrow ${V.sel == id ? 'sel' : ''}" data-eid="${id}"><input type="checkbox" ${st.elems[id]?.vis !== false ? 'checked' : ''} data-a="el"><span class="nm">${esc(e.cls)} ${id}</span><span class="cnt">${esc(e.catName || '')}</span><input type="color" value="${st.elems[id]?.color || '#000000'}" data-a="elcolor"></div>`).join('');
   }
   box.innerHTML = html || '<span class="dim">nothing in this view</span>';
-  box.querySelectorAll('input,span[data-a]').forEach(inp => {
-    const row = inp.closest('.vcrow'), a = inp.dataset.a, ev = inp.type === 'checkbox' || inp.type === 'color' || inp.type === 'number' ? 'onchange' : 'onclick';
+  box.querySelectorAll('input,select,span[data-a]').forEach(inp => {
+    const row = inp.closest('.vcrow'), a = inp.dataset.a, ev = inp.type === 'checkbox' || inp.type === 'color' || inp.type === 'number' || inp.tagName === 'SELECT' ? 'onchange' : 'onclick';
     inp[ev] = () => {
       if (a === 'layer') st.layers[row.dataset.l] = inp.checked;
       else if (a === 'cls') st.classes[row.dataset.cls] = inp.checked;
@@ -469,7 +478,7 @@ function renderTree() {
       else if (a === 'el') (st.elems[row.dataset.eid] ||= {}).vis = inp.checked;
       else if (a === 'elcolor') (st.elems[row.dataset.eid] ||= {}).color = inp.value;
       else { const k = row.dataset.cat, o = (st.cats[k] ||= {});
-        if (a === 'vis') o.vis = inp.checked; else if (a === 'color') o.color = inp.value; else if (a === 'wscale') o.wscale = +inp.value; else if (a === 'reset') { delete st.cats[k]; renderTree(); } }
+        if (a === 'vis') o.vis = inp.checked; else if (a === 'color') o.color = inp.value; else if (a === 'wscale') o.wscale = +inp.value; else if (a === 'dash') { o.dash = inp.value; saveLocal(); makeScene(V.sc); return; } else if (a === 'reset') { delete st.cats[k]; renderTree(); } }
       applyStyles(); saveLocal();
     };
   });
@@ -506,11 +515,12 @@ function renderPanel() {
   <h4>Picked</h4><div id="vcPicked"><span class="dim">click a drawn element</span></div>
   <h4>Presets</h4><div class="r"><select id="vcPre" style="flex:1"><option value="">saved presets</option>${Object.keys(V.presets).sort().map(n => `<option>${esc(n)}</option>`).join('')}</select><button id="vcPreLoad">load</button><button id="vcPreDel">delete</button></div>
   <div class="r"><input type="text" id="vcPreName" placeholder="preset name" style="flex:1"><button id="vcPreSave">save</button><button id="vcExport" title="download this view's settings as JSON">export</button></div>
-  <div id="vcStatus">${esc(V.status || '')}</div>`;
+  <div id="vcStatus">${esc(V.status || '')}</div>${V.stale ? '<div class="dim">drawn by an older drawing-code version (cached) <button id="vcRefresh">redraw now</button></div>' : ''}`;
   const hd = $('#vcHead'); if (hd) hd.onpointerdown = e => { if (e.target.tagName === 'BUTTON') return; const r = p.getBoundingClientRect(), pr = $('#view').getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
     hd.setPointerCapture(e.pointerId); hd.onpointermove = m => { p.style.left = Math.max(0, Math.min(pr.width - 60, m.clientX - pr.left - dx)) + 'px'; p.style.top = Math.max(0, Math.min(pr.height - 30, m.clientY - pr.top - dy)) + 'px'; p.style.right = 'auto';
       try { localStorage['vctl:pos'] = JSON.stringify([p.style.left, p.style.top]); } catch (er) {} }; hd.onpointerup = () => { hd.onpointermove = null; }; };
   const on = (id, fn, ev = 'onchange') => { const e = $('#' + id); if (e) e[ev] = fn; };
+  on('vcRefresh', () => loadScene(V.vid, true), 'onclick');
   on('vcOff', () => closeVC(), 'onclick');
   on('vcView', e => { const v = +$('#vcView').value; if (v) openVC(v); });
   const redraw = () => { saveLocal(); loadScene(V.vid); };
@@ -563,3 +573,14 @@ setInterval(() => { if (V.on && V.mid !== S.mid) { closeVC(); } }, 1000);
   await toggle(); const pn = q.get('vcp');
   await openVC(vid, pn && V.presets[pn] ? V.presets[pn] : null);
 })();
+
+// Views tab: an 'annotations' link on every plan / section row opens the view with its view-dependent elements
+new MutationObserver(() => {
+  document.querySelectorAll('#tabbody [data-vk]:not([data-vc])').forEach(row => {
+    row.dataset.vc = 1; const v = (S.meta.views || [])[+row.dataset.vk];
+    if (!v || !v.origin || !/^(plan|section|elevation)$/i.test(v.kind || '') || !row.firstElementChild) return;
+    const a = document.createElement('a'); a.href = '#'; a.className = 'drawlink'; a.textContent = 'annotations'; a.title = 'open with the view-dependent elements (tags, text, grids...) and the view control panel';
+    a.style.marginLeft = '6px'; a.onclick = async e => { e.preventDefault(); e.stopPropagation(); if (!V.on) await toggle(); openVC(v.id); };
+    row.firstElementChild.appendChild(a);
+  });
+}).observe($('#tabbody'), {childList: true, subtree: true});
