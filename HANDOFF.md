@@ -5,3 +5,6 @@ Done this session: plan/section/elevation views framed + clipped to stored crop;
 Background: ~/scratchpad q.sh retry loop queues remote-host job vsweep4 (full 78-file re-sweep, RVT_SWEEP_REDO=1) as soon as remote-host MemAvailable >= 11 GB; when done: h1run pull .cache/rvt-viewer/sweep.jsonl, tools/sweep_table.py, tools/demo_table.py, update DEMO.md table.
 Next: sweep table in DEMO.md; Rust fast path items (NEEDS 12/13/10), material browser polish, per-class fidelity buckets, writer scenes (~/rvt-research/write-lab/scenes) vs Revit: tell c4-writer if we draw what Revit cannot.
 Tests: tools/uitest6/7/11/12.py MODELDIR PORT OUT (PORT 4-digit!), tools/demo_smoke.sh FILE PORT.
+
+## c5-viewer start (2026-10-15)
+Baseline smoke OK (2020 Residential). Rust fast path + preimport thread already adopted. Task B nav done earlier. Queue loop tools/queue_vsweep.sh running (log ~/.cache/q_vsweep.log) to start remote-host vsweep4; then pull sweep.jsonl, tools/sweep_table.py, update DEMO.md.
