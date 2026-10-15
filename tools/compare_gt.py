@@ -30,9 +30,9 @@ def load_oracle(gtdir, stem=None):
             elif x[0] == 'G' and len(x) >= 3:
                 k = x[1].split('.')
                 try:
-                    d = G.setdefault(int(k[0]), {}); vol = float(x[2].split('=')[1]); d.setdefault('vd', {}).setdefault(k[1], 0.0); d['vd'][k[1]] += vol
+                    d = G.setdefault(int(k[0]), {}); vol = float(x[2].split('=')[1]); d.setdefault('vd', {}).setdefault(k[1], 0.0); d['vd'][k[1]] += vol; d.setdefault('ad', {}).setdefault(k[1], 0.0); d['ad'][k[1]] += float(x[3].split('=')[1])
                 except (ValueError, IndexError): pass
-    return {i: {'bb': v.get('bb'), 'vol': (v['vd'][min(v['vd'], key=int)] if v.get('vd') else None)} for i, v in G.items() if v.get('bb')}      # solids of the shallowest depth present (family instances are depth 1)
+    return {i: {'bb': v.get('bb'), 'vol': (v['vd'][min(v['vd'], key=int)] if v.get('vd') else None), 'area': (v['ad'][min(v['ad'], key=int)] if v.get('ad') else None)} for i, v in G.items() if v.get('bb')}      # solids of the shallowest depth present (family instances are depth 1)
 
 def load_g(gtdir):
     G = {}
@@ -77,6 +77,8 @@ def main(mdir, gtdir):
         lo, hi = V.min(0), V.max(0); r = {'fid': fid, 'iou': round(build.box_iou(lo, hi, np.array(g['bb'][0]), np.array(g['bb'][1])), 3)}
         if g['vol']:
             vol = _vol(V, F); r['vratio'] = round(vol / g['vol'], 3)
+        r['id'] = el['id']; r['mesh_area'] = round(float(np.linalg.norm(np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]]), axis=1).sum() / 2), 4)
+        if g.get('area'): r['aratio'] = round(r['mesh_area'] / g['area'], 3)
         for cand in (os.path.join(gtdir, '%d.obj' % el['id']), os.path.join(gtdir, stem, '%d.obj' % el['id'])):
             if os.path.exists(cand):
                 OV, OF = read_obj(cand); A = sample(V, F); B = sample(OV, OF)

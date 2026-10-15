@@ -1392,6 +1392,28 @@ def run_geometry(ctx, els, prog, workers=None, on_partial=None):
     except Exception: pass
     return res
 
+SMOOTH = os.environ.get('RVT_SMOOTH', '1') != '0'
+SMOOTH_COS = np.cos(np.radians(35.0))
+def smooth_part(pv, pf):
+    """vertex normals for a triangle part: weld coincident vertices, area-weighted average of the incident (signed) face normals; a corner takes the vertex normal when it is within 35 deg
+    of its own face, else it gets its own vertex carrying the flat face normal (hard edges stay crisp, curved surfaces shade smooth). The sign of a normal is irrelevant: the viewer flips it
+    toward the flat screen-space normal per fragment (reader winding is not consistent). -> (positions, faces, normals)"""
+    pv = np.asarray(pv, np.float64); pf = np.asarray(pf, np.int64).reshape(-1, 3)
+    if len(pf) == 0: return pv, pf, np.zeros_like(pv)
+    q = np.round(pv * 2e4).astype(np.int64)                                   # 0.05 mm (feet)
+    _, first, inv = np.unique(q, axis=0, return_index=True, return_inverse=True); inv = inv.reshape(-1)
+    W = pv[first]; wf = inv[pf]
+    fn = np.cross(pv[pf[:, 1]] - pv[pf[:, 0]], pv[pf[:, 2]] - pv[pf[:, 0]])
+    ln = np.linalg.norm(fn, axis=1); ok = ln > 1e-12; fu = np.zeros_like(fn); fu[ok] = fn[ok] / ln[ok, None]
+    N = np.zeros_like(W)
+    for k in range(3): np.add.at(N, wf[:, k], fn)
+    nl = np.linalg.norm(N, axis=1); N = np.divide(N, nl[:, None], out=np.zeros_like(N), where=nl[:, None] > 1e-12)
+    sm = np.einsum('ij,ikj->ik', fu, N[wf]) > SMOOTH_COS                      # (faces, 3) corner uses the shared vertex normal
+    flat = ~sm & ok[:, None]; nf = int(flat.sum())
+    pos = np.vstack([W, pv[pf][flat]]); nrm = np.vstack([N, np.repeat(fu[:, None, :], 3, 1)[flat]])
+    idx = wf.copy(); idx[flat] = len(W) + np.arange(nf)
+    return pos, idx, nrm
+
 def pack_batches(els, res, previews=False, mats=None):
     """merge per-element parts into one indexed mesh per (category, kind, translucency, colour); parts may carry a material (position in `mats`): its colour / transparency are used and the
     per-vertex _MAT attribute lets the viewer draw procedural textures and 'colour by material'"""
@@ -1416,17 +1438,21 @@ def pack_batches(els, res, previews=False, mats=None):
                 if mrec['alpha'] < 0.97 and not transl: tr = round(max(0.08, mrec['alpha']) * 20) / 20          # glass etc.: its own translucent batch
             hexc = None if rgb is None else '%02x%02x%02x' % tuple(int(x * 255) for x in rgb)
             a = acc.setdefault((el['cat'], kind, tr, hexc), {'pos': [], 'idx': [], 'eidx': [], 'mat': [], 'ranges': [], 'nv': 0, 'nt': 0})
+            pn = None
+            if kind == 'tri' and len(pf) and SMOOTH: pv, pf, pn = smooth_part(pv, pf)
+            a.setdefault('nrm', []).append(pn if pn is not None else np.zeros((len(pv), 3)))
             a['pos'].append(pv); a['idx'].append(pf.reshape(-1) + a['nv']); a['eidx'].append(np.full(len(pv), i, np.float32)); a['mat'].append(np.full(len(pv), -1 if mrec is None else mi, np.float32))
             a['ranges'] += [i, a['nt'], len(pf)]; a['nv'] += len(pv); a['nt'] += len(pf)
         el['mats'] = sorted(used)
     batches = []; bmeta = []
     for (cat, kind, tr, hexc), a in acc.items():
+        nrm = np.vstack(a['nrm']) if kind == 'tri' and SMOOTH else None; nrm = None if nrm is None else np.stack([nrm[:, 0], nrm[:, 2], -nrm[:, 1]], 1).astype(np.float32)
         pos = glb.to_yup_m(np.vstack(a['pos'])); idx = np.concatenate(a['idx']).astype(np.uint32)
         c = (0.1, 0.1, 0.12) if kind == 'line' else (tuple(int(hexc[k:k + 2], 16) / 255 for k in (0, 2, 4)) if hexc else cat_color(cat))
         if isinstance(tr, float) and not isinstance(tr, bool): alpha = tr
         else: alpha = 0.45 if (cat in ('Windows', 'Curtain Panels') and not hexc) else ((0.08 if cat in ('Planting', 'Entourage') else 0.14) if tr else 1.0)      # a known material decides (glass carries its own transparency)
         matv = np.concatenate(a['mat']) if ML and kind == 'tri' else None
-        batches.append({'name': cat + ('' if kind == 'tri' else ' (lines)'), 'color': (*c, alpha), 'pos': pos, 'eidx': np.concatenate(a['eidx']), 'idx': idx, 'mode': 1 if kind == 'line' else 4, 'mat': matv})
+        batches.append({'name': cat + ('' if kind == 'tri' else ' (lines)'), 'color': (*c, alpha), 'pos': pos, 'eidx': np.concatenate(a['eidx']), 'idx': idx, 'mode': 1 if kind == 'line' else 4, 'mat': matv, 'nrm': nrm})
         bmeta.append({'cat': cat, 'kind': kind, 'color': '#%02x%02x%02x' % tuple(int(x * 255) for x in c), 'alpha': alpha, 'ranges': a['ranges'], 'tris': a['nt']})
     return batches, bmeta, covg, covc, ious
 

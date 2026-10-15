@@ -31,6 +31,8 @@ def write_glb(path, batches, extras=None):
         attrs = {'POSITION': a_pos, '_EIDX': a_ei}
         if b.get('mat') is not None:
             a_mt = len(accs); accs.append({'bufferView': add(np.ascontiguousarray(b['mat'], np.float32), 34962), 'componentType': 5126, 'count': len(pos), 'type': 'SCALAR'}); attrs['_MAT'] = a_mt
+        if b.get('nrm') is not None:
+            a_n = len(accs); accs.append({'bufferView': add(np.ascontiguousarray(b['nrm'], np.float32), 34962), 'componentType': 5126, 'count': len(pos), 'type': 'VEC3'}); attrs['NORMAL'] = a_n
         a_ix = len(accs); accs.append({'bufferView': add(ix, 34963), 'componentType': 5125, 'count': len(ix), 'type': 'SCALAR'})
         mats.append({'name': b['name'], 'pbrMetallicRoughness': {'baseColorFactor': [_lin(c) for c in b['color'][:3]] + [b['color'][3]], 'metallicFactor': 0.0, 'roughnessFactor': 0.85},
                      **({'alphaMode': 'BLEND'} if b['color'][3] < 1 else {}), 'doubleSided': True})

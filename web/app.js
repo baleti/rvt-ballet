@@ -75,13 +75,15 @@ function patch(mat) {
   mat.flatShading = true;
   mat.onBeforeCompile = sh => {
     sh.uniforms.tState = U.tState; sh.uniforms.uMode = U.uMode; sh.uniforms.tMat = U.tMat; sh.uniforms.tPat = U.tPat; sh.uniforms.tImg = U.tImg; sh.uniforms.tBump = U.tBump; sh.uniforms.uTex = U.uTex;
-    sh.vertexShader = 'attribute float _eidx; attribute float _mat; varying float vE; varying float vM; varying vec3 vWP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvE=_eidx; vM=_mat; vWP=(modelMatrix*vec4(transformed,1.)).xyz;');
-    sh.fragmentShader = `varying float vE; varying float vM; varying vec3 vWP; uniform sampler2D tState; uniform sampler2D tMat; uniform highp sampler2DArray tPat; uniform highp sampler2DArray tImg; uniform highp sampler2DArray tBump; uniform float uMode; uniform float uTex;
+    sh.vertexShader = 'attribute float _eidx; attribute float _mat; varying vec3 vNs; varying float vE; varying float vM; varying vec3 vWP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvNs=normalMatrix*normal; vE=_eidx; vM=_mat; vWP=(modelMatrix*vec4(transformed,1.)).xyz;');
+    sh.fragmentShader = `varying vec3 vNs; varying float vE; varying float vM; varying vec3 vWP; uniform sampler2D tState; uniform sampler2D tMat; uniform highp sampler2DArray tPat; uniform highp sampler2DArray tImg; uniform highp sampler2DArray tBump; uniform float uMode; uniform float uTex;
 vec4 fidCol(float f){ if(f<.5) return vec4(.18,.62,.36,1.); if(f<1.5) return vec4(.12,.56,.44,1.); if(f<2.5) return vec4(.42,.76,.29,1.); if(f<3.5) return vec4(.23,.48,.84,1.); if(f<4.5) return vec4(.12,.65,.69,1.); if(f<5.5) return vec4(.82,.54,.16,1.); if(f<6.5) return vec4(.54,.37,.82,1.); return vec4(.5,.5,.5,1.);}
 ` + sh.fragmentShader
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
 float eI = floor(vE+.5); vec4 stt = texelFetch(tState, ivec2(int(mod(eI,${TW}.)), int(eI/${TW}.)), 0);
 float fl = floor(stt.r*255.+.5); if(mod(fl,2.)>.5) discard;`)
+      .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+{ float hl = length(vNs); if (hl > .5) { vec3 ns = vNs / hl; normal = dot(ns, normal) < 0. ? -ns : ns; nonPerturbedNormal = normal; } }`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 { // bump map (Revit *_bump_map bitmap from the local library): triplanar height, screen-space gradient perturbs the normal (as three.js bumpMap does)
   float mI = floor(vM+.5); int mi = int(max(mI,0.)); vec4 b4 = texelFetch(tMat, ivec2(mi,4), 0), b5 = texelFetch(tMat, ivec2(mi,5), 0);
