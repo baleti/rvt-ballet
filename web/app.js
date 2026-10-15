@@ -680,7 +680,19 @@ $('#bShadow').onclick = () => { setShadows(!shadowsOn); if (!shadowsOn) dirty = 
 setShadows(shadowsOn);
 $('#bTex').onclick = () => { U.uTex.value = U.uTex.value ? 0 : 1; $('#bTex').classList.toggle('on', !!U.uTex.value); dirty = true; };
 $('#bFid').onclick = () => { S.fidMode ^= 1; if (S.fidMode) { S.matMode = false; $('#bMat').classList.remove('on'); } U.uMode.value = S.fidMode; $('#bFid').classList.toggle('on', !!S.fidMode); $('#legend').hidden = !S.fidMode; dirty = true; };
-$('#bFit').onclick = () => S.sel.size ? zoomTo([...S.sel]) : fitAll();
+// Fit: the selection, else the visible elements (robust: 0.5 / 99.5 percentiles of the element boxes, so one far-away survey point does not shrink the model), else the model box
+function visibleBox() {
+  if (!S.elRanges) return null; const lo = [[], [], []], hi = [[], [], []], v = new THREE.Vector3();
+  for (const [i, rs] of S.elRanges) {
+    if (stateData[i * 4] & 9) continue; const b = new THREE.Box3();
+    for (const r of rs) { const pos = r.mesh.geometry.attributes.position, ix = r.mesh.geometry.index; for (let k = 3 * r.start; k < 3 * (r.start + r.count); k += 7) b.expandByPoint(v.fromBufferAttribute(pos, ix.getX(k))); }
+    if (b.isEmpty()) continue; ['x', 'y', 'z'].forEach((c, j) => { lo[j].push(b.min[c]); hi[j].push(b.max[c]); });
+  }
+  const n = lo[0].length; if (!n) return null;
+  const q = (a, f) => { a.sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.max(0, Math.round(f * (a.length - 1))))]; };
+  const f = n < 50 ? 0 : .005; return new THREE.Box3(new THREE.Vector3(q(lo[0], f), q(lo[1], f), q(lo[2], f)), new THREE.Vector3(q(hi[0], 1 - f), q(hi[1], 1 - f), q(hi[2], 1 - f)));
+}
+$('#bFit').onclick = () => { if (S.sel.size) return zoomTo([...S.sel]); const b = visibleBox(); b && !b.isEmpty() ? fitBox(b, camera.position.clone().sub(controls.target)) : fitAll(); };
 $('#bTop').onclick = () => fitAll(new THREE.Vector3(0, 1, 0.001));
 $('#bFront').onclick = () => fitAll(new THREE.Vector3(0, 0.15, 1));
 $('#bIso').onclick = () => fitAll();
