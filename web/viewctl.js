@@ -434,7 +434,7 @@ function injectCss() {
 #vcStatus{color:var(--dim);margin-top:6px}`; document.head.appendChild(st);
 }
 const rowOf = (key, label, o) => `<div class="vcrow" data-k="${esc(key)}"><input type="checkbox" ${o.vis !== false ? 'checked' : ''} data-a="vis"><span class="nm" title="${esc(label)}">${esc(label)}</span>
-  <span class="cnt">${o.n ?? ''}</span><input type="color" value="${o.color || '#000000'}" data-a="color" title="override colour"><input type="number" step="0.25" min="0" value="${o.wscale ?? 1}" data-a="wscale" title="line weight multiplier" style="width:46px"><select data-a="dash" title="line pattern override" style="width:44px;font-size:10px"><option value="">pat</option>${Object.keys(PATTERNS).map(k => `<option ${o.dash === k ? 'selected' : ''}>${k}</option>`).join('')}</select><span data-a="reset" title="reset overrides" style="cursor:pointer">&#8634;</span></div>`;
+  <span class="cnt">${o.n ?? ''}</span><input type="color" value="${o.color || '#000000'}" data-a="color" title="override colour"><input type="number" step="0.25" min="0" value="${o.wscale ?? 1}" data-a="wscale" title="line weight multiplier" style="width:46px"><input type="number" step="0.25" min="0.1" value="${o.tscale ?? 1}" data-a="tscale" title="text size multiplier (this category)" style="width:42px"><select data-a="dash" title="line pattern override" style="width:44px;font-size:10px"><option value="">pat</option>${Object.keys(PATTERNS).map(k => `<option ${o.dash === k ? 'selected' : ''}>${k}</option>`).join('')}</select><span data-a="reset" title="reset overrides" style="cursor:pointer">&#8634;</span></div>`;
 
 function renderTree() {
   const box = $('#vcTree'); if (!box || !V.sc) return;
@@ -478,7 +478,7 @@ function renderTree() {
       else if (a === 'el') (st.elems[row.dataset.eid] ||= {}).vis = inp.checked;
       else if (a === 'elcolor') (st.elems[row.dataset.eid] ||= {}).color = inp.value;
       else { const k = row.dataset.cat, o = (st.cats[k] ||= {});
-        if (a === 'vis') o.vis = inp.checked; else if (a === 'color') o.color = inp.value; else if (a === 'wscale') o.wscale = +inp.value; else if (a === 'dash') { o.dash = inp.value; saveLocal(); makeScene(V.sc); return; } else if (a === 'reset') { delete st.cats[k]; renderTree(); } }
+        if (a === 'vis') o.vis = inp.checked; else if (a === 'color') o.color = inp.value; else if (a === 'wscale') o.wscale = +inp.value; else if (a === 'tscale') o.tscale = +inp.value || 1; else if (a === 'dash') { o.dash = inp.value; saveLocal(); makeScene(V.sc); return; } else if (a === 'reset') { delete st.cats[k]; renderTree(); } }
       applyStyles(); saveLocal();
     };
   });
