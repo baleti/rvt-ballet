@@ -7,10 +7,11 @@ per category / element. The drawing code is rvt-sheets (run in its own venv, one
   GET|PUT /api/vc/presets                        -> saved control presets (~/.config/rvt-viewer/vctl-presets.json)"""
 import os, sys, json, hashlib, asyncio, subprocess, threading, time
 from aiohttp import web
+from . import vcache
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHEETS_PY = os.environ.get('RVT_SHEETS_PY', os.path.expanduser('~/src/rvt-sheets/.venv/bin/python'))
-CACHE = os.path.expanduser('~/.cache/rvt-viewer/vscene')
+CACHE = vcache.CACHE
 PRESETS = os.path.expanduser('~/.config/rvt-viewer/vctl-presets.json')
 IDLE = 600
 
@@ -49,14 +50,9 @@ def register(app, ctx):
         if src not in procs: procs[src] = Proc(src)
         return procs[src], src
 
-    def cache_fn(src, req):
-        st = os.stat(src)
-        h = hashlib.md5(json.dumps([src, st.st_size, int(st.st_mtime), req, _code_stamp()], sort_keys=True).encode()).hexdigest()[:20]
-        return os.path.join(CACHE, h + '.json')
-
     async def run(mid, req, use_cache):
         pr, src = proc(mid)
-        fn = cache_fn(src, req) if use_cache else None
+        fn = vcache.cache_fn(src, req) if use_cache else None
         if fn and os.path.exists(fn): return open(fn, 'rb').read()
         line = await asyncio.get_running_loop().run_in_executor(None, pr.call, req)
         if fn and '"error"' not in line[:20]:
@@ -70,6 +66,9 @@ def register(app, ctx):
         q = req.query; r = {'op': 'scene', 'view': int(req.match_info['vid'])}
         if q.get('scale'): r['scale'] = int(q['scale'])
         if q.get('detail'): r['detail'] = int(q['detail'])
+        if q.get('cut'): r['cut'] = float(q['cut'])
+        if q.get('phase'): r['phase'] = int(q['phase'])
+        if q.get('phaseFilter'): r['phaseFilter'] = int(q['phaseFilter'])
         if q.get('template') == '0': r['template'] = False
         if q.get('filters') == '0': r['filters'] = False
         try: body = await run(req.match_info['mid'], r, True)
@@ -101,14 +100,3 @@ def register(app, ctx):
                 for p in list(procs.values()): p.reap()
         t = asyncio.create_task(loop()); yield; t.cancel()
     app.cleanup_ctx.append(reaper)
-
-
-def _code_stamp():
-    h = hashlib.md5()
-    for fn in (os.path.join(HERE, 'vscene_worker.py'),): h.update(open(fn, 'rb').read())
-    sh = os.path.expanduser(os.environ.get('RVTSHEETS', '~/src/rvt-sheets'))
-    try:
-        for f in sorted(os.listdir(os.path.join(sh, 'rvtsheets'))):
-            if f.endswith('.py'): h.update(str(os.stat(os.path.join(sh, 'rvtsheets', f)).st_mtime_ns).encode())
-    except Exception: pass
-    return h.hexdigest()[:10]

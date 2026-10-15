@@ -16,7 +16,7 @@ const LAYER_LABEL = {cut: 'Cut linework', projection: 'Projection linework', und
   surface_fill: 'Surface hatches', room_fill: 'Room fills', mask: 'Masking regions', annotation: 'Annotation symbols', annotation_fill: 'Annotation fills', text: 'Text', datum: 'Grids and levels'};
 const SCALES = [1, 5, 10, 20, 25, 50, 75, 96, 100, 200, 240, 500];
 
-const DEFAULT_STATE = () => ({scale: null, detail: null, template: true, filters: true, crop: true, layers: {}, cats: {}, elems: {}, classes: {}, textOn: true, textSize: 1, font: '', textColor: '',
+const DEFAULT_STATE = () => ({scale: null, detail: null, cut: null, phase: null, pfilter: null, template: true, filters: true, crop: true, layers: {}, cats: {}, elems: {}, classes: {}, textOn: true, textSize: 1, font: '', textColor: '',
   lineScale: 1, minPx: 1, model: true, lift: 0.02, onTop: true, opacity: 1, contrast: true, halo: false});
 const V = {mid: null, vid: null, sc: null, group: null, state: DEFAULT_STATE(), sel: null, views: [], loading: false, presets: {}};
 window.__vc = V;
@@ -374,7 +374,7 @@ async function showPicked(h) {
 }
 
 // ------------------------------------------------------------------ scene loading
-const viewQuery = () => { const s = V.state, q = new URLSearchParams(); if (s.scale) q.set('scale', s.scale); if (s.detail) q.set('detail', s.detail); if (!s.template) q.set('template', 0); if (!s.filters) q.set('filters', 0); return q.toString(); };
+const viewQuery = () => { const s = V.state, q = new URLSearchParams(); if (s.scale) q.set('scale', s.scale); if (s.detail) q.set('detail', s.detail); if (s.cut != null) q.set('cut', s.cut / FT); if (s.phase) q.set('phase', s.phase); if (s.pfilter) q.set('phaseFilter', s.pfilter); if (!s.template) q.set('template', 0); if (!s.filters) q.set('filters', 0); return q.toString(); };
 async function loadScene(vid, keepState = false) {
   V.loading = true; setStatus(`loading view ${vid}...`);
   try {
@@ -431,9 +431,9 @@ function renderTree() {
     for (const [k, c] of Object.entries(cats)) { const pk = c.parent != null ? c.parent : k; (top[pk] ||= {name: c.parent != null ? c.parentName : c.name, subs: []}).subs.push([k, c]); }
     html = Object.entries(top).sort((a, b) => String(a[1].name).localeCompare(String(b[1].name))).map(([pk, t]) => {
       const n = t.subs.reduce((s, [, c]) => s + c.elems.length, 0), o = Object.assign({n}, st.cats[pk] || {});
-      let h = rowOf('c' + pk, t.name || ('category ' + pk), o).replace('class="vcrow"', `class="vcrow" data-cat="${pk}"`);
+      let h = rowOf('c' + pk, t.name || '(no category)', o).replace('class="vcrow"', `class="vcrow" data-cat="${pk}"`);
       const subs = t.subs.filter(([k]) => k !== pk || t.subs.length > 1);
-      if (subs.length) h += '<div class="ind">' + subs.sort((a, b) => String(a[1].name).localeCompare(String(b[1].name))).map(([k, c]) => rowOf('c' + k, c.name || k, Object.assign({n: c.elems.length}, st.cats[k] || {})).replace('class="vcrow"', `class="vcrow" data-cat="${k}"`)).join('') + '</div>';
+      if (subs.length) h += '<div class="ind">' + subs.sort((a, b) => String(a[1].name).localeCompare(String(b[1].name))).map(([k, c]) => rowOf('c' + k, c.name || '(no category)', Object.assign({n: c.elems.length}, st.cats[k] || {})).replace('class="vcrow"', `class="vcrow" data-cat="${k}"`)).join('') + '</div>';
       return h;
     }).join('');
   } else if (mode === 'type') {
@@ -466,13 +466,15 @@ async function savePresets() { try { localStorage['vctl:presets'] = JSON.stringi
 function renderPanel() {
   let p = $('#vcpanel'); if (!p) { p = document.createElement('div'); p.id = 'vcpanel'; $('#view').appendChild(p); }
   p.hidden = !V.on; if (!V.on) return;
-  const st = V.state, sc = V.sc, vs = V.views.filter(v => v.drawable && v.kind !== '3d');
+  const st = V.state, sc = V.sc, vs = V.views.filter(v => v.drawable && (v.kind === 'plan' || v.kind === 'section'));
   const opt = (v, cur, lab) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${lab}</option>`;
   p.innerHTML = `<div style="display:flex;align-items:center"><b>View control</b><span class="sp" style="flex:1"></span><button id="vcOff" title="remove the overlay and close the panel">close</button></div>
   <div class="r"><label>View</label><select id="vcView" style="flex:1;min-width:0"><option value="">select a plan / section...</option>${vs.map(v => opt(v.id, V.vid, `${v.name} (${v.kind}${v.scale ? ' 1:' + v.scale : ''})`)).join('')}</select></div>
   <h4>Display (re-draws the view)</h4>
   <div class="r"><label>Annotation scale</label><select id="vcScale">${opt('', st.scale || '', 'view default' + (sc ? ' (1:' + (sc.view.scale_stored || sc.view.scale) + ')' : ''))}${SCALES.map(s => opt(s, st.scale, '1:' + s)).join('')}</select></div>
   <div class="r"><label>Detail level</label><select id="vcDetail">${opt('', st.detail || '', 'view default')}${opt(1, st.detail, 'Coarse')}${opt(2, st.detail, 'Medium')}${opt(3, st.detail, 'Fine')}</select></div>
+  ${sc && sc.view.range && sc.view.range.cut != null ? `<div class="r"><label>Cut plane (m)</label><input type="number" id="vcCut" step="0.1" value="${st.cut != null ? st.cut : +(sc.view.range.cut * FT).toFixed(3)}" title="absolute elevation of the plan cut plane, metres"> <button id="vcCutReset" title="back to the view range">reset</button></div>` : ''}
+  <div class="r"><label>Phase</label><select id="vcPhase" style="max-width:100px"><option value="">view</option>${(V.phases || []).map(x => opt(x.id, st.phase, x.name)).join('')}</select> <select id="vcPF" style="max-width:110px"><option value="">filter: view</option>${(V.phaseFilters || []).map(x => opt(x.id, st.pfilter, x.name)).join('')}</select></div>
   <div class="r"><label>Apply</label><label class="chk"><input type="checkbox" id="vcTpl" ${st.template ? 'checked' : ''}> view template</label><label class="chk"><input type="checkbox" id="vcFil" ${st.filters ? 'checked' : ''}> filters</label></div>
   <h4>Display (instant)</h4>
   <div class="r"><label>Crop region</label><input type="checkbox" id="vcCrop" ${st.crop ? 'checked' : ''}><span class="dim">${sc && sc.view.crop_uv ? 'model content only' : 'no stored crop'}</span></div>
@@ -494,6 +496,10 @@ function renderPanel() {
   const redraw = () => { saveLocal(); loadScene(V.vid); };
   on('vcScale', () => { st.scale = +$('#vcScale').value || null; redraw(); });
   on('vcDetail', () => { st.detail = +$('#vcDetail').value || null; redraw(); });
+  on('vcCut', () => { st.cut = +$('#vcCut').value; redraw(); });
+  on('vcCutReset', () => { st.cut = null; redraw(); }, 'onclick');
+  on('vcPhase', () => { st.phase = +$('#vcPhase').value || null; redraw(); });
+  on('vcPF', () => { st.pfilter = +$('#vcPF').value || null; redraw(); });
   on('vcTpl', () => { st.template = $('#vcTpl').checked; redraw(); });
   on('vcFil', () => { st.filters = $('#vcFil').checked; redraw(); });
   const inst = (id, fn) => on(id, () => { fn($('#' + id)); saveLocal(); applyStyles(); });
@@ -519,9 +525,9 @@ async function toggle() {
   V.on = true; $('#bVC').classList.add('on'); V.mid = S.mid; idxMap = null;
   if (!document.getElementById('vcStyle')) { injectCss(); }
   await loadPresets();
-  try { V.views = (await (await fetch(`/api/m/${V.mid}/vc/views`)).json()).views || []; } catch (e) { V.views = []; }
+  try { const j = await (await fetch(`/api/m/${V.mid}/vc/views`)).json(); V.views = j.views || []; V.phases = j.phases || []; V.phaseFilters = j.phaseFilters || []; } catch (e) { V.views = []; }
   renderPanel();
-  const cur = S.openView && V.views.find(v => v.id === S.openView.id && v.drawable && v.kind !== '3d');
+  const cur = S.openView && V.views.find(v => v.id === S.openView.id && v.drawable && (v.kind === 'plan' || v.kind === 'section'));
   if (cur) openVC(cur.id);
 }
 const btn = document.createElement('button'); btn.id = 'bVC'; btn.textContent = 'Annotations'; btn.title = 'View-dependent elements: tags, text, dimensions, grids, hatches - per view / category / element controls';

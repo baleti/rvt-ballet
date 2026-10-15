@@ -36,25 +36,31 @@ class Worker:
         for v in self.doc['views'].values():
             if v.get('template') or not v.get('name') or v.get('error'): continue
             out.append({'id': v['id'], 'name': v['name'], 'kind': v['kind'], 'scale': v.get('scale'), 'template': v.get('view_template'),
-                        'detail': v.get('detail_level'), 'drawable': v['kind'] in ('plan', 'section', 'drafting', 'legend', '3d')})
-        return {'views': out}
+                        'detail': v.get('detail_level'), 'phase': v.get('phase'), 'phaseFilter': v.get('phase_filter'), 'drawable': v['kind'] in ('plan', 'section', 'drafting', 'legend', '3d')})
+        ph, pf = self.doc.get('phases') or [], self.doc.get('phase_filters') or []
+        return {'views': out, 'phases': [{'id': x['id'], 'name': x['name']} for x in ph], 'phaseFilters': [{'id': x['id'], 'name': x['name']} for x in pf]}
 
     def scene(self, req):
         vid = int(req['view']); doc = self.doc; d = self.d; vis = d.vis
         v0 = doc['views'][vid]
         saved_scale = v0.get('scale'); eff0 = vis.effective
-        opts = {k: req.get(k) for k in ('scale', 'detail', 'template', 'filters')}
+        opts = {k: req.get(k) for k in ('scale', 'detail', 'template', 'filters', 'cut', 'phase', 'phaseFilter')}
+        saved_range = v0.get('range'); saved_phase = (v0.get('phase'), v0.get('phase_filter'))
         try:
             if req.get('scale'): v0['scale'] = int(req['scale'])
+            if req.get('cut') is not None and saved_range: v0['range'] = dict(saved_range, cut=float(req['cut']))     # absolute cut plane elevation, feet
+            if req.get('phase') is not None: v0['phase'] = int(req['phase'])
+            if req.get('phaseFilter') is not None: v0['phase_filter'] = int(req['phaseFilter'])
             def eff(v):
                 e = dict(eff0(v) if req.get('template', True) is not False else v)
                 if req.get('detail'): e['detail_level'] = int(req['detail'])
                 if req.get('filters') is False: e['filters'] = None; e['draw_filters'] = None
+                if req.get('phaseFilter') is not None: e['phase_filter'] = int(req['phaseFilter'])
                 return e
             vis.effective = eff
             t0 = time.time(); dr = d.draw(vid)
         finally:
-            v0['scale'] = saved_scale; vis.effective = eff0
+            v0['scale'] = saved_scale; vis.effective = eff0; v0['range'] = saved_range; v0['phase'], v0['phase_filter'] = saved_phase
         info = vis.info.info; cats = doc['categories']; els = {}
         for p in dr['prims']:
             e = p.get('elem')
@@ -84,7 +90,25 @@ class Worker:
         return {'id': eid, 'cls': i.get('cls'), 'props': props}
 
 
+def warm(path, kinds=('plan', 'section', 'drafting', 'legend')):
+    """pre-generate the default scene of every drawable view into the cache (run on remote-host: tools/vc_warm.sh); prints one line per view"""
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from rvtviewer import vcache
+    w = Worker(path); n = 0
+    for v in w.views()['views']:
+        if v['kind'] not in kinds or not v['drawable']: continue
+        req = {'op': 'scene', 'view': v['id']}; fn = vcache.cache_fn(path, req)
+        if os.path.exists(fn): print('have', v['id'], v['name'], flush=True); continue
+        t0 = time.time()
+        try: js = json.dumps(w.scene(req), default=_j, separators=(',', ':'))
+        except Exception as ex: print('FAIL', v['id'], v['name'], repr(ex)[:120], flush=True); continue
+        os.makedirs(vcache.CACHE, exist_ok=True); open(fn + '.tmp', 'w').write(js); os.replace(fn + '.tmp', fn); n += 1
+        print('ok', v['id'], v['kind'], v['name'], '%.1fs %dKB' % (time.time() - t0, len(js) // 1024), flush=True)
+    print('warmed %d scenes' % n)
+
+
 def main():
+    if len(sys.argv) > 2 and sys.argv[2] == '--warm': return warm(sys.argv[1])
     w = Worker(sys.argv[1])
     out = sys.stdout; sys.stdout = sys.stderr
     print(json.dumps({'ready': True, 'key': w.m.key}, default=_j), file=out, flush=True)
