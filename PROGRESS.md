@@ -71,3 +71,4 @@
 - Prism appearances textured (opaque_albedo bitmaps, unit-less Prism scales = inches): 2026 Facades bricks / stained wood / quartz from the library (5 -> 35 bitmaps). demo-ready = 6e5bb48.
 - Sweep 121/121, all 78 corpus files < 0.5% box-only. Real-GPU frame times (README): 2.15 M triangles 14.9 ms/frame.
 - Asked c2-sheets (rvt-sheets HOOKS.md) to serve the newest older complete sheets cache after reader changes.
+- 2026-10-15 (c4-viewer): plan/section/elevation views framed + clipped to the stored crop region; 3D views clip to stored section box; sheets badge notes stale. NEXT: rerun --prepare + smoke before re-tagging demo-ready (sheets warm on remote-host failed: remote-host memory).
