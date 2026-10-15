@@ -68,3 +68,6 @@
 - Writer scenes: stale saved graphics on copied columns reported to c2-writer (NEEDS-FROM-ORACLE.md).
 - demo-ready = d28ff71 (smoke on all three demo files).
 - Bump maps from the library (24 in Residential), plan views capped correctly (open shells excluded). demo-ready = 56259c3.
+- Prism appearances textured (opaque_albedo bitmaps, unit-less Prism scales = inches): 2026 Facades bricks / stained wood / quartz from the library (5 -> 35 bitmaps). demo-ready = 6e5bb48.
+- Sweep 121/121, all 78 corpus files < 0.5% box-only. Real-GPU frame times (README): 2.15 M triangles 14.9 ms/frame.
+- Asked c2-sheets (rvt-sheets HOOKS.md) to serve the newest older complete sheets cache after reader changes.
