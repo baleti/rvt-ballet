@@ -30,6 +30,21 @@ def phases(ctx):
         if r['class'] == 'ProjectPhase': ids[e] = len(names); names.append(r['fields'].get('m_name') or 'Phase %d' % e)
     return names, ids
 
+def _crop(ctx, f):
+    """active crop region of a view (its Viewer record's bounded space: origin, basis, per-axis [max, min] offsets in ft) -> 4 world corners (m) of the
+    crop rectangle in the view plane, or None when the crop is off (Revit then shows the whole model)"""
+    vr = ctx.recs.get(ctx.eid_int(f.get('m_viewerId')) or -1)
+    bs = (vr['fields'].get('m_boundedSpace') if vr else None) or {}
+    try:
+        act = bs.get('m_boundActive') or []
+        if not (any(act[0]) and any(act[1])): return None
+        O = np.array(bs['m_orig'], float); B = np.array(bs['m_basis'], float); b = bs['m_boundOffset']
+        xs = sorted(float(x) for x in b[0][:2]); ys = sorted(float(y) for y in b[1][:2])
+        if xs[1] - xs[0] < 1e-6 or ys[1] - ys[0] < 1e-6 or max(map(abs, xs + ys)) > 1e6: return None
+        return [[round(float(c) * 0.3048, 4) for c in O + B[0] * x + B[1] * y] for x, y in ((xs[0], ys[0]), (xs[1], ys[0]), (xs[1], ys[1]), (xs[0], ys[1]))]
+    except Exception:
+        return None
+
 def views_sheets(ctx):
     views = []; sheets = []; vp = {}
     for e, r in ctx.recs.items():
@@ -57,5 +72,7 @@ def views_sheets(ctx):
                 v['origin'] = m3(f.get('m_origin')); v['dir'] = d3(f.get('m_viewDir')); v['up'] = d3(f.get('m_vertDir'))
                 pl = g(f, 'm_pCutter', 'm_pPlane')
                 if isinstance(pl, dict) and 'm_origin' in pl: v['cut'] = {'origin': m3(pl['m_origin']), 'normal': d3(np.cross(pl.get('m_xVec', [1, 0, 0]), pl.get('m_yVec', [0, 1, 0])).tolist())}
+                cr = _crop(ctx, f)
+                if cr: v['crop'] = cr
             views.append(v)
     return sorted(views, key=lambda v: (v['kind'], v['name'])), sorted(sheets, key=lambda s: str(s['number']))

@@ -222,7 +222,7 @@ async function updateCachedBadge(models) {
   const b = $('#cachedBadge'); const m = (models || []).find(x => x.id === S.mid); b.hidden = true;
   if (!m || !m.cached) return;
   let txt = 'model cached', cls = '';
-  try { const r = await fetch(`/sheets/api/${encodeURIComponent(S.mid)}/cache.json`); if (r.ok) { const c = await r.json(); if (c.cached) txt += ' \u00b7 sheets cached'; else if (c.total) { txt += ` \u00b7 sheets ${c.sheets || 0}/${c.total} cached`; cls = 'partial'; } } } catch (e) {}
+  try { const r = await fetch(`/sheets/api/${encodeURIComponent(S.mid)}/cache.json`); if (r.ok) { const c = await r.json(); if (c.cached) { txt += ' \u00b7 sheets cached'; if (c.stale) b.title = 'sheets served from an earlier complete render of this file (re-run rvt-sheets warm to refresh)'; } else if (c.total) { txt += ` \u00b7 sheets ${c.sheets || 0}/${c.total} cached`; cls = 'partial'; } } } catch (e) {}
   b.textContent = txt; b.className = cls; b.hidden = false;
 }
 async function loadPlugins() {
@@ -298,7 +298,7 @@ async function loadModel(mid, opts = {}) {
     if (o.isMesh && !o.geometry.attributes._mat) o.geometry.setAttribute('_mat', new THREE.BufferAttribute(new Float32Array(o.geometry.attributes.position.count).fill(-1), 1));
     o.frustumCulled = false; o.renderOrder = 10; o.userData.bi = o.userData.batch ?? o.parent?.userData?.batch ?? 0;
   });
-  S.tris = tris; gltf.scene.renderOrder = 100; world.add(gltf.scene); buildElRanges(); if (renderer.clippingPlanes.length) updateCaps(renderer.clippingPlanes);      // groupOrder 100: the model draws after the section caps (groups 1..6)
+  S.tris = tris; gltf.scene.renderOrder = 100; world.add(gltf.scene); buildElRanges(); if (renderer.clippingPlanes.length) updateCaps(renderer.clippingPlanes.filter(p => !(S.viewCrop || []).includes(p)));      // groupOrder 100: the model draws after the section caps (groups 1..6)
   buildOverlays(); fitShadow(); if (!opts.keepCamera) fitAll(); buildTabs(); setupLegend(); refreshState();
   $('#status').textContent = `${S.N.toLocaleString()} elements, ${tris.toLocaleString()} triangles - ${((performance.now() - t0) / 1000).toFixed(1)}s` + ((S.meta.phase || 'done') === 'done' ? '' : ' (box preview)');
   if (!opts.keepCamera && !S.hashRestored) { S.hashRestored = true; restoreHash(); }
@@ -674,7 +674,7 @@ function applySection() {
     });
   }
   if (S.viewClip) planes.push(S.viewClip);
-  renderer.clippingPlanes = planes; updateCaps(planes); dirty = true; shadowDirty = true; scheduleHash();
+  renderer.clippingPlanes = planes.concat(S.viewCrop || []); updateCaps(planes); dirty = true; shadowDirty = true; scheduleHash();      // the crop region of an open view clips the model but is not capped (Revit crops a plan, it does not cut it)
 }
 // ------------------------------------------------------------------ section caps (poche): where a clip plane cuts a closed solid, fill the cut with a flat dark surface.
 // Stencil technique: every opaque batch is drawn once more into the stencil only (both sides, each face crossing inverts bit 0, clipped like the scene): a ray through
@@ -859,24 +859,39 @@ addEventListener('keydown', e => { if (e.target.tagName !== 'INPUT' && (e.key ==
 
 // ------------------------------------------------------------------ opening a Revit view (3D camera / plan cut / section-elevation plane) from its stored frame
 const dirV = d => new THREE.Vector3(d[0], d[2], -d[1]).normalize();
+function cropFrame(crop, axis) {
+  // crop rectangle (4 corners, revit metres) of a plan/section/elevation -> 4 clip planes around it (normals inward, 5 cm slack), its centre, and the camera
+  // distance along axis (the view direction) that fits it on screen
+  const pts = crop.map(toV), c = pts.reduce((a, p) => a.add(p), new THREE.Vector3()).multiplyScalar(0.25);
+  S.viewCrop = pts.map((p, i) => { const q = pts[(i + 1) % 4], n = new THREE.Vector3().subVectors(q, p).cross(axis).normalize();
+    if (n.dot(new THREE.Vector3().subVectors(c, p)) < 0) n.negate(); return new THREE.Plane(n, -n.dot(p) + 0.05); });
+  const e1 = pts[1].distanceTo(pts[0]), e2 = pts[2].distanceTo(pts[1]);
+  const horiz1 = Math.abs(axis.y) > 0.9 ? Math.abs(pts[1].x - pts[0].x) >= Math.abs(pts[1].z - pts[0].z) : Math.abs(pts[1].y - pts[0].y) < 0.5 * e1;      // which edge runs across the screen
+  const w = horiz1 ? e1 : e2, h = horiz1 ? e2 : e1;
+  return {c, dist: Math.max(w / camera.aspect, h) / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.08 + 1};
+}
 function openView(v) {
   if (!v || !v.origin) { $('#status').textContent = 'this view stores no camera/cut plane'; return; }
   const o = toV(v.origin), mb = modelBox(), c = mb.getCenter(new THREE.Vector3()), size = mb.getSize(new THREE.Vector3()).length();
-  S.viewClip = null; S.openView = v;
+  S.viewClip = null; S.viewCrop = null; S.openView = v;
   if (v.kind === '3d') {
     const d = dirV(v.dir); camera.position.copy(o); controls.target.copy(o).addScaledVector(d, Math.max(5, size / 4));
   } else if (v.kind === 'Plan' && v.cut) {
     const z = v.cut.origin[2]; S.viewClip = new THREE.Plane(new THREE.Vector3(0, -1, 0), z);
-    controls.target.set(c.x, z, c.z); camera.position.set(c.x, z + size * 0.9, c.z + 0.001);
+    const cr = v.crop && cropFrame(v.crop, new THREE.Vector3(0, 1, 0));      // the view's active crop region, framed from above like the sheet (whole model when the crop is off, as in Revit)
+    const cx = cr ? cr.c.x : c.x, cz = cr ? cr.c.z : c.z, h = cr ? cr.dist : size * 0.9;
+    controls.target.set(cx, z, cz); camera.position.set(cx, z + h, cz + 0.001);
   } else if (v.dir) {
     const d = dirV(v.dir); S.viewClip = new THREE.Plane(d.clone(), -d.dot(o));
-    controls.target.copy(o); camera.position.copy(o).addScaledVector(d, -size * 0.8);
+    const cr = v.crop && cropFrame(v.crop, d);
+    if (cr) { const t = cr.c.clone().addScaledVector(d, -d.dot(cr.c) + d.dot(o)); controls.target.copy(t); camera.position.copy(t).addScaledVector(d, -cr.dist); }
+    else { controls.target.copy(o); camera.position.copy(o).addScaledVector(d, -size * 0.8); }
   }
   camera.near = 0.05; camera.far = size * 20 + 500; camera.updateProjectionMatrix(); controls.update();
   if (S.lvlGroup) S.lvlGroup.visible = showLvl && v.kind !== 'Plan';          // level outlines seen from above are just lines across a plan
   if (S.gridMat) { S.gridMat.depthTest = v.kind !== 'Plan'; S.gridMat.needsUpdate = true; S.gridGroup.renderOrder = v.kind === 'Plan' ? 200 : 0; }      // plans draw grids on top, as Revit does
-  const vb = $('#viewbar'); vb.hidden = false; vb.innerHTML = `<b>${esc(v.name)}</b> <span class="dim">${esc(v.kind)}${S.viewClip ? ' (cut plane active)' : ''}</span> <button id="vbOff">close view</button>`;
-  $('#vbOff').onclick = () => { S.viewClip = null; vb.hidden = true; S.openView = null; if (S.lvlGroup) S.lvlGroup.visible = showLvl; if (S.gridMat) { S.gridMat.depthTest = true; S.gridMat.needsUpdate = true; } applySection(); fitAll(); };
+  const vb = $('#viewbar'); vb.hidden = false; vb.innerHTML = `<b>${esc(v.name)}</b> <span class="dim">${esc(v.kind)}${S.viewClip ? ' (cut plane active' + (S.viewCrop ? ', cropped' : '') + ')' : ''}</span> <button id="vbOff">close view</button>`;
+  $('#vbOff').onclick = () => { S.viewClip = null; S.viewCrop = null; vb.hidden = true; S.openView = null; if (S.lvlGroup) S.lvlGroup.visible = showLvl; if (S.gridMat) { S.gridMat.depthTest = true; S.gridMat.needsUpdate = true; } applySection(); fitAll(); };
   applySection(); dirty = true;
 }
 window.openView = openView;
