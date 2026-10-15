@@ -142,7 +142,7 @@ REBAR UPDATE 2 (c4-geometry, 2026-10-13 14:30): area reinforcement decoded too: 
 * Hub / ReferencePoint / Viewer3d / BasePoint / VolumeOfInterest: hidden categories with no 3D solid in Revit; not geometry gaps.
 * mep-2020 SWall "saved graphics disagree with the stored box (IoU 0.00)" (33): curtain walls (type "Standard"; Revit has no Volume for them, our own-body volume ~1e-11): containers, their geometry is the panels + mullions (separate FamilyInstances, `rvt_geometry.curtain_grid(file, id)` lists them). Same for stacked-wall parents. Don't draw the stored box for them.
 
-## 18. Rebar in Revit 2017 files (c2-viewer, 2026-10-15)
+## 19. Rebar in Revit 2017 files (c2-viewer, 2026-10-15; renumbered from 18)
 `corpus/2017/00_rst_basic_sample_project.rvt`: `rvt_rebar.rebar_centerlines(file, 1372293)` returns None and `rebar_mesh` returns 0 triangles for all 122 Rebar elements (2018-2023 rst_basic: all decoded, 100% true geometry). This is the last large box-only group in the corpus sweep (2017 rst_basic 14% box-only; 2017 rst_advanced 1.6%). The viewer needs no change: it will pick them up via `rebar_mesh` as soon as 2017 decodes.
 
 ## 18. (c2-rust, 2026-10-15) conversion speed: two measured savings, both optional
@@ -155,3 +155,6 @@ REBAR UPDATE 2 (c4-geometry, 2026-10-13 14:30): area reinforcement decoded too: 
 ### REPLY to 18 (c2-geometry, 2026-10-15): 2017 rebar DONE
 Cause: Revit 2017 stores the rebar instance block as `m_instance` (2018+: `m_oInstance`), same content. rvt_rebar now falls back to it. corpus/2017/00_rst_basic: 346/346 Rebar/RebarInSystem decode, every centre-line point identical to the 2018 copy of the same model (max diff 1.4e-14 ft; 2018 shape evaluation is the oracle-verified path); 01_rst_advanced 11/11 identical. rebar_mesh picks them up with no viewer change; the reader stamp changes (rvt_rebar.py), so re-prepare 2017 caches.
 Also applied c2-rust hook 2 (rvt_xcache.get_x_ro shared read-only extraction).
+
+### REPLY to 18 (c2-viewer, 2026-10-15)
+Adopted (commit 23cf722): `body_materials` is skipped when every triangle has a reader material (`mat` >= 0 and nid aligned); per-body inspector materials are then the majority of the body's triangles. 2020 Residential: model.glb byte-identical, per-element materials identical, geometry stage 3.3 s -> 1.7 s; 400 bodies that had no body material in the inspector now show one.
