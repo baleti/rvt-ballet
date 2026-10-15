@@ -14,6 +14,7 @@ const dirty = () => controls.dispatchEvent({type: 'change'});
 const MODEL_LAYERS = new Set(['cut', 'projection', 'underlay', 'symbolic', 'symbolic_fill', 'cut_fill', 'surface_fill', 'room_fill', 'mask']);
 const LAYER_LABEL = {cut: 'Cut linework', projection: 'Projection linework', underlay: 'Underlay', symbolic: 'Symbolic lines', symbolic_fill: 'Symbolic fills', cut_fill: 'Cut hatches/fills',
   surface_fill: 'Surface hatches', room_fill: 'Room fills', mask: 'Masking regions', annotation: 'Annotation symbols', annotation_fill: 'Annotation fills', text: 'Text', datum: 'Grids and levels'};
+const PATTERNS = {solid: null, dash: [3.2, 1.6], dot: [0.4, 1.2], dashdot: [3.2, 1.2, 0.4, 1.2], long: [6.4, 1.6]};      // paper mm
 const SCALES = [1, 5, 10, 20, 25, 50, 75, 96, 100, 200, 240, 500];
 
 const DEFAULT_STATE = () => ({scale: null, detail: null, cut: null, phase: null, pfilter: null, template: true, filters: true, crop: true, layers: {}, cats: {}, elems: {}, classes: {}, parts: {}, annoScale: 1, textOn: true, textSize: 1, font: '', textColor: '',
@@ -108,7 +109,8 @@ function build(sc) {
     const cat = p.cat != null ? p.cat : e.cat;
     meta[pi] = {eid, cat, layer, cls: e.cls, t: p.t, part: p.part, clip: MODEL_LAYERS.has(layer) ? 1 : 0};
     lyrs.add(layer);
-    const st = p.style || {w: 0.18, rgb: [0, 0, 0]}, pat = st.dash && st.dash.length ? st.dash.map(x => Math.max(x * mpmm, 1e-4)) : null;
+    const st = p.style || {w: 0.18, rgb: [0, 0, 0]}, ov = V.state.cats[catKey(cat)]?.dash ?? V.state.cats[catKey(e.parent)]?.dash;
+    const dsh = ov === undefined || ov === '' ? st.dash : (PATTERNS[ov] || null), pat = dsh && dsh.length ? dsh.map(x => Math.max(x * mpmm, 1e-4)) : null;
     const k = V.state.annoScale || 1, an = k !== 1 && p.paper && p.anchor && sc.view.right ? anchorUV(sc.view, p.anchor) : null;
     const sx = q => an ? [(an[0] + (q[0] - an[0]) * k), (an[1] + (q[1] - an[1]) * k)] : q;
     const addPoly = pts => {
@@ -432,7 +434,7 @@ function injectCss() {
 #vcStatus{color:var(--dim);margin-top:6px}`; document.head.appendChild(st);
 }
 const rowOf = (key, label, o) => `<div class="vcrow" data-k="${esc(key)}"><input type="checkbox" ${o.vis !== false ? 'checked' : ''} data-a="vis"><span class="nm" title="${esc(label)}">${esc(label)}</span>
-  <span class="cnt">${o.n ?? ''}</span><input type="color" value="${o.color || '#000000'}" data-a="color" title="override colour"><input type="number" step="0.25" min="0" value="${o.wscale ?? 1}" data-a="wscale" title="line weight multiplier" style="width:46px"><span data-a="reset" title="reset overrides" style="cursor:pointer">&#8634;</span></div>`;
+  <span class="cnt">${o.n ?? ''}</span><input type="color" value="${o.color || '#000000'}" data-a="color" title="override colour"><input type="number" step="0.25" min="0" value="${o.wscale ?? 1}" data-a="wscale" title="line weight multiplier" style="width:46px"><select data-a="dash" title="line pattern override" style="width:44px;font-size:10px"><option value="">pat</option>${Object.keys(PATTERNS).map(k => `<option ${o.dash === k ? 'selected' : ''}>${k}</option>`).join('')}</select><span data-a="reset" title="reset overrides" style="cursor:pointer">&#8634;</span></div>`;
 
 function renderTree() {
   const box = $('#vcTree'); if (!box || !V.sc) return;
@@ -467,8 +469,8 @@ function renderTree() {
     html = list.map(([id, e]) => `<div class="vcrow ${V.sel == id ? 'sel' : ''}" data-eid="${id}"><input type="checkbox" ${st.elems[id]?.vis !== false ? 'checked' : ''} data-a="el"><span class="nm">${esc(e.cls)} ${id}</span><span class="cnt">${esc(e.catName || '')}</span><input type="color" value="${st.elems[id]?.color || '#000000'}" data-a="elcolor"></div>`).join('');
   }
   box.innerHTML = html || '<span class="dim">nothing in this view</span>';
-  box.querySelectorAll('input,span[data-a]').forEach(inp => {
-    const row = inp.closest('.vcrow'), a = inp.dataset.a, ev = inp.type === 'checkbox' || inp.type === 'color' || inp.type === 'number' ? 'onchange' : 'onclick';
+  box.querySelectorAll('input,select,span[data-a]').forEach(inp => {
+    const row = inp.closest('.vcrow'), a = inp.dataset.a, ev = inp.type === 'checkbox' || inp.type === 'color' || inp.type === 'number' || inp.tagName === 'SELECT' ? 'onchange' : 'onclick';
     inp[ev] = () => {
       if (a === 'layer') st.layers[row.dataset.l] = inp.checked;
       else if (a === 'cls') st.classes[row.dataset.cls] = inp.checked;
@@ -476,7 +478,7 @@ function renderTree() {
       else if (a === 'el') (st.elems[row.dataset.eid] ||= {}).vis = inp.checked;
       else if (a === 'elcolor') (st.elems[row.dataset.eid] ||= {}).color = inp.value;
       else { const k = row.dataset.cat, o = (st.cats[k] ||= {});
-        if (a === 'vis') o.vis = inp.checked; else if (a === 'color') o.color = inp.value; else if (a === 'wscale') o.wscale = +inp.value; else if (a === 'reset') { delete st.cats[k]; renderTree(); } }
+        if (a === 'vis') o.vis = inp.checked; else if (a === 'color') o.color = inp.value; else if (a === 'wscale') o.wscale = +inp.value; else if (a === 'dash') { o.dash = inp.value; saveLocal(); makeScene(V.sc); return; } else if (a === 'reset') { delete st.cats[k]; renderTree(); } }
       applyStyles(); saveLocal();
     };
   });
