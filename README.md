@@ -38,80 +38,53 @@ Viewer details: a DataTexture holds per-element state (hidden / selected / hover
 so show/hide/isolate/highlight on 100k elements is one texture upload. Picking renders `_EIDX` and depth to a 1x1 target (exact, O(1) per click).
 
 ## Geometry honesty
-Every element has a fidelity tag shown in the inspector, tree, tooltip, coverage tab and the "Fidelity colours" mode:
-- `solid`  decoded B-rep faces from the file (planar faces only so far)
-- `param`  rebuilt from stored parametric data (approximate: wall joins/openings, roof slopes not modelled)
-- `bbox`   placeholder box at the true Revit bounding box (header), oriented when the instance transform allows
+Every element has a fidelity tag shown in the inspector, tree, tooltip, Coverage tab and the "Fidelity colours" mode:
+- `solid`  the reader's mesh for the element (saved-graphics triangles or decoded B-rep faces, per body and per face material)
+- `param`  rebuilt by the viewer from stored parametric data (fallback only; extents checked against the stored bbox, exact shape unproven)
+- `bbox`   placeholder box at the Revit-stored bounding box (the reader has no usable mesh)
+- `void`   instance with no 3D solid in Revit (void openings, reference families, QTY markers): drawn as an outline, not counted as box-only
 - `line`   curve;  `none` nothing drawable (types, annotations, views...)
-`bboxAgreement` in meta.json / inspector = IoU between our mesh and the Revit-stored bounding box (location accuracy check).
+`bboxAgreement` in meta.json / inspector = IoU between our mesh and the Revit-stored bounding box.
 
-### Fidelity table (tools/regress.py, building-geometry elements only: analytical/reference/room/annotation-like categories excluded)
-`true + matched` (formerly "exact"; the word "exact" is reserved for the reader's ACCURATE definition: volume within 2 % of Revit or bbox IoU >= 0.95, see docs/ACCEPTANCE-STATUS.md) = solid (decoded B-rep) + matched (rebuilt from stored data AND extents agree with the bounding box Revit stored: IoU >= 0.97, or inside it spanning >= 93% of its two largest dimensions); `approximate` = rebuilt but not matching / footprint-only; `box only` = placeholder at the stored bounding box.
-| model | elements | true geometry (B-rep / saved mesh) | parametric, extents match | approximate | box only |
-|---|---|---|---|---|---|
-| residential-2020 | 218 | 93% | 0% | 2% | 6% |
-| structural-2024 | 1371 | 95% | 0% | 0% | 5% |
-| mep-2020 | 6879 | 79% | 20% | 1% | 1% |
-| hvac-2024 | 2630 | 59% | 41% | 0% | 0% |
-| facades-2026 | 523 | 98% | 0% | 1% | 1% |
-Measured 2026-10-12 (afternoon) with the reader's updated mesh path (earlier values in git history). Changes since the previous table: per-body (nid/fid) meshes, flex ducts from their Hermite curves (HVAC box 1% -> 0%), curtain grid lines as lines, joist/beam systems are layout containers without geometry and no longer counted (Structural 1447 -> 1371), MEP re-measured after its class census was rebuilt. Remaining box-only: Rebar (no saved graphics), family instances whose symbol has no graphics, reference points/hubs (see NEEDS-FROM-READER.md section 8). In MEP and HVAC the "parametric" share is ducts and pipes rebuilt from stored curves/sections: extents match Revit's bounding box but the exact shape is unproven.
+### Accuracy vs Revit: the reader's FINAL per-class table (c4-geometry, 2026-10-14)
+Source: ~/rvt-research/NOTES.md section "FINAL per-class / per-year geometry table" and FID_TABLE_FINAL.txt (60 of the 61 gt4 Revit dumps, corpus files 2020-2026, Fine detail first then Medium, <= 400 elements per class per file). Three honest buckets per element:
+- **reader-accurate**: decoded solid with Revit's Volume within 2% (where Revit gives no Volume: bbox IoU >= 0.95 vs the stored bbox; zero-volume sheets/analytical surfaces validated by area + bbox against the oracle)
+- **mesh, unproven** (reader's "true-off"): a mesh exists but the criteria fail
+- **box-only**: no usable mesh, the viewer draws the stored bbox
 
-Walls, floors, ceilings and roofs now use the reader's saved-graphics meshes (they match Revit's volume within 2% for 92-100% of 2020 residential elements vs 57% / 0% for the parametric rebuild, which stays as fallback); doors/windows/trees count as true geometry when the mesh lies inside the stored bounding box. Only the first column is geometry decoded from the file's own faces; "parametric, extents match" (ducts, pipes, walls, floors rebuilt from stored curves/sections) matches Revit's stored bounding box but its exact shape is unproven.
-Family instances now come from the reader's saved-graphics triangle meshes (rvt_geometry 'mesh_approx': planar + cylindrical faces; ruled/revolved/NURBS faces still missing); box-only is what the reader has no saved graphics for. `tools/compare_gt.py` + the viewer's Compare button measure deviation against Revit oracle files (rvt-research/gt_geom). GEOMETRY_API.md reviewed: for every class it covers (walls, floors, ceilings, ducts..., instances as boxes) the API is 'approx'/'box' and the viewer's own builders already include joins, openings, layers and slopes, so nothing was switched to it; `tools/check_api.py FILE` compares both and flags classes where the API becomes 'exact'.
+Excluded (listed in the reader's footers): type/symbol definitions, curtain/stacked wall hosts (geometry is in their panels/mullions), elements with an empty stored bbox, void families, placeholder ids, unplaced rooms.
 
-### Volume vs Revit (tools/verify_gt.py; share within 5% of Revit's Volume)
-| sample | walls | floors | ceilings | roofs |
-|---|---|---|---|---|
-| 2020 MEP | 81% (133) | 100% (21) | 100% (43) | - |
-| 2026 Structural | 68% (56) | 93% (30) | - | - |
-| 2020 Residential | 43% (49) | 100% (6) | 100% (1) | 0% (2, median 1.09) |
-| 2026 Facades | 45% (78) | 100% (1) | - | 80% (5) |
-Walls: butt/miter joins from the stored join lists, hosted door/window/generic-void openings (doors/windows shrunk 0.2 ft per side, fitted on gt4), compound-structure layers, tops joined to roofs follow the roof. Floors: nested loops, stored Revit extent for flat slabs, open B-rep shells not accepted as solid. Weakest group: gable walls joined to roofs.
-Reader API status (GEOMETRY_API.md, rvt_brep.py, new rvt_mesh.py): still no family solids. Wired in: the reader's shell split (rvt_mesh.components) decides which B-rep bodies are closed solids (open shells become approximate); `tools/check_mesh.py` cross-checks its tessellation against ours (18/19 bodies agree on the 2020 MEP sample); `tools/check_api.py` compares API confidence per class.
+| class | n | reader-accurate | mesh, unproven | box-only | median IoU | median abs. volume error |
+|---|---|---|---|---|---|---|
+| FamilyInstance | 14495 | 97.8% | 1.4% | 0.8% | 0.998 | 0.00% |
+| CurveElem (model lines) | 13743 | 99.9% | 0.0% | 0.1% | 1.000 | - |
+| Ducts / pipes / conduits / flex ducts | 11696 | 100% | 0% | 0% | 1.000 | - |
+| SWall (walls) | 2592 | 99.3% | 0.1% | 0.6% | 0.977 | 0.00% |
+| RoomElem | 1605 | 99.4% | 0.6% | 0.0% | 1.000 | 0.00% |
+| Ceiling | 693 | 100% | 0% | 0% | 1.000 | 0.00% |
+| WallSweep | 452 | 100% | 0% | 0% | 1.000 | - |
+| Floor | 442 | 100% | 0% | 0% | 1.000 | 0.00% |
+| BaseRailing | 259 | 100% | 0% | 0% | 0.937 | - |
+| DPart (parts) | 184 | 99.5% | 0.0% | 0.5% | 1.000 | 0.00% |
+| Stairs (+ runs, supports) | 128 | 100% | 0% | 0% | 0.61-1.0 | - |
+| Roofs (ProfileRoof, FaceRoof) | 61 | 100% | 0% | 0% | 1.000 | 0.00% |
+| ContFooting | 52 | 100% | 0% | 0% | 1.000 | 0.00% |
+| Toposolid / SiteSurface / BuildingPad | 79 | 97% | 1% | 1% | 1.000 | 0.00% |
+| SweepHost (fascias, gutters) | 41 | 92.7% | 0.0% | 7.3% | 0.039 | 0.00% |
+| Text3dElem (model text) | 13 | 76.9% | 23.1% | 0.0% | 0.957 | - |
 
-### Acceptance status (ACCEPTANCE.md): per class, per year
-See `docs/ACCEPTANCE-STATUS.md` (regenerate with `tools/accept_table.py` after `tools/accept_all.sh` + `tools/accept_retry.sh`). Caveat: classes whose volume is not measurable in gt4 (rooms, topography...) can show DONE on IoU alone.
+Per year, FamilyInstance is 96-99% reader-accurate (2025/2026: 2% box-only = nested pile/void families); every class with a meaningful population is >= 96% in total. Residuals named by the reader: 2 rooms with zero-width slits, Facades 'Flex' columns 3% low, 3 Residential fascias carry a solid Revit's export lacks, family profile polygons are not stored, texture bitmaps are not in the .rvt (library paths only). Rebar is outside the table (no Volume-bearing graphics): centre-lines vs Revit's GetCenterlineCurves are exact for 346/346 sets (2020 rst_basic), 11/11 (rst_advanced), 12/14 (2024/2026 Structural).
+
+What the viewer adds on top: it draws exactly these reader meshes (per body, per face material), falls back to `param` / `bbox` only where the reader has nothing, and reports its own per-file shares (true / matched / approximate / box) for all 78 corpus files 2017-2026 in docs/SWEEP.md. The older viewer-side acceptance run (docs/ACCEPTANCE-STATUS.md, tools/accept_eval.py) predates the reader's final table and is superseded by it.
 
 ### Provisional constants
-`OPENING_SHRINK` (0.2 ft trimmed from door/window bounding boxes to approximate the real hole) was fitted against Revit volumes in gt4: it is tuning, not modelling. Openings should come from the families' real cut bodies (`m_complexCutGeoms`, already used when a symbol has one); the constant only covers doors/windows without them and will be removed once symbol geometry decodes. `ROOF_ATTACH_FRACTION` is likewise provisional.
-
-### Memory discipline for evaluations
-`tools/accept_all.sh` runs ONE file at a time under a 3.5 GB cap, waits while MemAvailable < 5 GB, and `accept_eval.py` evaluates element by element (no model build, no worker pool, mesh freed after its metrics, aborts above 3.3 GB RSS). Results are streamed to `~/.cache/rvt-viewer/accept/*.json`; finished files are skipped on restart.
+`OPENING_SHRINK` (0.2 ft trimmed from door/window bounding boxes to approximate the real hole) and `ROOF_ATTACH_FRACTION` are tuning for the parametric wall fallback only; walls normally come from the reader's mesh, which already carries the real cut.
 
 ### Safety
-Every conversion runs under `systemd-run --user --scope -p MemoryMax=6G -p MemorySwapMax=0` with nice (cli does it for `open`/`convert`; `tools/capped.sh CMD...` for scripts; RVT_MEM_CAP overrides, RVT_NO_CAP disables).
+Every conversion runs under `systemd-run --user --scope -p MemoryMax=6G -p MemorySwapMax=0` with nice (cli does it for `open`/`convert`; `tools/capped.sh CMD...` for scripts; RVT_MEM_CAP overrides, RVT_NO_CAP disables). Evaluations stream results to disk one file at a time under a cap.
 
-### Coverage per class (current)
-| class | tier | check |
-|---|---|---|
-| walls (straight) | param: reference-face box | IoU 0.94-0.97 |
-| floors / ceilings / pads | param: sketch prism between ref planes | IoU 0.94-0.99 |
-| ducts, pipes, conduits, cable trays | param: sweep along line/arc | IoU 0.99 |
-| stairs runs | solid: planar B-rep | IoU ~0.7 (support included) |
-| family instances (fittings, terminals, equipment, columns, beams, doors, windows, furniture...) | bbox (oriented) | exact AABB |
-| model lines | line | - |
-| roofs, curved walls, flex ducts, topography, railings | bbox | todo |
-
-### Verified against Revit-computed values (tools/verify_gt.py, ground truth = gt4 dumps from real Revit, not from this project)
-Walls: Unconnected Height within 5% for 94-100% of walls, Length within 5% for 89-100%; Volume median ratio 1.00 (openings/joins make 30-70% of walls deviate >5%).
-Floors: Volume within 5% for 87-100% (2020/18, 2026/55, 2026/58). Location check vs Revit's stored bounding box (IoU): ducts 0.99, pipes 0.98, ceilings/cable trays 1.0, floors 0.92-1.0, walls 0.80-0.99 (header box includes hosted sweeps).
-
-### Corpus table (tools/run_all.py; element counts are what the reader decodes)
-| file | elements | drawn | solid | param | approx | bbox | line | tris | build s |
-|---|---|---|---|---|---|---|---|---|---|
-| 2020/18_rst_basic_sample_project | 13853 | 5794 | 8 | 14 | 1 | 1420 | 4351 | 23913 | 2.1 |
-| 2020/20_Residential_Sample_Project | 7277 | 510 | 3 | 62 | 2 | 268 | 175 | 4767 | 0.8 |
-| 2020/21_rst_advanced_sample_project | 13586 | 4737 | 2 | 6 | 0 | 2786 | 1943 | 37515 | 2.3 |
-| 2020/23_rme_advanced_sample_project | 29132 | 10375 | 15 | 1472 | 0 | 6334 | 2554 | 128532 | 5.8 |
-| 2024/42_Snowdon_Towers_Sample_HVAC | 12679 | 2777 | 0 | 1053 | 0 | 1656 | 68 | 32576 | 2.4 |
-| 2024/43_Snowdon_Towers_Sample_Structural | 16571 | 2490 | 2 | 84 | 0 | 1381 | 1023 | 19804 | 2.5 |
-| 2026/54_Snowdon_Towers_Sample_HVAC | 12791 | 2777 | 0 | 1053 | 0 | 1656 | 68 | 32576 | 2.4 |
-| 2026/55_Snowdon_Towers_Sample_Structural | 16678 | 2490 | 2 | 84 | 0 | 1381 | 1023 | 19804 | 2.5 |
-| 2026/57_Snowdon_Towers_Sample_Plumbing | 25837 | 6531 | 0 | 3232 | 0 | 3228 | 71 | 211835 | 5.5 |
-| 2026/58_Snowdon_Towers_Sample_Facades | 9645 | 727 | 0 | 79 | 5 | 451 | 192 | 6628 | 1.4 |
-| 2026/59_Snowdon_Towers_Sample_Site | 11834 | 1635 | 17 | 17 | 0 | 104 | 1497 | 3488 | 2.9 |
-
-Samples 2020/2024/2026, family-heavy (2020 Residential, 2026 Facades) and MEP-heavy (2020 rme_advanced, 2024 HVAC, 2026 Plumbing) all convert and open. More files (2021-2025) converted OK via tools/batch.py, except 2021/24_rst_basic which the reader takes minutes on (reader-side).
+### Corpus table
+All 78 corpus files 2017-2026 convert and pass the functional test: docs/SWEEP.md (tools/sweep.py + tools/sweep_table.py), summary in DEMO.md.
 
 ### Conversion pipeline and timings (remote-host, 2026-10-12; tools/timings.py: each model in its own capped process)
 Stages (progress.json, shown in the UI): reading -> tables (+sqlite) -> preview (boxes, usable immediately) -> geometry (saved-graphics meshes decoded in forked workers, then the remaining builders in forked workers; disk-cached by reader stamp + geometry source) -> packing (meshes + materials).
