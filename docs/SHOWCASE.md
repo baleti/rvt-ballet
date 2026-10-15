@@ -50,3 +50,5 @@ Curved surfaces now shade smooth (per-vertex normals with a 35 degree crease ang
 | blend / blend-var / blend-2026 | rosetta/2024_fam_blend_{base,var}.rte, 2026_fam_blend_base.rte | loft between two profiles: tapered prism, planar faces |
 | sweep-arc-path (+var, 2026) | rosetta/2024_fam_sweep_arc_path_{base,var}.rte, 2026_... | rectangular profile swept along an arc: cylinder faces + planar ends |
 | torus / sphere / cone | rosetta/2024_fam_revolution_*_base.rte | revolved surfaces (revolution + cone faces) |
+
+Visual check (2026-10-15, c5-viewer): torus and arc sweep screenshots (screenshots/showcase/) show smooth curved shading, crisp end faces, nav mode "Revit"; matches the oracle ratios above.

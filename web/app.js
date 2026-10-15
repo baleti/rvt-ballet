@@ -143,7 +143,7 @@ function pickAt(cx, cy) {
   const r = canvas.getBoundingClientRect(); const W = r.width, H = r.height, x = cx - r.left, y = cy - r.top;
   if (x < 0 || y < 0 || x >= W || y >= H) return null;
   const buf = new Uint8Array(4), out = {};
-  world.visible = true; overlay.visible = false; capGroup.visible = false;
+  const wasWorld = world.visible; world.visible = true; overlay.visible = false; capGroup.visible = false;
   const prevBg = scene.background; scene.background = null;
   scene.overrideMaterial = pickMat;
   renderer.setClearColor(0x000000, 0); renderer.setRenderTarget(pickRT);
@@ -153,7 +153,7 @@ function pickAt(cx, cy) {
     renderer.readRenderTargetPixels(pickRT, 0, 0, 1, 1, buf);
     if (pass === 0) out.id = buf[0] + buf[1] * 256 + buf[2] * 65536 - 1; else out.d = (buf[0] + buf[1] * 256 + buf[2] * 65536) / 16777215;
   }
-  camera.clearViewOffset(); renderer.setRenderTarget(null); scene.overrideMaterial = null; scene.background = prevBg; overlay.visible = true; capGroup.visible = true;
+  camera.clearViewOffset(); renderer.setRenderTarget(null); scene.overrideMaterial = null; scene.background = prevBg; overlay.visible = true; capGroup.visible = true; world.visible = wasWorld;
   if (out.id < 0 || out.id >= S.N) return null;
   const ndc = new THREE.Vector3((x + .5) / W * 2 - 1, -((y + .5) / H) * 2 + 1, out.d * 2 - 1);
   camera.updateMatrixWorld(); camera.updateProjectionMatrix();
@@ -1024,3 +1024,7 @@ $('#bCmp').onclick = async () => {
   const home = document.createElement('button'); home.id = 'vhome'; home.textContent = '\u2302'; home.title = 'Home: isometric, fit all'; home.onclick = () => { camera.up.set(0, 1, 0); fitAll(); }; $('#view').appendChild(home);
   controls.addEventListener('change', drawCube); setInterval(drawCube, 400); drawCube(); window.drawCube = drawCube;
 }
+
+// view control (annotations panel, overlay of view-dependent elements): web/viewctl.js
+window.__dirty = () => { dirty = true; }; window.__world = world;
+(async () => { for (let k = 0; k < 4; k++) { try { await import('/viewctl.js' + (k ? '?r=' + k : '')); return; } catch (e) { console.warn('viewctl load attempt ' + k, e); await new Promise(r => setTimeout(r, 600)); } } })();      // retried: a dropped first fetch must not lose the panel
