@@ -53,3 +53,11 @@
 - Robustness: Rust panics fall back to the Python reference (found: refined_volume panic on rme_advanced, NEEDS 17); workers bounded by the memory cap; sweep conversions each in a capped scope.
 - Colour fidelity: sRGB -> linear glTF colours, Prism (Advanced) appearance colours, opaque window frames, MEP category colours, Spaces hidden by default.
 - Tests: functest (server + sheets) per corpus file on remote-host (58/58 non-MEP-advanced files pass so far), uisweep (browser render) 9/9 one model per year 2017-2026.
+
+## 2026-10-15 (c2-viewer, continues c4-viewer)
+- README accuracy section replaced by the reader's FINAL per-class table (three buckets: reader-accurate / mesh-unproven / box-only); stale viewer tables removed. docs/SWEEP.md regenerated (it was stale: rst_basic 2018-2023 are 100% true geometry, not 44% box).
+- 2017 rebar: requested (NEEDS 19), decoded by c2-geometry the same day: 2017 rst_basic 14% box-only -> 0%.
+- Sun shadows: toggle button + key L, sun 50 deg left of the view and 40 deg high, shadow map redrawn only when visibility / section / model change or the view turns > 8 deg (hover/selection do not redraw it); hidden and ghosted elements cast no shadow (custom depth material); section planes clip shadows.
+- c2-rust tip adopted: body_materials skipped when every triangle has a reader material (Residential glb byte-identical, geometry stage 3.3 -> 1.7 s).
+- Share links with `hc=` now refresh the tree checkboxes. demo_smoke.sh picks the model by file name.
+- Checked: tint (common_Tint) is unused in the 3 demo files (one white tint): not worth wiring. 2026 Site converts in 6.9 s on remote-host (the sweep's 41 s was contention).
