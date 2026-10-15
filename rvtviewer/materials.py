@@ -60,7 +60,7 @@ def asset_extras(src):
                 r = {'scale_ft': [d('texture_RealWorldScaleX'), d('texture_RealWorldScaleY')], 'offset_ft': [d('texture_RealWorldOffsetX') or 0.0, d('texture_RealWorldOffsetY') or 0.0],
                      'angle_deg': (props.get('texture_WAngle') or {}).get('m_value') or 0.0, 'prop': p.get('m_sName'),
                      'path': '|'.join(dict.fromkeys(x.replace('\\', '/') for x in str((props.get('unifiedbitmap_Bitmap') or {}).get('m_value') or '').split('|') if x)) or None}
-                nm = str(p.get('m_sName') or ''); r['colour'] = nm.endswith(('diffuse', '_color', '_colour')) or nm == 'opaque_albedo'      # bump / pattern / cutout / reflectance maps are not colour images
+                nm = str(p.get('m_sName') or ''); r['colour'] = nm.endswith(('diffuse', '_color', '_colour')) or nm in ('opaque_albedo', 'metal_f0')      # bump / pattern / cutout / reflectance maps are not colour images
                 if nm in ('generic_diffuse', 'opaque_albedo'): return r
                 if best is None or (r['colour'] and not best['colour']): best = r
         if best is not None and not best['colour']: best = dict(best, path=None)
