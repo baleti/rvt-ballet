@@ -46,33 +46,39 @@ export function patternTexture() {
   return patTex;
 }
 // palette (float RGBA, width = number of materials): row0 = rgb colour + alpha, row1 = texture class, real-world tile size x/y (m), angle (rad),
-// row2 = distinct hash colour (colour-by-material mode), row3 = image layer (0 = none, n = layer n-1 of imageTextures), offset x/y (m)
+// row2 = distinct hash colour (colour-by-material mode), row3 = image layer (0 = none, n = layer n-1 of imageTextures), offset x/y (m),
+// row4 = bump layer (0 = none, n = layer n-1 of bumpTextures), bump tile size x/y (m), relief strength (m), row5 = bump offset x/y (m), bump angle (rad)
 const DEF_FT = {brick: 2.2, concrete: 6, wood: 4, stone: 4, metal: 3, glass: 6, tile: 2, plaster: 8, grass: 4, water: 6, roof: 3, insulation: 3, siding: 4, carpet: 3};
-export function paletteTexture(mats, layers) {
-  const n = Math.max(1, mats.length), D = new Float32Array(n * 4 * 4);
+export function paletteTexture(mats, layers, blayers) {
+  const n = Math.max(1, mats.length), D = new Float32Array(n * 4 * 6);
   mats.forEach((m, i) => {
     D.set([m.rgb[0], m.rgb[1], m.rgb[2], m.alpha], i * 4);
     const cls = Math.max(0, CLASSES.indexOf(m.tex_class)), s = m.tex_scale_ft && m.tex_scale_ft[0] ? m.tex_scale_ft : [DEF_FT[m.tex_class] || 4, DEF_FT[m.tex_class] || 4];
     const mul = m.tex_tile_mul || 1; D.set([cls, s[0] * .3048 * mul, (s[1] || s[0]) * .3048 * mul, (m.tex_angle || 0) * Math.PI / 180], (n + i) * 4);
     const h = (i * 0.61803398875) % 1, c = hsl(h, .62, .52); D.set([c[0], c[1], c[2], 1], (2 * n + i) * 4);
     const o = m.tex_offset_ft || [0, 0]; D.set([layers && layers[i] != null ? layers[i] + 1 : 0, (o[0] || 0) * .3048, (o[1] || 0) * .3048, 0], (3 * n + i) * 4);
+    if (blayers && blayers[i] != null) {                 // Revit *_bump_amount (1 = default) -> height scale 0.02 m per unit of the grey map (tuned visually on the 2020 Residential siding / concrete)
+      const bs = m.bump_scale_ft && m.bump_scale_ft[0] ? m.bump_scale_ft : s, bo = m.bump_offset_ft || [0, 0], amt = Math.min(4, Math.max(.2, m.bump_amount ?? 1));
+      D.set([blayers[i] + 1, bs[0] * .3048 * mul, (bs[1] || bs[0]) * .3048 * mul, .02 * amt], (4 * n + i) * 4);
+      D.set([(bo[0] || 0) * .3048, (bo[1] || 0) * .3048, (m.bump_angle || 0) * Math.PI / 180, 0], (5 * n + i) * 4);
+    }
   });
-  const t = new THREE.DataTexture(D, n, 4, THREE.RGBAFormat, THREE.FloatType); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t;
+  const t = new THREE.DataTexture(D, n, 6, THREE.RGBAFormat, THREE.FloatType); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t;
 }
 // image textures (library bitmaps or Revit's flat swatches, 256 px PNGs from /m/<mid>/tex/<k>.png) -> one RGBA DataArrayTexture; returns {tex, layers: {material k: layer}}
 const IS = 256;
-export async function imageTextures(mid, mats) {
-  const ks = []; mats.forEach((m, k) => { if (m.tex_img) ks.push(k); });
+export async function imageTextures(mid, mats, kind = 'tex') {
+  const ks = []; mats.forEach((m, k) => { if (kind === 'tex' ? m.tex_img : m.bump_img) ks.push(k); });
   const layers = {}, D = new Uint8Array(IS * IS * 4 * Math.max(1, ks.length));
   const cv = document.createElement('canvas'); cv.width = cv.height = IS; const g = cv.getContext('2d', {willReadFrequently: true});
   let L = 0;
   for (const k of ks) {
     try {
-      const im = new Image(); im.src = `/m/${mid}/tex/${k}.png`; await im.decode();
+      const im = new Image(); im.src = `/m/${mid}/${kind}/${k}.png`; await im.decode();
       g.clearRect(0, 0, IS, IS); g.drawImage(im, 0, 0, IS, IS); D.set(g.getImageData(0, 0, IS, IS).data, L * IS * IS * 4); layers[k] = L++;
     } catch (e) { /* missing image: material keeps its colour / procedural pattern */ }
   }
-  const t = new THREE.DataArrayTexture(D, IS, IS, Math.max(1, L)); t.format = THREE.RGBAFormat; t.type = THREE.UnsignedByteType; t.colorSpace = THREE.SRGBColorSpace;
+  const t = new THREE.DataArrayTexture(D, IS, IS, Math.max(1, L)); t.format = THREE.RGBAFormat; t.type = THREE.UnsignedByteType; t.colorSpace = kind === 'tex' ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = true; t.needsUpdate = true;
   return {tex: t, layers};
 }

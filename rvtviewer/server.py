@@ -182,7 +182,7 @@ def make_app(models):
         except Exception: return web.json_response([])
     async def mat_image(req):
         mid, d = mdir(req); kind = req.match_info['kind']; k = req.match_info['k']
-        if kind not in ('swatch', 'tex') or not k.isdigit(): raise web.HTTPNotFound()
+        if kind not in ('swatch', 'tex', 'bump') or not k.isdigit(): raise web.HTTPNotFound()
         fn = os.path.join(d, kind, k + '.png')
         if not os.path.exists(fn): raise web.HTTPNotFound()
         return web.FileResponse(fn, headers={'Cache-Control': 'max-age=3600'})

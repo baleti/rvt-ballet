@@ -64,13 +64,31 @@ def asset_extras(src):
                 if best is None or (r['colour'] and not best['colour']): best = r
         if best is not None and not best['colour']: best = dict(best, path=None)
         return best
+    def bump(a):
+        """the bump map of an appearance asset (generic_bump_map, concrete_bump_map, ...): bitmap path, its own unit-aware real-world scale / offset / angle, and the *_bump_amount"""
+        props = {_ob(p).get('m_sName'): _ob(p) for p in (_ob(a).get('m_aAProperties') or [])}
+        amt = next((float(q['m_value']) for k, q in props.items() if str(k).endswith('bump_amount') and isinstance(q.get('m_value'), (int, float))), None)
+        for nm, p in props.items():
+            if not str(nm).endswith('bump_map'): continue
+            for c in (p.get('m_aConnected') or []):
+                cp = {_ob(q).get('m_sName'): _ob(q) for q in (_ob(c).get('m_aAProperties') or [])}
+                path = '|'.join(dict.fromkeys(x.replace('\\', '/') for x in str((cp.get('unifiedbitmap_Bitmap') or {}).get('m_value') or '').split('|') if x))
+                if not path: continue
+                def d(k):
+                    q = cp.get(k)
+                    return float(q['m_value']) * UNIT_FT.get(q.get('m_unit'), 1.0) if q and isinstance(q.get('m_value'), (int, float)) else None
+                return {'bump_path': path, 'bump_scale_ft': [d('texture_RealWorldScaleX'), d('texture_RealWorldScaleY')], 'bump_offset_ft': [d('texture_RealWorldOffsetX') or 0.0, d('texture_RealWorldOffsetY') or 0.0],
+                        'bump_angle': (cp.get('texture_WAngle') or {}).get('m_value') or 0.0, 'bump_amount': amt}
+        return None
     for eid, r in G.get_ctx(src).recs.items():
         if r['class'] != 'AppearanceAssetElem': continue
         f = _ob(r['fields']); th = _ob(f.get('m_pThumbnail')) if f.get('m_pThumbnail') is not None else None
         png = th.get('m_compressedImage') if isinstance(th, dict) else None
         try: t = tex(_ob(f.get('m_pAppearanceAsset') or {}).get('m_Asset') or {})
         except Exception: t = None
-        out[eid] = {'thumb': bytes(png) if isinstance(png, (bytes, bytearray)) and png[:4] == b'\x89PNG' else None, **(t or {})}
+        try: bm = bump(_ob(f.get('m_pAppearanceAsset') or {}).get('m_Asset') or {})
+        except Exception: bm = None
+        out[eid] = {'thumb': bytes(png) if isinstance(png, (bytes, bytearray)) and png[:4] == b'\x89PNG' else None, **(t or {}), **(bm or {})}
     return out
 
 
@@ -118,8 +136,8 @@ def write_images(outdir, mats, log=print):
         import io
         from PIL import Image
     except Exception as ex: log('no PIL, material images skipped: %r' % ex); return
-    for d in ('swatch', 'tex'): os.makedirs(os.path.join(outdir, d), exist_ok=True)
-    nlib = nsw = 0
+    for d in ('swatch', 'tex', 'bump'): os.makedirs(os.path.join(outdir, d), exist_ok=True)
+    nlib = nsw = nb = 0
     for k, m in enumerate(mats['list']):
         png = mats.get('thumbs', {}).get(m['id'])
         if png:
@@ -135,7 +153,11 @@ def write_images(outdir, mats, log=print):
                 t.save(os.path.join(outdir, 'tex', '%d.png' % k)); m['tex_img'] = 'swatch'; m['tex_tile_mul'] = 2; nsw += 1
                 m['texture_source'] = "Revit's own swatch image stored in the file, tiled at the asset's real-world size " + _fmt_ft(m.get('tex_scale_ft')) + ' (low resolution; the bitmap ' + str(m.get('tex_path')) + ' is not in the .rvt)'
         except Exception as ex: log('texture image %s: %r' % (m.get('name'), ex))
-    log('material images: %d swatches, %d library bitmaps, %d swatch textures' % (sum(1 for m in mats['list'] if m.get('swatch')), nlib, nsw))
+        blib = library_texture(m.get('bump_path')) if m.get('bump_path') else None
+        if blib:                                             # bump (height) map: grey 256 px tile, the shader perturbs the normal with its screen-space gradient
+            try: Image.open(blib).convert('L').resize((256, 256), Image.LANCZOS).save(os.path.join(outdir, 'bump', '%d.png' % k)); m['bump_img'] = True; nb += 1; m['texture_source'] = (m.get('texture_source') or '') + '; bump map ' + str(m['bump_path']).split('|')[0] + ' (local library), amount ' + str(m.get('bump_amount') if m.get('bump_amount') is not None else 1)
+            except Exception as ex: log('bump image %s: %r' % (m.get('name'), ex))
+    log('material images: %d swatches, %d library bitmaps, %d swatch textures, %d bump maps' % (sum(1 for m in mats['list'] if m.get('swatch')), nlib, nsw, nb))
 
 
 def _fmt_ft(s):
@@ -180,7 +202,7 @@ def load(src, log=print):
         rec = {'id': mid, 'name': m.get('name') or str(mid), 'class': m.get('class'), 'category': m.get('category'), 'rgb': [round(c / 255.0, 3) for c in col[:3]], 'alpha': round(1.0 - float(tr), 3),
                'smooth': m.get('smoothness'), 'shin': m.get('shininess'), 'metal': bool(a.get('metal')), 'glossiness': a.get('glossiness'), 'schema': a.get('schema'), 'asset': a.get('name'),
                'tex_class': cls, 'tex_path': (ax.get('path') if 'prop' in ax else tex.get('path')), 'tex_prop': ax.get('prop'), 'tex_colour': bool(ax.get('colour') and ax.get('path')), 'tex_scale_ft': scale[:2] or None, 'tex_angle': ax.get('angle_deg', tex.get('angle')), 'tex_offset_ft': ax.get('offset_ft'),
-               'color_source': csrc,
+               'color_source': csrc, **{k: ax[k] for k in ('bump_path', 'bump_scale_ft', 'bump_offset_ft', 'bump_angle', 'bump_amount') if k in ax},
                'texture_source': ('texture asset ' + str(tex.get('path')) + ' is not stored in the .rvt: built-in procedural "' + cls + '" (fallback)') if tex.get('path') and cls != 'none' else
                                  ('no texture asset: procedural "' + cls + '" chosen from the material name (fallback)' if cls != 'none' else 'no texture')}
         index[mid] = len(out); out.append(rec)

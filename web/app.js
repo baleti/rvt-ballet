@@ -58,7 +58,7 @@ const world = new THREE.Group(); world.renderOrder = 100; scene.add(world);     
 const overlay = new THREE.Group(); scene.add(overlay);
 let selBoxDummy;
 let stateTex, stateData;
-const U = {tState: {value: null}, uMode: {value: 0}, tMat: {value: null}, tPat: {value: null}, tImg: {value: null}, uTex: {value: 1}};
+const U = {tState: {value: null}, uMode: {value: 0}, tMat: {value: null}, tPat: {value: null}, tImg: {value: null}, tBump: {value: null}, uTex: {value: 1}};
 
 function depthMat() {
   const m = new THREE.MeshDepthMaterial({depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide}); m.clipShadows = true;
@@ -74,14 +74,24 @@ let DEPTH_MAT = null;
 function patch(mat) {
   mat.flatShading = true;
   mat.onBeforeCompile = sh => {
-    sh.uniforms.tState = U.tState; sh.uniforms.uMode = U.uMode; sh.uniforms.tMat = U.tMat; sh.uniforms.tPat = U.tPat; sh.uniforms.tImg = U.tImg; sh.uniforms.uTex = U.uTex;
+    sh.uniforms.tState = U.tState; sh.uniforms.uMode = U.uMode; sh.uniforms.tMat = U.tMat; sh.uniforms.tPat = U.tPat; sh.uniforms.tImg = U.tImg; sh.uniforms.tBump = U.tBump; sh.uniforms.uTex = U.uTex;
     sh.vertexShader = 'attribute float _eidx; attribute float _mat; varying float vE; varying float vM; varying vec3 vWP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvE=_eidx; vM=_mat; vWP=(modelMatrix*vec4(transformed,1.)).xyz;');
-    sh.fragmentShader = `varying float vE; varying float vM; varying vec3 vWP; uniform sampler2D tState; uniform sampler2D tMat; uniform highp sampler2DArray tPat; uniform highp sampler2DArray tImg; uniform float uMode; uniform float uTex;
+    sh.fragmentShader = `varying float vE; varying float vM; varying vec3 vWP; uniform sampler2D tState; uniform sampler2D tMat; uniform highp sampler2DArray tPat; uniform highp sampler2DArray tImg; uniform highp sampler2DArray tBump; uniform float uMode; uniform float uTex;
 vec4 fidCol(float f){ if(f<.5) return vec4(.18,.62,.36,1.); if(f<1.5) return vec4(.12,.56,.44,1.); if(f<2.5) return vec4(.42,.76,.29,1.); if(f<3.5) return vec4(.23,.48,.84,1.); if(f<4.5) return vec4(.12,.65,.69,1.); if(f<5.5) return vec4(.82,.54,.16,1.); if(f<6.5) return vec4(.54,.37,.82,1.); return vec4(.5,.5,.5,1.);}
 ` + sh.fragmentShader
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
 float eI = floor(vE+.5); vec4 stt = texelFetch(tState, ivec2(int(mod(eI,${TW}.)), int(eI/${TW}.)), 0);
 float fl = floor(stt.r*255.+.5); if(mod(fl,2.)>.5) discard;`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+{ // bump map (Revit *_bump_map bitmap from the local library): triplanar height, screen-space gradient perturbs the normal (as three.js bumpMap does)
+  float mI = floor(vM+.5); int mi = int(max(mI,0.)); vec4 b4 = texelFetch(tMat, ivec2(mi,4), 0), b5 = texelFetch(tMat, ivec2(mi,5), 0);
+  vec3 nn = normalize(cross(dFdx(vWP), dFdy(vWP))); vec3 ww = pow(abs(nn), vec3(4.)); ww /= (ww.x+ww.y+ww.z+1e-5);
+  float ca = cos(b5.b), sa = sin(b5.b); mat2 R = mat2(ca, sa, -sa, ca); vec2 sc = max(b4.gb, vec2(.02)); float L = max(b4.r-1., 0.);
+  float h = texture(tBump, vec3((R*vWP.zy - b5.rg)/sc, L)).r*ww.x + texture(tBump, vec3((R*vWP.xz - b5.rg)/sc, L)).r*ww.y + texture(tBump, vec3((R*vWP.xy - b5.rg)/sc, L)).r*ww.z;
+  vec2 dh = vec2(dFdx(h), dFdy(h)) * b4.a;
+  if (mI > -.5 && b4.r > .5 && uTex > .5 && uMode < .5) {
+    vec3 sx = dFdx(-vViewPosition), sy = dFdy(-vViewPosition), R1 = cross(sy, normal), R2 = cross(normal, sx); float det = dot(sx, R1);
+    normal = normalize(abs(det) * normal - sign(det) * (dh.x * R1 + dh.y * R2)); } }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
 { float mI = floor(vM+.5); int mi = int(max(mI,0.)); vec4 mp = texelFetch(tMat, ivec2(mi,1), 0); vec4 mq = texelFetch(tMat, ivec2(mi,3), 0); float cls = floor(mp.r+.5); vec2 sc = max(mp.gb, vec2(.05));
   vec3 nn = normalize(cross(dFdx(vWP), dFdy(vWP))); vec3 ww = pow(abs(nn), vec3(4.)); ww /= (ww.x+ww.y+ww.z+1e-5);
@@ -95,7 +105,7 @@ if(mod(floor(fl/8.),2.)>.5){ if(mod(floor(gl_FragCoord.x)+2.*floor(gl_FragCoord.
 if(mod(floor(fl/2.),2.)>.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.,.69,.1), .75);
 else if(mod(floor(fl/4.),2.)>.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.3,.7,1.), .5);`);
   };
-  mat.customProgramCacheKey = () => 'rvtpatch3';
+  mat.customProgramCacheKey = () => 'rvtpatch4';
   return mat;
 }
 
@@ -270,7 +280,9 @@ async function loadModel(mid, opts = {}) {
   try { S.matData = await (await fetch(`/m/${mid}/materials.json`)).json(); } catch (e) { S.matData = null; }
   S.mats = (S.matData && S.matData.materials) || []; U.tMat.value = paletteTexture(S.mats.length ? S.mats : [{rgb: [.7, .7, .7], alpha: 1, tex_class: 'none'}]); U.tPat.value = patternTexture();
   if (!U.tImg.value) { U.tImg.value = new THREE.DataArrayTexture(new Uint8Array(4).fill(128), 1, 1, 1); U.tImg.value.needsUpdate = true; }
-  if (S.mats.some(m => m.tex_img)) imageTextures(mid, S.mats).then(r => { U.tImg.value = r.tex; U.tMat.value = paletteTexture(S.mats, r.layers); dirty = true; }).catch(e => console.warn('image textures', e));
+  if (!U.tBump.value) { U.tBump.value = new THREE.DataArrayTexture(new Uint8Array(4).fill(128), 1, 1, 1); U.tBump.value.needsUpdate = true; }
+  if (S.mats.some(m => m.tex_img || m.bump_img)) Promise.all([S.mats.some(m => m.tex_img) ? imageTextures(mid, S.mats) : null, S.mats.some(m => m.bump_img) ? imageTextures(mid, S.mats, 'bump') : null]).then(([r, rb]) => {
+    if (r) U.tImg.value = r.tex; if (rb) U.tBump.value = rb.tex; U.tMat.value = paletteTexture(S.mats, r && r.layers, rb && rb.layers); dirty = true; }).catch(e => console.warn('image textures', e));
   const gltf = await new GLTFLoader().loadAsync(`/m/${mid}/${(S.meta.phase || 'done') === 'done' ? 'model' : 'preview'}.glb`);
   let tris = 0;
   gltf.scene.traverse(o => {
