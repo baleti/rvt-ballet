@@ -14,8 +14,11 @@ async def main(model_dir, port, gl):
         print('ms/frame approx (rAF cadence):', round(r, 1))
         t = time.time(); await b.drag(700, 500, 900, 560); await asyncio.sleep(0.3)
         pk = await b.ev("(()=>{const t0=performance.now();for(let k=0;k<20;k++)pickAt(700+k*3,500);return (performance.now()-t0)/20})()"); print('ms per GPU pick:', round(pk, 1))
+        rt = await b.ev("""(()=>{const r=window.__renderer,s=window.__scene,c=window.__camera,g=r.getContext(),px=new Uint8Array(4);const t=(n,f)=>{f&&f();r.render(s,c);g.readPixels(0,0,1,1,g.RGBA,g.UNSIGNED_BYTE,px);const t0=performance.now();for(let k=0;k<n;k++){f&&f();r.render(s,c);g.readPixels(0,0,1,1,g.RGBA,g.UNSIGNED_BYTE,px)}return +((performance.now()-t0)/n).toFixed(1)};
+          const plain=t(10), sh=t(5,()=>{r.shadowMap.needsUpdate=true}); document.querySelector('#bSection').click(); const caps=t(10); document.querySelector('#bSection').click(); return JSON.stringify({plain, withShadowUpdate: sh, sectionCaps: caps})})()""")
+        print('ms per synced full render:', rt)
         rs = await b.ev("(()=>{const t0=performance.now();for(let k=0;k<5;k++)refreshState();return (performance.now()-t0)/5})()"); print('ms per refreshState (visibility change):', round(rs, 1))
-        await b.shot('/tmp/claude-1000/-home-user1/c4f1809d-9e26-4d04-b6a8-47d3a195deb1/scratchpad/perf.png')
+        if os.environ.get('PERF_SHOT'): await b.shot(os.environ['PERF_SHOT'])
     finally:
         await b.close(); srv.terminate()
 asyncio.run(main(sys.argv[1], int(sys.argv[2]), sys.argv[3] if len(sys.argv) > 3 else 'swiftshader'))

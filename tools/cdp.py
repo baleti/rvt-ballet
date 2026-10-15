@@ -18,7 +18,8 @@ class Browser:
         self.prof = tempfile.mkdtemp(prefix='rvtv-cdp-')
         args = ['chromium', '--headless=new', '--remote-debugging-port=%d' % self.port, '--user-data-dir=' + self.prof, '--no-first-run', '--window-size=%d,%d' % self.size,
                 '--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--ignore-gpu-blocklist', '--hide-scrollbars', 'about:blank'] if self.gl == 'swiftshader' else \
-               ['chromium', '--headless=new', '--remote-debugging-port=%d' % self.port, '--user-data-dir=' + self.prof, '--no-first-run', '--window-size=%d,%d' % self.size, '--ignore-gpu-blocklist', 'about:blank']
+               ['chromium', '--headless=new', '--remote-debugging-port=%d' % self.port, '--user-data-dir=' + self.prof, '--no-first-run', '--window-size=%d,%d' % self.size, '--ignore-gpu-blocklist'] + \
+               ({'egl': ['--use-angle=gl-egl', '--use-gl=angle'], 'vulkan': ['--use-angle=vulkan', '--enable-features=Vulkan']}.get(self.gl, [])) + ['about:blank']      # real GPU without a window
         args = ['systemd-run', '--user', '--scope', '-q', '-p', 'CPUQuota=300%', '-p', 'MemoryMax=3G', '-p', 'MemorySwapMax=0', 'nice', '-n', '19'] + args[:1] + ['--num-raster-threads=2', '--renderer-process-limit=1'] + args[1:]      # gentle on the daily-driver host: 3 cores, 3 GB, lowest priority
         self.p = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True); _LIVE.add(self)
         for _ in range(100):
