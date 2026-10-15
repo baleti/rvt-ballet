@@ -39,7 +39,7 @@ It converts and caches each model, pre-renders all sheets and views, and prints 
 
 <!-- RESULTS -->
 
-## Functionality test over the whole corpus (2026-10-14, tools/sweep.py + tools/functest.py on remote-host)
+## Functionality test over the whole corpus (2026-10-15, tools/sweep.py + tools/functest.py on remote-host)
 
 **121 / 121 files pass** (convert as `rvt-view` does, then through the real server: valid GLB, materials + swatch images, inspector, search, the sheets plug-in with one sheet SVG and one view SVG). "true geometry" = share of building elements drawn from the file's own geometry (saved graphics / rebar shapes / decoded B-rep); template (.rte) files have almost no model geometry.
 
