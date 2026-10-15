@@ -14,6 +14,7 @@ It converts and caches each model, pre-renders all sheets and views, and prints 
 * **Materials** tab: Revit's own swatch images stored in the file; click a row to isolate where it is used. Click a swatch for colour/texture provenance.
 * Click a window: the inspector shows its parameters, type, IfcGUID, and the geometry badge (saved mesh, surfaces, closed solid).
 * **Section** (box or plane) to cut the house open: cut walls, slabs and furniture are filled dark (poche) like a Revit section; **Measure** with snapping.
+* **Views** tab: click `first floor` (plan) or `building section`: the view opens at Revit's stored cut plane with cut walls / slabs / roof filled dark, like the drawing in Revit. 'close view' returns.
 * **Shadows** (or key L) toggles sun shadows; the sun follows the view so shadows always fall visibly beside objects.
 
 ## 2. The building (2024 Snowdon Towers Structural, 28 MB): scale and structure
