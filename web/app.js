@@ -145,6 +145,7 @@ function initState(N) {
   stateTex = new THREE.DataTexture(stateData, TW, h, THREE.RGBAFormat, THREE.UnsignedByteType);
   stateTex.minFilter = stateTex.magFilter = THREE.NearestFilter; stateTex.needsUpdate = true; U.tState.value = stateTex;
 }
+const NOCAP_CATS = new Set(['Topography', 'Planting', 'Entourage', 'Detail Items', 'Rooms', 'Areas', 'Spaces', 'Mass', 'Site', 'Property Lines']);
 function refreshState() {
   const E = S.meta.elements, N = S.N; let vh = 0;
   for (let i = 0; i < N; i++) {
@@ -154,6 +155,7 @@ function refreshState() {
     else if (S.isolate && !S.isolate.has(i)) f |= S.isoGhost ? 8 : 1;
     if (S.sel.has(i)) f |= 2; else if (i === S.hoverI) f |= 4;
     stateData[i * 4] = f; stateData[i * 4 + 1] = FID.indexOf(el[6]); stateData[i * 4 + 2] = S.devCode ? S.devCode[i] : 0;
+    stateData[i * 4 + 3] = (S.noCap && S.noCap.has(i)) || NOCAP_CATS.has(cat) ? 255 : 0;          // open shells / sheets: excluded from the section-cap parity
     if (f & 9) vh = (vh * 31 + i + 1) | 0;
   }
   stateTex.needsUpdate = true; dirty = true; if (vh !== S.visHash) { S.visHash = vh; shadowDirty = true; }
@@ -256,7 +258,7 @@ async function loadModel(mid, opts = {}) {
     await sleep(700);
   }
   $('#progress').hidden = true;
-  S.meta = meta; const keepSel = opts.keepCamera ? [...S.sel] : [];
+  S.meta = meta; S.noCap = new Set(meta.openBodies || []); const keepSel = opts.keepCamera ? [...S.sel] : [];
   const E = S.meta.elements; S.N = E.length; S.hidden = new Uint8Array(S.N); S.sel = new Set(keepSel); S.isolate = null;
   S.byCat = new Map();
   E.forEach((el, i) => { const c = el[2] || '(no category)'; if (!S.byCat.has(c)) S.byCat.set(c, []); S.byCat.get(c).push(i); });
@@ -673,7 +675,7 @@ function stencilMat() {
     sh.uniforms.tState = U.tState;
     sh.vertexShader = 'attribute float _eidx; varying float vE;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvE=_eidx;');
     sh.fragmentShader = 'varying float vE; uniform sampler2D tState;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
-{ float eI = floor(vE+.5); vec4 stt = texelFetch(tState, ivec2(int(mod(eI,${TW}.)), int(eI/${TW}.)), 0); float fl = floor(stt.r*255.+.5); if(mod(fl,2.)>.5 || mod(floor(fl/8.),2.)>.5) discard; }`);
+{ float eI = floor(vE+.5); vec4 stt = texelFetch(tState, ivec2(int(mod(eI,${TW}.)), int(eI/${TW}.)), 0); float fl = floor(stt.r*255.+.5); if(mod(fl,2.)>.5 || mod(floor(fl/8.),2.)>.5 || stt.a>.5) discard; }`);
   };
   m.customProgramCacheKey = () => 'rvtstencil'; return m;
 }

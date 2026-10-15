@@ -1561,7 +1561,8 @@ def convert(path, outdir, log=print, workers=None):
     db.executemany('update el set fid=?, iou=? where i=?', [(el['fid'], el.get('iou'), el['i']) for el in els if el['fid'] != 'none']); db.commit(); db.close()
     meta = dict(base_meta); meta.update({'phase': 'done', 'batches': bmeta, 'bbox': model_bbox(els), 'coverage': {k: dict(v) for k, v in covg.items()}, 'coverageByClass': {k: dict(v) for k, v in covc.items()},
                                          'bboxAgreement': {k: [round(float(np.mean(v)), 3), len(v)] for k, v in ious.items()}, 'built': time.time(),
-                                         'elements': [[el['id'], el['cls'], el['cat'], el['name'], el['type'], el['level'], el['fid'], el['isType'], el['family'], el['phase']] for el in els]})
+                                         'elements': [[el['id'], el['cls'], el['cat'], el['name'], el['type'], el['level'], el['fid'], el['isType'], el['family'], el['phase']] for el in els],
+                                         'openBodies': [i for i, el in enumerate(els) if any(b_.get('closed') == 'open' for b_ in ((el.get('ginfo') or {}).get('body_list') or []))]})     # not closed solids: no section cap
     T['packing'] = round(time.time() - t, 2); T['total'] = round(time.time() - prog.t0, 2); meta['buildSecs'] = T['total']; meta['timings'] = T
     json.dump(meta, open(os.path.join(outdir, 'meta.json'), 'w'), separators=(',', ':'))
     write_summary(outdir, meta, path)
