@@ -349,7 +349,7 @@ function buildOverlays() {
     e.position.set(c.x, l.elev, c.z); S.lvlGroup.add(e);
     addLabel(`${l.name}  ${l.elev.toFixed(2)} m`, new THREE.Vector3(c.x - w / 2, l.elev, c.z + d / 2), 'lvl', S.lvlGroup);
   }
-  const gm = new THREE.LineBasicMaterial({color: 0x1f8f4f});
+  const gm = S.gridMat = new THREE.LineBasicMaterial({color: 0x1f8f4f});
   for (const g of S.meta.grids) {
     const a = toV(g.pts[0]), b = toV(g.pts[1]); a.y = b.y = mb.min.y;
     S.gridGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), gm));
@@ -873,8 +873,10 @@ function openView(v) {
     controls.target.copy(o); camera.position.copy(o).addScaledVector(d, -size * 0.8);
   }
   camera.near = 0.05; camera.far = size * 20 + 500; camera.updateProjectionMatrix(); controls.update();
+  if (S.lvlGroup) S.lvlGroup.visible = showLvl && v.kind !== 'Plan';          // level outlines seen from above are just lines across a plan
+  if (S.gridMat) { S.gridMat.depthTest = v.kind !== 'Plan'; S.gridMat.needsUpdate = true; S.gridGroup.renderOrder = v.kind === 'Plan' ? 200 : 0; }      // plans draw grids on top, as Revit does
   const vb = $('#viewbar'); vb.hidden = false; vb.innerHTML = `<b>${esc(v.name)}</b> <span class="dim">${esc(v.kind)}${S.viewClip ? ' (cut plane active)' : ''}</span> <button id="vbOff">close view</button>`;
-  $('#vbOff').onclick = () => { S.viewClip = null; vb.hidden = true; S.openView = null; applySection(); fitAll(); };
+  $('#vbOff').onclick = () => { S.viewClip = null; vb.hidden = true; S.openView = null; if (S.lvlGroup) S.lvlGroup.visible = showLvl; if (S.gridMat) { S.gridMat.depthTest = true; S.gridMat.needsUpdate = true; } applySection(); fitAll(); };
   applySection(); dirty = true;
 }
 window.openView = openView;

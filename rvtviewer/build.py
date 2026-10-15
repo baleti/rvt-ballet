@@ -1261,6 +1261,7 @@ def build_grids(ctx):
         pts = None
         if pl and pl[3]:
             o, x, y, env = pl; (u0, v0), (u1, v1) = env
+            if abs(float(np.asarray(x)[2])) > abs(float(np.asarray(y)[2])): x, y, u0, u1, v0 = y, x, v0, v1, u0          # axes stored the other way round (x up, y along the line: 2024 Snowdon grids 1-8)
             pts = np.array([o + x * u0 + y * v0, o + x * u1 + y * v0])
         if pts is None: continue
         out.append({'id': e, 'name': r['fields'].get('m_text', ''), 'pts': [[round(float(a) * 0.3048, 4) for a in p] for p in pts]})
