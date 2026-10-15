@@ -1,12 +1,7 @@
-# HANDOFF (rvt-viewer, c2-viewer) - updated 2026-10-15 (usage limit)
+# HANDOFF (rvt-viewer, c4-viewer) - 2026-10-15
 
-Older notes: HANDOFF-c4-viewer.md. Progress log: PROGRESS.md (2026-10-15 section).
-
-## State
-* master clean, tag `demo-ready` = 4309949 (smoke OK on Residential / Structural / Facades; models prepared for that commit; later commits are docs + tools/perftest/cdp only).
-* Sheets caches go stale on every reader stamp change. Background retry loops (may have ended with the session) warm Structural + Facades + Residential sheets on remote-host: re-run `~/src/rvt-sheets/rvt-sheets warm FILE --remote-host` if `/sheets/api/<mid>/cache.json` says cached:false.
-* remote-host jobs queued by retry loops (check `h1run status`): `vsweep3` (full re-sweep -> `h1run pull .cache/rvt-viewer/sweep.jsonl`, `tools/sweep_table.py`, `tools/demo_table.py`), `vperf` (converts 2023 rme_basic + 2019 Arch_Link into ~/.cache/rvt-viewer/perf/ -> pull, then `tools/perftest.py DIR PORT vulkan` = real Iris Xe headless, no window).
-
-## NEXT (in order)
-1. Prism textures DONE (6e5bb48). Sweep + perf DONE (README). Sheets of Structural / Facades still stale until remote-host has room (`rvt-sheets warm FILE --remote-host`); request to c2-sheets in rvt-sheets HOOKS.md (serve older complete cache).
-2. Brief leftovers: views fidelity vs Revit (plan crop / view range), Prism bump (surface_normal maps), wall/stair polish.
+State: master clean, tag demo-ready = 91eae28 (smoke OK Residential / Structural / Facades, models prepared for this converter).
+Done this session: plan/section/elevation views framed + clipped to stored crop; plan view depth (shader discard uBot); 3D views clip to stored section box; smooth vertex normals (35 deg crease, RVT_SMOOTH=0 disables); Revit navigation (Shift+middle orbit, middle pan, wheel zoom at cursor, dbl middle fit, Alt+left / Alt+Shift+left touchpad fallbacks, right button inert; tools/uitest12.py); rosetta oracle table in docs/SHOWCASE.md (tools/rosetta_dev.py, compare_gt area ratio).
+Background: ~/scratchpad q.sh retry loop queues remote-host job vsweep4 (full 78-file re-sweep, RVT_SWEEP_REDO=1) as soon as remote-host MemAvailable >= 11 GB; when done: h1run pull .cache/rvt-viewer/sweep.jsonl, tools/sweep_table.py, tools/demo_table.py, update DEMO.md table.
+Next: sweep table in DEMO.md; Rust fast path items (NEEDS 12/13/10), material browser polish, per-class fidelity buckets, writer scenes (~/rvt-research/write-lab/scenes) vs Revit: tell c4-writer if we draw what Revit cannot.
+Tests: tools/uitest6/7/11/12.py MODELDIR PORT OUT (PORT 4-digit!), tools/demo_smoke.sh FILE PORT.
