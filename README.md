@@ -27,6 +27,12 @@ First conversion of a big file takes minutes (the reader decodes every record); 
 * `docs/SHOWCASE.md` + `tools/showcase.py`: which file shows which surface type; headless screenshots in screenshots/showcase/ (not committed).
 * Mesh quality check: reader meshes of curved solids whose triangle area disagrees with the analytic area are labelled approximate (torus), see NEEDS-FROM-READER.md section 10.
 
+## Features added 2026-10-15
+* Section caps (poche): a section plane / box or an opened plan view fills the cut solids dark, like a Revit section (stencil parity per clip plane; open shells and sheet-like categories such as topography are excluded via `meta.openBodies`); 'caps' checkbox in the section panel.
+* Sun shadows (Shadows button, key L): the sun follows the view azimuth; the shadow map is redrawn only on visibility / section / model change or a turn of more than 8 deg.
+* Bump maps: Revit `*_bump_map` bitmaps from the local library with their own real-world scale and `*_bump_amount` (2020 Residential: 24 materials, e.g. siding boards, concrete).
+* Fit frames the visible elements; share links with `hc=` refresh the tree.
+
 ## Architecture
     .rvt --(rvt-research reader, rvtviewer/reader.py)--> records, headers, parameters
          --(rvtviewer/build.py + geom.py + brep.py + datums.py)--> element table, meshes per class, levels/grids/rooms/views

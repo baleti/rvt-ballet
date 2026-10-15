@@ -67,3 +67,4 @@
 - convert: OCP / scipy / matplotlib imported in a thread after the quick preview (c2-rust NEEDS 19).
 - Writer scenes: stale saved graphics on copied columns reported to c2-writer (NEEDS-FROM-ORACLE.md).
 - demo-ready = d28ff71 (smoke on all three demo files).
+- Bump maps from the library (24 in Residential), plan views capped correctly (open shells excluded). demo-ready = 56259c3.
