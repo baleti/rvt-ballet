@@ -9,7 +9,7 @@ It converts and caches each model, pre-renders all sheets and views, and prints 
 ## 1. The house (2020 Residential, 10 MB): materials and real geometry
     ~/src/rvt-viewer/bin/rvt-view ~/rvt-research/corpus/2020/20_Residential_Sample_Project.rvt
 * Opens in ~2 s. Say: "a native .rvt, read by our own parser: no Revit, no Autodesk SDK".
-* Orbit (left drag), pan (right drag), zoom (wheel). Untick **Planting** in the Model tree to see the house.
+* Navigation is Revit's: **Shift + middle-drag = orbit**, **middle-drag = pan**, **wheel = zoom at the cursor**, double middle-click = zoom to fit, click the ViewCube to snap to a view; left click selects, right button does nothing. Touchpad without a middle button: **Alt + left-drag = orbit**, **Alt + Shift + left-drag = pan**, two-finger scroll / pinch zooms, key F fits (the toolbar `Nav` box can switch to the classic left-drag orbit). Untick **Planting** in the Model tree to see the house.
 * Point at the stone chimney, the shake roof, the lap siding, the red door, glass and white sash: per-face materials from the file (25/25 sampled elements match Revit's own face materials), texture bitmaps tiled at the material's real-world size.
 * **Materials** tab: Revit's own swatch images stored in the file; click a row to isolate where it is used. Click a swatch for colour/texture provenance.
 * Click a window: the inspector shows its parameters, type, IfcGUID, and the geometry badge (saved mesh, surfaces, closed solid).

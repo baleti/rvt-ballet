@@ -72,6 +72,9 @@ def views_sheets(ctx):
                 v['origin'] = m3(f.get('m_origin')); v['dir'] = d3(f.get('m_viewDir')); v['up'] = d3(f.get('m_vertDir'))
                 pl = g(f, 'm_pCutter', 'm_pPlane')
                 if isinstance(pl, dict) and 'm_origin' in pl: v['cut'] = {'origin': m3(pl['m_origin']), 'normal': d3(np.cross(pl.get('m_xVec', [1, 0, 0]), pl.get('m_yVec', [0, 1, 0])).tolist())}
+                if c == 'DBViewPlan':      # view range (ft): cut plane, view depth (bottom), top clip; "unlimited" is +-1e9
+                    rg = {k: round(float(f[m]) * 0.3048, 4) for k, m in (('cut', 'm_cutPlaneElev'), ('top', 'm_topClipElev'), ('bottom', 'm_bottomClipElev')) if isinstance(f.get(m), (int, float)) and abs(f[m]) < 1e6}
+                    if rg: v['range'] = rg
                 cr = _crop(ctx, f)
                 if cr: v['crop'] = cr
             views.append(v)

@@ -22,9 +22,18 @@ scene.background = new THREE.Color(isDark ? 0x1a1e25 : 0xdfe4ea);
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
 camera.position.set(30, 25, 30);
 const controls = new OrbitControls(camera, canvas);
+// Revit navigation fallbacks, set per press before OrbitControls sees the event (capture phase): Alt+left = orbit, Alt+Shift+left = pan (touchpads without a middle button);
+// double middle-click = zoom to fit (Revit's zoom-extents gesture)
+let lastMid = 0;
+canvas.addEventListener('pointerdown', e => {
+  if (!controls.mouseButtons || (document.getElementById('navSel') || {}).value === 'orbit') return;
+  if (e.button === 0) controls.mouseButtons.LEFT = e.altKey ? THREE.MOUSE.ROTATE : -1;
+  if (e.button === 1) { const t = performance.now(); if (t - lastMid < 450) { e.preventDefault(); window.fitAll && window.fitAll(); } lastMid = t; }
+}, true);
+canvas.addEventListener('auxclick', e => e.preventDefault());
 function setNav(mode) {
   const M = THREE.MOUSE;
-  if (mode === 'revit') { controls.mouseButtons = {LEFT: -1, MIDDLE: M.PAN, RIGHT: M.ROTATE}; controls.zoomToCursor = true; }      // Revit: middle-drag pan, Shift+middle-drag orbit, wheel zooms at the cursor
+  if (mode === 'revit') { controls.mouseButtons = {LEFT: -1, MIDDLE: M.PAN, RIGHT: -1}; controls.zoomToCursor = true; }      // Revit: middle-drag pan, Shift+middle-drag orbit (OrbitControls swaps pan/rotate with Shift), wheel zooms at the cursor, right button does nothing; touchpad: Alt+left-drag orbit, Alt+Shift+left-drag pan (pointerdown hook below), double middle-click fits
   else { controls.mouseButtons = {LEFT: M.ROTATE, MIDDLE: M.DOLLY, RIGHT: M.PAN}; controls.zoomToCursor = false; }
   try { localStorage.setItem('rvtNav', mode); } catch (e) {}
   const sel = document.getElementById('navSel'); if (sel) sel.value = mode;
@@ -58,7 +67,7 @@ const world = new THREE.Group(); world.renderOrder = 100; scene.add(world);     
 const overlay = new THREE.Group(); scene.add(overlay);
 let selBoxDummy;
 let stateTex, stateData;
-const U = {tState: {value: null}, uMode: {value: 0}, tMat: {value: null}, tPat: {value: null}, tImg: {value: null}, tBump: {value: null}, uTex: {value: 1}};
+const U = {tState: {value: null}, uMode: {value: 0}, tMat: {value: null}, tPat: {value: null}, tImg: {value: null}, tBump: {value: null}, uTex: {value: 1}, uBot: {value: -1e9}};
 
 function depthMat() {
   const m = new THREE.MeshDepthMaterial({depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide}); m.clipShadows = true;
@@ -74,14 +83,14 @@ let DEPTH_MAT = null;
 function patch(mat) {
   mat.flatShading = true;
   mat.onBeforeCompile = sh => {
-    sh.uniforms.tState = U.tState; sh.uniforms.uMode = U.uMode; sh.uniforms.tMat = U.tMat; sh.uniforms.tPat = U.tPat; sh.uniforms.tImg = U.tImg; sh.uniforms.tBump = U.tBump; sh.uniforms.uTex = U.uTex;
+    sh.uniforms.tState = U.tState; sh.uniforms.uMode = U.uMode; sh.uniforms.tMat = U.tMat; sh.uniforms.tPat = U.tPat; sh.uniforms.tImg = U.tImg; sh.uniforms.tBump = U.tBump; sh.uniforms.uTex = U.uTex; sh.uniforms.uBot = U.uBot;
     sh.vertexShader = 'attribute float _eidx; attribute float _mat; varying vec3 vNs; varying float vE; varying float vM; varying vec3 vWP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvNs=normalMatrix*normal; vE=_eidx; vM=_mat; vWP=(modelMatrix*vec4(transformed,1.)).xyz;');
-    sh.fragmentShader = `varying vec3 vNs; varying float vE; varying float vM; varying vec3 vWP; uniform sampler2D tState; uniform sampler2D tMat; uniform highp sampler2DArray tPat; uniform highp sampler2DArray tImg; uniform highp sampler2DArray tBump; uniform float uMode; uniform float uTex;
+    sh.fragmentShader = `uniform float uBot; varying vec3 vNs; varying float vE; varying float vM; varying vec3 vWP; uniform sampler2D tState; uniform sampler2D tMat; uniform highp sampler2DArray tPat; uniform highp sampler2DArray tImg; uniform highp sampler2DArray tBump; uniform float uMode; uniform float uTex;
 vec4 fidCol(float f){ if(f<.5) return vec4(.18,.62,.36,1.); if(f<1.5) return vec4(.12,.56,.44,1.); if(f<2.5) return vec4(.42,.76,.29,1.); if(f<3.5) return vec4(.23,.48,.84,1.); if(f<4.5) return vec4(.12,.65,.69,1.); if(f<5.5) return vec4(.82,.54,.16,1.); if(f<6.5) return vec4(.54,.37,.82,1.); return vec4(.5,.5,.5,1.);}
 ` + sh.fragmentShader
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
 float eI = floor(vE+.5); vec4 stt = texelFetch(tState, ivec2(int(mod(eI,${TW}.)), int(eI/${TW}.)), 0);
-float fl = floor(stt.r*255.+.5); if(mod(fl,2.)>.5) discard;`)
+float fl = floor(stt.r*255.+.5); if(mod(fl,2.)>.5 || vWP.y < uBot) discard;`)
       .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
 { float hl = length(vNs); if (hl > .5) { vec3 ns = vNs / hl; normal = dot(ns, normal) < 0. ? -ns : ns; nonPerturbedNormal = normal; } }`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -875,7 +884,7 @@ function cropFrame(crop, axis) {
 function openView(v) {
   if (!v || !v.origin) { $('#status').textContent = 'this view stores no camera/cut plane'; return; }
   const o = toV(v.origin), mb = modelBox(), c = mb.getCenter(new THREE.Vector3()), size = mb.getSize(new THREE.Vector3()).length();
-  S.viewClip = null; S.viewCrop = null; S.openView = v;
+  S.viewClip = null; S.viewCrop = null; S.openView = v; U.uBot.value = -1e9;
   if (v.kind === '3d') {
     const d = dirV(v.dir); camera.position.copy(o); controls.target.copy(o).addScaledVector(d, Math.max(5, size / 4));
     if (v.section_box) {      // the view's stored section box: six clip planes (box basis in revit axes -> three y-up), not capped
@@ -890,6 +899,7 @@ function openView(v) {
     const z = v.cut.origin[2]; S.viewClip = new THREE.Plane(new THREE.Vector3(0, -1, 0), z);
     const cr = v.crop && cropFrame(v.crop, new THREE.Vector3(0, 1, 0));      // the view's active crop region, framed from above like the sheet (whole model when the crop is off, as in Revit)
     const cx = cr ? cr.c.x : c.x, cz = cr ? cr.c.z : c.z, h = cr ? cr.dist : size * 0.9;
+    if (v.range && v.range.bottom != null && v.range.bottom < z) U.uBot.value = v.range.bottom - 0.05;      // view depth: nothing below it is drawn (5 cm slack for slab tops at the level); a shader discard, not a clip plane, so the section caps' stencil parity stays right
     controls.target.set(cx, z, cz); camera.position.set(cx, z + h, cz + 0.001);
   } else if (v.dir) {
     const d = dirV(v.dir); S.viewClip = new THREE.Plane(d.clone(), -d.dot(o));
@@ -901,7 +911,7 @@ function openView(v) {
   if (S.lvlGroup) S.lvlGroup.visible = showLvl && v.kind !== 'Plan';          // level outlines seen from above are just lines across a plan
   if (S.gridMat) { S.gridMat.depthTest = v.kind !== 'Plan'; S.gridMat.needsUpdate = true; S.gridGroup.renderOrder = v.kind === 'Plan' ? 200 : 0; }      // plans draw grids on top, as Revit does
   const vb = $('#viewbar'); vb.hidden = false; vb.innerHTML = `<b>${esc(v.name)}</b> <span class="dim">${esc(v.kind)}${S.viewClip ? ' (cut plane active' + (S.viewCrop ? ', cropped' : '') + ')' : ''}</span> <button id="vbOff">close view</button>`;
-  $('#vbOff').onclick = () => { S.viewClip = null; S.viewCrop = null; vb.hidden = true; S.openView = null; if (S.lvlGroup) S.lvlGroup.visible = showLvl; if (S.gridMat) { S.gridMat.depthTest = true; S.gridMat.needsUpdate = true; } applySection(); fitAll(); };
+  $('#vbOff').onclick = () => { S.viewClip = null; S.viewCrop = null; U.uBot.value = -1e9; vb.hidden = true; S.openView = null; if (S.lvlGroup) S.lvlGroup.visible = showLvl; if (S.gridMat) { S.gridMat.depthTest = true; S.gridMat.needsUpdate = true; } applySection(); fitAll(); };
   applySection(); dirty = true;
 }
 window.openView = openView;
