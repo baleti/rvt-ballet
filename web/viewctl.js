@@ -386,12 +386,12 @@ async function showPicked(h) {
 
 // ------------------------------------------------------------------ scene loading
 const viewQuery = () => { const s = V.state, q = new URLSearchParams(); if (s.scale) q.set('scale', s.scale); if (s.detail) q.set('detail', s.detail); if (s.cut != null) q.set('cut', s.cut / FT); if (s.phase) q.set('phase', s.phase); if (s.pfilter) q.set('phaseFilter', s.pfilter); if (!s.template) q.set('template', 0); if (!s.filters) q.set('filters', 0); return q.toString(); };
-async function loadScene(vid, keepState = false) {
+async function loadScene(vid, refresh = false) {
   V.loading = true; setStatus(`loading view ${vid}...`);
   try {
-    const r = await fetch(`/api/m/${V.mid}/vc/scene/${vid}?${viewQuery()}`);
+    const r = await fetch(`/api/m/${V.mid}/vc/scene/${vid}?${viewQuery()}${refresh ? '&refresh=1' : ''}`);
     const sc = await r.json(); if (sc.error) throw new Error(sc.error);
-    V.vid = vid; makeScene(sc); renderPanel();
+    V.stale = r.headers.get('X-Vc-Stale') === '1'; V.vid = vid; makeScene(sc); renderPanel();
     setStatus(`${sc.view.name}: ${sc.prims.length} primitives, 1:${sc.view.scale} (${sc.seconds}s)`);
   } catch (e) { setStatus('view control: ' + e.message); }
   V.loading = false;
@@ -506,11 +506,12 @@ function renderPanel() {
   <h4>Picked</h4><div id="vcPicked"><span class="dim">click a drawn element</span></div>
   <h4>Presets</h4><div class="r"><select id="vcPre" style="flex:1"><option value="">saved presets</option>${Object.keys(V.presets).sort().map(n => `<option>${esc(n)}</option>`).join('')}</select><button id="vcPreLoad">load</button><button id="vcPreDel">delete</button></div>
   <div class="r"><input type="text" id="vcPreName" placeholder="preset name" style="flex:1"><button id="vcPreSave">save</button><button id="vcExport" title="download this view's settings as JSON">export</button></div>
-  <div id="vcStatus">${esc(V.status || '')}</div>`;
+  <div id="vcStatus">${esc(V.status || '')}</div>${V.stale ? '<div class="dim">drawn by an older drawing-code version (cached) <button id="vcRefresh">redraw now</button></div>' : ''}`;
   const hd = $('#vcHead'); if (hd) hd.onpointerdown = e => { if (e.target.tagName === 'BUTTON') return; const r = p.getBoundingClientRect(), pr = $('#view').getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
     hd.setPointerCapture(e.pointerId); hd.onpointermove = m => { p.style.left = Math.max(0, Math.min(pr.width - 60, m.clientX - pr.left - dx)) + 'px'; p.style.top = Math.max(0, Math.min(pr.height - 30, m.clientY - pr.top - dy)) + 'px'; p.style.right = 'auto';
       try { localStorage['vctl:pos'] = JSON.stringify([p.style.left, p.style.top]); } catch (er) {} }; hd.onpointerup = () => { hd.onpointermove = null; }; };
   const on = (id, fn, ev = 'onchange') => { const e = $('#' + id); if (e) e[ev] = fn; };
+  on('vcRefresh', () => loadScene(V.vid, true), 'onclick');
   on('vcOff', () => closeVC(), 'onclick');
   on('vcView', e => { const v = +$('#vcView').value; if (v) openVC(v); });
   const redraw = () => { saveLocal(); loadScene(V.vid); };

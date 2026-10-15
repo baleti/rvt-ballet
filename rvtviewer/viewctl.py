@@ -50,17 +50,22 @@ def register(app, ctx):
         if src not in procs: procs[src] = Proc(src)
         return procs[src], src
 
-    async def run(mid, req, use_cache):
+    async def run(mid, req, use_cache, refresh=False):
+        """-> (body bytes, stale). Cache hit for the current drawing code; else the newest cache of the same request (stale = True) unless refresh; else the worker draws it."""
         pr, src = proc(mid)
         fn = vcache.cache_fn(src, req) if use_cache else None
-        if fn and os.path.exists(fn): return open(fn, 'rb').read()
+        if fn and os.path.exists(fn): return open(fn, 'rb').read(), False
+        if fn and not refresh:
+            old = vcache.best_fn(src, req)
+            if old: return open(old, 'rb').read(), True
         line = await asyncio.get_running_loop().run_in_executor(None, pr.call, req)
         if fn and '"error"' not in line[:20]:
             os.makedirs(CACHE, exist_ok=True); tmp = fn + '.tmp%d' % os.getpid(); open(tmp, 'w').write(line); os.replace(tmp, fn)
-        return line.encode()
+        return line.encode(), False
 
     async def views(req):
-        return web.Response(body=await run(req.match_info['mid'], {'op': 'views'}, True), content_type='application/json')
+        body, stale = await run(req.match_info['mid'], {'op': 'views'}, True)
+        return web.Response(body=body, content_type='application/json')
 
     async def scene(req):
         q = req.query; r = {'op': 'scene', 'view': int(req.match_info['vid'])}
@@ -71,13 +76,14 @@ def register(app, ctx):
         if q.get('phaseFilter'): r['phaseFilter'] = int(q['phaseFilter'])
         if q.get('template') == '0': r['template'] = False
         if q.get('filters') == '0': r['filters'] = False
-        try: body = await run(req.match_info['mid'], r, True)
+        try: body, stale = await run(req.match_info['mid'], r, True, q.get('refresh') == '1')
         except web.HTTPException: raise
         except Exception as ex: return web.json_response({'error': str(ex)}, status=500)
-        return web.Response(body=body, content_type='application/json')
+        return web.Response(body=body, content_type='application/json', headers={'X-Vc-Stale': '1' if stale else '0'})
 
     async def element(req):
-        return web.Response(body=await run(req.match_info['mid'], {'op': 'element', 'id': int(req.match_info['eid'])}, True), content_type='application/json')
+        body, stale = await run(req.match_info['mid'], {'op': 'element', 'id': int(req.match_info['eid'])}, True)
+        return web.Response(body=body, content_type='application/json')
 
     async def presets_get(req):
         try: return web.json_response(json.load(open(PRESETS)))
