@@ -14,6 +14,7 @@ It converts and caches each model, pre-renders all sheets and views, and prints 
 * **Materials** tab: Revit's own swatch images stored in the file; click a row to isolate where it is used. Click a swatch for colour/texture provenance.
 * Click a window: the inspector shows its parameters, type, IfcGUID, and the geometry badge (saved mesh, surfaces, closed solid).
 * **Section** (box or plane) to cut the house open; **Measure** with snapping.
+* **Shadows** (or key L) toggles sun shadows; the sun follows the view so shadows always fall visibly beside objects.
 
 ## 2. The building (2024 Snowdon Towers Structural, 28 MB): scale and structure
     ~/src/rvt-viewer/bin/rvt-view ~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt --sheets
