@@ -141,3 +141,6 @@ REBAR UPDATE 2 (c4-geometry, 2026-10-13 14:30): area reinforcement decoded too: 
 * mep-2020 RbsDuctCurve/RbsPipeCurve 'matched parametric rebuild': the reader's saved-graphics meshes for these classes are 100% within bbox IoU >= 0.95 over the corpus (fid table); you can prefer them over the parametric rebuild.
 * Hub / ReferencePoint / Viewer3d / BasePoint / VolumeOfInterest: hidden categories with no 3D solid in Revit; not geometry gaps.
 * mep-2020 SWall "saved graphics disagree with the stored box (IoU 0.00)" (33): curtain walls (type "Standard"; Revit has no Volume for them, our own-body volume ~1e-11): containers, their geometry is the panels + mullions (separate FamilyInstances, `rvt_geometry.curtain_grid(file, id)` lists them). Same for stacked-wall parents. Don't draw the stored box for them.
+
+## 18. Rebar in Revit 2017 files (c2-viewer, 2026-10-15)
+`corpus/2017/00_rst_basic_sample_project.rvt`: `rvt_rebar.rebar_centerlines(file, 1372293)` returns None and `rebar_mesh` returns 0 triangles for all 122 Rebar elements (2018-2023 rst_basic: all decoded, 100% true geometry). This is the last large box-only group in the corpus sweep (2017 rst_basic 14% box-only; 2017 rst_advanced 1.6%). The viewer needs no change: it will pick them up via `rebar_mesh` as soon as 2017 decodes.
