@@ -1158,7 +1158,7 @@ def prefetch_reader_meshes(ctx, els, prog=None, on_partial=None):
                     account(e, r)
     ctx._rm = out
 
-CONTAINER_CLASSES = {'JoistSystem', 'BeamSystem', 'ElementGroup', 'GStyleElem', 'RebarSystem'}          # layout containers: zero-height bbox, no graphics of their own (the members are separate FamilyInstances)
+CONTAINER_CLASSES = {'JoistSystem', 'BeamSystem', 'ElementGroup', 'GStyleElem', 'RebarSystem', 'CategoryElem'}          # layout containers: zero-height bbox, no graphics of their own (the members are separate FamilyInstances); CategoryElem = Revit's category object (2020 Residential: id 229 'Walls' carries a foundation wall's bbox, its box z-fought the wall)
 
 LAYERED_CLASSES = {'SWall', 'ArcWall', 'Floor', 'Ceiling', 'ProfileRoof', 'FootPrintRoof', 'RoofSoffit', 'BuildingPad'}
 
@@ -1273,7 +1273,7 @@ def write_quick_preview(outdir, q, path):
     names = reader.category_names(); els = []; res = []
     for eid, v in q['elements'].items():
         bb = v.get('bbox')
-        if not bb or v.get('category') in (None, -1) or str(v['class']).endswith('Symbol'): continue
+        if not bb or v.get('category') in (None, -1) or str(v['class']).endswith('Symbol') or v['class'] in CONTAINER_CLASSES: continue
         lo, hi = np.array(bb[0], float), np.array(bb[1], float)
         if np.any(hi < lo): continue
         i = len(els); els.append({'id': int(eid), 'cls': v['class'], 'cat': names.get(str(v['category'])) or 'Category %s' % v['category'], 'name': '', 'type': '', 'level': None, 'fid': 'none', 'isType': False, 'family': '', 'phase': -1, 'bb': [lo, hi], 'i': i})
@@ -1523,7 +1523,7 @@ def convert(path, outdir, log=print, workers=None):
     prog.set('preview', 0.0, 'writing box preview')
     t = time.time(); pres = []
     for i, el in enumerate(els):
-        if el['cat'] and not el['isType'] and el['bb'] is not None: pres.append((i, 'bbox', 'tri', [(geom.box(*el['bb']).v, geom.box(*el['bb']).f, None)]))
+        if el['cat'] and not el['isType'] and el['bb'] is not None and el.get('cls') not in CONTAINER_CLASSES: pres.append((i, 'bbox', 'tri', [(geom.box(*el['bb']).v, geom.box(*el['bb']).f, None)]))
     pels = [dict(e) for e in els]
     pb, pm, pcovg, _, _ = pack_batches(pels, pres, mats=ctx.mats)
     glb.write_glb(os.path.join(outdir, 'preview.glb'), pb)
