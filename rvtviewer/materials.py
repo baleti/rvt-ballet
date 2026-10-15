@@ -47,6 +47,7 @@ def asset_extras(src):
     def tex(a):
         """first connected bitmap asset of the diffuse property (else of any property) -> its unit-aware scale / offset / angle"""
         best = None
+        prism = str(next((_ob(q).get('m_value') for q in (_ob(a).get('m_aAProperties') or []) if _ob(q).get('m_sName') == 'BaseSchema'), '')).startswith('Prism')
         for p in (_ob(a).get('m_aAProperties') or []):
             p = _ob(p)
             for c in (p.get('m_aConnected') or []):
@@ -55,12 +56,12 @@ def asset_extras(src):
                 def d(k):
                     q = props.get(k)
                     if not q or not isinstance(q.get('m_value'), (int, float)): return None
-                    return float(q['m_value']) * UNIT_FT.get(q.get('m_unit'), 1.0)
+                    return float(q['m_value']) * (1.0 / 12.0 if (prism and q.get('m_unit') is None) else UNIT_FT.get(q.get('m_unit'), 1.0))      # Prism maps store no unit: inches (brick_running 32 x 30 = 12 courses)
                 r = {'scale_ft': [d('texture_RealWorldScaleX'), d('texture_RealWorldScaleY')], 'offset_ft': [d('texture_RealWorldOffsetX') or 0.0, d('texture_RealWorldOffsetY') or 0.0],
                      'angle_deg': (props.get('texture_WAngle') or {}).get('m_value') or 0.0, 'prop': p.get('m_sName'),
                      'path': '|'.join(dict.fromkeys(x.replace('\\', '/') for x in str((props.get('unifiedbitmap_Bitmap') or {}).get('m_value') or '').split('|') if x)) or None}
-                nm = str(p.get('m_sName') or ''); r['colour'] = nm.endswith(('diffuse', '_color', '_colour'))      # bump / pattern / cutout maps are not colour images
-                if nm == 'generic_diffuse': return r
+                nm = str(p.get('m_sName') or ''); r['colour'] = nm.endswith(('diffuse', '_color', '_colour')) or nm == 'opaque_albedo'      # bump / pattern / cutout / reflectance maps are not colour images
+                if nm in ('generic_diffuse', 'opaque_albedo'): return r
                 if best is None or (r['colour'] and not best['colour']): best = r
         if best is not None and not best['colour']: best = dict(best, path=None)
         return best
