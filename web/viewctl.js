@@ -563,3 +563,14 @@ setInterval(() => { if (V.on && V.mid !== S.mid) { closeVC(); } }, 1000);
   await toggle(); const pn = q.get('vcp');
   await openVC(vid, pn && V.presets[pn] ? V.presets[pn] : null);
 })();
+
+// Views tab: an 'annotations' link on every plan / section row opens the view with its view-dependent elements
+new MutationObserver(() => {
+  document.querySelectorAll('#tabbody [data-vk]:not([data-vc])').forEach(row => {
+    row.dataset.vc = 1; const v = (S.meta.views || [])[+row.dataset.vk];
+    if (!v || !v.origin || !/^(plan|section|elevation)$/i.test(v.kind || '') || !row.firstElementChild) return;
+    const a = document.createElement('a'); a.href = '#'; a.className = 'drawlink'; a.textContent = 'annotations'; a.title = 'open with the view-dependent elements (tags, text, grids...) and the view control panel';
+    a.style.marginLeft = '6px'; a.onclick = async e => { e.preventDefault(); e.stopPropagation(); if (!V.on) await toggle(); openVC(v.id); };
+    row.firstElementChild.appendChild(a);
+  });
+}).observe($('#tabbody'), {childList: true, subtree: true});
