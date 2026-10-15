@@ -16,7 +16,7 @@ const LAYER_LABEL = {cut: 'Cut linework', projection: 'Projection linework', und
   surface_fill: 'Surface hatches', room_fill: 'Room fills', mask: 'Masking regions', annotation: 'Annotation symbols', annotation_fill: 'Annotation fills', text: 'Text', datum: 'Grids and levels'};
 const SCALES = [1, 5, 10, 20, 25, 50, 75, 96, 100, 200, 240, 500];
 
-const DEFAULT_STATE = () => ({scale: null, detail: null, cut: null, phase: null, pfilter: null, template: true, filters: true, crop: true, layers: {}, cats: {}, elems: {}, classes: {}, textOn: true, textSize: 1, font: '', textColor: '',
+const DEFAULT_STATE = () => ({scale: null, detail: null, cut: null, phase: null, pfilter: null, template: true, filters: true, crop: true, layers: {}, cats: {}, elems: {}, classes: {}, parts: {}, annoScale: 1, textOn: true, textSize: 1, font: '', textColor: '',
   lineScale: 1, minPx: 1, model: true, lift: 0.02, onTop: true, opacity: 1, contrast: true, halo: false});
 const V = {mid: null, vid: null, sc: null, group: null, state: DEFAULT_STATE(), sel: null, views: [], loading: false, presets: {}};
 window.__vc = V;
@@ -56,6 +56,10 @@ const fillMat = new THREE.ShaderMaterial({
 
 // ------------------------------------------------------------------ geometry from primitives
 const rgb = c => (c && c.length >= 3) ? [c[0] / 255, c[1] / 255, c[2] / 255] : [0, 0, 0];
+function anchorUV(view, a) {
+  const o = view.origin, d = [a[0] - o[0], a[1] - o[1], (a[2] ?? o[2]) - o[2]], dot = (u, v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+  return [dot(d, view.right), dot(d, view.up)];
+}
 const hex2rgb = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
 const lum = c => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 
@@ -101,11 +105,13 @@ function build(sc) {
   sc.prims.forEach((p, pi) => {
     const eid = p.elem, layer = p.layer || 'x', e = sc.elements[eid] || {};
     const cat = p.cat != null ? p.cat : e.cat;
-    meta[pi] = {eid, cat, layer, cls: e.cls, t: p.t, clip: MODEL_LAYERS.has(layer) ? 1 : 0};
+    meta[pi] = {eid, cat, layer, cls: e.cls, t: p.t, part: p.part, clip: MODEL_LAYERS.has(layer) ? 1 : 0};
     lyrs.add(layer);
     const st = p.style || {w: 0.18, rgb: [0, 0, 0]}, pat = st.dash && st.dash.length ? st.dash.map(x => Math.max(x * mpmm, 1e-4)) : null;
+    const k = V.state.annoScale || 1, an = k !== 1 && p.paper && p.anchor && sc.view.right ? anchorUV(sc.view, p.anchor) : null;
+    const sx = q => an ? [(an[0] + (q[0] - an[0]) * k), (an[1] + (q[1] - an[1]) * k)] : q;
     const addPoly = pts => {
-      const P = pts.map(q => [q[0] * FT, q[1] * FT]);
+      const P = pts.map(q => { const r = sx(q); return [r[0] * FT, r[1] * FT]; });
       if (pat) for (const [a, b] of dashed(P, pat)) segs.push({a, b, p: pi});
       else for (let i = 0; i + 1 < P.length; i++) segs.push({a: P[i], b: P[i + 1], p: pi});
     };
@@ -227,6 +233,7 @@ function primVisible(m) {
   if (e && e.parent != null && st.cats[catKey(e.parent)]?.vis === false) return false;
   if (m.eid != null && st.elems[m.eid]?.vis === false) return false;
   if (m.cls && st.classes[m.cls] === false) return false;
+  if (m.part && st.parts[m.part] === false) return false;
   if (m.t === 'text' && !st.textOn) return false;
   return true;
 }
@@ -437,6 +444,9 @@ function renderTree() {
       if (subs.length) h += '<div class="ind">' + subs.sort((a, b) => String(a[1].name).localeCompare(String(b[1].name))).map(([k, c]) => rowOf('c' + k, c.name || '(no category)', Object.assign({n: c.elems.length}, st.cats[k] || {})).replace('class="vcrow"', `class="vcrow" data-cat="${k}"`)).join('') + '</div>';
       return h;
     }).join('');
+  } else if (mode === 'part') {
+    const cnt = {}; sc.prims.forEach(p => cnt[p.part || 'line'] = (cnt[p.part || 'line'] || 0) + 1);
+    html = Object.keys(cnt).sort().map(l => `<div class="vcrow" data-part="${esc(l)}"><input type="checkbox" ${st.parts[l] !== false ? 'checked' : ''} data-a="part"><span class="nm">${esc(l)}</span><span class="cnt">${cnt[l]}</span></div>`).join('');
   } else if (mode === 'type') {
     const cls = {}; for (const e of Object.values(sc.elements)) cls[e.cls] = (cls[e.cls] || 0) + 1;
     html = Object.entries(cls).sort().map(([c, n]) => `<div class="vcrow" data-cls="${esc(c)}"><input type="checkbox" ${st.classes[c] !== false ? 'checked' : ''} data-a="cls"><span class="nm">${esc(c)}</span><span class="cnt">${n}</span></div>`).join('');
@@ -451,6 +461,7 @@ function renderTree() {
     inp[ev] = () => {
       if (a === 'layer') st.layers[row.dataset.l] = inp.checked;
       else if (a === 'cls') st.classes[row.dataset.cls] = inp.checked;
+      else if (a === 'part') st.parts[row.dataset.part] = inp.checked;
       else if (a === 'el') (st.elems[row.dataset.eid] ||= {}).vis = inp.checked;
       else if (a === 'elcolor') (st.elems[row.dataset.eid] ||= {}).color = inp.value;
       else { const k = row.dataset.cat, o = (st.cats[k] ||= {});
@@ -480,11 +491,11 @@ function renderPanel() {
   <div class="r"><label>Apply</label><label class="chk"><input type="checkbox" id="vcTpl" ${st.template ? 'checked' : ''}> view template</label><label class="chk"><input type="checkbox" id="vcFil" ${st.filters ? 'checked' : ''}> filters</label></div>
   <h4>Display (instant)</h4>
   <div class="r"><label>Crop region</label><input type="checkbox" id="vcCrop" ${st.crop ? 'checked' : ''}><span class="dim">${sc && sc.view.crop_uv ? 'model content only' : 'no stored crop'}</span></div>
-  <div class="r"><label>Text</label><input type="checkbox" id="vcText" ${st.textOn ? 'checked' : ''}> size &times;<input type="number" id="vcTS" step="0.1" min="0.1" value="${st.textSize}"> <input type="text" id="vcFont" placeholder="font" value="${esc(st.font)}" style="width:80px"></div>
+  <div class="r"><label>Text</label><input type="checkbox" id="vcText" ${st.textOn ? 'checked' : ''}> size &times;<input type="number" id="vcTS" step="0.1" min="0.1" value="${st.textSize}"> symbols &times;<input type="number" id="vcAS" step="0.1" min="0.1" value="${st.annoScale}" title="annotation symbol size about their anchor (instant); use Annotation scale for the exact re-draw"> <input type="text" id="vcFont" placeholder="font" value="${esc(st.font)}" style="width:80px"></div>
   <div class="r"><label>Line weight &times;</label><input type="number" id="vcLS" step="0.25" min="0" value="${st.lineScale}"> min px<input type="number" id="vcMP" step="0.5" min="0" value="${st.minPx}"></div>
   <div class="r"><label>3D model</label><input type="checkbox" id="vcModel" ${st.model ? 'checked' : ''}><span class="dim">show the model under the drawing</span></div>
   <div class="r"><label>Placement</label><label class="chk"><input type="checkbox" id="vcTop" ${st.onTop ? 'checked' : ''}> on top</label> lift<input type="number" id="vcLift" step="0.05" value="${st.lift}" title="metres along the view normal"> &alpha;<input type="number" id="vcOp" step="0.1" min="0" max="1" value="${st.opacity}"></div>
-  <h4>Visibility <span class="sp"></span><span class="chk" style="gap:2px"><button data-m="cat" class="${(V.treeMode || 'cat') === 'cat' ? 'on' : ''}">category</button><button data-m="layer" class="${V.treeMode === 'layer' ? 'on' : ''}">layer</button><button data-m="type" class="${V.treeMode === 'type' ? 'on' : ''}">type</button><button data-m="el" class="${V.treeMode === 'el' ? 'on' : ''}">element</button></span></h4>
+  <h4>Visibility <span class="sp"></span><span class="chk" style="gap:2px"><button data-m="cat" class="${(V.treeMode || 'cat') === 'cat' ? 'on' : ''}">category</button><button data-m="layer" class="${V.treeMode === 'layer' ? 'on' : ''}">layer</button><button data-m="type" class="${V.treeMode === 'type' ? 'on' : ''}">type</button><button data-m="part" class="${V.treeMode === 'part' ? 'on' : ''}" title="leaders, witness lines, arrows, heads...">part</button><button data-m="el" class="${V.treeMode === 'el' ? 'on' : ''}">element</button></span></h4>
   ${V.treeMode === 'el' ? '<input type="text" id="vcQ" placeholder="filter id / class / category" style="width:100%;margin-bottom:3px">' : ''}
   <div class="vctree" id="vcTree"></div>
   <div class="vcbtns"><button id="vcAllOn">all on</button><button id="vcAnnOff">annotations off</button><button id="vcModelOff">linework off</button><button id="vcResetAll">reset all</button></div>
@@ -509,10 +520,10 @@ function renderPanel() {
   on('vcFil', () => { st.filters = $('#vcFil').checked; redraw(); });
   const inst = (id, fn) => on(id, () => { fn($('#' + id)); saveLocal(); applyStyles(); });
   inst('vcCrop', e => st.crop = e.checked); inst('vcText', e => st.textOn = e.checked); inst('vcTS', e => st.textSize = +e.value || 1); inst('vcFont', e => { st.font = e.value; if (V.sc) makeScene(V.sc); });
-  inst('vcModel', e => st.model = e.checked); inst('vcLS', e => st.lineScale = +e.value); inst('vcMP', e => st.minPx = +e.value); inst('vcTop', e => st.onTop = e.checked); inst('vcLift', e => st.lift = +e.value); inst('vcOp', e => st.opacity = +e.value);
+  inst('vcModel', e => st.model = e.checked); on('vcAS', () => { st.annoScale = +$('#vcAS').value || 1; saveLocal(); if (V.sc) makeScene(V.sc); }); inst('vcLS', e => st.lineScale = +e.value); inst('vcMP', e => st.minPx = +e.value); inst('vcTop', e => st.onTop = e.checked); inst('vcLift', e => st.lift = +e.value); inst('vcOp', e => st.opacity = +e.value);
   p.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { V.treeMode = b.dataset.m; renderPanel(); });
   on('vcQ', () => renderTree(), 'oninput');
-  on('vcAllOn', () => { st.layers = {}; st.cats = {}; st.elems = {}; st.classes = {}; st.textOn = true; applyStyles(); saveLocal(); renderPanel(); }, 'onclick');
+  on('vcAllOn', () => { st.parts = {}; st.layers = {}; st.cats = {}; st.elems = {}; st.classes = {}; st.textOn = true; applyStyles(); saveLocal(); renderPanel(); }, 'onclick');
   on('vcAnnOff', () => { ['annotation', 'text', 'datum', 'annotation_fill'].forEach(l => st.layers[l] = false); applyStyles(); saveLocal(); renderPanel(); }, 'onclick');
   on('vcModelOff', () => { [...MODEL_LAYERS].forEach(l => st.layers[l] = false); applyStyles(); saveLocal(); renderPanel(); }, 'onclick');
   on('vcResetAll', () => { const keep = {scale: st.scale, detail: st.detail}; V.state = Object.assign(DEFAULT_STATE(), keep); saveLocal(); loadScene(V.vid); }, 'onclick');

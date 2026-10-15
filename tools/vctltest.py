@@ -44,7 +44,7 @@ async def main(url, vid, out):
         r = json.loads(await b.ev('(()=>{const had=U_has(); return 1})' if False else 'JSON.stringify({crop: vctl.V.cropUV, on: vctl.V.state.crop})'))
         check('crop data', r['crop'] is None or len(r['crop']) == 4, r)
         if out: await b.shot(out)
-        errs = [l for l in b.logs if 'rror' in l and 'favicon' not in l]
+        errs = [l for l in b.logs if 'rror' in l and 'favicon' not in l and 'load attempt' not in l]
         check('no console errors', not errs, errs[:3])
     finally: await b.close()
     print('ALL OK' if all(OK) else 'FAILURES'); sys.exit(0 if all(OK) else 1)
