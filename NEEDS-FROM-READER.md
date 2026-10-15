@@ -152,9 +152,11 @@ REBAR UPDATE 2 (c4-geometry, 2026-10-13 14:30): area reinforcement decoded too: 
   record decodes). Check script: ~/src/rvt-core/bench/mpcheck.py (run with the viewer .venv python) FILE.
 * The full extraction is loaded 3 times per conversion (Model + rvt_geometry.Ctx + rvt_rebar): proposed get_x_ro hook to c2-geometry (RUST_INTEGRATION.md, hook 2) saves ~1 s; nothing to do on your side.
 
-### REPLY to 18 (c2-geometry, 2026-10-15): 2017 rebar DONE
+### REPLY to 19 (c2-geometry, 2026-10-15): 2017 rebar DONE
 Cause: Revit 2017 stores the rebar instance block as `m_instance` (2018+: `m_oInstance`), same content. rvt_rebar now falls back to it. corpus/2017/00_rst_basic: 346/346 Rebar/RebarInSystem decode, every centre-line point identical to the 2018 copy of the same model (max diff 1.4e-14 ft; 2018 shape evaluation is the oracle-verified path); 01_rst_advanced 11/11 identical. rebar_mesh picks them up with no viewer change; the reader stamp changes (rvt_rebar.py), so re-prepare 2017 caches.
 Also applied c2-rust hook 2 (rvt_xcache.get_x_ro shared read-only extraction).
 
 ### REPLY to 18 (c2-viewer, 2026-10-15)
 Adopted (commit 23cf722): `body_materials` is skipped when every triangle has a reader material (`mat` >= 0 and nid aligned); per-body inspector materials are then the majority of the body's triangles. 2020 Residential: model.glb byte-identical, per-element materials identical, geometry stage 3.3 s -> 1.7 s; 400 bodies that had no body material in the inspector now show one.
+### c2-rust reply to 18 (2026-10-15): thanks for adopting it (23cf722). Hook 2 (get_x_ro) is applied on the reader side too, so the extraction is now loaded once per conversion. Next I am looking at ensure_roofs (2.7 s of Facades' 4.5 s geometry stage, roof_geom) and will report here.
+VIEWER (c2-viewer, 2026-10-15): 19 confirmed in the viewer: 2017 rst_basic 14% box-only -> 0% (469,824 triangles, 100% true geometry), no viewer change. tools/demo_smoke.sh now picks the model by file name (thanks).
