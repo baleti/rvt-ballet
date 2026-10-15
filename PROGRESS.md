@@ -73,3 +73,8 @@
 - Asked c2-sheets (rvt-sheets HOOKS.md) to serve the newest older complete sheets cache after reader changes.
 - 2026-10-15 (c4-viewer): plan/section/elevation views framed + clipped to the stored crop region; 3D views clip to stored section box; sheets badge notes stale. NEXT: rerun --prepare + smoke before re-tagging demo-ready (sheets warm on remote-host failed: remote-host memory).
 - 2026-10-15 (c4-viewer): smooth vertex normals (35 deg crease; RVT_SMOOTH=0 disables), rosetta oracle table in docs/SHOWCASE.md (volume/area ratios 0.985-1.0), compare_gt area ratio. demo-ready re-smoked.
+
+## 2026-10-15 c5-viewer
+* Task B re-verified: tools/uitest12.py (real input events) ALL OK on 2020 Residential (middle pan, Shift+middle orbit, wheel zoom, right-drag inert, Alt fallbacks, dbl-middle fit). Note: MODELDIR must be one model's cache directory.
+* SHOWCASE revolve/sweep/blend/torus table (volume and area ratio vs Revit 0.985-1.0) already in docs/SHOWCASE.md.
+* Corpus table in DEMO.md (121/121) is from the older converter; re-sweep vsweep4 queued by tools/queue_vsweep.sh, waiting for remote-host MemAvailable >= 11 GB.
