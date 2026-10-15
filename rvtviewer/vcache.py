@@ -18,6 +18,17 @@ def code_stamp():
     _stamp = h.hexdigest()[:10]; return _stamp
 
 
+def _base(src, req):
+    return hashlib.md5(json.dumps([os.path.basename(src), os.stat(src).st_size, req], sort_keys=True).encode()).hexdigest()[:20]
+
+
 def cache_fn(src, req):
-    h = hashlib.md5(json.dumps([os.path.basename(src), os.stat(src).st_size, req, code_stamp()], sort_keys=True).encode()).hexdigest()[:20]
-    return os.path.join(CACHE, h + '.json')
+    """exact cache file of a request for the current drawing code"""
+    return os.path.join(CACHE, '%s.%s.json' % (_base(src, req), code_stamp()))
+
+
+def best_fn(src, req):
+    """newest cache file of the same request (same file name+size) from any drawing-code version, or None: the demo never decodes on host3 just because rvt-sheets was edited"""
+    import glob
+    fs = glob.glob(os.path.join(CACHE, _base(src, req) + '.*.json'))
+    return max(fs, key=os.path.getmtime) if fs else None

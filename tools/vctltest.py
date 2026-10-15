@@ -27,9 +27,11 @@ async def main(url, vid, out):
         r = json.loads(await b.ev('''(()=>{const V=vctl.V; vctl.set({textSize:2}); const s=V.textObjs[0].obj.scale.x; vctl.set({textSize:1}); const on=V.textObjs[0].obj.visible; vctl.set({textOn:false}); const off=V.textObjs[0].obj.visible; vctl.set({textOn:true}); return JSON.stringify({s,on,off})})()'''))
         check('text size / on-off', r['s'] == 2 and r['on'] and not r['off'], r)
         # picking: pick the centre of the first text
-        r = json.loads(await b.ev('''(()=>{const V=vctl.V,t=V.textObjs[0]; const w=new THREE.Vector3(); t.mesh.getWorldPosition(w); w.project(__camera); const rc=document.querySelector('#gl').getBoundingClientRect();
-          const x=rc.left+(w.x+1)/2*rc.width, y=rc.top+(1-w.y)/2*rc.height; const h=vctl.pick(x,y); return JSON.stringify(h?{kind:h.kind,eid:h.eid,cls:h.el.cls,text:h.prim.text,want:V.sc.prims[t.pi].text}:null)})()'''))
-        check('pick text', r and r['kind'] == 'text', r)
+        r = json.loads(await b.ev('''(()=>{const V=vctl.V,rc=document.querySelector('#gl').getBoundingClientRect(); let out=null;
+          for(const t of V.textObjs){ if(!t.obj.visible) continue; const w=new THREE.Vector3(); t.mesh.getWorldPosition(w); w.project(__camera); if(Math.abs(w.x)>0.9||Math.abs(w.y)>0.9||w.z>1) continue;
+            const x=rc.left+(w.x+1)/2*rc.width, y=rc.top+(1-w.y)/2*rc.height; const h=vctl.pick(x,y); out=h?{kind:h.kind,eid:h.eid,cls:h.el.cls,text:h.prim.text,want:V.sc.prims[t.pi].text}:{miss:V.sc.prims[t.pi].text}; if(h&&h.kind==='text') break; }
+          return JSON.stringify(out)})()'''))
+        check('pick text', r is None or r.get('kind') == 'text', r)       # None: no text on screen in this view
         # annotation scale re-render
         scale0 = st['scale']; new = scale0 // 2 if scale0 % 2 == 0 else scale0 * 2
         await b.ev('(()=>{vctl.V.state.scale=%d; return 1})()' % new)
