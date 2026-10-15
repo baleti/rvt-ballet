@@ -9,3 +9,4 @@ Tests: tools/uitest6/7/11/12.py MODELDIR PORT OUT (PORT 4-digit!), tools/demo_sm
 ## c5-viewer start (2026-10-15)
 Baseline smoke OK (2020 Residential). Rust fast path + preimport thread already adopted. Task B nav done earlier. Queue loop tools/queue_vsweep.sh running (log ~/.cache/q_vsweep.log) to start remote-host vsweep4; then pull sweep.jsonl, tools/sweep_table.py, update DEMO.md.
 19:03:48 vsweep4 started on remote-host after reboot (h1run tail vsweep4); then pull .cache/rvt-viewer/sweep.jsonl, tools/sweep_table.py, update DEMO.md
+19:38:03 master=071285d (vctl v1 merged, .venv untracked and rebuilt, GLB byte-identical, 3-file smoke OK), demo-ready moved here
