@@ -17,7 +17,7 @@ const LAYER_LABEL = {cut: 'Cut linework', projection: 'Projection linework', und
 const SCALES = [1, 5, 10, 20, 25, 50, 75, 96, 100, 200, 240, 500];
 
 const DEFAULT_STATE = () => ({scale: null, detail: null, cut: null, phase: null, pfilter: null, template: true, filters: true, crop: true, layers: {}, cats: {}, elems: {}, classes: {}, parts: {}, annoScale: 1, textOn: true, textSize: 1, font: '', textColor: '',
-  lineScale: 1, minPx: 1, model: true, lift: 0.02, onTop: true, opacity: 1, contrast: true, halo: false});
+  lineScale: 1, minPx: 1, model: true, nativeOff: true, lift: 0.02, onTop: true, opacity: 1, contrast: true, halo: false});
 const V = {mid: null, vid: null, sc: null, group: null, state: DEFAULT_STATE(), sel: null, views: [], loading: false, presets: {}};
 window.__vc = V;
 
@@ -282,6 +282,10 @@ function applyStyles() {
   });
   lineMat.depthTest = fillMat.depthTest = !st.onTop;
   if (window.__world) window.__world.visible = !!st.model;
+  // the view's own grids / levels (extents, heads per view) replace the viewer's whole-model grid and level planes
+  const hideNative = st.nativeOff && st.layers.datum !== false && B.layers.includes('datum');
+  if (hideNative && !V.prevNative) V.prevNative = {g: S.gridGroup?.visible, l: S.lvlGroup?.visible};
+  if (V.prevNative) { if (S.gridGroup) S.gridGroup.visible = hideNative ? false : V.prevNative.g; if (S.lvlGroup) S.lvlGroup.visible = hideNative ? false : V.prevNative.l; if (!hideNative) V.prevNative = null; }
   // lift along the view normal (metres), crop
   const lift = new THREE.Matrix4().makeTranslation(0, 0, st.lift); V.group.matrix.copy(V.base).multiply(lift); V.group.matrixWorldNeedsUpdate = true;
   const cu = V.cropUV, cropOn = st.crop && cu; U.uCropOn.value = cropOn ? 1 : 0;
@@ -493,7 +497,7 @@ function renderPanel() {
   <div class="r"><label>Crop region</label><input type="checkbox" id="vcCrop" ${st.crop ? 'checked' : ''}><span class="dim">${sc && sc.view.crop_uv ? 'model content only' : 'no stored crop'}</span></div>
   <div class="r"><label>Text</label><input type="checkbox" id="vcText" ${st.textOn ? 'checked' : ''}> size &times;<input type="number" id="vcTS" step="0.1" min="0.1" value="${st.textSize}"> symbols &times;<input type="number" id="vcAS" step="0.1" min="0.1" value="${st.annoScale}" title="annotation symbol size about their anchor (instant); use Annotation scale for the exact re-draw"> <input type="text" id="vcFont" placeholder="font" value="${esc(st.font)}" style="width:80px"></div>
   <div class="r"><label>Line weight &times;</label><input type="number" id="vcLS" step="0.25" min="0" value="${st.lineScale}"> min px<input type="number" id="vcMP" step="0.5" min="0" value="${st.minPx}"></div>
-  <div class="r"><label>3D model</label><input type="checkbox" id="vcModel" ${st.model ? 'checked' : ''}><span class="dim">show the model under the drawing</span></div>
+  <div class="r"><label>3D model</label><input type="checkbox" id="vcModel" ${st.model ? 'checked' : ''}><span class="dim">under the drawing</span> <label class="chk" title="hide the viewer's own whole-model grids and level planes while the view's datums are shown"><input type="checkbox" id="vcNat" ${st.nativeOff ? 'checked' : ''}> own datums off</label></div>
   <div class="r"><label>Placement</label><label class="chk"><input type="checkbox" id="vcTop" ${st.onTop ? 'checked' : ''}> on top</label> lift<input type="number" id="vcLift" step="0.05" value="${st.lift}" title="metres along the view normal"> &alpha;<input type="number" id="vcOp" step="0.1" min="0" max="1" value="${st.opacity}"></div>
   <h4>Visibility <span class="sp"></span><span class="chk" style="gap:2px"><button data-m="cat" class="${(V.treeMode || 'cat') === 'cat' ? 'on' : ''}">category</button><button data-m="layer" class="${V.treeMode === 'layer' ? 'on' : ''}">layer</button><button data-m="type" class="${V.treeMode === 'type' ? 'on' : ''}">type</button><button data-m="part" class="${V.treeMode === 'part' ? 'on' : ''}" title="leaders, witness lines, arrows, heads...">part</button><button data-m="el" class="${V.treeMode === 'el' ? 'on' : ''}">element</button></span></h4>
   ${V.treeMode === 'el' ? '<input type="text" id="vcQ" placeholder="filter id / class / category" style="width:100%;margin-bottom:3px">' : ''}
@@ -520,7 +524,7 @@ function renderPanel() {
   on('vcFil', () => { st.filters = $('#vcFil').checked; redraw(); });
   const inst = (id, fn) => on(id, () => { fn($('#' + id)); saveLocal(); applyStyles(); });
   inst('vcCrop', e => st.crop = e.checked); inst('vcText', e => st.textOn = e.checked); inst('vcTS', e => st.textSize = +e.value || 1); inst('vcFont', e => { st.font = e.value; if (V.sc) makeScene(V.sc); });
-  inst('vcModel', e => st.model = e.checked); on('vcAS', () => { st.annoScale = +$('#vcAS').value || 1; saveLocal(); if (V.sc) makeScene(V.sc); }); inst('vcLS', e => st.lineScale = +e.value); inst('vcMP', e => st.minPx = +e.value); inst('vcTop', e => st.onTop = e.checked); inst('vcLift', e => st.lift = +e.value); inst('vcOp', e => st.opacity = +e.value);
+  inst('vcModel', e => st.model = e.checked); inst('vcNat', e => st.nativeOff = e.checked); on('vcAS', () => { st.annoScale = +$('#vcAS').value || 1; saveLocal(); if (V.sc) makeScene(V.sc); }); inst('vcLS', e => st.lineScale = +e.value); inst('vcMP', e => st.minPx = +e.value); inst('vcTop', e => st.onTop = e.checked); inst('vcLift', e => st.lift = +e.value); inst('vcOp', e => st.opacity = +e.value);
   p.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { V.treeMode = b.dataset.m; renderPanel(); });
   on('vcQ', () => renderTree(), 'oninput');
   on('vcAllOn', () => { st.parts = {}; st.layers = {}; st.cats = {}; st.elems = {}; st.classes = {}; st.textOn = true; applyStyles(); saveLocal(); renderPanel(); }, 'onclick');
@@ -533,7 +537,7 @@ function renderPanel() {
   on('vcExport', () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({view: V.vid, state: V.state}, null, 1)], {type: 'application/json'})); a.download = `view-${V.vid}-controls.json`; a.click(); }, 'onclick');
   renderTree();
 }
-function closeVC() { V.on = false; if (window.__world) window.__world.visible = true; disposeGroup(); V.sc = null; const p = $('#vcpanel'); if (p) p.hidden = true; $('#bVC')?.classList.remove('on'); dirty(); }
+function closeVC() { V.on = false; if (V.prevNative) { if (S.gridGroup) S.gridGroup.visible = V.prevNative.g; if (S.lvlGroup) S.lvlGroup.visible = V.prevNative.l; V.prevNative = null; } if (window.__world) window.__world.visible = true; disposeGroup(); V.sc = null; const p = $('#vcpanel'); if (p) p.hidden = true; $('#bVC')?.classList.remove('on'); dirty(); }
 
 // ------------------------------------------------------------------ entry
 async function toggle() {
