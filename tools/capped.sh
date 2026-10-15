@@ -1,0 +1,3 @@
+#!/bin/sh
+# run any command under a memory cap and low priority (host3 OOM on 2026-10-11 14:45 was a runaway python): tools/capped.sh .venv/bin/python tools/batch.py FILE...
+exec systemd-run --user --scope -q -p MemoryMax=${RVT_MEM_CAP:-6G} -p MemorySwapMax=0 nice -n 10 "$@"

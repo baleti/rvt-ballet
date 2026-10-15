@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RVT Viewer</title>
+<link rel="stylesheet" href="/style.css">
+<script type="importmap">{"imports":{"three":"/vendor/three/three.module.js","three/":"/vendor/three/"}}</script>
+</head><body>
+<header id="top">
+  <div id="brand">RVT Viewer</div>
+  <select id="modelSel" title="model"></select><span id="cachedBadge" hidden></span><button id="bModels" title="Models: switch, open another .rvt (O)">Models</button>
+  <input id="q" type="search" placeholder="Search name, category, type, level, id, GUID..." autocomplete="off">
+  <label class="chk" title="also search parameter values (server side)"><input type="checkbox" id="qParams"> params</label>
+  <span class="sp"></span>
+  <select id="navSel" title="Mouse navigation"><option value="revit">Nav: Revit</option><option value="orbit">Nav: Orbit</option></select>
+  <button id="bFit" title="Fit all (F)">Fit</button>
+  <button id="bTop">Top</button><button id="bFront">Front</button><button id="bIso">Iso</button>
+  <button id="bSection" title="Section plane">Section</button>
+  <button id="bMeasure" title="Measure (M)">Measure</button>
+  <button id="bIsolate" title="Isolate selection (I)">Isolate</button>
+  <button id="bHide" title="Hide selection (H)">Hide</button>
+  <button id="bShowAll" title="Show everything">Show all</button>
+  <button id="bLink" title="Copy a link to this exact view">Link</button>
+  <button id="bHelp" title="Controls">?</button>
+  <button id="bCmp" title="Compare geometry with Revit oracle files (gt_geom)">Compare</button>
+  <button id="bFid" title="Colour by geometry fidelity">Fidelity colours</button>
+  <button id="bMat" title="Colour by material (one distinct colour per material)">Colour by material</button>
+  <button id="bShadow" class="on" title="Sun shadows (L)">Shadows</button>
+  <button id="bTex" class="on" title="Texture bitmaps (local material library / file swatches) and built-in fallback patterns">Textures</button>
+</header>
+<div id="parsebar" hidden></div>
+<main>
+  <div id="sheetspane" hidden><div class="shbar"><button id="shModel" title="Back to the 3D model">&#9664; Model (3D)</button><b>Sheets &amp; views</b><span id="shInfo" class="dim"></span><span class="sp"></span><a id="shNew" target="_blank" class="drawlink">open in a new tab</a></div><iframe id="shFrame" title="Sheets and views"></iframe></div>
+  <aside id="left">
+    <nav id="tabs"><button data-t="tree" class="on">Model</button><button data-t="levels">Levels</button><button data-t="views">Views</button><button data-t="rooms">Rooms</button><button data-t="search">Results</button><button data-t="cov">Coverage</button><button data-t="mat">Materials</button></nav>
+    <div id="tabbody"></div>
+  </aside>
+  <div id="view"><canvas id="gl"></canvas><div id="labels"></div><div id="tip"></div>
+    <div id="secui" hidden><b>Section</b>
+      <select id="secMode"><option value="plane">plane</option><option value="box">box</option></select>
+      <span id="secPlaneUi"><select id="secAxis"><option>X</option><option selected>Y</option><option>Z</option></select>
+      <input type="range" id="secPos" min="0" max="1000" value="500"><button id="secFlip">flip</button></span>
+      <span id="secBoxUi" hidden>X <input type="range" id="bxx0" min="0" max="1000" value="0"><input type="range" id="bxx1" min="0" max="1000" value="1000">
+      Y <input type="range" id="bxy0" min="0" max="1000" value="0"><input type="range" id="bxy1" min="0" max="1000" value="1000">
+      Z <input type="range" id="bxz0" min="0" max="1000" value="0"><input type="range" id="bxz1" min="0" max="1000" value="1000"></span>
+      <label class="chk" title="fill the cut solids (poche)"><input type="checkbox" id="secCaps" checked> caps</label> <button id="secOff">off</button></div>
+    <div id="viewbar" hidden></div>
+    <div id="progress" hidden></div>
+    <div id="watermark" hidden></div>
+    <div id="picker" hidden></div>
+    <div id="cmpPanel" hidden></div>
+    <div id="status">loading...</div>
+    <div id="legend" hidden></div>
+    <div id="help" hidden><b>Controls</b> <span class="dim">(? toggles)</span><br><b>Revit nav</b>: middle-drag pan &middot; Shift+middle-drag orbit &middot; wheel zoom at cursor &middot; double middle-click zoom to fit &middot; ViewCube click snaps views &middot; left click select. <b>Touchpad</b>: Alt+left-drag orbit &middot; Alt+Shift+left-drag pan &middot; two-finger scroll / pinch zoom &middot; F fits. <b>Orbit nav</b>: left-drag orbit &middot; right-drag pan<br>click select (Ctrl/Shift adds) &middot; double-click zoom to element<br>F fit &middot; H hide &middot; I isolate &middot; M measure &middot; L sun shadows &middot; Esc clear<br>tree: checkbox = category visibility, dot = element visibility<br>measure: M, click two points (snaps to vertices/edges, Alt = free) &middot; section: plane or box<br>views tab: click a plan/section/3D view to open it &middot; Link button copies camera+selection+filters<br>level 'only' / category &#9678; isolate &middot; phases: click to isolate &middot; O model picker<br>fidelity tags: solid / matched / param / approx / bbox / line (see Coverage tab)</div>
+  </div>
+  <aside id="right"><div id="insp"><p class="dim">Click an element to inspect it.</p></div></aside>
+</main>
+<script type="module" src="/app.js"></script>
+<script>/* first-contact safety net: if the app module has not started after 6 s (server still warming up), reload once */
+setTimeout(()=>{try{if(!window.S&&!sessionStorage.rvtRetry){sessionStorage.rvtRetry=1;location.reload()}}catch(e){}},6000)</script>
+</body></html>

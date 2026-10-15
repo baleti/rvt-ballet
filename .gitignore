@@ -1,0 +1,15 @@
+*
+!*/
+!*.py
+!*.rs
+!*.toml
+!*.lock
+!*.sh
+!*.js
+!*.mjs
+!*.html
+!*.css
+!*.md
+!*.cs
+!*.ps1
+!.gitignore
