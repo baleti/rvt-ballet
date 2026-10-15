@@ -26,6 +26,7 @@ It converts and caches each model, pre-renders all sheets and views, and prints 
 ## 3. Curved facade (2026 Snowdon Towers Facades, 53 MB): newest format version
     ~/src/rvt-viewer/bin/rvt-view ~/rvt-research/corpus/2026/58_Snowdon_Towers_Sample_Facades.rvt
 * Revit 2026 file; curtain walls, mullions and curved panels from cones, revolutions, ruled and Hermite surfaces decoded from the file.
+* Zoom to the street front: running and soldier-course brick, granite, quartz, stained wood frames and copper come from Revit's Advanced (Prism) appearances, textured at their real-world size.
 
 **Facades sheets**: their drawings are big (about 25 minutes to pre-render). Check `curl localhost:PORT/sheets/api/<id>/cache.json` or the toolbar badge ("sheets cached"); if it says not cached, open Facades WITHOUT `--sheets` (the 3D model is instant) or run `~/src/rvt-sheets/rvt-sheets warm <file> --remote-host` first.
 

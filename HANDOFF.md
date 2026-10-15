@@ -3,7 +3,7 @@
 Older notes: HANDOFF-c4-viewer.md. Progress log: PROGRESS.md (2026-10-15 section).
 
 ## State
-* master clean, tag `demo-ready` = 6e5bb48 (smoke OK on Residential / Structural / Facades; models prepared for that commit; later commits are docs + tools/perftest/cdp only).
+* master clean, tag `demo-ready` = 4309949 (smoke OK on Residential / Structural / Facades; models prepared for that commit; later commits are docs + tools/perftest/cdp only).
 * Sheets caches go stale on every reader stamp change. Background retry loops (may have ended with the session) warm Structural + Facades + Residential sheets on remote-host: re-run `~/src/rvt-sheets/rvt-sheets warm FILE --remote-host` if `/sheets/api/<mid>/cache.json` says cached:false.
 * remote-host jobs queued by retry loops (check `h1run status`): `vsweep3` (full re-sweep -> `h1run pull .cache/rvt-viewer/sweep.jsonl`, `tools/sweep_table.py`, `tools/demo_table.py`), `vperf` (converts 2023 rme_basic + 2019 Arch_Link into ~/.cache/rvt-viewer/perf/ -> pull, then `tools/perftest.py DIR PORT vulkan` = real Iris Xe headless, no window).
 
