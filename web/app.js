@@ -32,12 +32,45 @@ function setNav(mode) {
 controls.enableDamping = true; controls.dampingFactor = 0.12; controls.screenSpacePanning = true;
 scene.add(new THREE.HemisphereLight(0xffffff, 0x556070, 1.1));
 const sun = new THREE.DirectionalLight(0xffffff, 1.6); scene.add(sun, sun.target);
+// sun shadows (toggle "Shadows", key L): the sun stands 50 deg left of the view direction, 40 deg high, so shadows fall to the right of / behind objects as seen;
+// the shadow map is redrawn only when visibility / section / model change or the view turns by more than ~8 deg (shadowDirty), not on every frame
+let shadowsOn = (() => { try { return localStorage.getItem('rvtShadows') !== '0'; } catch (e) { return true; } })(), shadowDirty = true, sunAz = null;
+const SUN_DIR = new THREE.Vector3(-.45, 1, .55).normalize();
+function sunFromCamera() {
+  const v = camera.position.clone().sub(controls.target); const az = Math.atan2(v.x, v.z) + THREE.MathUtils.degToRad(50), el = THREE.MathUtils.degToRad(40);
+  if (sunAz !== null && Math.abs(Math.atan2(Math.sin(az - sunAz), Math.cos(az - sunAz))) < THREE.MathUtils.degToRad(8)) return false;
+  sunAz = az; SUN_DIR.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)); return true;
+}
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.shadowMap.autoUpdate = false;
+sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0004;
+function fitShadow() {
+  if (!S.meta) return; const mb = modelBox(), c = mb.getCenter(new THREE.Vector3()), r = Math.max(mb.getSize(new THREE.Vector3()).length() / 2, 1);
+  sun.target.position.copy(c); sun.position.copy(c).addScaledVector(SUN_DIR, r * 2);
+  const sc = sun.shadow.camera; sc.left = sc.bottom = -r; sc.right = sc.top = r; sc.near = r * .5; sc.far = r * 3.5; sc.updateProjectionMatrix();
+  sun.shadow.normalBias = r / 4096 * 1.5; sun.target.updateMatrixWorld(); sun.updateMatrixWorld(); shadowDirty = true;
+}
+function setShadows(on) {
+  shadowsOn = on; sun.castShadow = on; shadowDirty = true; dirty = true;
+  try { localStorage.setItem('rvtShadows', on ? '1' : '0'); } catch (e) {}
+  const b = document.getElementById('bShadow'); if (b) b.classList.toggle('on', on);
+}
 const world = new THREE.Group(); scene.add(world);
 const overlay = new THREE.Group(); scene.add(overlay);
 let selBoxDummy;
 let stateTex, stateData;
 const U = {tState: {value: null}, uMode: {value: 0}, tMat: {value: null}, tPat: {value: null}, tImg: {value: null}, uTex: {value: 1}};
 
+function depthMat() {
+  const m = new THREE.MeshDepthMaterial({depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide}); m.clipShadows = true;
+  m.onBeforeCompile = sh => {
+    sh.uniforms.tState = U.tState;
+    sh.vertexShader = 'attribute float _eidx; varying float vE;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvE=_eidx;');
+    sh.fragmentShader = 'varying float vE; uniform sampler2D tState;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+{ float eI = floor(vE+.5); vec4 stt = texelFetch(tState, ivec2(int(mod(eI,${TW}.)), int(eI/${TW}.)), 0); float fl = floor(stt.r*255.+.5); if(mod(fl,2.)>.5 || mod(floor(fl/8.),2.)>.5) discard; }`);
+  };
+  m.customProgramCacheKey = () => 'rvtdepth1'; return m;
+}
+let DEPTH_MAT = null;
 function patch(mat) {
   mat.flatShading = true;
   mat.onBeforeCompile = sh => {
@@ -113,7 +146,7 @@ function initState(N) {
   stateTex.minFilter = stateTex.magFilter = THREE.NearestFilter; stateTex.needsUpdate = true; U.tState.value = stateTex;
 }
 function refreshState() {
-  const E = S.meta.elements, N = S.N;
+  const E = S.meta.elements, N = S.N; let vh = 0;
   for (let i = 0; i < N; i++) {
     const el = E[i]; let f = 0;
     const cat = el[2];
@@ -121,8 +154,9 @@ function refreshState() {
     else if (S.isolate && !S.isolate.has(i)) f |= S.isoGhost ? 8 : 1;
     if (S.sel.has(i)) f |= 2; else if (i === S.hoverI) f |= 4;
     stateData[i * 4] = f; stateData[i * 4 + 1] = FID.indexOf(el[6]); stateData[i * 4 + 2] = S.devCode ? S.devCode[i] : 0;
+    if (f & 9) vh = (vh * 31 + i + 1) | 0;
   }
-  stateTex.needsUpdate = true; dirty = true;
+  stateTex.needsUpdate = true; dirty = true; if (vh !== S.visHash) { S.visHash = vh; shadowDirty = true; }
 }
 let dirty = true;
 
@@ -243,6 +277,7 @@ async function loadModel(mid, opts = {}) {
     if (o.isMesh) {
       o.material = patch(new THREE.MeshStandardMaterial({color: old.color, roughness: .85, metalness: 0, side: THREE.DoubleSide, transparent: old.transparent, opacity: old.opacity, depthWrite: !old.transparent}));
       tris += o.geometry.index.count / 3;
+      o.castShadow = !old.transparent; o.receiveShadow = true; o.customDepthMaterial = DEPTH_MAT || (DEPTH_MAT = depthMat());
     } else {
       const lm = new THREE.LineBasicMaterial({color: old.color}); lm.onBeforeCompile = patch(new THREE.MeshStandardMaterial()).onBeforeCompile; lm.customProgramCacheKey = () => 'rvtline1'; o.material = lm;
     }
@@ -250,7 +285,7 @@ async function loadModel(mid, opts = {}) {
     o.frustumCulled = false; o.userData.bi = o.userData.batch ?? o.parent?.userData?.batch ?? 0;
   });
   world.add(gltf.scene); buildElRanges();
-  buildOverlays(); if (!opts.keepCamera) fitAll(); buildTabs(); setupLegend(); refreshState();
+  buildOverlays(); fitShadow(); if (!opts.keepCamera) fitAll(); buildTabs(); setupLegend(); refreshState();
   $('#status').textContent = `${S.N.toLocaleString()} elements, ${tris.toLocaleString()} triangles - ${((performance.now() - t0) / 1000).toFixed(1)}s` + ((S.meta.phase || 'done') === 'done' ? '' : ' (box preview)');
   if (!opts.keepCamera && !S.hashRestored) { S.hashRestored = true; restoreHash(); }
   dirty = true; window.__loaded = true;
@@ -625,7 +660,7 @@ function applySection() {
     });
   }
   if (S.viewClip) planes.push(S.viewClip);
-  renderer.clippingPlanes = planes; dirty = true; scheduleHash();
+  renderer.clippingPlanes = planes; dirty = true; shadowDirty = true; scheduleHash();
 }
 $('#bSection').onclick = () => { secOn ? (secOn = false, $('#secui').hidden = true, applySection()) : setSection('Y', (modelBox().min.y + modelBox().max.y) / 2); };
 $('#secAxis').onchange = applySection; $('#secPos').oninput = applySection;
@@ -641,6 +676,8 @@ $('#bHide').onclick = () => { S.sel.forEach(i => S.hidden[i] = 1); S.sel.clear()
 $('#bShowAll').onclick = () => { S.hidden.fill(0); S.catHidden.clear(); S.lvlHidden.clear(); S.isolate = null; $('#bIsolate').classList.remove('on'); secOn = false; $('#secui').hidden = true; applySection(); refreshState(); renderTab(); };
 function renderIfTree() { if (S.tab === 'tree') renderTab(); }
 $('#bMat').onclick = () => { S.matMode = !S.matMode; if (S.matMode) { S.fidMode = 0; $('#bFid').classList.remove('on'); $('#legend').hidden = true; } U.uMode.value = S.matMode ? 3 : (S.fidMode || 0); $('#bMat').classList.toggle('on', S.matMode); dirty = true; };
+$('#bShadow').onclick = () => { setShadows(!shadowsOn); if (!shadowsOn) dirty = true; };
+setShadows(shadowsOn);
 $('#bTex').onclick = () => { U.uTex.value = U.uTex.value ? 0 : 1; $('#bTex').classList.toggle('on', !!U.uTex.value); dirty = true; };
 $('#bFid').onclick = () => { S.fidMode ^= 1; if (S.fidMode) { S.matMode = false; $('#bMat').classList.remove('on'); } U.uMode.value = S.fidMode; $('#bFid').classList.toggle('on', !!S.fidMode); $('#legend').hidden = !S.fidMode; dirty = true; };
 $('#bFit').onclick = () => S.sel.size ? zoomTo([...S.sel]) : fitAll();
@@ -683,7 +720,7 @@ canvas.addEventListener('pointerleave', () => { $('#tip').style.display = 'none'
 addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
   if (e.key === 'f' || e.key === 'F') $('#bFit').click(); else if (e.key === 'h' || e.key === 'H') $('#bHide').click();
-  else if (e.key === 'i' || e.key === 'I') $('#bIsolate').click(); else if (e.key === 'm' || e.key === 'M') $('#bMeasure').click();
+  else if (e.key === 'i' || e.key === 'I') $('#bIsolate').click(); else if (e.key === 'm' || e.key === 'M') $('#bMeasure').click(); else if (e.key === 'l' || e.key === 'L') $('#bShadow').click();
   else if (e.key === 'Escape') { select(null); if (S.measure) $('#bMeasure').click(); }
 });
 controls.addEventListener('change', () => dirty = true);
@@ -696,7 +733,8 @@ function resize() {
 function frame() {
   requestAnimationFrame(frame); resize(); controls.update();
   if (!dirty) return; dirty = false;
-  sun.position.copy(camera.position).add(new THREE.Vector3(.3, 1, .2).multiplyScalar(50)); sun.target.position.copy(controls.target);
+  if (!shadowsOn) { sun.position.copy(camera.position).add(new THREE.Vector3(.3, 1, .2).multiplyScalar(50)); sun.target.position.copy(controls.target); }
+  else if (sunFromCamera() || shadowDirty) { fitShadow(); renderer.shadowMap.needsUpdate = true; shadowDirty = false; }
   renderer.render(scene, camera); updateLabels();
 }
 requestAnimationFrame(frame);
@@ -803,7 +841,7 @@ function restoreHash() {
   const v = q.get('v'); if (v) { const vv = (S.meta.views || []).find(x => String(x.id) === v); if (vv) openView(vv); }
   const c = q.get('c'); if (c) { const a = c.split(',').map(Number); if (a.length === 6) { camera.position.set(a[0], a[1], a[2]); controls.target.set(a[3], a[4], a[5]); controls.update(); used = true; } }
   const sl = q.get('s'); if (sl) { const ids = new Set(sl.split(',').map(Number)); const idx = []; S.meta.elements.forEach((e, i) => { if (ids.has(e[0])) idx.push(i); }); if (idx.length) { S.sel = new Set(idx); used = true; } }
-  if (used) { refreshState(); markTree(); updateSelBox(); showInspector(); }
+  if (used) { refreshState(); if (hc) renderTab(); markTree(); updateSelBox(); showInspector(); }
   return used;
 }
 controls.addEventListener('change', scheduleHash);

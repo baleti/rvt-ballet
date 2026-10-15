@@ -1051,8 +1051,13 @@ def reader_mesh(ctx, e, a_pre=None):
     mats = getattr(ctx, 'mats', None)
     if mats and mats['list']:
         try:
-            mp = body_materials(GG, ctx.src, e) if a.get('nid') is not None else {}
             tri_mat = a.get('mat') if a.get('mat') is not None and len(a['mat']) == len(P) // 3 else None       # per-triangle material from the reader (face render style first): beats the per-body guess
+            full = tri_mat is not None and len(tri_mat) and int(np.min(tri_mat)) >= 0 and a.get('nid') is not None and len(a['nid']) == len(tri_mat)
+            if full:                                             # every triangle has a material: the per-body map would change nothing (c2-rust, 5 files, 0 triangles), derive it from the triangles (~1.4 s saved on Structural)
+                nid_ = np.asarray(a['nid']); tm_ = np.asarray(tri_mat, np.int64); mp = {}
+                for b_ in np.unique(nid_):
+                    v_, c_ = np.unique(tm_[nid_ == b_], return_counts=True); mp[int(b_)] = int(v_[c_.argmax()])
+            else: mp = body_materials(GG, ctx.src, e) if a.get('nid') is not None else {}
             if tri_mat is not None: m.info['material_source'] = 'per face (reader)'
             elif mp: m.info['material_source'] = 'per body (graphics style of the geometry node)'
             res = _split_by_material(m, a.get('nid'), len(a['nid']) if a.get('nid') is not None else 0, mp, mats['index'], tri_mat) if (mp or tri_mat is not None) else None

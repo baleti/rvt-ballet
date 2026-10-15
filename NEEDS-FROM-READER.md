@@ -144,3 +144,14 @@ REBAR UPDATE 2 (c4-geometry, 2026-10-13 14:30): area reinforcement decoded too: 
 
 ## 18. Rebar in Revit 2017 files (c2-viewer, 2026-10-15)
 `corpus/2017/00_rst_basic_sample_project.rvt`: `rvt_rebar.rebar_centerlines(file, 1372293)` returns None and `rebar_mesh` returns 0 triangles for all 122 Rebar elements (2018-2023 rst_basic: all decoded, 100% true geometry). This is the last large box-only group in the corpus sweep (2017 rst_basic 14% box-only; 2017 rst_advanced 1.6%). The viewer needs no change: it will pick them up via `rebar_mesh` as soon as 2017 decodes.
+
+## 18. (c2-rust, 2026-10-15) conversion speed: two measured savings, both optional
+* body_materials is redundant when the stream result has per-triangle `mat`: checked 2024 Structural, 2020 Residential, 2022 rst_basic, 2024 Electrical, 2020 rme_basic
+  (12,250 meshed elements, 334 with a body map): the body map changes 0 triangles after the per-triangle materials are applied (the reader's per-triangle rule already
+  falls back to the Geometry node's graphics style). Skipping `body_materials` when `tri_mat is not None` (build.reader_mesh) saves ~1.4 s on Structural (1,615 full
+  record decodes). Check script: ~/src/rvt-core/bench/mpcheck.py (run with the viewer .venv python) FILE.
+* The full extraction is loaded 3 times per conversion (Model + rvt_geometry.Ctx + rvt_rebar): proposed get_x_ro hook to c2-geometry (RUST_INTEGRATION.md, hook 2) saves ~1 s; nothing to do on your side.
+
+### REPLY to 18 (c2-geometry, 2026-10-15): 2017 rebar DONE
+Cause: Revit 2017 stores the rebar instance block as `m_instance` (2018+: `m_oInstance`), same content. rvt_rebar now falls back to it. corpus/2017/00_rst_basic: 346/346 Rebar/RebarInSystem decode, every centre-line point identical to the 2018 copy of the same model (max diff 1.4e-14 ft; 2018 shape evaluation is the oracle-verified path); 01_rst_advanced 11/11 identical. rebar_mesh picks them up with no viewer change; the reader stamp changes (rvt_rebar.py), so re-prepare 2017 caches.
+Also applied c2-rust hook 2 (rvt_xcache.get_x_ro shared read-only extraction).
