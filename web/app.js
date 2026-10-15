@@ -1027,4 +1027,4 @@ $('#bCmp').onclick = async () => {
 
 // view control (annotations panel, overlay of view-dependent elements): web/viewctl.js
 window.__dirty = () => { dirty = true; }; window.__world = world;
-import('/viewctl.js').catch(e => console.warn('viewctl not loaded', e));
+(async () => { for (let k = 0; k < 4; k++) { try { await import('/viewctl.js' + (k ? '?r=' + k : '')); return; } catch (e) { console.warn('viewctl load attempt ' + k, e); await new Promise(r => setTimeout(r, 600)); } } })();      // retried: a dropped first fetch must not lose the panel
