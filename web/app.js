@@ -876,6 +876,14 @@ function openView(v) {
   S.viewClip = null; S.viewCrop = null; S.openView = v;
   if (v.kind === '3d') {
     const d = dirV(v.dir); camera.position.copy(o); controls.target.copy(o).addScaledVector(d, Math.max(5, size / 4));
+    if (v.section_box) {      // the view's stored section box: six clip planes (box basis in revit axes -> three y-up), not capped
+      const sb = v.section_box, O = new THREE.Vector3(...sb.origin);
+      S.viewCrop = []; sb.ranges.forEach((rg, k) => { const ax = new THREE.Vector3(...sb.basis[k]).normalize(), n = new THREE.Vector3(ax.x, ax.z, -ax.y), p0 = toV(sb.origin), d0 = n.dot(p0);
+        S.viewCrop.push(new THREE.Plane(n.clone(), -(d0 + rg[0])), new THREE.Plane(n.clone().negate(), d0 + rg[1])); });
+      const bb = new THREE.Box3(); for (const i of [0, 1]) for (const j of [0, 1]) for (const k of [0, 1]) {      // frame the box corners (box basis axes)
+        const q = O.clone(); [i, j, k].forEach((w, ax) => q.addScaledVector(new THREE.Vector3(...sb.basis[ax]), sb.ranges[ax][w])); bb.expandByPoint(toV([q.x, q.y, q.z])); }
+      const mb2 = bb.clone().intersect(modelBox()); fitBox(mb2.isEmpty() ? bb : mb2, d.clone().negate().add(new THREE.Vector3(0, .5, 0)));
+    }
   } else if (v.kind === 'Plan' && v.cut) {
     const z = v.cut.origin[2]; S.viewClip = new THREE.Plane(new THREE.Vector3(0, -1, 0), z);
     const cr = v.crop && cropFrame(v.crop, new THREE.Vector3(0, 1, 0));      // the view's active crop region, framed from above like the sheet (whole model when the crop is off, as in Revit)

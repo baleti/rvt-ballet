@@ -75,4 +75,17 @@ def views_sheets(ctx):
                 cr = _crop(ctx, f)
                 if cr: v['crop'] = cr
             views.append(v)
+    # 3D views' section boxes: ModelClipBox.m_viewer3dId -> Viewer3d.m_dbViewId -> view; stored as origin + basis + per-axis [max, min] offsets (ft)
+    byid = {v['id']: v for v in views}
+    for e, r in ctx.recs.items():
+        if r['class'] != 'ModelClipBox': continue
+        try:
+            bs = r['fields'].get('m_boundedSpace') or {}; act = bs.get('m_boundActive') or []
+            v3 = ctx.recs.get(ctx.eid_int(r['fields'].get('m_viewer3dId')) or -1); v = byid.get(ctx.eid_int(v3['fields'].get('m_dbViewId'))) if v3 else None
+            if v is None or not bs.get('m_isOn') or not all(any(a) for a in act[:3]): continue
+            O = np.array(bs['m_orig'], float); B = np.array(bs['m_basis'], float); bo = bs['m_boundOffset']
+            v['section_box'] = {'origin': [round(float(x) * 0.3048, 4) for x in O], 'basis': [[round(float(x), 6) for x in row] for row in B],
+                                'ranges': [[round(float(min(o)) * 0.3048, 4), round(float(max(o)) * 0.3048, 4)] for o in bo[:3]]}
+        except Exception:
+            continue
     return sorted(views, key=lambda v: (v['kind'], v['name'])), sorted(sheets, key=lambda s: str(s['number']))
