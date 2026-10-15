@@ -13,7 +13,7 @@ It converts and caches each model, pre-renders all sheets and views, and prints 
 * Point at the stone chimney, the shake roof, the lap siding, the red door, glass and white sash: per-face materials from the file (25/25 sampled elements match Revit's own face materials), texture bitmaps tiled at the material's real-world size.
 * **Materials** tab: Revit's own swatch images stored in the file; click a row to isolate where it is used. Click a swatch for colour/texture provenance.
 * Click a window: the inspector shows its parameters, type, IfcGUID, and the geometry badge (saved mesh, surfaces, closed solid).
-* **Section** (box or plane) to cut the house open; **Measure** with snapping.
+* **Section** (box or plane) to cut the house open: cut walls, slabs and furniture are filled dark (poche) like a Revit section; **Measure** with snapping.
 * **Shadows** (or key L) toggles sun shadows; the sun follows the view so shadows always fall visibly beside objects.
 
 ## 2. The building (2024 Snowdon Towers Structural, 28 MB): scale and structure

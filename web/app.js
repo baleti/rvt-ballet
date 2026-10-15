@@ -14,7 +14,7 @@ window.S = S;
 
 // ------------------------------------------------------------------ three setup
 const canvas = $('#gl');
-const renderer = new THREE.WebGLRenderer({canvas, antialias: true, preserveDrawingBuffer: true});
+const renderer = new THREE.WebGLRenderer({canvas, antialias: true, preserveDrawingBuffer: true, stencil: true});
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 const scene = new THREE.Scene();
 const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
@@ -54,7 +54,7 @@ function setShadows(on) {
   try { localStorage.setItem('rvtShadows', on ? '1' : '0'); } catch (e) {}
   const b = document.getElementById('bShadow'); if (b) b.classList.toggle('on', on);
 }
-const world = new THREE.Group(); scene.add(world);
+const world = new THREE.Group(); world.renderOrder = 100; scene.add(world);          // drawn after the section caps (renderOrder 1..6), see updateCaps
 const overlay = new THREE.Group(); scene.add(overlay);
 let selBoxDummy;
 let stateTex, stateData;
@@ -122,7 +122,7 @@ function pickAt(cx, cy) {
   const r = canvas.getBoundingClientRect(); const W = r.width, H = r.height, x = cx - r.left, y = cy - r.top;
   if (x < 0 || y < 0 || x >= W || y >= H) return null;
   const buf = new Uint8Array(4), out = {};
-  world.visible = true; overlay.visible = false;
+  world.visible = true; overlay.visible = false; capGroup.visible = false;
   const prevBg = scene.background; scene.background = null;
   scene.overrideMaterial = pickMat;
   renderer.setClearColor(0x000000, 0); renderer.setRenderTarget(pickRT);
@@ -132,7 +132,7 @@ function pickAt(cx, cy) {
     renderer.readRenderTargetPixels(pickRT, 0, 0, 1, 1, buf);
     if (pass === 0) out.id = buf[0] + buf[1] * 256 + buf[2] * 65536 - 1; else out.d = (buf[0] + buf[1] * 256 + buf[2] * 65536) / 16777215;
   }
-  camera.clearViewOffset(); renderer.setRenderTarget(null); scene.overrideMaterial = null; scene.background = prevBg; overlay.visible = true;
+  camera.clearViewOffset(); renderer.setRenderTarget(null); scene.overrideMaterial = null; scene.background = prevBg; overlay.visible = true; capGroup.visible = true;
   if (out.id < 0 || out.id >= S.N) return null;
   const ndc = new THREE.Vector3((x + .5) / W * 2 - 1, -((y + .5) / H) * 2 + 1, out.d * 2 - 1);
   camera.updateMatrixWorld(); camera.updateProjectionMatrix();
@@ -282,9 +282,9 @@ async function loadModel(mid, opts = {}) {
       const lm = new THREE.LineBasicMaterial({color: old.color}); lm.onBeforeCompile = patch(new THREE.MeshStandardMaterial()).onBeforeCompile; lm.customProgramCacheKey = () => 'rvtline1'; o.material = lm;
     }
     if (o.isMesh && !o.geometry.attributes._mat) o.geometry.setAttribute('_mat', new THREE.BufferAttribute(new Float32Array(o.geometry.attributes.position.count).fill(-1), 1));
-    o.frustumCulled = false; o.userData.bi = o.userData.batch ?? o.parent?.userData?.batch ?? 0;
+    o.frustumCulled = false; o.renderOrder = 10; o.userData.bi = o.userData.batch ?? o.parent?.userData?.batch ?? 0;
   });
-  world.add(gltf.scene); buildElRanges();
+  S.tris = tris; gltf.scene.renderOrder = 100; world.add(gltf.scene); buildElRanges(); if (renderer.clippingPlanes.length) updateCaps(renderer.clippingPlanes);      // groupOrder 100: the model draws after the section caps (groups 1..6)
   buildOverlays(); fitShadow(); if (!opts.keepCamera) fitAll(); buildTabs(); setupLegend(); refreshState();
   $('#status').textContent = `${S.N.toLocaleString()} elements, ${tris.toLocaleString()} triangles - ${((performance.now() - t0) / 1000).toFixed(1)}s` + ((S.meta.phase || 'done') === 'done' ? '' : ' (box preview)');
   if (!opts.keepCamera && !S.hashRestored) { S.hashRestored = true; restoreHash(); }
@@ -660,13 +660,50 @@ function applySection() {
     });
   }
   if (S.viewClip) planes.push(S.viewClip);
-  renderer.clippingPlanes = planes; dirty = true; shadowDirty = true; scheduleHash();
+  renderer.clippingPlanes = planes; updateCaps(planes); dirty = true; shadowDirty = true; scheduleHash();
+}
+// ------------------------------------------------------------------ section caps (poche): where a clip plane cuts a closed solid, fill the cut with a flat dark surface.
+// Stencil technique: every opaque batch is drawn once more into the stencil only (both sides, each face crossing inverts bit 0, clipped like the scene): a ray through
+// the cut opening of a closed solid crosses an odd number of faces, so a large plane drawn on each clip plane with (stencil & 1) != 0 shows exactly the cut areas.
+// Parity, not front/back counting, because the reader's triangle winding is not consistent. Hidden / ghosted elements are discarded in the stencil pass too.
+const capGroup = new THREE.Group(); scene.add(capGroup); let capsOn = true;
+function stencilMat() {
+  const op = THREE.InvertStencilOp, m = new THREE.MeshBasicMaterial({side: THREE.DoubleSide, colorWrite: false, depthWrite: false, depthTest: false, stencilWrite: true, stencilWriteMask: 1, stencilFunc: THREE.AlwaysStencilFunc, stencilFail: op, stencilZFail: op, stencilZPass: op});
+  m.onBeforeCompile = sh => {
+    sh.uniforms.tState = U.tState;
+    sh.vertexShader = 'attribute float _eidx; varying float vE;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvE=_eidx;');
+    sh.fragmentShader = 'varying float vE; uniform sampler2D tState;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+{ float eI = floor(vE+.5); vec4 stt = texelFetch(tState, ivec2(int(mod(eI,${TW}.)), int(eI/${TW}.)), 0); float fl = floor(stt.r*255.+.5); if(mod(fl,2.)>.5 || mod(floor(fl/8.),2.)>.5) discard; }`);
+  };
+  m.customProgramCacheKey = () => 'rvtstencil'; return m;
+}
+let STM = null;
+function updateCaps(planes) {
+  capGroup.traverse(o => { if (o.isMesh && o.userData.capPlane) { o.geometry.dispose(); o.material.dispose(); } }); capGroup.clear();
+  if (!capsOn || !planes.length || !S.meta || (planes.length > 1 && (S.tris || 0) > 1.5e6)) return;      // a box re-draws the model up to 6 times into the stencil: skipped on very large models
+  STM = STM || stencilMat();
+  const mb = modelBox(), size = mb.getSize(new THREE.Vector3()).length() * 2 + 10, c = mb.getCenter(new THREE.Vector3());
+  planes.forEach((pl, k) => {
+    const g = new THREE.Group(); g.renderOrder = k + 1;
+    world.traverse(o => {
+      if (!o.isMesh || o.material.transparent || !o.visible) return;
+      const m = new THREE.Mesh(o.geometry, STM); m.matrixAutoUpdate = false; m.matrix.copy(o.matrixWorld); m.renderOrder = k + 1; m.frustumCulled = false; g.add(m);
+    });
+    const pm = new THREE.MeshBasicMaterial({color: isDark ? 0x6a6f78 : 0x2a2c30, side: THREE.DoubleSide, stencilWrite: true, stencilRef: 0, stencilFuncMask: 1,
+      stencilFunc: THREE.NotEqualStencilFunc, stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp,
+      clippingPlanes: [], polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1});
+    const cap = new THREE.Mesh(new THREE.PlaneGeometry(size, size), pm); cap.userData.capPlane = true; cap.renderOrder = k + 1.1; cap.frustumCulled = false;
+    pl.coplanarPoint(cap.position); cap.position.add(pl.normal.clone().multiplyScalar(1e-4)); cap.position.add(c.clone().sub(cap.position).projectOnPlane(pl.normal));
+    cap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), pl.normal.clone().normalize()); cap.onAfterRender = r => r.clearStencil();
+    g.add(cap); capGroup.add(g);
+  });
 }
 $('#bSection').onclick = () => { secOn ? (secOn = false, $('#secui').hidden = true, applySection()) : setSection('Y', (modelBox().min.y + modelBox().max.y) / 2); };
 $('#secAxis').onchange = applySection; $('#secPos').oninput = applySection;
 $('#secMode').onchange = () => { secMode = $('#secMode').value; secOn = true; applySection(); };
 ['x', 'y', 'z'].forEach(kk => { $(`#bx${kk}0`).oninput = applySection; $(`#bx${kk}1`).oninput = applySection; });
 $('#secFlip').onclick = () => { secFlip *= -1; applySection(); };
+$('#secCaps').onchange = () => { capsOn = $('#secCaps').checked; applySection(); };
 $('#secOff').onclick = () => { secOn = false; $('#secui').hidden = true; applySection(); };
 
 
@@ -767,7 +804,7 @@ window.refreshState = refreshState;
 window.__renderer = renderer; window.__scene = scene; window.__camera = camera;
 
 $('#bHelp').onclick = () => { $('#help').hidden = !$('#help').hidden; };
-window.__controls = controls;
+window.__controls = controls; window.__pickAt = (x, y) => { const h = pickAt(x, y); return h && {id: h.id, d: h.d, p: h.p && h.p.toArray()}; };
 window.fitAll = fitAll; window.THREE = THREE;
 window.toVd = toV; window.fitBox = fitBox;
 
