@@ -106,6 +106,13 @@ Cache-hit page load (headless, software GL, 1280x720): 1.4-2.4 s. Measured on re
 The reader's own caches (xcache) are used as shipped; the reader's Rust fast paths (extract, schemas, g103) are on by default and make the cold decode seconds instead of minutes. The geometry stage (the reader's element_mesh in Python, now 6 forked workers) is what remains; rvt-core is porting it to Rust. The geometry stage is now mostly the Rust mesh stream plus the viewer's own per-mesh work (topology check, materials, body summary, ~9 s on Facades).
 
 ### Performance
+Real GPU (Intel Iris Xe, headless Chromium via ANGLE/Vulkan, no window; `tools/perftest.py DIR PORT vulkan`, 1280x720, ms per synced full frame, 2026-10-15):
+| model | triangles | frame | frame with shadow-map redraw (only on turns > 8 deg / visibility change) | section plane + caps | GPU pick |
+|---|---|---|---|---|---|
+| 2023 rme_basic | 2.15 M | 14.9 | 35.9 | 23.7 | 17.9 |
+| 2019 Arch Link | 0.86 M | 13.0 | 35.0 | 15.1 | 11.2 |
+| 2024 Snowdon Structural | 0.67 M | 16.6 | 26.1 | 12.3 | 12-20 |
+| 2026 Snowdon Facades | 0.29 M | 7.5 | 12.2 | 6.9 | 8.5 |
 Synthetic 150k elements / 1.8M triangles (tools/synth.py): metadata+GLB load 1.2 s (software GL), visibility change 5 ms. Real Intel Iris Xe (app-mode Chromium): GPU pick 4.5 ms, full 120k-triangle render 13 ms at 1906x972.
 Not done: true instancing (placeholders are tiny merged boxes; real symbol geometry is not in the file, see NEEDS-FROM-READER.md).
 
