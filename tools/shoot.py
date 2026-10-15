@@ -9,5 +9,7 @@ async def main(url, out, steps):
             r = await b.ev(js); await asyncio.sleep(0.9)
             if r is not None: print(r)
         await b.shot(out); print('\n'.join(b.logs[-4:]))
+    except Exception:
+        print('\n'.join(b.logs[-6:])); raise
     finally: await b.close()
 asyncio.run(main(sys.argv[1], sys.argv[2], json.load(open(sys.argv[3])) if len(sys.argv) > 3 else []))

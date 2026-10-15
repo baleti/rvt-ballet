@@ -192,6 +192,9 @@ def make_app(models):
     app.router.add_get('/api/m/{mid}/el/{i}', element)
     app.router.add_get('/api/m/{mid}/search', search)
     plugins = load_plugins(app, models)
+    try:
+        from . import viewctl; viewctl.register(app, PluginContext(models))
+    except Exception as ex: print('view control not loaded: %r' % ex)
     async def list_plugins(req): return web.json_response(plugins)
     app.router.add_get('/api/plugins', list_plugins)
     app.router.add_static('/', WEB, follow_symlinks=False)
