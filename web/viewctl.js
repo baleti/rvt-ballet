@@ -389,8 +389,9 @@ function setStatus(t) { const s = $('#vcStatus'); if (s) s.textContent = t; }
 function stateKey() { return `vctl:${V.mid}:${V.vid}`; }
 function saveLocal() { try { localStorage[stateKey()] = JSON.stringify(V.state); } catch (e) {} }
 
-async function openVC(vid) {
-  if (V.vid !== vid) {
+async function openVC(vid, preset) {
+  if (preset) V.state = Object.assign(DEFAULT_STATE(), JSON.parse(JSON.stringify(preset)));
+  else if (V.vid !== vid) {
     try { const j = localStorage[`vctl:${V.mid}:${vid}`]; V.state = Object.assign(DEFAULT_STATE(), j ? JSON.parse(j) : {}); } catch (e) { V.state = DEFAULT_STATE(); }
   }
   const mv = (S.meta.views || []).find(x => x.id === vid); if (mv && window.openView) window.openView(mv);
@@ -466,9 +467,10 @@ async function savePresets() { try { localStorage['vctl:presets'] = JSON.stringi
 function renderPanel() {
   let p = $('#vcpanel'); if (!p) { p = document.createElement('div'); p.id = 'vcpanel'; $('#view').appendChild(p); }
   p.hidden = !V.on; if (!V.on) return;
+  if (!p.style.left) { try { const pos = JSON.parse(localStorage['vctl:pos'] || 'null'); if (pos) { p.style.left = pos[0]; p.style.top = pos[1]; p.style.right = 'auto'; } } catch (e) {} }
   const st = V.state, sc = V.sc, vs = V.views.filter(v => v.drawable && (v.kind === 'plan' || v.kind === 'section'));
   const opt = (v, cur, lab) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${lab}</option>`;
-  p.innerHTML = `<div style="display:flex;align-items:center"><b>View control</b><span class="sp" style="flex:1"></span><button id="vcOff" title="remove the overlay and close the panel">close</button></div>
+  p.innerHTML = `<div id="vcHead" style="display:flex;align-items:center;cursor:move" title="drag to move the panel"><b>View control</b><span class="sp" style="flex:1"></span><button id="vcOff" title="remove the overlay and close the panel">close</button></div>
   <div class="r"><label>View</label><select id="vcView" style="flex:1;min-width:0"><option value="">select a plan / section...</option>${vs.map(v => opt(v.id, V.vid, `${v.name} (${v.kind}${v.scale ? ' 1:' + v.scale : ''})`)).join('')}</select></div>
   <h4>Display (re-draws the view)</h4>
   <div class="r"><label>Annotation scale</label><select id="vcScale">${opt('', st.scale || '', 'view default' + (sc ? ' (1:' + (sc.view.scale_stored || sc.view.scale) + ')' : ''))}${SCALES.map(s => opt(s, st.scale, '1:' + s)).join('')}</select></div>
@@ -490,6 +492,9 @@ function renderPanel() {
   <h4>Presets</h4><div class="r"><select id="vcPre" style="flex:1"><option value="">saved presets</option>${Object.keys(V.presets).sort().map(n => `<option>${esc(n)}</option>`).join('')}</select><button id="vcPreLoad">load</button><button id="vcPreDel">delete</button></div>
   <div class="r"><input type="text" id="vcPreName" placeholder="preset name" style="flex:1"><button id="vcPreSave">save</button><button id="vcExport" title="download this view's settings as JSON">export</button></div>
   <div id="vcStatus">${esc(V.status || '')}</div>`;
+  const hd = $('#vcHead'); if (hd) hd.onpointerdown = e => { if (e.target.tagName === 'BUTTON') return; const r = p.getBoundingClientRect(), pr = $('#view').getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+    hd.setPointerCapture(e.pointerId); hd.onpointermove = m => { p.style.left = Math.max(0, Math.min(pr.width - 60, m.clientX - pr.left - dx)) + 'px'; p.style.top = Math.max(0, Math.min(pr.height - 30, m.clientY - pr.top - dy)) + 'px'; p.style.right = 'auto';
+      try { localStorage['vctl:pos'] = JSON.stringify([p.style.left, p.style.top]); } catch (er) {} }; hd.onpointerup = () => { hd.onpointermove = null; }; };
   const on = (id, fn, ev = 'onchange') => { const e = $('#' + id); if (e) e[ev] = fn; };
   on('vcOff', () => closeVC(), 'onclick');
   on('vcView', e => { const v = +$('#vcView').value; if (v) openVC(v); });
@@ -535,3 +540,11 @@ btn.onclick = toggle; $('#bFid').before(btn);
 window.vctl = {state: () => V.state, V, openView: openVC, toggle, apply: applyStyles, set: patch => { Object.assign(V.state, patch); applyStyles(); }, pick: hitTest};
 // switching model closes the overlay
 setInterval(() => { if (V.on && V.mid !== S.mid) { closeVC(); } }, 1000);
+
+// ?vc=VIEWID[&vcp=PRESET] opens the panel on that view (demo scripting / shareable link)
+(async () => {
+  const q = new URLSearchParams(location.search), vid = +q.get('vc'); if (!vid) return;
+  for (let k = 0; k < 200 && !(window.__loaded && S.meta && S.meta.phase); k++) await new Promise(r => setTimeout(r, 300));
+  await toggle(); const pn = q.get('vcp');
+  await openVC(vid, pn && V.presets[pn] ? V.presets[pn] : null);
+})();

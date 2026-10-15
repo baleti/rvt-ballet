@@ -78,3 +78,14 @@
 * Task B re-verified: tools/uitest12.py (real input events) ALL OK on 2020 Residential (middle pan, Shift+middle orbit, wheel zoom, right-drag inert, Alt fallbacks, dbl-middle fit). Note: MODELDIR must be one model's cache directory.
 * SHOWCASE revolve/sweep/blend/torus table (volume and area ratio vs Revit 0.985-1.0) already in docs/SHOWCASE.md.
 * Corpus table in DEMO.md (121/121) is from the older converter; re-sweep vsweep4 queued by tools/queue_vsweep.sh, waiting for remote-host MemAvailable >= 11 GB.
+
+## 2026-10-15 c2-vctl (branch vctl, worktree ~/src/rvt-viewer-vctl)
+* View control v1 (commits d27fadc..): header button "Annotations" opens a floating panel; overlay of the drawn view (rvt-sheets primitives) placed in model space on the 3D scene.
+  Files: web/viewctl.js (overlay + panel + picking + presets), rvtviewer/viewctl.py (HTTP API), rvtviewer/vscene_worker.py (rvt-sheets ViewDrawer in its own venv, one process per file),
+  rvtviewer/vcache.py (content-keyed scene cache, valid across hosts), tools/vctltest.py (regression, headless), tools/vc_warm.sh (pre-generate scenes on remote-host), docs/CONTROL-API.md (contract).
+* Controls: annotation scale 1:N (exact re-render), detail level, view template on/off, filters on/off, plan cut plane height, phase + phase filter, crop on/off (model content only),
+  text on/off / size x / font, line weight x / min px, placement (on top, lift, opacity, hide 3D model underneath); visibility by layer / category+subcategory / class / element; colour + line weight
+  override per category and element; picking (hover tooltip, click highlight, stored fields, hide element/category/type); presets (server file + localStorage), per-view autosave, JSON export;
+  `?vc=VIEWID&vcp=PRESET` opens a view with a preset. Model API: window.vctl.
+* Touches shared files minimally: web/app.js (retrying import of viewctl.js, window.__dirty/__world, pickAt keeps world.visible), rvtviewer/server.py (viewctl.register).
+* Tests: tools/vctltest.py URL VIEWID (ALL OK on Residential plan 'first floor'); demo smoke OK (Residential, port 8852).
