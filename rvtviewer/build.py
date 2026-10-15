@@ -1456,15 +1456,20 @@ def convert(path, outdir, log=print, workers=None):
         log(m)
         if 'raw cache hit' in m: cold[0] = False; prog.extra['raw_cache_hit'] = True
     prog.set('reading', 0.0, 'decoding %s with the reader' % os.path.basename(path)); prog.start_heartbeat()
+    def _preimport():                                   # heavy first-time imports (OpenCascade ~2 s, scipy, matplotlib) overlap the Rust reader (c2-rust NEEDS 19); joined before any fork
+        for mod in ('rvtviewer.occ', 'scipy.spatial', 'scipy.optimize', 'matplotlib.path'):
+            try: __import__(mod)
+            except Exception: pass
+    import threading; pre = threading.Thread(target=_preimport, daemon=True)          # started after the quick preview: the first picture must not wait for the GIL
     VF = fast_module(); fm = None; t = time.time()
     if VF is not None:
         try:
             fm = VF.open(path); q = fm.quick(); nq = write_quick_preview(outdir, q, path); T['quick'] = round(time.time() - t, 2)
             prog.extra['quick_boxes'] = nq; prog.extra['fast_path'] = True; prog.set('reading', 0.0, 'element table in %.1fs: %d boxes, %d levels (full decode continues)' % (T['quick'], nq, len(q.get('levels') or [])), quick_rev=1)
-            raw = VF.load(path, rlog, model=fm)
+            pre.start(); raw = VF.load(path, rlog, model=fm)
         except (KeyboardInterrupt, SystemExit): raise
         except BaseException as ex:                                    # incl. Rust panics
-            log('Rust fast path failed (%r): using the Python reader' % ex); fm = None; raw = reader.cached_load(path, rlog)
+            log('Rust fast path failed (%r): using the Python reader' % ex); fm = None; pre.is_alive() and pre.join(); raw = reader.cached_load(path, rlog)
     else: raw = reader.cached_load(path, rlog)
     T['reader'] = round(time.time() - t, 2); ctx = Ctx(raw); ctx.fm = fm; prog.stop_heartbeat()
     if cold[0]:                                                          # remember the cold decode speed for ETAs
@@ -1543,6 +1548,7 @@ def convert(path, outdir, log=print, workers=None):
         json.dump(mt, open(os.path.join(outdir, 'meta.json.tmp'), 'w'), separators=(',', ':'))
         os.replace(os.path.join(outdir, 'preview.glb.tmp'), os.path.join(outdir, 'preview.glb')); os.replace(os.path.join(outdir, 'meta.json.tmp'), os.path.join(outdir, 'meta.json'))
         rev[0] += 1; prog.set('geometry', prog.last[1], prog.last[2], partial_rev=rev[0], pending=mt['pending'])
+    pre.is_alive() and pre.join()                       # no import may be in flight when the geometry stage forks its workers
     t = time.time(); res = run_geometry(ctx, els, prog, workers, on_partial); T['geometry'] = round(time.time() - t, 2)
     prog.set('packing', 0.0, 'packing glTF (meshes, materials)', done=len(els), total=len(els))
     t = time.time(); batches, bmeta, covg, covc, ious = pack_batches(els, res, mats=ctx.mats)
