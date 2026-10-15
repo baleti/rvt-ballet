@@ -4,7 +4,7 @@ usage: tools/sweep.py [FILES...]   (default: all of ~/rvt-research/corpus; files
 host1: h1run run vsweep --env occ --dir ~/src/rvt-viewer -- python tools/sweep.py   then   h1run pull .cache/rvt-viewer/sweep.jsonl ; tools/sweep_table.py"""
 import sys, os, json, time, glob, subprocess, shutil
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT = os.path.expanduser('~/.cache/rvt-viewer/sweep.jsonl'); WORK = os.path.expanduser('~/.cache/rvt-viewer/sweep-work')
+OUT = os.path.expanduser(os.environ.get('RVT_SWEEP_OUT', '~/.cache/rvt-viewer/sweep.jsonl')); WORK = os.path.expanduser('~/.cache/rvt-viewer/sweep-work')
 TIMEOUT = int(os.environ.get('RVT_SWEEP_TIMEOUT', '1200'))
 
 def main(files):
