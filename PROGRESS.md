@@ -72,3 +72,4 @@
 - Sweep 121/121, all 78 corpus files < 0.5% box-only. Real-GPU frame times (README): 2.15 M triangles 14.9 ms/frame.
 - Asked c2-sheets (rvt-sheets HOOKS.md) to serve the newest older complete sheets cache after reader changes.
 - 2026-10-15 (c4-viewer): plan/section/elevation views framed + clipped to the stored crop region; 3D views clip to stored section box; sheets badge notes stale. NEXT: rerun --prepare + smoke before re-tagging demo-ready (sheets warm on remote-host failed: remote-host memory).
+- 2026-10-15 (c4-viewer): smooth vertex normals (35 deg crease; RVT_SMOOTH=0 disables), rosetta oracle table in docs/SHOWCASE.md (volume/area ratios 0.985-1.0), compare_gt area ratio. demo-ready re-smoked.
