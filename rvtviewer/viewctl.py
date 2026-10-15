@@ -63,8 +63,25 @@ def register(app, ctx):
             os.makedirs(CACHE, exist_ok=True); tmp = fn + '.tmp%d' % os.getpid(); open(tmp, 'w').write(line); os.replace(tmp, fn)
         return line.encode(), False
 
+    async def sheets_get(req, path):
+        """GET from the mounted rvt-sheets plug-in (same server); None when it does not serve this route (older release) or fails"""
+        import aiohttp
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=600)) as ses:
+                async with ses.get('%s://%s/sheets%s' % (req.scheme, req.host, path)) as r:
+                    return r.status, await r.read()
+        except Exception: pass
+        return 0, None
+
     async def views(req):
-        body, stale = await run(req.match_info['mid'], {'op': 'views'}, True)
+        mid = req.match_info['mid']; pr, src = proc(mid)
+        fn = vcache.cache_fn(src, {'op': 'views'}); old = fn if os.path.exists(fn) else vcache.best_fn(src, {'op': 'views'})
+        if old: return web.Response(body=open(old, 'rb').read(), content_type='application/json')
+        st, doc = await sheets_get(req, '/api/%s/doc.json' % mid)       # cached sheets document: no decoding of the model on this host
+        if st == 200:
+            d = json.loads(doc)
+            return web.json_response({'views': [dict(v, drawable=True, template=None) for v in d.get('views', [])], 'phases': [], 'phaseFilters': []})
+        body, stale = await run(mid, {'op': 'views'}, True)
         return web.Response(body=body, content_type='application/json')
 
     async def scene(req):
@@ -76,7 +93,13 @@ def register(app, ctx):
         if q.get('phaseFilter'): r['phaseFilter'] = int(q['phaseFilter'])
         if q.get('template') == '0': r['template'] = False
         if q.get('filters') == '0': r['filters'] = False
-        try: body, stale = await run(req.match_info['mid'], r, True, q.get('refresh') == '1')
+        mid = req.match_info['mid']
+        if True:
+            qs = '&'.join('%s=%s' % (k, v) for k, v in q.items() if k in ('scale', 'detail', 'template', 'filters', 'cut', 'phase', 'phaseFilter') and v)
+            st, body = await sheets_get(req, '/api/%s/view/%s.json?%s' % (mid, req.match_info['vid'], qs))
+            if st == 202: return web.json_response({'error': 'the sheets server is still reading the model, retry in a few seconds'}, status=503)
+            if st == 200: return web.Response(body=body, content_type='application/json', headers={'X-Vc-Stale': '0', 'X-Vc-Source': 'sheets'})
+        try: body, stale = await run(mid, r, True, q.get('refresh') == '1')
         except web.HTTPException: raise
         except Exception as ex: return web.json_response({'error': str(ex)}, status=500)
         return web.Response(body=body, content_type='application/json', headers={'X-Vc-Stale': '1' if stale else '0'})
