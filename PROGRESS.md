@@ -89,3 +89,5 @@
   `?vc=VIEWID&vcp=PRESET` opens a view with a preset. Model API: window.vctl.
 * Touches shared files minimally: web/app.js (retrying import of viewctl.js, window.__dirty/__world, pickAt keeps world.visible), rvtviewer/server.py (viewctl.register).
 * Tests: tools/vctltest.py URL VIEWID (ALL OK on Residential plan 'first floor'); demo smoke OK (Residential, port 8852).
+* Host rules (user, permanent): no servers/workers left running on remote-host; any scene generation of big files only via tools/vc_warm.sh (remote-host, h1run) and list the job in ~/demo-state/H1-QUEUE.md. Re-warm needed after rvt-sheets/worker code changes (cache key is content based; stale caches are served with a "redraw now" button).
+* Latest: depth-rank painter order (masks), stale cache fallback, part visibility, datums replace native grids; UI tested on Residential (plan + section) with tools/vctltest.py; Structural L2 shows grids 1-9/A-E and tags.
