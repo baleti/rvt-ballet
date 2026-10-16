@@ -8,11 +8,29 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rvtviewer import reader, build
 
+def oriented_volume(V, F):
+    """weld vertices, make the winding consistent per connected component (BFS over edges shared by exactly 2 triangles, flipping faces whose shared edge runs the same direction), then the volume of each component as |signed sum|"""
+    key = np.round(V, 5); u, inv = np.unique(key, axis=0, return_inverse=True); W = inv.reshape(-1)[F].copy(); n = len(W)
+    E = {}
+    for t, (a, b, c) in enumerate(W):
+        for p, q in ((a, b), (b, c), (c, a)): E.setdefault((min(p, q), max(p, q)), []).append((t, 1 if p < q else -1))
+    adj = [[] for _ in range(n)]
+    for v in E.values():
+        if len(v) == 2: (t1, d1), (t2, d2) = v; adj[t1].append((t2, d1 == d2)); adj[t2].append((t1, d1 == d2))      # same direction on the shared edge = one of them must flip
+    flip = np.zeros(n, bool); seen = np.zeros(n, bool); tot = 0.0
+    for s0 in range(n):
+        if seen[s0]: continue
+        comp = [s0]; seen[s0] = True; k = 0
+        while k < len(comp):
+            t = comp[k]; k += 1
+            for t2, same in adj[t]:
+                if not seen[t2]: seen[t2] = True; flip[t2] = flip[t] ^ same; comp.append(t2)
+        Tc = u[W[comp]]; sg = np.where(flip[comp], -1.0, 1.0)
+        tot += abs(float((np.einsum('ij,ij->i', Tc[:, 0], np.cross(Tc[:, 1], Tc[:, 2])) * sg).sum() / 6))
+    return tot
 def _vol(V, F):
-    """signed-volume with consistent orientation: the reader's rvt_mesh.mesh_volume (orients triangles through shared edges); plain sum as fallback"""
-    try:
-        sys.path.insert(0, os.path.expanduser('~/rvt-research')); import rvt_mesh
-        return float(rvt_mesh.mesh_volume([tuple(map(tuple, V[f])) for f in F])[0])
+    """volume of a (possibly inconsistently wound) triangle mesh: weld vertices, orient every connected component consistently (oriented_volume); the reader's rvt_mesh.mesh_volume gave 0.5-0.7 of the true volume on Revit beams with non-manifold edges (verified against Revit's solid volumes to 4 digits, 2026-10-16)"""
+    try: return oriented_volume(V, F)
     except Exception: return abs(np.einsum('ij,ij->i', V[F[:, 0]], np.cross(V[F[:, 1]], V[F[:, 2]])).sum() / 6)
 
 def _xyz(t): return [float(v) for v in t.split(',')]
