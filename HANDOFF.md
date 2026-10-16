@@ -19,3 +19,4 @@ Baseline smoke OK (2020 Residential). Rust fast path + preimport thread already 
 06:01:29 vctl 5d3458a merged; vctltest ALL OK on Structural L2 (VC_RERENDER=0, 1.8 GB worker) and Residential; smoke OK; demo-ready moved
 06:13:06 demo models re-prepared after reader change (face->edge index); smoke OK; sheets warm retry loop tools/queue_warm.sh running (log ~/.cache/q_warm.log)
 09:51:32 sheets warm for Structural/Facades done (08:34), 3-file smoke OK, sweep6 89/89, demo-ready on 52b8ed8. Open: reader stage of 2017-19 MEP, MEP geometry 24-37 s (NEEDS-FROM-READER 20), item 21 writer scenes approx jump.
+14:17:05 vctl 894a4ae merged (Paper look), smoke x3 + vctltest OK, demo-ready moved; osweep (oracle_sweep.py) running on remote-host
