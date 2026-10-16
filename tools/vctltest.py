@@ -32,13 +32,13 @@ async def main(url, vid, out):
             const x=rc.left+(w.x+1)/2*rc.width, y=rc.top+(1-w.y)/2*rc.height; const h=vctl.pick(x,y); out=h?{kind:h.kind,eid:h.eid,cls:h.el.cls,text:h.prim.text,want:V.sc.prims[t.pi].text}:{miss:V.sc.prims[t.pi].text}; if(h&&h.kind==='text') break; }
           return JSON.stringify(out)})()'''))
         check('pick text', r is None or r.get('kind') == 'text', r)       # None: no text on screen in this view
-        # annotation scale re-render
-        scale0 = st['scale']; new = scale0 // 2 if scale0 % 2 == 0 else scale0 * 2
-        await b.ev('(()=>{vctl.V.state.scale=%d; return 1})()' % new)
-        await b.ev('fetch("/api/m/"+vctl.V.mid+"/vc/scene/%s?scale=%d").then(r=>r.json()).then(j=>{window.__sc2=j;return 1})' % (vid, new))
-        r = json.loads(await b.ev('JSON.stringify({size: __sc2.prims.find(p=>p.t==="text").size, scale: __sc2.view.scale})'))
-        check('annotation scale re-render', r['scale'] == new and abs(r['size'] / st['ts'] - new / scale0) < 0.05, (r, st['ts'], new / scale0))
-        await b.ev('(()=>{vctl.V.state.scale=null; return 1})()')
+        if os.environ.get('VC_RERENDER', '1') == '1':       # VC_RERENDER=0 on big files: the re-draw decodes the model
+            scale0 = st['scale']; new = scale0 // 2 if scale0 % 2 == 0 else scale0 * 2
+            await b.ev('(()=>{vctl.V.state.scale=%d; return 1})()' % new)
+            await b.ev('fetch("/api/m/"+vctl.V.mid+"/vc/scene/%s?scale=%d").then(r=>r.json()).then(j=>{window.__sc2=j;return 1})' % (vid, new))
+            r = json.loads(await b.ev('JSON.stringify({size: __sc2.prims.find(p=>p.t==="text").size, scale: __sc2.view.scale})'))
+            check('annotation scale re-render', r['scale'] == new and abs(r['size'] / st['ts'] - new / scale0) < 0.05, (r, st['ts'], new / scale0))
+            await b.ev('(()=>{vctl.V.state.scale=null; return 1})()')
         # presets
         await b.ev('fetch("/api/vc/presets",{method:"PUT",body:JSON.stringify({__test:{textSize:3}})}).then(()=>1)')
         r = await b.ev('fetch("/api/vc/presets").then(r=>r.json()).then(j=>JSON.stringify(j))'); check('presets roundtrip', '"__test"' in r, r)
