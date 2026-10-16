@@ -37,7 +37,7 @@ def _xyz(t): return [float(v) for v in t.split(',')]
 
 def load_oracle(gtdir, stem=None):
     """session-181 gt_geom format (FORMAT.md): BB rows (id, min, max as x,y,z) and G rows (key=<id>.<depth>.<solid>, volume=..); depth-0 solids are summed per element"""
-    G = {}
+    G = {}; seen_sig = set()
     for f in glob.glob(os.path.join(gtdir, '*.tsv')):
         if stem and stem not in os.path.basename(f): continue
         for l in open(f, errors='ignore'):
@@ -48,6 +48,9 @@ def load_oracle(gtdir, stem=None):
             elif x[0] == 'G' and len(x) >= 3:
                 k = x[1].split('.')
                 try:
+                    sig = (k[0], k[1], round(float(x[2].split('=')[1]), 7), round(float(x[3].split('=')[1]), 6) if len(x) > 3 and '=' in x[3] else None, tuple(round(float(c), 4) for c in x[4].split('=')[1].split(',')) if len(x) > 4 and '=' in x[4] else None)      # coincident duplicate solids (same volume, area, centroid; only the material differs, e.g. duct fittings with 3 copies): the viewer drops duplicate bodies on purpose, so the oracle counts them once
+                    if sig in seen_sig: continue
+                    seen_sig.add(sig)
                     d = G.setdefault(int(k[0]), {}); vol = float(x[2].split('=')[1]); d.setdefault('vd', {}).setdefault(k[1], 0.0); d['vd'][k[1]] += vol; d.setdefault('ad', {}).setdefault(k[1], 0.0); d['ad'][k[1]] += float(x[3].split('=')[1])
                 except (ValueError, IndexError): pass
     return {i: {'bb': v.get('bb'), 'vol': (v['vd'][min(v['vd'], key=int)] if v.get('vd') else None), 'area': (v['ad'][min(v['ad'], key=int)] if v.get('ad') else None)} for i, v in G.items() if v.get('bb')}      # solids of the shallowest depth present (family instances are depth 1)
