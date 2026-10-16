@@ -5,7 +5,7 @@ Branch vctl, worktree ~/src/rvt-viewer-vctl, head = see `git log`. All work comm
 * master merged an earlier vctl head; later vctl commits are NOT yet in master (tell c5-viewer; run smoke first). Master .venv was rebuilt after my symlink incident (see memory worktree-venv-symlink-incident); never `git add -A` a .venv symlink.
 ## Next
 1. DONE 2026-10-15: release 3 mounted, scene served by the sheets server (X-Vc-Source: sheets) incl. uncached variants.
-2. Queue in ~/demo-state/H1-QUEUE.md: tools/vc_warm.sh for Snowdon Structural (and other demo files) after the sheets release (remote-host >= 11 GB free); not needed if the sheets endpoint caches.
+2. DONE: Structural scenes warmed (41, key b73c3265d16b52b5, 12 carry element props); re-warm only if the sheets drawing code changes.
 3. Wire c2-annot's element properties (picking panel) when ViewDrawer.element_props lands; use `anchor` for true model-space placement; tags/grids `part` values when added.
 4. Possible: 3D-view annotations, per-type (family type) grouping once typeName exists, better mask handling check on detail views, Revit-export comparison via c5-qa.
 ## Rules reminder
