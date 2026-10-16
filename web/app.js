@@ -285,7 +285,7 @@ async function loadModel(mid, opts = {}) {
   S.byCat = new Map();
   E.forEach((el, i) => { const c = el[2] || '(no category)'; if (!S.byCat.has(c)) S.byCat.set(c, []); S.byCat.get(c).push(i); });
   S.hay = E.map(el => [el[0], el[1], el[2], el[3], el[4], el[5], el[8]].join(' ').toLowerCase());
-  S.catHidden = opts.keepCamera ? S.catHidden : new Set(S.meta.defaultHidden || []);
+  S.catHidden = opts.keepCamera ? S.catHidden : new Set([...(S.meta.defaultHidden || []), ...(new URLSearchParams(location.search).get('hide') || '').split(',').filter(Boolean)]);      // ?hide=Planting,Entourage (rvt-view --hide)
   initState(S.N); refreshState();
   $('#status').textContent = 'loading geometry...';
   world.clear(); overlay.clear(); S.bbCache = null;

@@ -96,4 +96,4 @@ First usable = reader + tables + preview (`timings` of tools/sweep.py): the page
 
 ## Files of 25 MB and more
 
-Median first usable 12.8 s, median total 46.8 s (n=29). Slowest first usable: 05_rme_advanced_sample_project 51 s, 29_rme_advanced_sample_project 27 s, 28_rme_basic_sample_project.rv 24 s.
+Timings come from a shared host1 slice and can be inflated by neighbouring jobs (2026 Site: 48.7 s in the sweep, 12.5 s alone). Median first usable 12.8 s, median total 46.8 s (n=29). Slowest first usable: 05_rme_advanced_sample_project 51 s, 29_rme_advanced_sample_project 27 s, 28_rme_basic_sample_project.rv 24 s.

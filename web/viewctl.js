@@ -17,8 +17,8 @@ const LAYER_LABEL = {cut: 'Cut linework', projection: 'Projection linework', und
 const PATTERNS = {solid: null, dash: [3.2, 1.6], dot: [0.4, 1.2], dashdot: [3.2, 1.2, 0.4, 1.2], long: [6.4, 1.6]};      // paper mm
 const SCALES = [1, 5, 10, 20, 25, 50, 75, 96, 100, 200, 240, 500];
 
-const DEFAULT_STATE = () => ({scale: null, detail: null, cut: null, phase: null, pfilter: null, template: true, filters: true, crop: true, layers: {}, cats: {}, elems: {}, classes: {}, types: {}, parts: {}, annoScale: 1, textOn: true, textSize: 1, font: '', textColor: '',
-  lineScale: 1, minPx: 1, model: true, nativeOff: true, lift: 0.02, onTop: true, opacity: 1, contrast: true, halo: false});
+const DEFAULT_STATE = () => ({ghosts: [], ghostOpacity: 0.45, scale: null, detail: null, cut: null, phase: null, pfilter: null, template: true, filters: true, crop: true, layers: {}, cats: {}, elems: {}, classes: {}, types: {}, parts: {}, annoScale: 1, textOn: true, textSize: 1, font: '', textColor: '',
+  lineScale: 1, minPx: 1, hideHang: false, model: true, nativeOff: true, lift: 0.02, onTop: true, opacity: 1, contrast: true, halo: false});
 const V = {mid: null, vid: null, sc: null, group: null, state: DEFAULT_STATE(), sel: null, views: [], loading: false, presets: {}};
 window.__vc = V;
 
@@ -107,7 +107,7 @@ function build(sc) {
   sc.prims.forEach((p, pi) => {
     const eid = p.elem, layer = p.layer || 'x', e = sc.elements[eid] || {};
     const cat = p.cat != null ? p.cat : e.cat;
-    meta[pi] = {eid, cat, layer, cls: e.cls, t: p.t, part: p.part, clip: MODEL_LAYERS.has(layer) ? 1 : 0};
+    meta[pi] = {eid, cat, layer, cls: e.cls, t: p.t, part: p.part, hang: p.hang, clip: MODEL_LAYERS.has(layer) ? 1 : 0};
     lyrs.add(layer);
     const st = p.style || {w: 0.18, rgb: [0, 0, 0]}, ov = V.state.cats[catKey(cat)]?.dash ?? V.state.cats[catKey(e.parent)]?.dash;
     const dsh = ov === undefined || ov === '' ? st.dash : (PATTERNS[ov] || null), pat = dsh && dsh.length ? dsh.map(x => Math.max(x * mpmm, 1e-4)) : null;
@@ -200,6 +200,35 @@ function makeScene(sc) {
   applyStyles(); dirty();
 }
 
+// other views drawn as faint static linework at their own heights (e.g. L1 + L2 + roof plans stacked on the model); strokes only, no text
+const ghostMeshes = [];
+function clearGhosts() { for (const m of ghostMeshes) { m.parent && m.parent.remove(m); m.geometry.dispose(); } ghostMeshes.length = 0; }
+async function loadGhosts() {
+  clearGhosts();
+  for (const vid of V.state.ghosts) {
+    try {
+      const sc = await (await fetch(`/api/m/${V.mid}/vc/scene/${vid}`)).json(); if (sc.error) continue;
+      const B = build(sc), n = B.segs.length, A = new Float32Array(n * 12), Bv = new Float32Array(n * 12), C = new Float32Array(n * 8), col = new Float32Array(n * 16), W = new Float32Array(n * 4), K = new Float32Array(n * 4), RK = new Float32Array(n * 4), idx = new Uint32Array(n * 6);
+      const corners = [[0, -1], [0, 1], [1, -1], [1, 1]], dark = matchMedia('(prefers-color-scheme: dark)').matches;
+      B.segs.forEach((sg, i) => {
+        const m = B.meta[sg.p], st = sc.prims[sg.p].style || {w: 0.18, rgb: [0, 0, 0]}; let c = rgb(st.rgb); if (dark && lum(c) < 0.18) c = [0.93, 0.93, 0.93];
+        for (let k = 0; k < 4; k++) { const o = i * 4 + k; A.set([sg.a[0], sg.a[1], 0], o * 3); Bv.set([sg.b[0], sg.b[1], 0], o * 3); C.set(corners[k], o * 2); K[o] = m.clip; col.set([c[0], c[1], c[2], V.state.ghostOpacity], o * 4); W[o] = m.layer === 'text' ? 0 : st.w; }
+        idx.set([i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 1, i * 4 + 3, i * 4 + 2], i * 6);
+      });
+      const g = new THREE.BufferGeometry();
+      for (const [k, a, sz] of [['position', A, 3], ['aA', A, 3], ['aB', Bv, 3], ['aC', C, 2], ['aCol', col, 4], ['aW', W, 1], ['aClip', K, 1], ['aRank', RK, 1]]) g.setAttribute(k, new THREE.BufferAttribute(a, sz));
+      g.setIndex(new THREE.BufferAttribute(idx, 1));
+      const mat = lineMat.clone(); mat.uniforms = Object.assign({}, U, {uCrop: {value: new THREE.Vector4(...(sc.view.crop_uv || [-1e6, -1e6, 1e6, 1e6]).map(x => x * FT))}, uRankMode: {value: 0}, uPxPerMm: {value: 1}});
+      mat.depthTest = true; 
+      const mesh = new THREE.Mesh(g, mat); mesh.frustumCulled = false; mesh.renderOrder = 998; mesh.matrixAutoUpdate = false; mesh.matrix.copy(frameMatrix(sc.view).m);
+      // line widths in px for this view's own scale: pxPerMm uniform is per overlay scale; correct by the scale ratio
+      mesh.onBeforeRender = (r, sce, cam) => { updateUniforms(cam); mat.uniforms.uPxPerMm.value = U.uPxPerMm.value * (sc.view.scale || 100) / (V.sc ? V.sc.view.scale || 100 : 100); };
+      (window.__overlay || scene).add(mesh); ghostMeshes.push(mesh);
+    } catch (e) { console.warn('ghost view', vid, e); }
+  }
+  dirty();
+}
+
 function makeText(p, pi) {
   const lines = String(p.text).split('\n'), tx = textTexture(lines, V.state.font || p.font, p.bold, p.italic);
   const em = (p.size || 0.0098) * EM * FT;          // metres per em (size is Revit text size in model feet; em = size / 0.72)
@@ -243,6 +272,7 @@ function primVisible(m) {
   if (m.eid != null && st.elems[m.eid]?.vis === false) return false;
   if (m.cls && st.classes[m.cls] === false) return false;
   if (m.part && st.parts[m.part] === false) return false;
+  if (m.hang && st.hideHang) return false;
   if (e && e.typeName && st.types[e.typeName] === false) return false;
   if (m.t === 'text' && !st.textOn) return false;
   return true;
@@ -404,7 +434,7 @@ async function loadScene(vid, refresh = false) {
   try {
     const r = await fetch(`/api/m/${V.mid}/vc/scene/${vid}?${viewQuery()}${refresh ? '&refresh=1' : ''}`);
     const sc = await r.json(); if (sc.error) throw new Error(sc.error);
-    V.stale = r.headers.get('X-Vc-Stale') === '1'; V.vid = vid; makeScene(sc); renderPanel();
+    V.stale = r.headers.get('X-Vc-Stale') === '1'; V.vid = vid; makeScene(sc); renderPanel(); loadGhosts();
     setStatus(`${sc.view.name}: ${sc.prims.length} primitives, 1:${sc.view.scale} (${sc.seconds}s)`);
   } catch (e) { setStatus('view control: ' + e.message); }
   V.loading = false;
@@ -514,7 +544,9 @@ function renderPanel() {
   <div class="r"><label>Crop region</label><input type="checkbox" id="vcCrop" ${st.crop ? 'checked' : ''}><span class="dim">${sc && sc.view.crop_uv ? 'model content only' : 'no stored crop'}</span></div>
   <div class="r"><label>Text</label><input type="checkbox" id="vcText" ${st.textOn ? 'checked' : ''}> size &times;<input type="number" id="vcTS" step="0.1" min="0.1" value="${st.textSize}"> symbols &times;<input type="number" id="vcAS" step="0.1" min="0.1" value="${st.annoScale}" title="annotation symbol size about their anchor (instant); use Annotation scale for the exact re-draw"> <input type="text" id="vcFont" placeholder="font" value="${esc(st.font)}" style="width:80px"></div>
   <div class="r"><label>Line weight &times;</label><input type="number" id="vcLS" step="0.25" min="0" value="${st.lineScale}"> min px<input type="number" id="vcMP" step="0.5" min="0" value="${st.minPx}"></div>
+  <div class="r"><label>Markers</label><label class="chk" title="section / elevation / callout heads that sit outside the model extents"><input type="checkbox" id="vcHang" ${st.hideHang ? 'checked' : ''}> hide far-out heads</label></div>
   <div class="r"><label>3D model</label><input type="checkbox" id="vcModel" ${st.model ? 'checked' : ''}><span class="dim">under the drawing</span> <label class="chk" title="hide the viewer's own whole-model grids and level planes while the view's datums are shown"><input type="checkbox" id="vcNat" ${st.nativeOff ? 'checked' : ''}> own datums off</label></div>
+  <div class="r"><label>Also show</label><select id="vcGhost" multiple size="3" style="flex:1;min-width:0" title="other plan / section views drawn faintly at their own position (ctrl-click for several)">${vs.filter(v => v.id !== V.vid).map(v => `<option value="${v.id}" ${st.ghosts.includes(v.id) ? 'selected' : ''}>${esc(v.name)} (${v.kind})</option>`).join('')}</select></div>
   <div class="r"><label>Placement</label><label class="chk"><input type="checkbox" id="vcTop" ${st.onTop ? 'checked' : ''}> on top</label> lift<input type="number" id="vcLift" step="0.05" value="${st.lift}" title="metres along the view normal"> &alpha;<input type="number" id="vcOp" step="0.1" min="0" max="1" value="${st.opacity}"></div>
   <h4>Visibility <span class="sp"></span><span class="chk" style="gap:2px"><button data-m="cat" class="${(V.treeMode || 'cat') === 'cat' ? 'on' : ''}">category</button><button data-m="layer" class="${V.treeMode === 'layer' ? 'on' : ''}">layer</button><button data-m="type" class="${V.treeMode === 'type' ? 'on' : ''}">type</button><button data-m="ftype" class="${V.treeMode === 'ftype' ? 'on' : ''}" title="family type (tag / dimension / note types)">family type</button><button data-m="part" class="${V.treeMode === 'part' ? 'on' : ''}" title="leaders, witness lines, arrows, heads...">part</button><button data-m="el" class="${V.treeMode === 'el' ? 'on' : ''}">element</button></span></h4>
   ${V.treeMode === 'el' ? '<input type="text" id="vcQ" placeholder="filter id / class / category" style="width:100%;margin-bottom:3px">' : ''}
@@ -538,11 +570,12 @@ function renderPanel() {
   on('vcCutReset', () => { st.cut = null; redraw(); }, 'onclick');
   on('vcPhase', () => { st.phase = +$('#vcPhase').value || null; redraw(); });
   on('vcPF', () => { st.pfilter = +$('#vcPF').value || null; redraw(); });
+  on('vcGhost', () => { st.ghosts = [...$('#vcGhost').selectedOptions].map(o => +o.value); saveLocal(); loadGhosts(); });
   on('vcTpl', () => { st.template = $('#vcTpl').checked; redraw(); });
   on('vcFil', () => { st.filters = $('#vcFil').checked; redraw(); });
   const inst = (id, fn) => on(id, () => { fn($('#' + id)); saveLocal(); applyStyles(); });
   inst('vcCrop', e => st.crop = e.checked); inst('vcText', e => st.textOn = e.checked); inst('vcTS', e => st.textSize = +e.value || 1); inst('vcFont', e => { st.font = e.value; if (V.sc) makeScene(V.sc); });
-  inst('vcModel', e => st.model = e.checked); inst('vcNat', e => st.nativeOff = e.checked); on('vcAS', () => { st.annoScale = +$('#vcAS').value || 1; saveLocal(); if (V.sc) makeScene(V.sc); }); inst('vcLS', e => st.lineScale = +e.value); inst('vcMP', e => st.minPx = +e.value); inst('vcTop', e => st.onTop = e.checked); inst('vcLift', e => st.lift = +e.value); inst('vcOp', e => st.opacity = +e.value);
+  inst('vcHang', e => st.hideHang = e.checked); inst('vcModel', e => st.model = e.checked); inst('vcNat', e => st.nativeOff = e.checked); on('vcAS', () => { st.annoScale = +$('#vcAS').value || 1; saveLocal(); if (V.sc) makeScene(V.sc); }); inst('vcLS', e => st.lineScale = +e.value); inst('vcMP', e => st.minPx = +e.value); inst('vcTop', e => st.onTop = e.checked); inst('vcLift', e => st.lift = +e.value); inst('vcOp', e => st.opacity = +e.value);
   p.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { V.treeMode = b.dataset.m; renderPanel(); });
   on('vcQ', () => renderTree(), 'oninput');
   on('vcAllOn', () => { st.types = {}; st.parts = {}; st.layers = {}; st.cats = {}; st.elems = {}; st.classes = {}; st.textOn = true; applyStyles(); saveLocal(); renderPanel(); }, 'onclick');
@@ -555,7 +588,7 @@ function renderPanel() {
   on('vcExport', () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({view: V.vid, state: V.state}, null, 1)], {type: 'application/json'})); a.download = `view-${V.vid}-controls.json`; a.click(); }, 'onclick');
   renderTree();
 }
-function closeVC() { V.on = false; if (V.prevNative) { if (S.gridGroup) S.gridGroup.visible = V.prevNative.g; if (S.lvlGroup) S.lvlGroup.visible = V.prevNative.l; V.prevNative = null; } if (window.__world) window.__world.visible = true; disposeGroup(); V.sc = null; const p = $('#vcpanel'); if (p) p.hidden = true; $('#bVC')?.classList.remove('on'); dirty(); }
+function closeVC() { V.on = false; clearGhosts(); if (V.prevNative) { if (S.gridGroup) S.gridGroup.visible = V.prevNative.g; if (S.lvlGroup) S.lvlGroup.visible = V.prevNative.l; V.prevNative = null; } if (window.__world) window.__world.visible = true; disposeGroup(); V.sc = null; const p = $('#vcpanel'); if (p) p.hidden = true; $('#bVC')?.classList.remove('on'); dirty(); }
 
 // ------------------------------------------------------------------ entry
 async function toggle() {
@@ -570,7 +603,7 @@ async function toggle() {
 }
 const btn = document.createElement('button'); btn.id = 'bVC'; btn.textContent = 'Annotations'; btn.title = 'View-dependent elements: tags, text, dimensions, grids, hatches - per view / category / element controls';
 btn.onclick = toggle; $('#bFid').before(btn);
-window.vctl = {state: () => V.state, V, openView: openVC, toggle, apply: applyStyles, set: patch => { Object.assign(V.state, patch); applyStyles(); }, pick: hitTest};
+window.vctl = {loadGhosts, state: () => V.state, V, openView: openVC, toggle, apply: applyStyles, set: patch => { Object.assign(V.state, patch); applyStyles(); }, pick: hitTest};
 // switching model closes the overlay
 setInterval(() => { if (V.on && V.mid !== S.mid) { closeVC(); } }, 1000);
 

@@ -15,7 +15,7 @@ for r in rows:
     out.append('| %s | %s | %.1f | %.1f | %.1f | %d | %d |' % (r['year'], r['file'], r['mb'], fu, t['total'], r['elements'], r['tris']))
 big = [r for r in rows if r['mb'] >= 25]
 out += ['', '## Files of 25 MB and more', '',
-  'Median first usable %.1f s, median total %.1f s (n=%d). Slowest first usable: %s.' % (
+  'Timings come from a shared host1 slice and can be inflated by neighbouring jobs (2026 Site: 48.7 s in the sweep, 12.5 s alone). Median first usable %.1f s, median total %.1f s (n=%d). Slowest first usable: %s.' % (
     sorted(r['timings']['reader'] + r['timings']['tables'] + r['timings']['preview'] for r in big)[len(big) // 2],
     sorted(r['timings']['total'] for r in big)[len(big) // 2], len(big),
     ', '.join('%s %.0f s' % (r['file'][:30], r['timings']['reader'] + r['timings']['tables'] + r['timings']['preview']) for r in sorted(big, key=lambda r: -(r['timings']['reader'] + r['timings']['tables'] + r['timings']['preview']))[:3]))]

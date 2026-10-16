@@ -7,14 +7,15 @@ Everything runs offline, no Revit, no Autodesk SDK. Prepare once before the inte
 It converts and caches each model, pre-renders all sheets and views, and prints `READY: <command>` per file. If a peer changes the reader afterwards, the prepared model still opens instantly (a small "newer reader available" chip appears bottom right; ignore it or hide it with x).
 
 ## 1. The house (2020 Residential, 10 MB): materials and real geometry
-    ~/src/rvt-viewer/bin/rvt-view ~/rvt-research/corpus/2020/20_Residential_Sample_Project.rvt
+    ~/src/rvt-viewer/bin/rvt-view ~/rvt-research/corpus/2020/20_Residential_Sample_Project.rvt --hide Planting,Entourage
 * Opens in ~2 s. Say: "a native .rvt, read by our own parser: no Revit, no Autodesk SDK".
-* Navigation is Revit's: **Shift + middle-drag = orbit**, **middle-drag = pan**, **wheel = zoom at the cursor**, double middle-click = zoom to fit, click the ViewCube to snap to a view; left click selects, right button does nothing. Touchpad without a middle button: **Alt + left-drag = orbit**, **Alt + Shift + left-drag = pan**, two-finger scroll / pinch zooms, key F fits (the toolbar `Nav` box can switch to the classic left-drag orbit). Untick **Planting** in the Model tree to see the house.
+* Navigation is Revit's: **Shift + middle-drag = orbit**, **middle-drag = pan**, **wheel = zoom at the cursor**, double middle-click = zoom to fit, click the ViewCube to snap to a view; left click selects, right button does nothing. Touchpad without a middle button: **Alt + left-drag = orbit**, **Alt + Shift + left-drag = pan**, two-finger scroll / pinch zooms, key F fits (the toolbar `Nav` box can switch to the classic left-drag orbit). `--hide Planting,Entourage` starts with the trees hidden so the house is visible at once (without it, untick **Planting** in the Model tree).
 * Point at the stone chimney, the shake roof, the lap siding, the red door, glass and white sash: per-face materials from the file (25/25 sampled elements match Revit's own face materials), texture bitmaps tiled at the material's real-world size.
 * **Materials** tab: Revit's own swatch images stored in the file; click a row to isolate where it is used. Click a swatch for colour/texture provenance.
-* Click a window: the inspector shows its parameters, type, IfcGUID, and the geometry badge (saved mesh, surfaces, closed solid).
+* Click a window: the inspector shows its parameters, type, IfcGUID, the geometry badge (saved mesh, surfaces, closed solid) and how well the reader matches Revit for that element class over the whole corpus (docs/FIDELITY-FINAL.md: e.g. walls 99.3%, family instances 99.5%).
 * **Section** (box or plane) to cut the house open: cut walls, slabs and furniture are filled dark (poche) like a Revit section; **Measure** with snapping.
 * **Views** tab: click `first floor` (plan) or `building section`: the view opens at Revit's stored cut plane with cut walls / slabs / roof filled dark, like the drawing in Revit. 'close view' returns.
+* **Annotations** (header button, or the `annotations` link on a plan row in the Views tab): the view's tags, text, dimensions, grids, levels and markers appear in model space on the 3D scene, as the sheets renderer draws them. Switch annotation scale (1:48 ...), hide a category or a family type, change colour / line weight / text size, click a tag to see its properties; save a preset. Details: docs/VIEW-CONTROL.md.
 * **Shadows** (or key L) toggles sun shadows; the sun follows the view so shadows always fall visibly beside objects.
 
 ## 2. The building (2024 Snowdon Towers Structural, 28 MB): scale and structure
@@ -28,12 +29,15 @@ It converts and caches each model, pre-renders all sheets and views, and prints 
 * Revit 2026 file; curtain walls, mullions and curved panels from cones, revolutions, ruled and Hermite surfaces decoded from the file.
 * Zoom to the street front: running and soldier-course brick, granite, quartz, stained wood frames and copper come from Revit's Advanced (Prism) appearances, textured at their real-world size.
 
-**Facades sheets**: their drawings are big (about 25 minutes to pre-render). Check `curl localhost:PORT/sheets/api/<id>/cache.json` or the toolbar badge ("sheets cached"); if it says not cached, open Facades WITHOUT `--sheets` (the 3D model is instant) or run `~/src/rvt-sheets/rvt-sheets warm <file> --host1` first.
+**Facades sheets**: the first pre-render of these big drawings can take long; after `--prepare` they are cached (re-warm with `tools/queue_warm.sh` when host1 is free). Check `curl localhost:PORT/sheets/api/<id>/cache.json` or the toolbar badge ("sheets cached"); if it says not cached, open Facades WITHOUT `--sheets` (the 3D model is instant) or run `~/src/rvt-sheets/rvt-sheets warm <file> --host1` first.
 
 ## If something goes wrong
 * Window does not appear: the command prints `serving http://127.0.0.1:PORT/...`; open that URL in any browser.
 * A model looks unfinished: the banner says STILL PARSING with a live counter; boxes turn into meshes as they decode.
 * Close with Ctrl+C in the terminal (or close the window).
+
+## Verified (2026-10-16)
+* All three demo files pass tools/demo_smoke.sh on master (main page, materials, sheets page and doc); tools/uitest12.py (Revit navigation with real input events) and tools/vctltest.py (annotation control) pass. Whole corpus: 89 / 89 files pass (table below, docs/SWEEP.md); speed per file: docs/SPEED.md; geometry accuracy per class and year: docs/FIDELITY-FINAL.md.
 
 ## Verified (2026-10-14)
 * `rvt-view FILE --sheets` end to end in headless Chromium (banner, 3D loads, Sheets page ready, Model button back, no JS exceptions): 2020 Residential (first picture 2.7 s, sheets page 2 s), 2024 Snowdon Structural (2.5 s, 12 sheets / 104 views), 2026 Snowdon Facades (3.1 s, 2 sheets / 47 views). The real app window (workspace 178, silent) opens too.
