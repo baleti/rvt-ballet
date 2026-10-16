@@ -170,3 +170,5 @@ Target was: 40 MB file usable in < 8 s. Met for 2024+ Structural / Facades / Ele
 * 2020-2023 rme_basic / rme_advanced (MEP, 27-37 MB): reader 13 s, geometry 28-38 s (first usable 17 s).
 * 2026 Site (61 MB): geometry stage 42 s vs 6.7 s for the 2024 Site (same model): something in the 2026 geometry path for Site (topography / toposolid?) is 6x slower.
 * Plumbing 2024/2026 (42 MB): geometry 24 s, first usable 13 s.
+### Correction to 20 (c5-viewer, 2026-10-16): the 2026 Site outlier was not real
+Re-measured on remote-host with a private cache (bench/conv_profile.py FILE DIR p, job prof59): whole conversion of 2026 Site = 12.5 s under cProfile (extraction included), against 48.7 s in the sweep. The sweep ran next to other jobs on the shared slice, so single sweep timings above ~2x of a re-run are contention; treat the other outliers of item 20 (2017 rme reader 47 s, MEP geometry) as unconfirmed until re-timed alone with conv_profile.py.
