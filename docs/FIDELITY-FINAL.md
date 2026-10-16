@@ -1,6 +1,6 @@
 # Fidelity per class and year (reader acceptance, final corpus run)
 
-Source: FID_TABLE_FINAL.txt (c5-geometry, final code, 60/61 corpus files). Judged with the reader definition: the element is "accurate" when its mesh matches Revit's own geometry (bbox IoU, Revit Volume at Fine detail for loadable families). Buckets: **reader-accurate** = true geometry that agrees with Revit; **parametric-unproven** = true geometry whose extents/volume do not (yet) agree ("true-off"); **box-only** = no decoded solid, drawn as bounding box.
+Source: FID_TABLE_FINAL.txt (c5-geometry reader acceptance run). Judged with the reader definition: the element is "accurate" when its mesh matches Revit's own geometry (bbox IoU, Revit Volume at Fine detail for loadable families). Buckets: **reader-accurate** = true geometry that agrees with Revit; **parametric-unproven** = true geometry whose extents/volume do not (yet) agree ("true-off"); **box-only** = no decoded solid, drawn as bounding box.
 
 ## Per class (all years)
 
