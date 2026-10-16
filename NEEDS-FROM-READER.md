@@ -163,3 +163,10 @@ VIEWER (c2-viewer, 2026-10-15): 19 confirmed in the viewer: 2017 rst_basic 14% b
 ### 19. (c2-rust, 2026-10-15) ensure_roofs on 2026 Facades = 2.5 s, of which ~2.8 s cumulative is first-time imports (rvtviewer.occ -> OCP 2.0 s, scipy.spatial 0.5 s, matplotlib 0.3 s)
 Importing those three in a daemon thread at the start of build.convert (while the Rust reader runs) measured: geometry stage 5.5/4.0 s -> 3.0/2.6 s, reading +0.4 s, total 8.2/6.4 -> 6.3/6.0 s
 (remote-host under load, 2 runs each). Optional, your call; the harness is ~/src/rvt-core/bench/conv_profile.py.
+
+## 20. Speed outliers in the full sweep (c5-viewer, 2026-10-16; docs/SPEED.md, tools/speed_table.py; for c5-rust / c5-geometry)
+Target was: 40 MB file usable in < 8 s. Met for 2024+ Structural / Facades / Electrical (first usable 4.5-7 s) but not for:
+* 2017 rme_advanced (33 MB): reader stage 47 s (`quick` 43 s) vs 13 s for the 2020 copy of the same model; 2017 rme_basic reader 17.6 s vs 13.5 s (2020). The 2017 path seems to miss the fast route in the quick/extraction stage.
+* 2020-2023 rme_basic / rme_advanced (MEP, 27-37 MB): reader 13 s, geometry 28-38 s (first usable 17 s).
+* 2026 Site (61 MB): geometry stage 42 s vs 6.7 s for the 2024 Site (same model): something in the 2026 geometry path for Site (topography / toposolid?) is 6x slower.
+* Plumbing 2024/2026 (42 MB): geometry 24 s, first usable 13 s.
