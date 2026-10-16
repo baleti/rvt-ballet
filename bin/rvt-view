@@ -1,4 +1,4 @@
 #!/bin/sh
-# demo launcher, run it from anywhere:   ~/src/rvt-viewer/bin/rvt-view /full/path/FILE.rvt [--sheets] [--workspace N] [--no-browser]
+# demo launcher, run it from anywhere:   ~/src/rvt-viewer/bin/rvt-view /full/path/FILE.rvt [--sheets] [--workspace N] [--no-browser] [--hide Cat1,Cat2]
 # converts/loads FILE.rvt with the progressive "still parsing" banner and opens the app window on the CURRENT workspace with focus.
 exec "$(dirname "$(readlink -f "$0")")/../rvt-viewer" open "$@"

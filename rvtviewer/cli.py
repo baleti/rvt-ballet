@@ -1,5 +1,5 @@
 """rvt-viewer open FILE.rvt | convert FILE.rvt OUTDIR | serve [DIRS...]"""
-import os, sys, argparse, hashlib, json, subprocess, shutil, time
+import urllib.parse, os, sys, argparse, hashlib, json, subprocess, shutil, time
 from . import reader
 
 def model_dir(path):
@@ -124,7 +124,7 @@ def prepare(files):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog='rvt-viewer'); sub = ap.add_subparsers(dest='cmd', required=True)
-    o = sub.add_parser('open'); o.add_argument('files', nargs='+'); o.add_argument('--port', type=int, default=0); o.add_argument('--no-browser', action='store_true'); o.add_argument('--workspace'); o.add_argument('--rebuild', action='store_true'); o.add_argument('--sheets', action='store_true', help='open directly on the sheets page'); o.add_argument('--prepare', action='store_true', help='demo prep: convert + cache the model(s), warm the sheets cache, print the exact demo command, do not serve')
+    o = sub.add_parser('open'); o.add_argument('files', nargs='+'); o.add_argument('--port', type=int, default=0); o.add_argument('--no-browser', action='store_true'); o.add_argument('--workspace'); o.add_argument('--rebuild', action='store_true'); o.add_argument('--sheets', action='store_true', help='open directly on the sheets page'); o.add_argument('--hide', default='', help='comma list of categories hidden at start, e.g. Planting,Entourage (URL ?hide=...)'); o.add_argument('--prepare', action='store_true', help='demo prep: convert + cache the model(s), warm the sheets cache, print the exact demo command, do not serve')
     c = sub.add_parser('convert'); c.add_argument('file'); c.add_argument('out', nargs='?')
     s = sub.add_parser('serve'); s.add_argument('dirs', nargs='*'); s.add_argument('--port', type=int, default=0)
     a = ap.parse_args(argv)
@@ -193,7 +193,8 @@ def main(argv=None):
                 if os.path.exists(os.path.join(root, n, 'meta.json')): models.add(n, os.path.join(root, n), n.rsplit('-', 1)[0] + stale_mark(os.path.join(root, n)))
     def ready(port):
         first = next(iter(models.m)) if models.m else ''
-        url = 'http://127.0.0.1:%d/%s#%s' % (port, '?sheets=1' if getattr(a, 'sheets', False) else '', first)
+        qs = '&'.join(x for x in ['sheets=1' if getattr(a, 'sheets', False) else '', 'hide=' + urllib.parse.quote(a.hide) if getattr(a, 'hide', '') else ''] if x)
+        url = 'http://127.0.0.1:%d/%s#%s' % (port, '?' + qs if qs else '', first)
         print('serving', url, flush=True)
         if a.cmd == 'open' and not a.no_browser: open_browser(url, a.workspace)
     server.serve(models, port=a.port, ready=ready)
