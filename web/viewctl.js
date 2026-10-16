@@ -17,7 +17,7 @@ const LAYER_LABEL = {cut: 'Cut linework', projection: 'Projection linework', und
 const PATTERNS = {solid: null, dash: [3.2, 1.6], dot: [0.4, 1.2], dashdot: [3.2, 1.2, 0.4, 1.2], long: [6.4, 1.6]};      // paper mm
 const SCALES = [1, 5, 10, 20, 25, 50, 75, 96, 100, 200, 240, 500];
 
-const DEFAULT_STATE = () => ({scale: null, detail: null, cut: null, phase: null, pfilter: null, template: true, filters: true, crop: true, layers: {}, cats: {}, elems: {}, classes: {}, parts: {}, annoScale: 1, textOn: true, textSize: 1, font: '', textColor: '',
+const DEFAULT_STATE = () => ({scale: null, detail: null, cut: null, phase: null, pfilter: null, template: true, filters: true, crop: true, layers: {}, cats: {}, elems: {}, classes: {}, types: {}, parts: {}, annoScale: 1, textOn: true, textSize: 1, font: '', textColor: '',
   lineScale: 1, minPx: 1, model: true, nativeOff: true, lift: 0.02, onTop: true, opacity: 1, contrast: true, halo: false});
 const V = {mid: null, vid: null, sc: null, group: null, state: DEFAULT_STATE(), sel: null, views: [], loading: false, presets: {}};
 window.__vc = V;
@@ -243,6 +243,7 @@ function primVisible(m) {
   if (m.eid != null && st.elems[m.eid]?.vis === false) return false;
   if (m.cls && st.classes[m.cls] === false) return false;
   if (m.part && st.parts[m.part] === false) return false;
+  if (e && e.typeName && st.types[e.typeName] === false) return false;
   if (m.t === 'text' && !st.textOn) return false;
   return true;
 }
@@ -380,8 +381,11 @@ async function showPicked(h) {
   const box = $('#vcPicked'); if (!box) return;
   if (!h) { box.innerHTML = '<span class="dim">click a drawn element</span>'; return; }
   const e = h.el, p = h.prim;
-  box.innerHTML = `<b>${esc(e.catName || '?')}</b>${e.parentName ? ' <span class="dim">/ ' + esc(e.parentName) + '</span>' : ''}<br>${esc(e.cls || '')} &middot; id ${h.eid} &middot; layer ${esc(h.meta.layer)}${p.t === 'text' ? '<br>text: <b>' + esc(p.text) + '</b> (' + (p.size * 12).toFixed(2) + ' in, ' + esc(p.font || '') + ')' : ''}
+  box.innerHTML = `<b>${esc(e.catName || '?')}</b>${e.parentName ? ' <span class="dim">/ ' + esc(e.parentName) + '</span>' : ''}<br>${esc(e.cls || '')} &middot; id ${h.eid} &middot; layer ${esc(h.meta.layer)}${e.typeName ? '<br>type: <b>' + esc((e.familyName ? e.familyName + ' : ' : '') + e.typeName) + '</b>' : ''}${e.levelName ? ' &middot; level ' + esc(e.levelName) : ''}${e.hostId ? ' &middot; <a href="#" id="vcHost">tagged element ' + e.hostId + '</a>' : ''}${e.text && p.t !== 'text' ? '<br>text: ' + esc(e.text) : ''}${p.t === 'text' ? '<br>text: <b>' + esc(p.text) + '</b> (' + (p.size * 12).toFixed(2) + ' in, ' + esc(p.font || '') + ')' : ''}
     <div class="vcbtns"><button id="vcHideEl">hide element</button><button id="vcHideCat">hide category</button><button id="vcIsoCat">only this category</button><button id="vcHideCls">hide ${esc(e.cls || 'type')}</button></div><div id="vcRaw" class="dim">...</div>`;
+  const hl = $('#vcHost'); if (hl) hl.onclick = ev => { ev.preventDefault(); const i = elementIndex(e.hostId); if (i != null && window.selectEl) window.selectEl(i); };
+  const pe = Object.entries(e.params || {}).filter(([k, v]) => !/\|ElementId$|^(Family|Type|Family and Type|Type Id)$/.test(k) || typeof v !== 'number');
+  if (pe.length) { const rows = pe.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="mono">${esc(typeof v === 'number' ? +v.toFixed(5) : v)}</td></tr>`).join(''); box.insertAdjacentHTML('beforeend', `<details open><summary>parameters (${pe.length})</summary><table class="kv">${rows}</table></details>`); }
   $('#vcHideEl').onclick = () => { (V.state.elems[h.eid] ||= {}).vis = false; V.sel = null; applyStyles(); renderTree(); };
   $('#vcHideCat').onclick = () => { (V.state.cats[catKey(h.meta.cat)] ||= {}).vis = false; applyStyles(); renderTree(); };
   $('#vcIsoCat').onclick = () => { for (const k of Object.keys(V.sc.elements)) { const c = V.sc.elements[k].cat; (V.state.cats[catKey(c)] ||= {}).vis = c === h.meta.cat; } applyStyles(); renderTree(); };
@@ -457,6 +461,9 @@ function renderTree() {
       if (subs.length) h += '<div class="ind">' + subs.sort((a, b) => String(a[1].name).localeCompare(String(b[1].name))).map(([k, c]) => rowOf('c' + k, c.name || '(no category)', Object.assign({n: c.elems.length}, st.cats[k] || {})).replace('class="vcrow"', `class="vcrow" data-cat="${k}"`)).join('') + '</div>';
       return h;
     }).join('');
+  } else if (mode === 'ftype') {
+    const cnt = {}; for (const e of Object.values(sc.elements)) if (e.typeName) cnt[e.typeName] = (cnt[e.typeName] || 0) + 1;
+    html = Object.entries(cnt).sort().map(([t, n]) => `<div class="vcrow" data-ft="${esc(t)}"><input type="checkbox" ${st.types[t] !== false ? 'checked' : ''} data-a="ftype"><span class="nm">${esc(t)}</span><span class="cnt">${n}</span></div>`).join('') || '<span class="dim">no family / type names in this view\'s data</span>';
   } else if (mode === 'part') {
     const cnt = {}; sc.prims.forEach(p => cnt[p.part || 'line'] = (cnt[p.part || 'line'] || 0) + 1);
     html = Object.keys(cnt).sort().map(l => `<div class="vcrow" data-part="${esc(l)}"><input type="checkbox" ${st.parts[l] !== false ? 'checked' : ''} data-a="part"><span class="nm">${esc(l)}</span><span class="cnt">${cnt[l]}</span></div>`).join('');
@@ -475,6 +482,7 @@ function renderTree() {
       if (a === 'layer') st.layers[row.dataset.l] = inp.checked;
       else if (a === 'cls') st.classes[row.dataset.cls] = inp.checked;
       else if (a === 'part') st.parts[row.dataset.part] = inp.checked;
+      else if (a === 'ftype') st.types[row.dataset.ft] = inp.checked;
       else if (a === 'el') (st.elems[row.dataset.eid] ||= {}).vis = inp.checked;
       else if (a === 'elcolor') (st.elems[row.dataset.eid] ||= {}).color = inp.value;
       else { const k = row.dataset.cat, o = (st.cats[k] ||= {});
@@ -508,7 +516,7 @@ function renderPanel() {
   <div class="r"><label>Line weight &times;</label><input type="number" id="vcLS" step="0.25" min="0" value="${st.lineScale}"> min px<input type="number" id="vcMP" step="0.5" min="0" value="${st.minPx}"></div>
   <div class="r"><label>3D model</label><input type="checkbox" id="vcModel" ${st.model ? 'checked' : ''}><span class="dim">under the drawing</span> <label class="chk" title="hide the viewer's own whole-model grids and level planes while the view's datums are shown"><input type="checkbox" id="vcNat" ${st.nativeOff ? 'checked' : ''}> own datums off</label></div>
   <div class="r"><label>Placement</label><label class="chk"><input type="checkbox" id="vcTop" ${st.onTop ? 'checked' : ''}> on top</label> lift<input type="number" id="vcLift" step="0.05" value="${st.lift}" title="metres along the view normal"> &alpha;<input type="number" id="vcOp" step="0.1" min="0" max="1" value="${st.opacity}"></div>
-  <h4>Visibility <span class="sp"></span><span class="chk" style="gap:2px"><button data-m="cat" class="${(V.treeMode || 'cat') === 'cat' ? 'on' : ''}">category</button><button data-m="layer" class="${V.treeMode === 'layer' ? 'on' : ''}">layer</button><button data-m="type" class="${V.treeMode === 'type' ? 'on' : ''}">type</button><button data-m="part" class="${V.treeMode === 'part' ? 'on' : ''}" title="leaders, witness lines, arrows, heads...">part</button><button data-m="el" class="${V.treeMode === 'el' ? 'on' : ''}">element</button></span></h4>
+  <h4>Visibility <span class="sp"></span><span class="chk" style="gap:2px"><button data-m="cat" class="${(V.treeMode || 'cat') === 'cat' ? 'on' : ''}">category</button><button data-m="layer" class="${V.treeMode === 'layer' ? 'on' : ''}">layer</button><button data-m="type" class="${V.treeMode === 'type' ? 'on' : ''}">type</button><button data-m="ftype" class="${V.treeMode === 'ftype' ? 'on' : ''}" title="family type (tag / dimension / note types)">family type</button><button data-m="part" class="${V.treeMode === 'part' ? 'on' : ''}" title="leaders, witness lines, arrows, heads...">part</button><button data-m="el" class="${V.treeMode === 'el' ? 'on' : ''}">element</button></span></h4>
   ${V.treeMode === 'el' ? '<input type="text" id="vcQ" placeholder="filter id / class / category" style="width:100%;margin-bottom:3px">' : ''}
   <div class="vctree" id="vcTree"></div>
   <div class="vcbtns"><button id="vcAllOn">all on</button><button id="vcAnnOff">annotations off</button><button id="vcModelOff">linework off</button><button id="vcResetAll">reset all</button></div>
@@ -537,7 +545,7 @@ function renderPanel() {
   inst('vcModel', e => st.model = e.checked); inst('vcNat', e => st.nativeOff = e.checked); on('vcAS', () => { st.annoScale = +$('#vcAS').value || 1; saveLocal(); if (V.sc) makeScene(V.sc); }); inst('vcLS', e => st.lineScale = +e.value); inst('vcMP', e => st.minPx = +e.value); inst('vcTop', e => st.onTop = e.checked); inst('vcLift', e => st.lift = +e.value); inst('vcOp', e => st.opacity = +e.value);
   p.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { V.treeMode = b.dataset.m; renderPanel(); });
   on('vcQ', () => renderTree(), 'oninput');
-  on('vcAllOn', () => { st.parts = {}; st.layers = {}; st.cats = {}; st.elems = {}; st.classes = {}; st.textOn = true; applyStyles(); saveLocal(); renderPanel(); }, 'onclick');
+  on('vcAllOn', () => { st.types = {}; st.parts = {}; st.layers = {}; st.cats = {}; st.elems = {}; st.classes = {}; st.textOn = true; applyStyles(); saveLocal(); renderPanel(); }, 'onclick');
   on('vcAnnOff', () => { ['annotation', 'text', 'datum', 'annotation_fill'].forEach(l => st.layers[l] = false); applyStyles(); saveLocal(); renderPanel(); }, 'onclick');
   on('vcModelOff', () => { [...MODEL_LAYERS].forEach(l => st.layers[l] = false); applyStyles(); saveLocal(); renderPanel(); }, 'onclick');
   on('vcResetAll', () => { const keep = {scale: st.scale, detail: st.detail}; V.state = Object.assign(DEFAULT_STATE(), keep); saveLocal(); loadScene(V.vid); }, 'onclick');
