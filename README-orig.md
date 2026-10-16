@@ -23,7 +23,7 @@ First conversion of a big file takes minutes (the reader decodes every record); 
 
 ## Features added 2026-10-16
 * **Annotations** (header button): the view-dependent content of a plan / section (tags, text, dimensions, grids, levels, markers, hatches) placed in model space on the 3D scene with per-category / type / element visibility, colour, line weight, text size, annotation scale, presets, picking (docs/VIEW-CONTROL.md, docs/CONTROL-API.md; built by the vctl branch, data from rvt-sheets).
-* Inspector line "reader accuracy for <class>" from the corpus acceptance table (web/fidclass.json, docs/FIDELITY-FINAL.md); full corpus table with timings (DEMO.md, docs/SWEEP.md, docs/SPEED.md); viewer mesh vs Revit per class (docs/ORACLE-SWEEP.md, tools/oracle_sweep.py).
+* Inspector line "reader accuracy for <class>" from the corpus acceptance table (web/fidclass.json, docs/FIDELITY-FINAL.md for 2020-2026, docs/FIDELITY-2017-2019.md for the older files); full corpus table with timings (DEMO.md, docs/SWEEP.md, docs/SPEED.md); viewer mesh vs Revit per class (docs/ORACLE-SWEEP.md, tools/oracle_sweep.py).
 * Revit navigation: Shift+middle-drag orbit, middle-drag pan, wheel zoom at cursor (tools/uitest12.py).
 
 ## Features added 2026-10-12 (see docs/ for details)
