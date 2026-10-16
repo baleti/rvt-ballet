@@ -96,3 +96,6 @@
 ## 2026-10-16 c5-vctl (takeover from c2-vctl)
 * Read handoff, merged master into vctl (fast-forward, only tools/docs changed since 894a4ae: no viewer code delta, so the last vctltest/smoke results stand). c5-annot's parts, element props, anchor and host keys are already consumed by web/viewctl.js (part tree, typeName/levelName/hostId picking).
 * Open: 3D/drafting/legend views, tagged-element anchor scaling about `host` centre, Revit-export visual diff via c5-qa.
+* d85457d (tag symbol scaling) and ca51db6 (drafting/legend views) merged in master. Merged master back into vctl.
+* Finding: no cached scene on disk carries the `host` key yet (Residential plan 180203 has 32 anchored prims, none with host), so the tag-scaling path is untested on real data. After c5-sheets release 8, re-warm Structural/Residential/Commercial scenes (tools/vc_warm.sh, remote-host) and re-run vctltest on Structural L2.
+* 3D views: scenes are served (3751 prims for a camera 3D view) but placement semantics are undecided; not started.
