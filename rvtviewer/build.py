@@ -843,7 +843,7 @@ def _dump_refined_fail(a, ex):
         if len([f for f in os.listdir(d) if f.startswith('ri_fail_')]) < 20:
             pickle.dump({'tris_raw': a.get('tris_raw'), 'meta_raw': a.get('meta_raw'), 'fid': a.get('fid'), 'keys': sorted(a), 'error': repr(ex), 'tb': traceback.format_exc()}, open(os.path.join(d, 'ri_fail_%s.pkl' % eid), 'wb'))
             print('refined_volume failure arguments saved to', d, flush=True)
-    except Exception: pass
+    except Exception as ex3_: print('refined_volume failure arguments NOT saved:', repr(ex3_), flush=True)
 
 def topology_check(a, P):
     """the reader validates curved solids with analytic (refined) volume/area; compare the triangle mesh's own area with it: a mesh whose triangles span the wrong vertices has the right volume on paper but draws wrongly. -> (ok, mesh_area, analytic_area) or None"""
