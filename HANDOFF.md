@@ -12,3 +12,4 @@ Baseline smoke OK (2020 Residential). Rust fast path + preimport thread already 
 19:38:03 master=071285d (vctl v1 merged, .venv untracked and rebuilt, GLB byte-identical, 3-file smoke OK), demo-ready moved here
 23:53:16 master 515bfe9: vctl 0c6ab1d merged (vctltest ALL OK), corpus table 89/89 (DEMO.md, SWEEP.md), docs/FIDELITY-FINAL.md, 3 demo models re-prepared with the new reader (sheets warm for Structural/Facades needs remote-host >= 11 GB: rvt-view --prepare with RVT_WARM_NO_LOCAL=1), demo-ready moved.
 01:44:14 demo-ready -> e1d81e7 (3-file smoke OK, sheets warm done, inspector class accuracy line)
+01:47:13 vctl d2ee7ef merged, demo-ready moved (3-file smoke + vctltest OK)
