@@ -21,3 +21,4 @@ Baseline smoke OK (2020 Residential). Rust fast path + preimport thread already 
 09:51:32 sheets warm for Structural/Facades done (08:34), 3-file smoke OK, sweep6 89/89, demo-ready on 52b8ed8. Open: reader stage of 2017-19 MEP, MEP geometry 24-37 s (NEEDS-FROM-READER 20), item 21 writer scenes approx jump.
 14:17:05 vctl 894a4ae merged (Paper look), smoke x3 + vctltest OK, demo-ready moved; osweep (oracle_sweep.py) running on remote-host
 16:29:49 vctl d85457d merged (tags scale about own point), smoke x3 + vctltest OK, demo-ready moved
+16:39:12 vctl 9a1da21 merged (drafting/legend views), smoke x3 + vctltest OK, demo-ready moved
