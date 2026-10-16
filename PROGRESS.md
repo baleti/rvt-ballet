@@ -92,3 +92,7 @@
 * Host rules (user, permanent): no servers/workers left running on remote-host; any scene generation of big files only via tools/vc_warm.sh (remote-host, h1run) and list the job in ~/demo-state/H1-QUEUE.md. Re-warm needed after rvt-sheets/worker code changes (cache key is content based; stale caches are served with a "redraw now" button).
 * Latest: depth-rank painter order (masks), stale cache fallback, part visibility, datums replace native grids; UI tested on Residential (plan + section) with tools/vctltest.py; Structural L2 shows grids 1-9/A-E and tags.
 * 2026-10-16 (c5-viewer): after merging vctl 7011f97, tools/uitest6, uitest7, uitest11 (all PASS lines, no JS exceptions) and uitest12 ALL OK on 2020 Residential; demo_smoke OK on Residential / Structural / Facades; vctltest ALL OK. Corpus sweep 89/89 (docs/SWEEP.md), speed table docs/SPEED.md (sweep timings are inflated by shared remote-host: 2026 Site 48.7 s sweep vs 12.5 s alone).
+
+## 2026-10-16 c5-vctl (takeover from c2-vctl)
+* Read handoff, merged master into vctl (fast-forward, only tools/docs changed since 894a4ae: no viewer code delta, so the last vctltest/smoke results stand). c5-annot's parts, element props, anchor and host keys are already consumed by web/viewctl.js (part tree, typeName/levelName/hostId picking).
+* Open: 3D/drafting/legend views, tagged-element anchor scaling about `host` centre, Revit-export visual diff via c5-qa.
