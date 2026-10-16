@@ -18,7 +18,7 @@ const PATTERNS = {solid: null, dash: [3.2, 1.6], dot: [0.4, 1.2], dashdot: [3.2,
 const SCALES = [1, 5, 10, 20, 25, 50, 75, 96, 100, 200, 240, 500];
 
 const DEFAULT_STATE = () => ({ghosts: [], ghostOpacity: 0.45, scale: null, detail: null, cut: null, phase: null, pfilter: null, template: true, filters: true, crop: true, layers: {}, cats: {}, elems: {}, classes: {}, types: {}, parts: {}, annoScale: 1, textOn: true, textSize: 1, font: '', textColor: '',
-  lineScale: 1, minPx: 1, hideHang: false, model: true, nativeOff: true, lift: 0.02, onTop: true, opacity: 1, contrast: true, halo: false});
+  lineScale: 1, minPx: 1, paper: false, hideHang: false, model: true, nativeOff: true, lift: 0.02, onTop: true, opacity: 1, contrast: true, halo: false});
 const V = {mid: null, vid: null, sc: null, group: null, state: DEFAULT_STATE(), sel: null, views: [], loading: false, presets: {}};
 window.__vc = V;
 
@@ -279,7 +279,7 @@ function primVisible(m) {
 }
 function applyStyles() {
   if (!V.group) return;
-  const st = V.state, sc = V.sc, B = V.B, dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const st = V.state, sc = V.sc, B = V.B, dark = matchMedia('(prefers-color-scheme: dark)').matches && !st.paper;
   const colA = V.lines.geometry.attributes.aCol, wA = V.lines.geometry.attributes.aW;
   const vis = B.meta.map(m => primVisible(m));
   const selEid = V.sel;
@@ -321,7 +321,9 @@ function applyStyles() {
     t.mesh.material.uniforms.uColor.value.set(...hex2rgb(c)); t.mesh.material.uniforms.uOpacity.value = st.opacity;
   });
   U.uRankMode.value = st.onTop ? 1 : 0;
-  if (window.__world) window.__world.visible = !!st.model;
+  if (window.__world) window.__world.visible = !!st.model && !st.paper;
+  if (st.paper) { if (V.prevBg === undefined) V.prevBg = scene.background; scene.background = new THREE.Color(0xffffff); }
+  else if (V.prevBg !== undefined) { scene.background = V.prevBg; V.prevBg = undefined; }
   // the view's own grids / levels (extents, heads per view) replace the viewer's whole-model grid and level planes
   const hideNative = st.nativeOff && st.layers.datum !== false && B.layers.includes('datum');
   if (hideNative && !V.prevNative) V.prevNative = {g: S.gridGroup?.visible, l: S.lvlGroup?.visible};
@@ -544,6 +546,7 @@ function renderPanel() {
   <div class="r"><label>Crop region</label><input type="checkbox" id="vcCrop" ${st.crop ? 'checked' : ''}><span class="dim">${sc && sc.view.crop_uv ? 'model content only' : 'no stored crop'}</span></div>
   <div class="r"><label>Text</label><input type="checkbox" id="vcText" ${st.textOn ? 'checked' : ''}> size &times;<input type="number" id="vcTS" step="0.1" min="0.1" value="${st.textSize}"> symbols &times;<input type="number" id="vcAS" step="0.1" min="0.1" value="${st.annoScale}" title="annotation symbol size about their anchor (instant); use Annotation scale for the exact re-draw"> <input type="text" id="vcFont" placeholder="font" value="${esc(st.font)}" style="width:80px"></div>
   <div class="r"><label>Line weight &times;</label><input type="number" id="vcLS" step="0.25" min="0" value="${st.lineScale}"> min px<input type="number" id="vcMP" step="0.5" min="0" value="${st.minPx}"></div>
+  <div class="r"><label>Paper look</label><label class="chk" title="white background, no 3D model, black linework: the drawing as printed"><input type="checkbox" id="vcPaper" ${st.paper ? 'checked' : ''}> white sheet, model hidden</label></div>
   <div class="r"><label>Markers</label><label class="chk" title="section / elevation / callout heads that sit outside the model extents"><input type="checkbox" id="vcHang" ${st.hideHang ? 'checked' : ''}> hide far-out heads</label></div>
   <div class="r"><label>3D model</label><input type="checkbox" id="vcModel" ${st.model ? 'checked' : ''}><span class="dim">under the drawing</span> <label class="chk" title="hide the viewer's own whole-model grids and level planes while the view's datums are shown"><input type="checkbox" id="vcNat" ${st.nativeOff ? 'checked' : ''}> own datums off</label></div>
   <div class="r"><label>Also show</label><select id="vcGhost" multiple size="3" style="flex:1;min-width:0" title="other plan / section views drawn faintly at their own position (ctrl-click for several)">${vs.filter(v => v.id !== V.vid).map(v => `<option value="${v.id}" ${st.ghosts.includes(v.id) ? 'selected' : ''}>${esc(v.name)} (${v.kind})</option>`).join('')}</select></div>
@@ -575,7 +578,7 @@ function renderPanel() {
   on('vcFil', () => { st.filters = $('#vcFil').checked; redraw(); });
   const inst = (id, fn) => on(id, () => { fn($('#' + id)); saveLocal(); applyStyles(); });
   inst('vcCrop', e => st.crop = e.checked); inst('vcText', e => st.textOn = e.checked); inst('vcTS', e => st.textSize = +e.value || 1); inst('vcFont', e => { st.font = e.value; if (V.sc) makeScene(V.sc); });
-  inst('vcHang', e => st.hideHang = e.checked); inst('vcModel', e => st.model = e.checked); inst('vcNat', e => st.nativeOff = e.checked); on('vcAS', () => { st.annoScale = +$('#vcAS').value || 1; saveLocal(); if (V.sc) makeScene(V.sc); }); inst('vcLS', e => st.lineScale = +e.value); inst('vcMP', e => st.minPx = +e.value); inst('vcTop', e => st.onTop = e.checked); inst('vcLift', e => st.lift = +e.value); inst('vcOp', e => st.opacity = +e.value);
+  inst('vcPaper', e => st.paper = e.checked); inst('vcHang', e => st.hideHang = e.checked); inst('vcModel', e => st.model = e.checked); inst('vcNat', e => st.nativeOff = e.checked); on('vcAS', () => { st.annoScale = +$('#vcAS').value || 1; saveLocal(); if (V.sc) makeScene(V.sc); }); inst('vcLS', e => st.lineScale = +e.value); inst('vcMP', e => st.minPx = +e.value); inst('vcTop', e => st.onTop = e.checked); inst('vcLift', e => st.lift = +e.value); inst('vcOp', e => st.opacity = +e.value);
   p.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { V.treeMode = b.dataset.m; renderPanel(); });
   on('vcQ', () => renderTree(), 'oninput');
   on('vcAllOn', () => { st.types = {}; st.parts = {}; st.layers = {}; st.cats = {}; st.elems = {}; st.classes = {}; st.textOn = true; applyStyles(); saveLocal(); renderPanel(); }, 'onclick');
@@ -588,7 +591,7 @@ function renderPanel() {
   on('vcExport', () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({view: V.vid, state: V.state}, null, 1)], {type: 'application/json'})); a.download = `view-${V.vid}-controls.json`; a.click(); }, 'onclick');
   renderTree();
 }
-function closeVC() { V.on = false; clearGhosts(); if (V.prevNative) { if (S.gridGroup) S.gridGroup.visible = V.prevNative.g; if (S.lvlGroup) S.lvlGroup.visible = V.prevNative.l; V.prevNative = null; } if (window.__world) window.__world.visible = true; disposeGroup(); V.sc = null; const p = $('#vcpanel'); if (p) p.hidden = true; $('#bVC')?.classList.remove('on'); dirty(); }
+function closeVC() { V.on = false; if (V.prevBg !== undefined) { scene.background = V.prevBg; V.prevBg = undefined; } clearGhosts(); if (V.prevNative) { if (S.gridGroup) S.gridGroup.visible = V.prevNative.g; if (S.lvlGroup) S.lvlGroup.visible = V.prevNative.l; V.prevNative = null; } if (window.__world) window.__world.visible = true; disposeGroup(); V.sc = null; const p = $('#vcpanel'); if (p) p.hidden = true; $('#bVC')?.classList.remove('on'); dirty(); }
 
 // ------------------------------------------------------------------ entry
 async function toggle() {

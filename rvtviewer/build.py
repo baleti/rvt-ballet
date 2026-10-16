@@ -833,6 +833,18 @@ def _note_rust_issue(what, ex):
     k = (what, repr(ex)[:120])
     if k not in _RUST_ISSUES: _RUST_ISSUES[k] = 1; print('Rust fast path %s failed (%r): Python reference used' % (what, ex), flush=True)
 
+def _dump_refined_fail(a, ex):
+    """the reference rvt_mesh.refined_volume raised (c5-geometry cannot reproduce it from element_mesh): keep its exact arguments for them, ~/rvt-research/ana_c5/ri_fail_<eid>.pkl (max 20 files), and print the traceback"""
+    import traceback, pickle
+    traceback.print_exc()
+    try:
+        d = os.path.expanduser('~/rvt-research/ana_c5'); os.makedirs(d, exist_ok=True)
+        eid = a.get('eid', a.get('id', a.get('nid', 'x')))
+        if len([f for f in os.listdir(d) if f.startswith('ri_fail_')]) < 20:
+            pickle.dump({'tris_raw': a.get('tris_raw'), 'meta_raw': a.get('meta_raw'), 'fid': a.get('fid'), 'keys': sorted(a), 'error': repr(ex), 'tb': traceback.format_exc()}, open(os.path.join(d, 'ri_fail_%s.pkl' % eid), 'wb'))
+            print('refined_volume failure arguments saved to', d, flush=True)
+    except Exception as ex3_: print('refined_volume failure arguments NOT saved:', repr(ex3_), flush=True)
+
 def topology_check(a, P):
     """the reader validates curved solids with analytic (refined) volume/area; compare the triangle mesh's own area with it: a mesh whose triangles span the wrong vertices has the right volume on paper but draws wrongly. -> (ok, mesh_area, analytic_area) or None"""
     if not a.get('tris_raw') or not a.get('meta_raw'): return None
@@ -847,7 +859,9 @@ def topology_check(a, P):
             except (KeyboardInterrupt, SystemExit, TimeoutError): raise
             except BaseException as ex_:                       # a Rust panic (pyo3 PanicException is a BaseException): the Python reference instead
                 if rv is None: raise
-                _note_rust_issue('refined_volume', ex_); v_, closed, area_ref = RM.refined_volume(a['tris_raw'], a['meta_raw'], fid=a.get('fid'))[:3]
+                _note_rust_issue('refined_volume', ex_)
+                try: v_, closed, area_ref = RM.refined_volume(a['tris_raw'], a['meta_raw'], fid=a.get('fid'))[:3]
+                except Exception as ex2_: _dump_refined_fail(a, ex2_); raise
         finally: signal.setitimer(signal.ITIMER_REAL, 0); signal.signal(signal.SIGALRM, old)
         T = P.reshape(-1, 3, 3); area = float(np.linalg.norm(np.cross(T[:, 1] - T[:, 0], T[:, 2] - T[:, 0]), axis=1).sum() / 2)
         return ((0.6 <= area / area_ref <= 1.5) if area_ref > 1e-9 else True), area, float(area_ref)      # tolerance is wide on purpose: the analytic area omits some caps (duct fittings read 1.1-1.3 with correct meshes); the torus reads 1.6, facade members up to 3.3
@@ -1030,6 +1044,7 @@ def reader_mesh(ctx, e, a_pre=None):
             keep = ~np.isin(nid, list(drop)); P = TT[keep].reshape(-1, 3)
             a = dict(a, **{k_: [x for x, kp in zip(a[k_], keep) if kp] for k_ in ('nid', 'fid', 'mat', 'surf') if a.get(k_) is not None and len(a[k_]) == len(keep)})
             a['flags'] = list(a.get('flags') or []) + ['duplicate_bodies_dropped']
+            if os.environ.get('RVT_RI_SKIP_DEDUPED', '1') != '0': a['tris_raw'] = a['meta_raw'] = None      # fid was filtered above, tris_raw / meta_raw were not: refined_volume got arguments of different lengths (IndexError in the reference on 2017 rme_advanced); the topology check is skipped for these elements
     m = Mesh(P, np.arange(len(P)).reshape(-1, 3))
     m.info = {'source': next((sl.get('source') for sl in a['solids'] if sl.get('source')), None), 'flags': list(a.get('flags') or []), 'bodies': len(a['solids']), 'tris': len(P) // 3}
     if a.get('nid') is not None and len(a['nid']) == len(P) // 3: m.info['body_list'] = _body_summary_fast(P, a['nid'], a.get('fid'), a.get('surf')); m.info['bodies'] = len(set(a['nid']))
