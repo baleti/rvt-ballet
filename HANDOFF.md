@@ -17,3 +17,4 @@ Baseline smoke OK (2020 Residential). Rust fast path + preimport thread already 
 04:51:30 vctl 7011f97 merged, 3-file smoke + vctltest, demo-ready moved
 05:39:06 vctl 34c4018 merged (3-file smoke + vctltest OK), demo-ready moved
 06:01:29 vctl 5d3458a merged; vctltest ALL OK on Structural L2 (VC_RERENDER=0, 1.8 GB worker) and Residential; smoke OK; demo-ready moved
+06:13:06 demo models re-prepared after reader change (face->edge index); smoke OK; sheets warm retry loop tools/queue_warm.sh running (log ~/.cache/q_warm.log)
