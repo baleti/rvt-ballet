@@ -1,7 +1,7 @@
 """why does a viewer mesh have another volume than Revit's solid: tools/vol_probe.py CORPUS_FILE ID [ID ...]: plain signed volume, mesh_volume of the reader, volume after welding vertices, edge manifoldness, Revit's gt volume"""
 import sys, os, json
 import numpy as np
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0, ROOT); sys.path.insert(0, os.path.join(ROOT, 'tools')); sys.path.insert(0, os.path.expanduser('~/rvt-research'))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0, os.path.expanduser('~/rvt-research')); sys.path.insert(0, ROOT); sys.path.insert(0, os.path.join(ROOT, 'tools'))      # tools/ first: ~/rvt-research has another compare_gt
 import compare_gt as C; from rvtviewer import reader, build
 src = sys.argv[1]; ids = [int(x) for x in sys.argv[2:]]
 raw = reader.cached_load(src); ctx = build.Ctx(raw); ctx.src = src; els = build.build_table(ctx)
