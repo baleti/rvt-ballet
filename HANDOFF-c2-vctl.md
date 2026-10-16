@@ -14,3 +14,7 @@ remote-host light only (MemoryMax 1.5G, stop servers/workers when done); no pkil
 ## Update 2026-10-16
 * Text size/position accuracy vs Revit is covered by c5-qa (vector text diff vs Revit DXF: 1220 of 1295 texts matched, 94%, 43 views; see ~/src/rvt-qa/README.md). Viewer text uses the same size rule (em = size/0.72), so no viewer-side work left there.
 * Done since: family-type visibility, picked properties, Also show (stacked views), hide far-out heads, warm of Structural/Residential/Commercial scenes. All merged in master.
+
+## Final stop 2026-10-16
+* Last commit adds a part/hang visibility check to tools/vctltest.py (ALL OK on Residential plan 180203). All earlier work is merged in master; this test commit is on vctl only.
+* Idle items: tagged-element anchor from c2-annot; 3D/drafting/legend support (not started, would be a branch off vctl).
