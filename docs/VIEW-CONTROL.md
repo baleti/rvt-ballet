@@ -4,6 +4,7 @@ Header button **Annotations** (or the `annotations` link on a plan/section row i
 * **View**: pick a plan / section; the camera and clip follow the stored view.
 * **Re-draws the view** (server round trip, cached): annotation scale 1:N (text, symbols and pen widths are regenerated exactly), detail level, view template on/off, filters on/off, plan cut plane (m), phase and phase filter.
 * **Instant**: crop (model content only; annotations hang outside as in Revit), text on/off, text size x, font, symbol size x (about each element's anchor), line weight x, minimum px, on top / lift / opacity, hide the 3D model under the drawing, replace the viewer's own grids and levels by the view's datums.
+* **Paper look**: white sheet, no 3D model, black linework.
 * **Also show**: other plan/section views drawn faintly at their own height (stacked levels).
 * **Visibility** tree, four modes: category (with subcategories) / layer / type (Revit class) / part (leaders, witness lines, arrows...) / element. Per category: checkbox, colour, line weight x, text size x, line pattern.
 * **Picking**: hover tooltip; click highlights, shows category / class / id / stored fields, hides element / category / type, and opens the element in the inspector (full parameters) when it exists in the model.
