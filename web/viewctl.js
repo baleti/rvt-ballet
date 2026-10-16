@@ -104,6 +104,9 @@ function build(sc) {
   const texts = [];
   const meta = [];       // per prim: {eid, cat, layer, kind}
   const lyrs = new Set();
+  // tags anchor on the tagged element (host); scaling a tag about that point would move it away from its host, so scale about the tag's own first point
+  const own = new Map();
+  sc.prims.forEach(p => { if (p.host != null && p.paper && p.elem != null && !own.has(p.elem)) { const q = p.pts ? p.pts[0] : p.segs && p.segs[0] ? p.segs[0][0] : p.origin; if (q) own.set(p.elem, q); } });
   sc.prims.forEach((p, pi) => {
     const eid = p.elem, layer = p.layer || 'x', e = sc.elements[eid] || {};
     const cat = p.cat != null ? p.cat : e.cat;
@@ -111,7 +114,7 @@ function build(sc) {
     lyrs.add(layer);
     const st = p.style || {w: 0.18, rgb: [0, 0, 0]}, ov = V.state.cats[catKey(cat)]?.dash ?? V.state.cats[catKey(e.parent)]?.dash;
     const dsh = ov === undefined || ov === '' ? st.dash : (PATTERNS[ov] || null), pat = dsh && dsh.length ? dsh.map(x => Math.max(x * mpmm, 1e-4)) : null;
-    const k = V.state.annoScale || 1, an = k !== 1 && p.paper && p.anchor && sc.view.right ? anchorUV(sc.view, p.anchor) : null;
+    const k = V.state.annoScale || 1, an = k !== 1 && p.paper && p.anchor && sc.view.right ? (p.host != null && own.has(p.elem) ? own.get(p.elem) : anchorUV(sc.view, p.anchor)) : null;
     const sx = q => an ? [(an[0] + (q[0] - an[0]) * k), (an[1] + (q[1] - an[1]) * k)] : q;
     const addPoly = pts => {
       const P = pts.map(q => { const r = sx(q); return [r[0] * FT, r[1] * FT]; });

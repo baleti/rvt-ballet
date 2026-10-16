@@ -14,15 +14,24 @@ def find(stem):
     if base[:4].isdigit(): c += [g for x in stems for g in glob.glob(H + '/rvt-research/corpus/%s/%s' % (base[:4], x[5:]))]
     return next((x for x in c if os.path.exists(x)), None)
 def run(stems):
-    import compare_gt
-    from rvtviewer import build
+    import subprocess
     done = set()
     if os.path.exists(OUT): done = {json.loads(l)['file'] for l in open(OUT)}
     for t in sorted(os.listdir(GT)) if not stems else stems:
         if not t.endswith('.tsv'): continue
         base = t[:-4]; src = find(t)
         if not src or base in done or os.path.getsize(src) > MAXMB * 1e6: continue
-        out = os.path.join(WORK, base); shutil.rmtree(out, ignore_errors=True); os.makedirs(WORK, exist_ok=True)
+        p = subprocess.run([sys.executable, os.path.abspath(__file__), 'one', t], capture_output=True, text=True)      # one process per file: the reader's caches would add up to the memory cap
+        if p.returncode != 0:
+            with open(OUT, 'a') as f: f.write(json.dumps({'file': base, 'n': 0, 'error': 'exit %d %s' % (p.returncode, (p.stderr or '')[-150:]), 'rows': []}) + '\n')
+            print(base, 'FAILED', p.returncode, flush=True)
+        else: print(base, 'ok', flush=True)
+
+def one(t):
+    import compare_gt
+    from rvtviewer import build
+    base = t[:-4]; src = find(t); out = os.path.join(WORK, base); shutil.rmtree(out, ignore_errors=True); os.makedirs(WORK, exist_ok=True)
+    if True:
         try:
             build.convert(src, out, log=lambda *a: None); compare_gt.main(out, GT)
             m = json.load(open(out + '/meta.json'))['elements']; c = json.load(open(out + '/compare.json'))['elements']
@@ -31,7 +40,7 @@ def run(stems):
         except BaseException as ex: rows = []; err = repr(ex)[:200]
         with open(OUT, 'a') as f:
             f.write(json.dumps({'file': base, 'n': len(rows), 'error': err, 'rows': rows}) + '\n')
-        shutil.rmtree(out, ignore_errors=True); print(base, len(rows), err or 'ok', flush=True)
+        shutil.rmtree(out, ignore_errors=True)
 def table():
     import statistics as S
     R = collections.defaultdict(list); files = 0; errs = []
@@ -49,4 +58,5 @@ def table():
     open(os.path.join(ROOT, 'docs', 'ORACLE-SWEEP.md'), 'w').write('\n'.join(L) + '\n'); print('\n'.join(L[:12]))
 if __name__ == '__main__':
     if sys.argv[1] == 'run': run(sys.argv[2:])
+    elif sys.argv[1] == 'one': one(sys.argv[2])
     else: table()

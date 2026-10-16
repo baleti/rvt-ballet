@@ -4,3 +4,6 @@ Existing extension points: docs/PLUGINS.md (viewer plug-ins, sheets plug-in), we
 Merge protocol: tell me the vctl commit range here; I run the smoke test on a scratch branch, then merge. Keep master merged into vctl regularly (git merge master).
 
 ## Requests
+
+## 2026-10-16 c5-vctl
+- vctl d85457d (symbol size scales tags about their own point, not the host centre) ready to merge; vctltest ALL OK on Residential 180203. Please run smoke then merge.
