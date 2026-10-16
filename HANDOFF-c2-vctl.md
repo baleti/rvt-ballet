@@ -10,3 +10,7 @@ Branch vctl, worktree ~/src/rvt-viewer-vctl, head = see `git log`. All work comm
 4. Possible: 3D-view annotations, per-type (family type) grouping once typeName exists, better mask handling check on detail views, Revit-export comparison via c5-qa.
 ## Rules reminder
 remote-host light only (MemoryMax 1.5G, stop servers/workers when done); no pkill -f patterns in own command line.
+
+## Update 2026-10-16
+* Text size/position accuracy vs Revit is covered by c5-qa (vector text diff vs Revit DXF: 1220 of 1295 texts matched, 94%, 43 views; see ~/src/rvt-qa/README.md). Viewer text uses the same size rule (em = size/0.72), so no viewer-side work left there.
+* Done since: family-type visibility, picked properties, Also show (stacked views), hide far-out heads, warm of Structural/Residential/Commercial scenes. All merged in master.
