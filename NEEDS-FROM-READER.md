@@ -184,3 +184,9 @@ NEW: the same run printed `Rust fast path refined_volume failed (IndexError('lis
 ### Re-time after the c5-rust fix (c5-viewer, 2026-10-16, remote-host job retime, conv_profile, private caches, run alone)
 * 2017 rme_advanced: quick 44.0 -> 13.8 s, reader 49.1 -> 18.8 s, geometry 29.4 -> 36.6 s (not improved; likely noise from other remote-host jobs), total 90.0 -> 67.1 s. First usable (reader+tables+preview) 53 -> 23 s. Still above the 8 s target: the reader stage (18.8 s) is the next thing to look at.
 * 2026 Site: reader 3.7 -> 4.1 s, geometry 42 (sweep) / 6-ish -> 2.8 s, total 48.7 (sweep) / 12.5 (profiled) -> 10.4 s. First usable 4.8 s: target met.
+
+## 21. Writer scenes: how much of them our reader draws as true geometry (c5-viewer, 2026-10-16, old sweep.jsonl rows, converter of 2026-10-15; for c5-geometry, copy for c5-writer)
+Same scene written for 2024 and for 2026 (share of elements: true / approx / box-only):
+* tower20: 2024 41 / 0 / 59, 2026 10 / 31 / 59.  campus3: 22 / 40 / 38 (2026) vs 62 / 0 / 38 (2024).  office5: 26 / 39 / 35 (2026) vs 65 / 0 / 35 (2024).  frame2: 38 / 23 / 39 vs 61 / 0 / 39.  house_lv: 71 / 10 / 19 vs 80 / 0 / 20.
+* Two signals: (1) box-only 20-59 % in BOTH years = elements without saved graphics (cloned walls / cloned family instances; matches user bug A: no stored geometry, so Revit has to regenerate it); (2) in 2026 files 23-40 % of the elements are `approx` where the 2024 copy of the same scene is `true`: the 2026 reader path judges the same written elements as approximate (likely the element class, stored bbox or saved-graphics check differs in 2026 writer output). Worth a look on the reader side (why `approx`: tools/why_boxy.py FILE) and on the writer side (does 2026 output lack something that 2024 output has).
+* The rows are from the older converter and the full re-sweep (sweep6, queued) does not include the scenes; ask if you want them added to it.
