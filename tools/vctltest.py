@@ -26,6 +26,9 @@ async def main(url, vid, out):
         check('colour override', r[0] > 0.99 and r[1] < 0.01, r)
         r = json.loads(await b.ev('''(()=>{const V=vctl.V; vctl.set({textSize:2}); const s=V.textObjs[0].obj.scale.x; vctl.set({textSize:1}); const on=V.textObjs[0].obj.visible; vctl.set({textOn:false}); const off=V.textObjs[0].obj.visible; vctl.set({textOn:true}); return JSON.stringify({s,on,off})})()'''))
         check('text size / on-off', r['s'] == 2 and r['on'] and not r['off'], r)
+        r = json.loads(await b.ev('''(()=>{const V=vctl.V,B=V.B,wA=V.lines.geometry.attributes.aW; const live=()=>{let n=0;B.segs.forEach((s,i)=>{if(wA.getX(i*4)>0)n++});return n}; const a=live();
+          const parts=[...new Set(V.sc.prims.map(p=>p.part||'line'))]; vctl.set({hideHang:true, parts:Object.fromEntries(parts.filter(x=>x!=='line').map(x=>[x,false]))}); const b2=live(); vctl.set({hideHang:false, parts:{}}); return JSON.stringify({a,b2,c:live(),parts})})()'''))
+        check('part / hang visibility', r['b2'] <= r['a'] and r['c'] == r['a'], r)
         # picking: pick the centre of the first text
         r = json.loads(await b.ev('''(()=>{const V=vctl.V,rc=document.querySelector('#gl').getBoundingClientRect(); let out=null;
           for(const t of V.textObjs){ if(!t.obj.visible) continue; const w=new THREE.Vector3(); t.mesh.getWorldPosition(w); w.project(__camera); if(Math.abs(w.x)>0.9||Math.abs(w.y)>0.9||w.z>1) continue;
