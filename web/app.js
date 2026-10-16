@@ -238,6 +238,7 @@ async function updateCachedBadge(models) {
 }
 async function loadPlugins() {
   try { S.plugins = await (await fetch('/api/plugins')).json(); } catch (e) { S.plugins = []; }
+  try { S.fidClass = await (await fetch('/fidclass.json')).json(); } catch (e) { S.fidClass = {}; }
   const top = $('#top'); top.querySelectorAll('.plug').forEach(b => b.remove());
   for (const p of S.plugins) {
     const b = document.createElement('button'); b.className = 'plug';
@@ -423,6 +424,10 @@ function fmtVal(k, v) {
 }
 
 const SURF_COL = {plane: '#8aa', cylinder: '#6a9', cone: '#c96', sphere: '#c6c', torus: '#e86', revolution: '#d66', ruled: '#69d', hermite: '#9c6', bspline: '#c9a'};
+function classAcc(e) {      // how well the reader does on this element class over the whole corpus (docs/FIDELITY-FINAL.md)
+  const c = (S.fidClass || {})[e.cls]; if (!c) return '';
+  return `<div class="dim" style="margin:2px 0" title="reader acceptance over the corpus: share of ${esc(e.cls)} elements whose geometry matches Revit's own (bbox IoU, volume at Fine detail)">reader accuracy for ${esc(e.cls)}: <b>${c[0].toFixed(1)}%</b> match Revit${c[1] ? ', ' + c[1].toFixed(1) + '% unproven' : ''}${c[2] ? ', ' + c[2].toFixed(1) + '% box-only' : ''} (n=${c[3]})</div>`;
+}
 function geomBadge(e, g) {
   // what is really drawn for this element: B-rep surface types, saved mesh, parametric rebuild or a box
   const kind = {solid: 'decoded B-rep', mesh: 'Revit saved mesh (tessellated B-rep faces)', matched: 'parametric rebuild (extents match the stored box)', param: 'parametric rebuild', approx: 'approximate', bbox: 'BOX only', line: 'curve', none: 'nothing drawn'}[e.fid] || e.fid;
@@ -453,6 +458,7 @@ async function showInspector() {
   el.innerHTML = `<h2>${esc(e.name || e.type || e.cls + ' ' + e.id)}</h2><div class="dim">${esc(e.cat || '')}${e.family ? ' | ' + esc(e.family) : ''}${e.type ? ' : ' + esc(e.type) : ''}</div>
   <div style="margin:6px 0"><span class="fid f-${e.fid}">${e.fid}</span> <span class="dim">${esc(fidLabel)}</span></div>
   ${geomBadge(e, info.ginfo)}
+  ${classAcc(e)}
   ${(info.materials || []).length ? `<h3>Materials (${info.materials.length})</h3>` + info.materials.map(k => S.mats[k] ? matLine(S.mats[k], k) : '').join('') : ''}
   <table class="kv">${rows}</table>
   ${(info.typeParams || []).length ? `<h3>Type parameters / profile dimensions (${info.typeParams.length})</h3><table class="kv">${info.typeParams.filter(p => !/^(UniqueId|IfcGUID|Family|Type Id|Type|Family and Type)$/.test(p[0])).map(p => `<tr><td>${esc(p[0])}</td><td class="mono">${fmtVal(p[0], p[1])}</td></tr>`).join('')}</table>` : ''}

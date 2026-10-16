@@ -68,7 +68,7 @@ class Worker:
             i = info.get(e) or {}; c = i.get('cat'); cc = cats.get(c) or {}
             par = cc.get('parent'); pn = (cats.get(par) or {}).get('name') if par not in (None, -1) else None
             els[e] = {'cls': i.get('cls'), 'cat': c, 'catName': cc.get('name'), 'parent': par if par not in (None, -1) else None, 'parentName': pn}
-        keep = ('t', 'elem', 'layer', 'pts', 'segs', 'loops', 'style', 'fill', 'color', 'text', 'origin', 'x', 'size', 'font', 'bold', 'italic', 'halign', 'valign', 'anchor', 'box', 'order', 'cat', 'elems', 'part', 'anchor', 'paper', 'gs', 'pattern')
+        keep = ('t', 'elem', 'layer', 'pts', 'segs', 'loops', 'style', 'fill', 'color', 'text', 'origin', 'x', 'size', 'font', 'bold', 'italic', 'halign', 'valign', 'anchor', 'box', 'order', 'cat', 'elems', 'part', 'anchor', 'paper', 'gs', 'pattern', 'hang')
         prims = [{k: _round(p[k]) for k in keep if k in p and p[k] is not None} for p in dr['prims'] if p.get('t') != 'image']
         vw = {k: _round(v0.get(k)) for k in ('id', 'name', 'kind', 'scale', 'origin', 'right', 'up', 'dir', 'range', 'discipline', 'detail_level', 'view_template')}
         cr = v0.get('crop') or {}
