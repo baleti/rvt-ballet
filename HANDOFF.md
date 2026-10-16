@@ -15,3 +15,4 @@ Baseline smoke OK (2020 Residential). Rust fast path + preimport thread already 
 01:47:13 vctl d2ee7ef merged, demo-ready moved (3-file smoke + vctltest OK)
 02:36:42 vctl 3fc4fcd merged (docs), smoke OK, demo-ready moved
 04:51:30 vctl 7011f97 merged, 3-file smoke + vctltest, demo-ready moved
+05:39:06 vctl 34c4018 merged (3-file smoke + vctltest OK), demo-ready moved
