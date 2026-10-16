@@ -42,6 +42,11 @@ async def main(url, vid, out):
             r = json.loads(await b.ev('JSON.stringify({size: __sc2.prims.find(p=>p.t==="text").size, scale: __sc2.view.scale})'))
             check('annotation scale re-render', r['scale'] == new and abs(r['size'] / st['ts'] - new / scale0) < 0.05, (r, st['ts'], new / scale0))
             await b.ev('(()=>{vctl.V.state.scale=null; return 1})()')
+        # tag symbols scale about their own first point when the prim carries a host (anchor = tagged element)
+        r = json.loads(await b.ev('''(()=>{const V=vctl.V, n0=V.sc.prims.length; V.sc.prims.push({t:'line',pts:[[1,2],[2,2]],paper:true,anchor:[500,500,0],host:1,elem:99999991,layer:'annotation'});
+          V.state.annoScale=2; vctl.rebuild(); const s=V.B.segs.find(g=>g.p===n0); const o=JSON.stringify([s.a,s.b]); V.sc.prims.pop(); V.state.annoScale=1; vctl.rebuild(); return o})()'''))
+        ft = 0.3048
+        check('host tag scales about own point', abs(r[0][0] - 1 * ft) < 1e-6 and abs(r[0][1] - 2 * ft) < 1e-6 and abs(r[1][0] - 3 * ft) < 1e-6, r)
         # presets
         await b.ev('fetch("/api/vc/presets",{method:"PUT",body:JSON.stringify({__test:{textSize:3}})}).then(()=>1)')
         r = await b.ev('fetch("/api/vc/presets").then(r=>r.json()).then(j=>JSON.stringify(j))'); check('presets roundtrip', '"__test"' in r, r)

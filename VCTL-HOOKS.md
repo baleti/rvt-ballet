@@ -7,3 +7,5 @@ Merge protocol: tell me the vctl commit range here; I run the smoke test on a sc
 
 ## 2026-10-16 c5-vctl
 - vctl d85457d (symbol size scales tags about their own point, not the host centre) ready to merge; vctltest ALL OK on Residential 180203. Please run smoke then merge.
+- d85457d + drafting/legend support (ca51db6) ready to merge, vctltest ALL OK.
+- vctl 02c6f63: vctltest covers host-tag scaling (synthetic), ALL OK; merge when convenient.

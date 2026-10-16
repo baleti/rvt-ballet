@@ -434,12 +434,21 @@ async function showPicked(h) {
 
 // ------------------------------------------------------------------ scene loading
 const viewQuery = () => { const s = V.state, q = new URLSearchParams(); if (s.scale) q.set('scale', s.scale); if (s.detail) q.set('detail', s.detail); if (s.cut != null) q.set('cut', s.cut / FT); if (s.phase) q.set('phase', s.phase); if (s.pfilter) q.set('phaseFilter', s.pfilter); if (!s.template) q.set('template', 0); if (!s.filters) q.set('filters', 0); return q.toString(); };
+// drafting / legend: look straight down at the drawing and fit it
+function frameFlat() {
+  const cam = window.__camera, ctl = window.__controls; if (!cam || !ctl || !V.B.segs.length) return;
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (const s of V.B.segs) for (const q of [s.a, s.b]) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); }
+  const c = new THREE.Vector3((x0 + x1) / 2, (y0 + y1) / 2, 0).applyMatrix4(V.base), w = Math.max(x1 - x0, 1e-3), h = Math.max(y1 - y0, 1e-3);
+  const t = Math.tan(cam.fov * Math.PI / 360), d = 1.15 * Math.max(h / (2 * t), w / (2 * t * (cam.aspect || 1.5)));
+  ctl.target.copy(c); cam.position.set(c.x, c.y + d, c.z + 1e-3 * d); cam.near = Math.min(cam.near, d / 1000); cam.updateProjectionMatrix(); ctl.update();
+}
 async function loadScene(vid, refresh = false) {
   V.loading = true; setStatus(`loading view ${vid}...`);
   try {
     const r = await fetch(`/api/m/${V.mid}/vc/scene/${vid}?${viewQuery()}${refresh ? '&refresh=1' : ''}`);
     const sc = await r.json(); if (sc.error) throw new Error(sc.error);
-    V.stale = r.headers.get('X-Vc-Stale') === '1'; V.vid = vid; makeScene(sc); renderPanel(); loadGhosts();
+    V.stale = r.headers.get('X-Vc-Stale') === '1'; V.vid = vid; makeScene(sc); if (/^(drafting|legend)$/.test(sc.view.kind)) frameFlat(); renderPanel(); loadGhosts();
     setStatus(`${sc.view.name}: ${sc.prims.length} primitives, 1:${sc.view.scale} (${sc.seconds}s)`);
   } catch (e) { setStatus('view control: ' + e.message); }
   V.loading = false;
@@ -452,6 +461,8 @@ async function openVC(vid, preset) {
   if (preset) V.state = Object.assign(DEFAULT_STATE(), JSON.parse(JSON.stringify(preset)));
   else if (V.vid !== vid) {
     try { const j = localStorage[`vctl:${V.mid}:${vid}`]; V.state = Object.assign(DEFAULT_STATE(), j ? JSON.parse(j) : {}); } catch (e) { V.state = DEFAULT_STATE(); }
+    // drafting / legend views have no model position: show them as a white sheet by default
+    const vk = (V.views.find(v => v.id === vid) || {}).kind; if (/^(drafting|legend)$/.test(vk) && !(localStorage[`vctl:${V.mid}:${vid}`] || '').includes('"paper"')) V.state.paper = true;
   }
   const mv = (S.meta.views || []).find(x => x.id === vid); if (mv && window.openView) window.openView(mv);
   await loadScene(vid);
@@ -535,7 +546,7 @@ function renderPanel() {
   let p = $('#vcpanel'); if (!p) { p = document.createElement('div'); p.id = 'vcpanel'; $('#view').appendChild(p); }
   p.hidden = !V.on; if (!V.on) return;
   if (!p.style.left) { try { const pos = JSON.parse(localStorage['vctl:pos'] || 'null'); if (pos) { p.style.left = pos[0]; p.style.top = pos[1]; p.style.right = 'auto'; } } catch (e) {} }
-  const st = V.state, sc = V.sc, vs = V.views.filter(v => v.drawable && (v.kind === 'plan' || v.kind === 'section'));
+  const st = V.state, sc = V.sc, vs = V.views.filter(v => v.drawable && /^(plan|section|drafting|legend)$/.test(v.kind));
   const opt = (v, cur, lab) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${lab}</option>`;
   p.innerHTML = `<div id="vcHead" style="display:flex;align-items:center;cursor:move" title="drag to move the panel"><b>View control</b><span class="sp" style="flex:1"></span><button id="vcOff" title="remove the overlay and close the panel">close</button></div>
   <div class="r"><label>View</label><select id="vcView" style="flex:1;min-width:0"><option value="">select a plan / section...</option>${vs.map(v => opt(v.id, V.vid, `${v.name} (${v.kind}${v.scale ? ' 1:' + v.scale : ''})`)).join('')}</select></div>
@@ -604,12 +615,12 @@ async function toggle() {
   await loadPresets();
   try { const j = await (await fetch(`/api/m/${V.mid}/vc/views`)).json(); V.views = j.views || []; V.phases = j.phases || []; V.phaseFilters = j.phaseFilters || []; } catch (e) { V.views = []; }
   renderPanel();
-  const cur = S.openView && V.views.find(v => v.id === S.openView.id && v.drawable && (v.kind === 'plan' || v.kind === 'section'));
+  const cur = S.openView && V.views.find(v => v.id === S.openView.id && v.drawable && /^(plan|section|drafting|legend)$/.test(v.kind));
   if (cur) openVC(cur.id);
 }
 const btn = document.createElement('button'); btn.id = 'bVC'; btn.textContent = 'Annotations'; btn.title = 'View-dependent elements: tags, text, dimensions, grids, hatches - per view / category / element controls';
 btn.onclick = toggle; $('#bFid').before(btn);
-window.vctl = {loadGhosts, state: () => V.state, V, openView: openVC, toggle, apply: applyStyles, set: patch => { Object.assign(V.state, patch); applyStyles(); }, pick: hitTest};
+window.vctl = {rebuild: () => V.sc && makeScene(V.sc), loadGhosts, state: () => V.state, V, openView: openVC, toggle, apply: applyStyles, set: patch => { Object.assign(V.state, patch); applyStyles(); }, pick: hitTest};
 // switching model closes the overlay
 setInterval(() => { if (V.on && V.mid !== S.mid) { closeVC(); } }, 1000);
 
