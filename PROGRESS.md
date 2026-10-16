@@ -100,3 +100,4 @@
 * Finding: no cached scene on disk carries the `host` key yet (Residential plan 180203 has 32 anchored prims, none with host), so the tag-scaling path is untested on real data. After c5-sheets release 8, re-warm Structural/Residential/Commercial scenes (tools/vc_warm.sh, remote-host) and re-run vctltest on Structural L2.
 * 3D views: scenes are served (3751 prims for a camera 3D view) but placement semantics are undecided; not started.
 * 2026-10-16 20:05: Structural re-warmed on remote-host (release 13 code, 41 scenes, 12 carry host keys); vctltest ALL OK on Structural 124186 (VC_RERENDER=0). Residential/Commercial not re-warmed (older scenes still served, stale fallback).
+* Residential re-warmed (17 scenes, release 13 code), vctltest ALL OK on plan 180203. Commercial not re-warmed.
