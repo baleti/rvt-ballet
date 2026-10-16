@@ -96,4 +96,4 @@ First usable = reader + tables + preview (`timings` of tools/sweep.py): the page
 
 ## Files of 25 MB and more
 
-Timings come from a shared remote-host slice and can be inflated by neighbouring jobs (2026 Site went 48.7 s -> 7.4 s with the Rust face-edge index; 2017 rme_advanced reader 47 s -> 19 s). Median first usable 11.5 s, median total 45.2 s (n=29). Slowest first usable: 04_rme_basic_sample_project.rv 21 s, 41_rme_advanced_sample_project 19 s, 29_rme_advanced_sample_project 18 s.
+Timings come from a shared remote-host slice and can be inflated by neighbouring jobs (2026 Site went 48.7 s -> 7.4 s with the Rust face-edge index; 2017 rme_advanced reader 47 s -> 19 s cold, 7 s with a warm extraction cache). Median first usable 11.5 s, median total 45.2 s (n=29). Slowest first usable: 04_rme_basic_sample_project.rv 21 s, 41_rme_advanced_sample_project 19 s, 29_rme_advanced_sample_project 18 s.
