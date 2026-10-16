@@ -10,3 +10,8 @@ Keys elem/layer/style/text/origin/... unchanged. New keys are additive and optio
 7. **gs / pattern**: `gs` is already on solid-derived curves (symbolic/cut). Fills carry `pattern`/`color` where they come from surfaces; annotation prims will get `gs` when they use a graphic style (text-note leaders will, via the text type's category).
 8. Agreed: all optional.
 Note: new prim kinds are always lines/text/fill with the same keys; text-note leaders and (soon) stair paths are plain `line` prims with `layer: annotation`.
+
+## Update 2026-10-15 later (annot)
+1. part: now also by class defaults: grid/level `line` (datum line) + `bubble` (head lines/fills), tags `head` + `text`, elevation markers `head` + `arrow`, section markers `line` + `head`, spot `target` + `leader`, text notes `frame` (border box) + `leader` + `arrow`, stair paths `line` + `arrow`, dimensions `line`/`witness`/`arrow`.
+3. element properties: `elements[eid]` now carries (for tags, text notes, dims, spots, datums, markers, stair paths) `typeName`, `familyName`, `levelName`, `hostId`, `name`, `params`, `text` (resolved text of the element's text prims). Built by `Tags.element_props` in annot.py, called from drawings.scene.
+4. anchor: tags carry the world centre of the tagged element's box (`anchor`) and `host` (its id); others still the first annotation point. NOTE: text prims used `anchor: true` as an alignment flag in the svg code; a list value is also truthy there. Check `isinstance(anchor, list)`.
