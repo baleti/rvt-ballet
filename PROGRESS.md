@@ -102,3 +102,8 @@
 * 2026-10-16 20:05: Structural re-warmed on remote-host (release 13 code, 41 scenes, 12 carry host keys); vctltest ALL OK on Structural 124186 (VC_RERENDER=0). Residential/Commercial not re-warmed (older scenes still served, stale fallback).
 * Residential re-warmed (17 scenes, release 13 code), vctltest ALL OK on plan 180203. Commercial not re-warmed.
 * Commercial re-warmed (20 scenes), vctltest ALL OK on plan 193216. All three demo files now carry release 13 scenes.
+
+## 2026-10-17 c3-vctl (takeover from c5-vctl)
+* Read handoff, merged master into vctl. vctltest ALL OK on Residential 180203 after the merge.
+* 3D views: decided NOT to overlay. A 3D view scene (Residential {3D} 157966) holds only projected model linework (family symbolic lines, projection/surface_fill segs), no tags, text, dimensions or datums; overlaying it would duplicate the real 3D model. Not selectable in the panel by design.
+* Panel layout: rows wrap and the panel no longer scrolls horizontally at 1280 px.
