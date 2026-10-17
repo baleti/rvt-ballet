@@ -107,3 +107,4 @@
 * Read handoff, merged master into vctl. vctltest ALL OK on Residential 180203 after the merge.
 * 3D views: decided NOT to overlay. A 3D view scene (Residential {3D} 157966) holds only projected model linework (family symbolic lines, projection/surface_fill segs), no tags, text, dimensions or datums; overlaying it would duplicate the real 3D model. Not selectable in the panel by design.
 * Panel layout: rows wrap and the panel no longer scrolls horizontally at 1280 px.
+* legend view tested (Commercial 206449): fixed dark/striped paper look (caps + level planes hidden), deef646
