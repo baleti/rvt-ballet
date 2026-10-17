@@ -47,9 +47,10 @@ async def main(a):
               const l=new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry,30),new THREE.LineBasicMaterial({color:0}));l.userData.hl=1;add.push([o,l])});add.forEach(([o,l])=>o.add(l));__dirty();return 0})()""")
         if a.vg:
             await b.ev("(async()=>{await __hl.loadView({id:%s});return 0})()" % json.dumps(a.vg)); await asyncio.sleep(1)
+        a.style = a.style or 'realistic'      # the viewer now opens in hidden line; shots stay shaded unless --style hidden
         if a.style:
             await b.ev("(()=>{__hl.setStyle(%s);return 0})()" % json.dumps(a.style))
-            if a.style in ('hidden', 'wire'): await b.wait('window.__hlReady===true', 600)
+            if a.style in ('hidden', 'wire'): await b.wait('window.__hlReady===true', 600); print('edges', await b.ev('__hl.edgeCount+" edges in "+__hl.edgeMs+" ms, meshes "+__hl.meshes.length'))
         if a.fit:
             await b.ev("""(()=>{const c=__camera,o=__controls,B=S.meta.bbox,bb=new THREE.Box3(new THREE.Vector3(B[0][0],B[0][2],-B[1][1]),new THREE.Vector3(B[1][0],B[1][2],-B[0][1]));      // model box from meta (stray far-off meshes must not shrink the view)
               

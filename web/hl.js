@@ -128,7 +128,7 @@ function setupTwins() {
 
 async function buildEdges() {
   const ver = ++H.version, grp = new THREE.Group(); grp.renderOrder = 11; grp.visible = false; world.add(grp); H.group = grp; window.__hlGroup = grp; H.edgeCount = 0;
-  H.ready = false;
+  H.ready = false; const t0 = performance.now();
   for (const m of H.meshes) {
     if (ver !== H.version) return;
     const r = await runEdge(m); if (ver !== H.version) return;
@@ -140,7 +140,7 @@ async function buildEdges() {
       if (em === edgeMat) l.onBeforeRender = r => { r.getDrawingBufferSize(_v2); uPx.value.set(2 / _v2.x, 2 / _v2.y); }; }
  H.edgeCount += r.pos.length / 6; dirty();
   }
-  H.ready = true; window.__hlReady = true; dirty();
+  H.edgeMs = Math.round(performance.now() - t0); H.ready = true; window.__hlReady = true; dirty();
 }
 
 // per element surface colour + opacity from the category table (and element overrides in H.el)
@@ -195,7 +195,8 @@ H.loadView = async function (v) {
 let lastView; setInterval(() => { if (S.openView !== lastView) { lastView = S.openView; H.viewReady = false; H.loadView(S.openView); } }, 400);
 
 let saved = null;
-H.setStyle = function (st) {
+H.setStyle = function (st, user) {
+  if (user) H.userChose = true;
   if (!STYLES[st]) st = 'realistic'; const prev = H.style; H.style = st; try { localStorage.setItem('rvtStyle', st); } catch (e) {}
   const hl = st === 'hidden' || st === 'wire';
   if (st !== 'realistic' && U.uStyle.value === 0 && !saved) saved = {bg: scene.background, tex: U.uTex.value};
@@ -220,13 +221,15 @@ H.setStyle = function (st) {
 function onLoaded() {
   H.ovl = null; H.twins = []; H.group = null; H.meshes = undefined; H.ready = false; window.__hlReady = false; H.version++;
   H.applyOverrides();
-  H.viewId = null; H.el = null; lastView = undefined; saved = null; H.setStyle(H.style);
+  H.viewId = null; H.el = null; lastView = undefined; saved = null;
+  if (!H.userChose && H.style === 'hidden' && S.tris > 12e6) H.style = 'realistic';      // very large models open in the cheap style until the user asks for hidden line
+  H.setStyle(H.style);
 }
 
 const sel = document.createElement('select'); sel.id = 'styleSel'; sel.title = 'Visual style';
 sel.innerHTML = Object.entries(STYLES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
-$('#bShadow').before(sel); sel.onchange = () => H.setStyle(sel.value);
+$('#bShadow').before(sel); sel.onchange = () => H.setStyle(sel.value, true);
 window.addEventListener('rvt-model-loaded', onLoaded);
 let st0 = new URLSearchParams(location.search).get('style'); try { st0 = st0 || localStorage.getItem('rvtStyle'); } catch (e) {}
-H.style = STYLES[st0] ? st0 : 'realistic'; sel.value = H.style;
+H.userChose = !!STYLES[st0]; H.style = STYLES[st0] ? st0 : 'hidden'; sel.value = H.style;      // Revit's default 3D look is hidden line
 if (S.meta && window.__loaded) onLoaded();
