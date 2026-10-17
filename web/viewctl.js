@@ -620,7 +620,7 @@ async function toggle() {
   if (cur) openVC(cur.id);
 }
 const btn = document.createElement('button'); btn.id = 'bVC'; btn.textContent = 'Annotations'; btn.title = 'View-dependent elements: tags, text, dimensions, grids, hatches - per view / category / element controls';
-btn.onclick = toggle; $('#bFid').before(btn);
+btn.onclick = toggle; $('#navSel').before(btn);      // left end of the right-hand buttons: stays visible in a narrow window
 window.vctl = {rebuild: () => V.sc && makeScene(V.sc), loadGhosts, state: () => V.state, V, openView: openVC, toggle, apply: applyStyles, set: patch => { Object.assign(V.state, patch); applyStyles(); }, pick: hitTest};
 // switching model closes the overlay
 setInterval(() => { if (V.on && V.mid !== S.mid) { closeVC(); } }, 1000);
