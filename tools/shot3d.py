@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(__file__)); import cdp
 D = os.path.dirname(os.path.abspath(__file__)) + '/..'
 async def main(a):
     port = a.port or (9400 + os.getpid() % 500)
-    srv = subprocess.Popen([D + '/bin/rvt-view', a.file, '--no-browser', '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
+    srv = subprocess.Popen([os.environ.get('RVT_VIEW') or D + '/bin/rvt-view', a.file, '--no-browser', '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
     base = 'http://127.0.0.1:%d' % port; b = None
     try:
         cdp.wait_http(base + '/api/models', 600)
@@ -45,6 +45,9 @@ async def main(a):
         if a.hl:
             await b.ev("""(()=>{const w=__world,add=[];w.traverse(o=>{if(!o.isMesh||o.userData.hl)return;o.userData.hl=1;o.material=new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
               const l=new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry,30),new THREE.LineBasicMaterial({color:0}));l.userData.hl=1;add.push([o,l])});add.forEach(([o,l])=>o.add(l));__dirty();return 0})()""")
+        if a.style:
+            await b.ev("(()=>{__hl.setStyle(%s);return 0})()" % json.dumps(a.style))
+            if a.style in ('hidden', 'wire'): await b.wait('window.__hlReady===true', 600)
         if a.fit:
             await b.ev("""(()=>{const c=__camera,o=__controls,bb=new THREE.Box3();__world.traverse(m=>{if(m.isMesh&&m.visible&&!m.userData.hlEdge)bb.expandByObject(m)});
               const ct=bb.getCenter(new THREE.Vector3()),dir=c.position.clone().sub(o.target).normalize(),pts=[];for(const x of [bb.min.x,bb.max.x])for(const y of [bb.min.y,bb.max.y])for(const z of [bb.min.z,bb.max.z])pts.push(new THREE.Vector3(x,y,z));
@@ -60,5 +63,5 @@ async def main(a):
         try: os.killpg(srv.pid, 15)
         except Exception: pass
 p = argparse.ArgumentParser(); p.add_argument('file'); p.add_argument('view'); p.add_argument('camera'); p.add_argument('out')
-p.add_argument('--size', default='1280x720'); p.add_argument('--clean', action='store_true'); p.add_argument('--units', default='ft'); p.add_argument('--fov', type=float); p.add_argument('--port', type=int); p.add_argument('--up'); p.add_argument('--white', action='store_true', help='white background, no level planes / grids / labels / cube'); p.add_argument('--levels', action='store_true', help='with --white: keep levels and grids'); p.add_argument('--hl', action='store_true', help='hidden-line style: white faces, black edges'); p.add_argument('--fit', action='store_true', help='fit the model bounding box into the frame (5%% margin) along the camera direction'); p.add_argument('--like', help='PNG whose pixel size to use'); p.add_argument('--ortho', action='store_true', help='emulate an orthographic camera (narrow fov far away, centred on the view axis through the model centre)'); p.add_argument('--vh', type=float, help='with --ortho: visible height in metres (default: fits the model)')
+p.add_argument('--size', default='1280x720'); p.add_argument('--clean', action='store_true'); p.add_argument('--units', default='ft'); p.add_argument('--fov', type=float); p.add_argument('--port', type=int); p.add_argument('--up'); p.add_argument('--white', action='store_true', help='white background, no level planes / grids / labels / cube'); p.add_argument('--levels', action='store_true', help='with --white: keep levels and grids'); p.add_argument('--hl', action='store_true', help='hidden-line style: white faces, black edges'); p.add_argument('--fit', action='store_true', help='fit the model bounding box into the frame (5%% margin) along the camera direction'); p.add_argument('--like', help='PNG whose pixel size to use'); p.add_argument('--ortho', action='store_true', help='emulate an orthographic camera (narrow fov far away, centred on the view axis through the model centre)'); p.add_argument('--vh', type=float, help='with --ortho: visible height in metres (default: fits the model)'); p.add_argument('--style')
 asyncio.run(main(p.parse_args()))
