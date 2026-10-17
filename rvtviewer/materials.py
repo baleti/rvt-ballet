@@ -93,6 +93,10 @@ def asset_extras(src):
     return out
 
 
+import functools
+
+
+@functools.lru_cache(maxsize=512)
 def flat_swatch(png):
     """True when Revit's swatch is a full-frame texture (grass, gravel, asphalt, tiles) rather than a rendered sphere / cube / wall: usable as a tileable texture"""
     try:
@@ -146,12 +150,12 @@ def write_images(outdir, mats, log=print):
         lib = library_texture(m.get('tex_path')) if m.get('tex_colour') else None
         try:
             if lib:
-                Image.open(lib).convert('RGB').resize((256, 256), Image.LANCZOS).save(os.path.join(outdir, 'tex', '%d.png' % k)); m['tex_img'] = 'library'; nlib += 1
+                Image.open(lib).convert('RGB').resize((256, 256), Image.LANCZOS).save(os.path.join(outdir, 'tex', '%d.png' % k), compress_level=1); m['tex_img'] = 'library'; nlib += 1
                 m['texture_source'] = 'bitmap ' + str(m.get('tex_path')) + ' from the local Autodesk material library copy (not stored in the .rvt), real-world size ' + _fmt_ft(m.get('tex_scale_ft'))
             elif png and flat_swatch(png):
                 q = Image.open(io.BytesIO(png)).convert('RGB').resize((128, 128), Image.BICUBIC); t = Image.new('RGB', (256, 256))       # 2 x 2 mirrored: a seamless tile from a non-tileable swatch
                 t.paste(q, (0, 0)); t.paste(q.transpose(Image.FLIP_LEFT_RIGHT), (128, 0)); t.paste(q.transpose(Image.FLIP_TOP_BOTTOM), (0, 128)); t.paste(q.transpose(Image.ROTATE_180), (128, 128))
-                t.save(os.path.join(outdir, 'tex', '%d.png' % k)); m['tex_img'] = 'swatch'; m['tex_tile_mul'] = 2; nsw += 1
+                t.save(os.path.join(outdir, 'tex', '%d.png' % k), compress_level=1); m['tex_img'] = 'swatch'; m['tex_tile_mul'] = 2; nsw += 1
                 m['texture_source'] = "Revit's own swatch image stored in the file, tiled at the asset's real-world size " + _fmt_ft(m.get('tex_scale_ft')) + ' (low resolution; the bitmap ' + str(m.get('tex_path')) + ' is not in the .rvt)'
         except Exception as ex: log('texture image %s: %r' % (m.get('name'), ex))
         blib = library_texture(m.get('bump_path')) if m.get('bump_path') else None
