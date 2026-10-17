@@ -13,7 +13,8 @@ const STYLE_ID = {realistic: 0, shaded: 0, hidden: 1, wire: 2, consistent: 4};
 const H = window.__hl = {style: 'realistic', edges: [], twins: [], cat: {}, thresholdDeg: 30, group: null, version: 0};
 
 // default hidden-line graphics per category (until the view's resolved overrides are applied through H.setCat)
-H.cat = {'Floors': {a: 0.28}, 'Structural Foundations': {}, 'Roofs': {a: 0.5}};
+H.defCat = {'Floors': {a: 0.85}};   // used when no view graphics are open
+H.cat = Object.assign({}, H.defCat);
 
 const WORKER_SRC = `
 self.onmessage = ev => {
@@ -71,27 +72,36 @@ self.onmessage = ev => {
   self.postMessage(out, [out.pos.buffer, out.n1.buffer, out.n2.buffer, out.kind.buffer, out.eidx.buffer]);
 };`;
 
-const edgeMat = new THREE.ShaderMaterial({
-  clipping: true, depthTest: true, uniforms: {tState: U.tState, uCol: {value: new THREE.Color(0)}},
+const TW = 2048, uPx = {value: new THREE.Vector2(.001, .001)}, tLn = {value: null};
+// edge material; k = 0 base line, k = 1, 2 extra passes offset by about a pixel that thicken the lines of elements whose line weight needs 2 / 3 px
+function mkEdgeMat(k) {
+  const m = new THREE.ShaderMaterial({
+  clipping: true, depthTest: true, uniforms: {tState: U.tState, tLn, uPx, uK: {value: k}},
   vertexShader: `#include <common>
 #include <clipping_planes_pars_vertex>
-attribute float _eidx; attribute vec3 n1; attribute vec3 n2; attribute float kind; uniform sampler2D tState;
+attribute float _eidx; attribute vec3 n1; attribute vec3 n2; attribute float kind; uniform sampler2D tState; uniform sampler2D tLn; uniform vec2 uPx; uniform float uK; varying vec3 vC;
 void main(){
   vec4 wp = modelMatrix * vec4(position, 1.0); vec4 mvPosition = viewMatrix * wp; gl_Position = projectionMatrix * mvPosition;
-  float eI = floor(_eidx + .5); vec4 stt = texelFetch(tState, ivec2(int(mod(eI, ${2048}.)), int(eI / ${2048}.)), 0); float fl = floor(stt.r * 255. + .5);
-  bool hide = mod(fl, 2.) > .5 || mod(floor(fl / 8.), 2.) > .5;
+  float eI = floor(_eidx + .5); ivec2 ix = ivec2(int(mod(eI, ${TW}.)), int(eI / ${TW}.)); vec4 stt = texelFetch(tState, ix, 0); float fl = floor(stt.r * 255. + .5);
+  vec4 ln = texelFetch(tLn, ix, 0); vC = ln.rgb; float wpx = floor(ln.a * 255. / 50. + .5);
+  bool hide = mod(fl, 2.) > .5 || mod(floor(fl / 8.), 2.) > .5 || (uK > .5 && wpx < uK + .5);
   if (kind > .5) { vec3 v = cameraPosition - wp.xyz; vec3 a = mat3(modelMatrix) * n1, b = mat3(modelMatrix) * n2; if (dot(a, v) * dot(b, v) > 0.) hide = true; }
+  if (uK > .5) gl_Position.xy += (uK < 1.5 ? vec2(.7, .7) : vec2(-.7, .7)) * uPx * gl_Position.w;
   if (hide) gl_Position = vec4(2., 2., 2., 1.);
 #include <clipping_planes_vertex>
 }`,
   fragmentShader: `#include <clipping_planes_pars_fragment>
-uniform vec3 uCol;
+varying vec3 vC;
 void main(){
 #include <clipping_planes_fragment>
-  gl_FragColor = vec4(uCol, 1.);
+  gl_FragColor = vec4(vC, 1.);
 }`});
-edgeMat.polygonOffset = false;
+  return m;
+}
+const edgeMats = [mkEdgeMat(0), mkEdgeMat(1), mkEdgeMat(2)];
+const edgeMat = edgeMats[0];
 
+const _v2 = new THREE.Vector2();
 let workers = [], jobs = new Map(), jid = 0;
 function runEdge(mesh) {
   return new Promise(res => {
@@ -106,9 +116,9 @@ function setupTwins() {
   const meshes = []; world.traverse(o => { if (o.isMesh && !o.userData.hlTwin) meshes.push(o); });
   H.meshes = meshes;
   for (const m of meshes) {
-    m.material.polygonOffset = true; m.material.polygonOffsetFactor = 1; m.material.polygonOffsetUnits = 1;
+    m.material.polygonOffset = true; m.material.polygonOffsetFactor = 2; m.material.polygonOffsetUnits = 4;
     if (m.userData.twin) continue;
-    const mat = window.__patch(new THREE.MeshStandardMaterial({color: m.material.color, roughness: .85, metalness: 0, side: THREE.DoubleSide, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1}));
+    const mat = window.__patch(new THREE.MeshStandardMaterial({color: m.material.color, roughness: .85, metalness: 0, side: THREE.DoubleSide, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4}));
     mat.userData.pt = {value: 1};
     const t = new THREE.Mesh(m.geometry, mat); t.userData.hlTwin = 1; t.userData.bi = m.userData.bi; t.frustumCulled = false; t.renderOrder = 12; t.visible = false; t.matrixAutoUpdate = false;
     t.customDepthMaterial = m.customDepthMaterial; t.castShadow = false;
@@ -125,8 +135,10 @@ async function buildEdges() {
     if (!r.pos.length) continue;
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(r.pos, 3)); g.setAttribute('_eidx', new THREE.BufferAttribute(r.eidx, 1));
     g.setAttribute('n1', new THREE.BufferAttribute(r.n1, 3)); g.setAttribute('n2', new THREE.BufferAttribute(r.n2, 3)); g.setAttribute('kind', new THREE.BufferAttribute(r.kind, 1));
-    const l = new THREE.LineSegments(g, edgeMat); l.frustumCulled = false; l.renderOrder = 11; l.matrixAutoUpdate = false; m.updateWorldMatrix(true, false); l.matrix.copy(m.matrixWorld); l.userData.hlEdge = 1;
-    grp.add(l); H.edgeCount += r.pos.length / 6; dirty();
+    m.updateWorldMatrix(true, false);
+    for (const em of edgeMats) { const l = new THREE.LineSegments(g, em); l.frustumCulled = false; l.renderOrder = 11; l.matrixAutoUpdate = false; l.matrix.copy(m.matrixWorld); l.userData.hlEdge = 1; grp.add(l);
+      if (em === edgeMat) l.onBeforeRender = r => { r.getDrawingBufferSize(_v2); uPx.value.set(2 / _v2.x, 2 / _v2.y); }; }
+ H.edgeCount += r.pos.length / 6; dirty();
   }
   H.ready = true; window.__hlReady = true; dirty();
 }
@@ -138,9 +150,49 @@ H.applyOverrides = function () {
     const c = H.cat[E[i][2]] || {}, o = (H.el && H.el[i]) || {}; const col = o.c || c.c || [255, 255, 255], a = o.a ?? c.a ?? 1;
     d[4*i] = col[0]; d[4*i+1] = col[1]; d[4*i+2] = col[2]; d[4*i+3] = Math.round(a * 255);
   }
-  S.ovrTex.needsUpdate = true; dirty();
+  S.ovrTex.needsUpdate = true; H.applyLines(); dirty();
+};
+H.applyLines = function () {
+  if (!S.meta) return; const E = S.meta.elements, N = S.N, h = Math.max(1, Math.ceil(N / TW));
+  if (!H.lnData || H.lnData.length !== TW * h * 4) { H.lnData = new Uint8Array(TW * h * 4); H.lnTex = new THREE.DataTexture(H.lnData, TW, h, THREE.RGBAFormat, THREE.UnsignedByteType); H.lnTex.minFilter = H.lnTex.magFilter = THREE.NearestFilter; tLn.value = H.lnTex; }
+  const d = H.lnData;
+  for (let i = 0; i < N; i++) { const o = (H.el && H.el[i]) || {}; const c = o.lc || [0, 0, 0], w = o.lw || 1; d[4*i] = c[0]; d[4*i+1] = c[1]; d[4*i+2] = c[2]; d[4*i+3] = w * 50; }
+  H.lnTex.needsUpdate = true;
 };
 H.setCat = function (cat, o) { H.cat[cat] = o; H.applyOverrides(); };
+
+// level outlines and grids in the Revit look: thin dashed lines (levels black, grids magenta), no tinted planes
+function restyleOverlays(on) {
+  if (!S.lvlGroup) return;
+  if (!H.ovl) {
+    H.ovl = new THREE.Group(); H.ovl.userData.hl = 1; const mk = (c, d, g) => new THREE.LineDashedMaterial({color: c, dashSize: d, gapSize: g, transparent: true, opacity: .9});
+    const lm = mk(0x222222, 1.6, .5), gm = mk(0xd020d0, 1.2, .4);
+    for (const o of S.lvlGroup.children) if (o.isLineLoop) { const pts = []; const a = o.geometry.attributes.position; for (let i = 0; i <= a.count; i++) pts.push(new THREE.Vector3().fromBufferAttribute(a, i % a.count)); const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lm); l.position.copy(o.position); l.computeLineDistances(); l.userData.src = o; H.ovl.add(l); }
+    for (const o of S.gridGroup.children) if (o.isLine) { const l = new THREE.Line(o.geometry, gm); l.computeLineDistances(); l.userData.src = o; H.ovl.add(l); }
+    S.lvlGroup.add(H.ovl); H.ovlSrc = [...S.lvlGroup.children.filter(o => o.isLineLoop), ...S.gridGroup.children.filter(o => o.isLine)];
+  }
+  H.ovl.visible = on; for (const o of H.ovlSrc) o.visible = !on;
+  if (S.lvlGroup.children[0]?.isMesh) S.lvlGroup.children.forEach(o => { if (o.isMesh) o.visible = !on; });
+  document.body.classList.toggle('hlstyle', on);
+}
+
+// resolved view graphics (view template + filters + category overrides + transparency) from the server for the open view (rvtviewer/vg3d.py)
+H.el = null; H.viewId = null; let viewHidden = new Set();
+H.loadView = async function (v) {
+  const vid = v && v.id; if (vid === H.viewId) return; H.viewId = vid;
+  for (const i of viewHidden) S.hidden[i] = 0; viewHidden.clear(); H.el = null; H.cat = Object.assign({}, H.defCat);
+  if (vid != null) {
+    try {
+      const r = await fetch(`/api/m/${S.mid}/vg3d/${vid}`); if (!r.ok) throw new Error(r.status); const d = await r.json(); if (H.viewId !== vid) return;
+      const E = S.meta.elements, idx = new Map(); E.forEach((e, i) => idx.set(String(e[0]), i)); H.el = {}; H.cat = {};
+      for (const [k, a] of Object.entries(d.els)) { const i = idx.get(k); if (i === undefined) continue;
+        H.el[i] = {c: [a[0], a[1], a[2]], a: a[3], lc: [a[4], a[5], a[6]], lw: a[7] < .7 ? 1 : a[7] < 1 ? 2 : 3, ht: a[8]}; }
+      for (const id of d.hidden) { const i = idx.get(String(id)); if (i !== undefined && !S.hidden[i]) { S.hidden[i] = 1; viewHidden.add(i); } }
+    } catch (e) { console.warn('view graphics', e); }
+  }
+  window.__refreshState && window.__refreshState(); H.applyOverrides(); H.viewReady = true;
+};
+let lastView; setInterval(() => { if (S.openView !== lastView) { lastView = S.openView; H.viewReady = false; H.loadView(S.openView); } }, 400);
 
 let saved = null;
 H.setStyle = function (st) {
@@ -157,17 +209,18 @@ H.setStyle = function (st) {
   if (st === 'shaded' || st === 'consistent') U.uTex.value = 0; else if (st === 'realistic' && saved) U.uTex.value = saved.tex;
   $('#bTex')?.classList.toggle('on', !!U.uTex.value);
   if (st === 'realistic') saved = null;
-  edgeMat.depthTest = st !== 'wire';
+  for (const em of edgeMats) em.depthTest = st !== 'wire';
   if (H.group) H.group.visible = hl; for (const t of H.twins) t.visible = st === 'hidden';
   for (const m of H.meshes || []) { m.material.polygonOffset = st === 'hidden'; }
   if (H.meshes) for (const m of H.meshes) { m.material.needsUpdate = true; }
+  restyleOverlays(hl);
   const sel = $('#styleSel'); if (sel) sel.value = st; dirty();
 };
 
 function onLoaded() {
-  H.twins = []; H.group = null; H.meshes = undefined; H.ready = false; window.__hlReady = false; H.version++;
+  H.ovl = null; H.twins = []; H.group = null; H.meshes = undefined; H.ready = false; window.__hlReady = false; H.version++;
   H.applyOverrides();
-  saved = null; H.setStyle(H.style);
+  H.viewId = null; H.el = null; lastView = undefined; saved = null; H.setStyle(H.style);
 }
 
 const sel = document.createElement('select'); sel.id = 'styleSel'; sel.title = 'Visual style';

@@ -68,7 +68,7 @@ const overlay = new THREE.Group(); scene.add(overlay);
 let selBoxDummy;
 let stateTex, stateData;
 const U = {tState: {value: null}, uMode: {value: 0}, tMat: {value: null}, tPat: {value: null}, tImg: {value: null}, tBump: {value: null}, uTex: {value: 1}, uBot: {value: -1e9}, uStyle: {value: 0}, tOvr: {value: null}};
-window.__U = U;
+window.__U = U; setTimeout(() => { window.__refreshState = refreshState; }, 0);
 setTimeout(() => { window.__patch = patch; }, 0);
 
 function depthMat() {
