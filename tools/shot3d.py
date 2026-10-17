@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(__file__)); import cdp
 D = os.path.dirname(os.path.abspath(__file__)) + '/..'
 async def main(a):
     port = a.port or (9400 + os.getpid() % 500)
-    srv = subprocess.Popen([D + '/bin/rvt-view', a.file, '--no-browser', '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
+    srv = subprocess.Popen([os.environ.get('RVT_VIEW') or D + '/bin/rvt-view', a.file, '--no-browser', '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
     base = 'http://127.0.0.1:%d' % port; b = None
     try:
         cdp.wait_http(base + '/api/models', 600)
@@ -25,6 +25,8 @@ async def main(a):
             import struct; hd = open(a.like, 'rb').read(24); a.size = '%dx%d' % struct.unpack('>II', hd[16:24])
         w, h = map(int, a.size.split('x')); b = cdp.Browser(size=(w, h)); b.size = (w, h); await b.start()
         await b.goto(base + '/#' + mid); await b.wait('window.__loaded===true', 300); await asyncio.sleep(1)
+        if a.tan:
+            import math; a.fov = 2 * math.degrees(math.atan(float(a.tan.split(',')[1])))
         if a.clean: await b.ev("(()=>{const s=document.createElement('style');s.textContent='header,#side,#tabs,#panel,#inspector,#help,#status,#viewcube,#viewbar,#banner,.panel,#left,#right,#vcube,#vhome,.lbl{display:none!important}#view{position:fixed!important;inset:0!important;height:100vh!important}';document.head.appendChild(s);return 0})()")
         await b.ev("window.dispatchEvent(new Event('resize'));0"); await asyncio.sleep(2)      # canvas takes the new size before the view framing is computed
         if a.view != '3d':
@@ -45,8 +47,15 @@ async def main(a):
         if a.hl:
             await b.ev("""(()=>{const w=__world,add=[];w.traverse(o=>{if(!o.isMesh||o.userData.hl)return;o.userData.hl=1;o.material=new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
               const l=new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry,30),new THREE.LineBasicMaterial({color:0}));l.userData.hl=1;add.push([o,l])});add.forEach(([o,l])=>o.add(l));__dirty();return 0})()""")
+        if a.vg:
+            await b.ev("(async()=>{await __hl.loadView({id:%s});return 0})()" % json.dumps(a.vg)); await asyncio.sleep(1)
+        a.style = a.style or 'realistic'      # the viewer now opens in hidden line; shots stay shaded unless --style hidden
+        if a.style:
+            await b.ev("(()=>{__hl.setStyle(%s);return 0})()" % json.dumps(a.style))
+            if a.style in ('hidden', 'wire'): await b.wait('window.__hlReady===true', 600); print('edges', await b.ev('__hl.edgeCount+" edges in "+__hl.edgeMs+" ms, meshes "+__hl.meshes.length'))
         if a.fit:
-            await b.ev("""(()=>{const c=__camera,o=__controls,bb=new THREE.Box3();__world.traverse(m=>{if(m.isMesh&&m.visible&&!m.userData.hlEdge)bb.expandByObject(m)});
+            await b.ev("""(()=>{const c=__camera,o=__controls,B=S.meta.bbox,bb=new THREE.Box3(new THREE.Vector3(B[0][0],B[0][2],-B[1][1]),new THREE.Vector3(B[1][0],B[1][2],-B[0][1]));      // model box from meta (stray far-off meshes must not shrink the view)
+              
               const ct=bb.getCenter(new THREE.Vector3()),dir=c.position.clone().sub(o.target).normalize(),pts=[];for(const x of [bb.min.x,bb.max.x])for(const y of [bb.min.y,bb.max.y])for(const z of [bb.min.z,bb.max.z])pts.push(new THREE.Vector3(x,y,z));
               const ndc=(D,tg)=>{c.position.copy(tg).addScaledVector(dir,D);c.near=Math.max(D/2000,0.02);c.far=D*10+500;c.lookAt(tg);c.updateProjectionMatrix();c.updateMatrixWorld(true);let mx=0;for(const p of pts){const q=p.clone().project(c);mx=Math.max(mx,Math.abs(q.x),Math.abs(q.y))}return mx};
               let tg=ct.clone();for(let it=0;it<3;it++){let lo=0.5,hi=1e5;for(let k=0;k<60;k++){const m=Math.sqrt(lo*hi);if(ndc(m,tg)>0.95)lo=m;else hi=m}const D=hi;ndc(D,tg);
@@ -54,11 +63,13 @@ async def main(a):
                 const cx=(a[0]+a[1])/2,cy=(a[2]+a[3])/2,right=new THREE.Vector3().setFromMatrixColumn(c.matrixWorld,0),upv=new THREE.Vector3().setFromMatrixColumn(c.matrixWorld,1),hh=D*Math.tan(c.fov*Math.PI/360);
                 tg.addScaledVector(right,cx*hh*c.aspect).addScaledVector(upv,cy*hh)}
               let lo=0.5,hi=1e5;for(let k=0;k<60;k++){const m=Math.sqrt(lo*hi);if(ndc(m,tg)>0.95)lo=m;else hi=m}ndc(hi,tg);o.target.copy(tg);o.update();__dirty();return 0})()""")
+        if a.sky:
+            await b.ev("""(()=>{const c=document.createElement('canvas');c.width=2;c.height=256;const g=c.getContext('2d'),gr=g.createLinearGradient(0,0,0,256);gr.addColorStop(0,'#5f9bd8');gr.addColorStop(.55,'#a9cdee');gr.addColorStop(.8,'#e4eef7');gr.addColorStop(1,'#e4eef7');g.fillStyle=gr;g.fillRect(0,0,2,256);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;__scene.background=t;__dirty();return 0})()""")
         await asyncio.sleep(3); await b.shot(a.out); print('wrote', a.out)
     finally:
         if b: await b.close()
         try: os.killpg(srv.pid, 15)
         except Exception: pass
 p = argparse.ArgumentParser(); p.add_argument('file'); p.add_argument('view'); p.add_argument('camera'); p.add_argument('out')
-p.add_argument('--size', default='1280x720'); p.add_argument('--clean', action='store_true'); p.add_argument('--units', default='ft'); p.add_argument('--fov', type=float); p.add_argument('--port', type=int); p.add_argument('--up'); p.add_argument('--white', action='store_true', help='white background, no level planes / grids / labels / cube'); p.add_argument('--levels', action='store_true', help='with --white: keep levels and grids'); p.add_argument('--hl', action='store_true', help='hidden-line style: white faces, black edges'); p.add_argument('--fit', action='store_true', help='fit the model bounding box into the frame (5%% margin) along the camera direction'); p.add_argument('--like', help='PNG whose pixel size to use'); p.add_argument('--ortho', action='store_true', help='emulate an orthographic camera (narrow fov far away, centred on the view axis through the model centre)'); p.add_argument('--vh', type=float, help='with --ortho: visible height in metres (default: fits the model)')
+p.add_argument('--size', default='1280x720'); p.add_argument('--clean', action='store_true'); p.add_argument('--units', default='ft'); p.add_argument('--fov', type=float); p.add_argument('--port', type=int); p.add_argument('--tan', help='half field-of-view tangents TX,TY of a Revit perspective crop (sets the vertical fov; pass --size with the TX:TY ratio)'); p.add_argument('--sky', action='store_true', help='sky gradient background (Revit realistic perspective look)'); p.add_argument('--up'); p.add_argument('--white', action='store_true', help='white background, no level planes / grids / labels / cube'); p.add_argument('--levels', action='store_true', help='with --white: keep levels and grids'); p.add_argument('--hl', action='store_true', help='hidden-line style: white faces, black edges'); p.add_argument('--fit', action='store_true', help='fit the model bounding box into the frame (5%% margin) along the camera direction'); p.add_argument('--like', help='PNG whose pixel size to use'); p.add_argument('--ortho', action='store_true', help='emulate an orthographic camera (narrow fov far away, centred on the view axis through the model centre)'); p.add_argument('--vh', type=float, help='with --ortho: visible height in metres (default: fits the model)'); p.add_argument('--style'); p.add_argument('--vg', help='apply the resolved graphics (overrides, filters, hidden elements) of this view id without moving the camera')
 asyncio.run(main(p.parse_args()))

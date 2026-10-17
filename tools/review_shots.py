@@ -18,10 +18,11 @@ for name in (sys.argv[1:] or sorted(os.listdir(R))):
         if t[0] != 'VIEW': continue
         vid, kind, vname = t[1], t[2], t[4]; png = '%s/%s.png' % (d, vid)
         if not os.path.exists(png): continue
+        if os.environ.get('HL3D') and kind != 'View3D': continue
         cam, ortho = cams.get(vid, (None, False))
-        for suf, extra in (('', []), ('_hl', ['--hl'])):
+        for suf, extra in (('', ['--style', 'shaded']), ('_hl', ['--style', 'hidden', '--vg', vid])):
             out = '%s/%s/%s__ours3d%s.png' % (O, name, vid, suf)
             if os.path.exists(out): continue
-            a = [D + '/tools/capped.sh', D + '/.venv/bin/python', D + '/tools/shot3d.py', f[0], vid if kind != 'View3D' else '3d', ','.join(cam) if cam else '-', out, '--clean', '--white'] + (['--fit'] if kind == 'View3D' else []) + ['--like', png] + extra + (['--ortho'] if ortho else [])
+            a = [D + '/tools/capped.sh', os.environ.get('RVT_PY') or D + '/.venv/bin/python', D + '/tools/shot3d.py', f[0], vid if kind != 'View3D' else '3d', ','.join(cam) if cam else '-', out, '--clean', '--white'] + (['--fit'] if kind == 'View3D' else []) + ['--like', png] + extra + (['--ortho'] if ortho else [])
             if kind == 'View3D' and not cam: continue
             print(' '.join(a[3:])); subprocess.run(a, env=dict(os.environ, RVT_MEM_CAP='3G'), timeout=1500)

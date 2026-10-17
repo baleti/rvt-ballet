@@ -63,3 +63,13 @@ main{position:relative}
 #sheetspane .shbar{display:flex;gap:12px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel);font-size:13px}
 #sheetspane .sp{flex:1}#shFrame{flex:1;border:0;width:100%;background:#fff}
 #cachedBadge{font-size:11px;padding:1px 7px;border-radius:9px;background:#0d2d1c;color:#9fe3bb;border:1px solid #1f6a43;white-space:nowrap}#cachedBadge.partial{background:#3a2a05;color:#ffd98a;border-color:#8a6a1a}
+/* hidden-line style (hl.js): Revit-like annotation: black text on white, grid bubbles as outlined circles, level tags without fill */
+body.hlstyle .lbl{color:#111;background:#fffc;border-radius:0}
+body.hlstyle .lbl.lvl{background:none;font-size:10px}
+body.hlstyle .lbl.grid{background:#fff;border:1px solid #111;border-radius:50%}
+body.hlstyle .lbl.room{background:none;color:#444}
+/* open-licensed (SIL OFL, web/fonts/LICENSE) Arial metric twin shipped locally: text overlays (tags, dims, grids) use the same stack as the sheets: Arial, Liberation Sans, Helvetica, sans-serif */
+@font-face{font-family:"Liberation Sans";font-weight:400;font-style:normal;src:local("Liberation Sans"),url(/fonts/LiberationSans-Regular.ttf)}
+@font-face{font-family:"Liberation Sans";font-weight:700;font-style:normal;src:local("Liberation Sans Bold"),url(/fonts/LiberationSans-Bold.ttf)}
+@font-face{font-family:"Liberation Sans";font-weight:400;font-style:italic;src:local("Liberation Sans Italic"),url(/fonts/LiberationSans-Italic.ttf)}
+@font-face{font-family:"Liberation Sans";font-weight:700;font-style:italic;src:local("Liberation Sans Bold Italic"),url(/fonts/LiberationSans-BoldItalic.ttf)}

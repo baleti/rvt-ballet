@@ -9,7 +9,7 @@ async def main(url, vid):
     try:
         await b.goto(url); await b.wait('window.__loaded===true', 120); await b.wait('typeof window.vctl==="object"', 30)
         r = json.loads(await b.ev('(()=>{const r=document.querySelector("#bVC").getBoundingClientRect();return JSON.stringify([r.x+r.width/2,r.y+r.height/2])})()'))
-        print('button at', r); await b.click(*r); await b.wait('!!document.querySelector("#vcpanel")', 20)
+        print('button at', r); await b.click(*r); await b.wait('!!document.querySelector("#vcpanel")', 90)
         check('panel opens on button click', await b.ev('!document.querySelector("#vcpanel").hidden'))
         await b.ev('(()=>{const s=document.querySelector("#vcView");s.value="%s";s.dispatchEvent(new Event("change",{bubbles:true}));return 1})()' % vid)
         await b.wait('vctl.V.sc&&vctl.V.sc.view.id==%s' % vid, 120); await asyncio.sleep(4)

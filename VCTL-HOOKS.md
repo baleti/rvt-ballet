@@ -19,3 +19,7 @@ Merge protocol: tell me the vctl commit range here; I run the smoke test on a sc
 - vctl head: demo_smoke OK on all three demo files (Residential, Structural, Facades).
 - vctl aa172a5: JS only (textTexture narrow fonts). vctltest ALL OK Structural 579516 (126 Arial Narrow texts).
 - vctl head 2e7abe5 (3 unmerged viewer commits: 24bedb5 button, 26b0d44 tabs, narrow-font text): demo_smoke OK on Residential, Structural, Facades.
+- vctl 6efffa9: visual style UI (selector #vsSel + panel row, per-view autosave, default hiddenline, presets with style, ?vs=). Hidden until window.vstyle exists, so safe to merge before c3-viewer lands the renderer. vstyletest ALL OK (mock), vctltest ALL OK. Contract docs/VSTYLE-API.md. Smoke before merge please.
+- vctl 0668c25: vg proxy route + V/G block in the picking box (silent when sheets has no vg.json route yet: 404). After c3-sheets merges branch vg into dev the vctl scene cache key changes: re-warm needed (I do it). vctltest/vcui ALL OK.
+- vctl 23bbe6b = master 682db70 + vg proxy route and V/G block (0668c25): vstyletest VS_MOCK=0, vctltest, vcui ALL OK against the real hl.js vstyle; demo_smoke OK Residential. Note: vg.json is only in sheets branch dev (67a24e0), master sheets has no route yet: the block stays absent (404) until dev is promoted.
+- vctl 3840c90: V/G pick block shows sources (filter name / category) for overridden members, tested with c3-vg full JSON of Structural 3D 600158 (mock fetch). vctltest, vcui ALL OK. Still needs the vg.json route in sheets master to show anything.

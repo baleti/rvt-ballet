@@ -67,7 +67,10 @@ const world = new THREE.Group(); world.renderOrder = 100; scene.add(world);     
 const overlay = new THREE.Group(); scene.add(overlay);
 let selBoxDummy;
 let stateTex, stateData;
-const U = {tState: {value: null}, uMode: {value: 0}, tMat: {value: null}, tPat: {value: null}, tImg: {value: null}, tBump: {value: null}, uTex: {value: 1}, uBot: {value: -1e9}};
+try { for (const f of ['400 16px', '700 16px', 'italic 400 16px', 'italic 700 16px']) document.fonts.load(f + ' "Liberation Sans"'); } catch (e) {}      // text overlays draw to canvas: have the local Arial twin ready before the first view opens
+const U = {tState: {value: null}, uMode: {value: 0}, tMat: {value: null}, tPat: {value: null}, tImg: {value: null}, tBump: {value: null}, uTex: {value: 1}, uBot: {value: -1e9}, uStyle: {value: 0}, tOvr: {value: null}};
+window.__U = U; setTimeout(() => { window.__refreshState = refreshState; }, 0);
+setTimeout(() => { window.__patch = patch; }, 0);
 
 function depthMat() {
   const m = new THREE.MeshDepthMaterial({depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide}); m.clipShadows = true;
@@ -83,14 +86,17 @@ let DEPTH_MAT = null;
 function patch(mat) {
   mat.flatShading = true;
   mat.onBeforeCompile = sh => {
-    sh.uniforms.tState = U.tState; sh.uniforms.uMode = U.uMode; sh.uniforms.tMat = U.tMat; sh.uniforms.tPat = U.tPat; sh.uniforms.tImg = U.tImg; sh.uniforms.tBump = U.tBump; sh.uniforms.uTex = U.uTex; sh.uniforms.uBot = U.uBot;
+    sh.uniforms.tState = U.tState; sh.uniforms.uMode = U.uMode; sh.uniforms.tMat = U.tMat; sh.uniforms.tPat = U.tPat; sh.uniforms.tImg = U.tImg; sh.uniforms.tBump = U.tBump; sh.uniforms.uTex = U.uTex; sh.uniforms.uBot = U.uBot; sh.uniforms.uStyle = U.uStyle; sh.uniforms.tOvr = U.tOvr; sh.uniforms.uPassT = (mat.userData.pt = mat.userData.pt || {value: 0});
     sh.vertexShader = 'attribute float _eidx; attribute float _mat; varying vec3 vNs; varying float vE; varying float vM; varying vec3 vWP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvNs=normalMatrix*normal; vE=_eidx; vM=_mat; vWP=(modelMatrix*vec4(transformed,1.)).xyz;');
-    sh.fragmentShader = `uniform float uBot; varying vec3 vNs; varying float vE; varying float vM; varying vec3 vWP; uniform sampler2D tState; uniform sampler2D tMat; uniform highp sampler2DArray tPat; uniform highp sampler2DArray tImg; uniform highp sampler2DArray tBump; uniform float uMode; uniform float uTex;
+    sh.fragmentShader = `uniform float uBot; varying vec3 vNs; varying float vE; varying float vM; varying vec3 vWP; uniform sampler2D tState; uniform sampler2D tMat; uniform highp sampler2DArray tPat; uniform highp sampler2DArray tImg; uniform highp sampler2DArray tBump; uniform float uMode; uniform float uTex; uniform float uStyle; uniform float uPassT; uniform sampler2D tOvr;
 vec4 fidCol(float f){ if(f<.5) return vec4(.18,.62,.36,1.); if(f<1.5) return vec4(.12,.56,.44,1.); if(f<2.5) return vec4(.42,.76,.29,1.); if(f<3.5) return vec4(.23,.48,.84,1.); if(f<4.5) return vec4(.12,.65,.69,1.); if(f<5.5) return vec4(.82,.54,.16,1.); if(f<6.5) return vec4(.54,.37,.82,1.); return vec4(.5,.5,.5,1.);}
 ` + sh.fragmentShader
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
 float eI = floor(vE+.5); vec4 stt = texelFetch(tState, ivec2(int(mod(eI,${TW}.)), int(eI/${TW}.)), 0);
-float fl = floor(stt.r*255.+.5); if(mod(fl,2.)>.5 || vWP.y < uBot) discard;`)
+float fl = floor(stt.r*255.+.5); if(mod(fl,2.)>.5 || vWP.y < uBot) discard;
+vec4 ovr = texelFetch(tOvr, ivec2(int(mod(eI,${TW}.)), int(eI/${TW}.)), 0);
+if(uStyle>1.5 && uStyle<2.5) discard;
+if(uStyle>.5 && uStyle<1.5){ if(uPassT<.5 && ovr.a<.99) discard; if(uPassT>.5 && ovr.a>=.99) discard; }`)
       .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
 { float hl = length(vNs); if (hl > .5) { vec3 ns = vNs / hl; normal = dot(ns, normal) < 0. ? -ns : ns; nonPerturbedNormal = normal; } }`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -111,12 +117,14 @@ float fl = floor(stt.r*255.+.5); if(mod(fl,2.)>.5 || vWP.y < uBot) discard;`)
   if(mI>-.5){ if(uMode>2.5 && uMode<3.5) diffuseColor.rgb = texelFetch(tMat, ivec2(mi,2), 0).rgb;
     else if(uTex>.5 && uMode<.5 && mq.r>.5){ float L = mq.r-1.; vec3 tc = texture(tImg, vec3(u1, L)).rgb*ww.x + texture(tImg, vec3(u2, L)).rgb*ww.y + texture(tImg, vec3(u3, L)).rgb*ww.z; diffuseColor.rgb = tc; }
     else if(uTex>.5 && uMode<.5 && cls>.5){ float tt = texture(tPat, vec3(u1, cls)).r*ww.x + texture(tPat, vec3(u2, cls)).r*ww.y + texture(tPat, vec3(u3, cls)).r*ww.z; diffuseColor.rgb *= clamp(2.*tt,.3,1.6); } } }
+if(uStyle>.5 && uStyle<1.5){ diffuseColor.rgb = ovr.rgb; diffuseColor.a *= ovr.a; }
 if(uMode>1.5 && uMode<2.5){ float dv=floor(stt.b*255.+.5); diffuseColor.rgb = dv<.5?vec3(.55):dv<1.5?vec3(.18,.7,.3):dv<2.5?vec3(.9,.8,.2):dv<3.5?vec3(.95,.55,.15):vec3(.9,.2,.2); } else if(uMode>.5 && uMode<1.5) diffuseColor.rgb = fidCol(floor(stt.g*255.+.5)).rgb;
 if(mod(floor(fl/8.),2.)>.5){ if(mod(floor(gl_FragCoord.x)+2.*floor(gl_FragCoord.y),5.)>.5) discard; diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.6), .5); }
 if(mod(floor(fl/2.),2.)>.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.,.69,.1), .75);
-else if(mod(floor(fl/4.),2.)>.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.3,.7,1.), .5);`);
+else if(mod(floor(fl/4.),2.)>.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.3,.7,1.), .5);`)
+      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\nif(uStyle>.5 && uStyle<1.5) gl_FragColor = vec4(diffuseColor.rgb, diffuseColor.a);\n#ifdef FLAT_SHADED\nif(uStyle>3.5){ float ndl = abs(dot(normalize(normal), normalize(vViewPosition))); gl_FragColor = vec4(diffuseColor.rgb*(.55+.45*ndl), diffuseColor.a); }\n#endif');
   };
-  mat.customProgramCacheKey = () => 'rvtpatch4';
+  mat.customProgramCacheKey = () => 'rvtpatch5';
   return mat;
 }
 
@@ -145,7 +153,7 @@ function pickAt(cx, cy) {
   const buf = new Uint8Array(4), out = {};
   const wasWorld = world.visible; world.visible = true; overlay.visible = false; capGroup.visible = false;
   const prevBg = scene.background; scene.background = null;
-  scene.overrideMaterial = pickMat;
+  scene.overrideMaterial = pickMat; const hg = window.__hlGroup, hgv = hg && hg.visible; if (hg) hg.visible = false;
   renderer.setClearColor(0x000000, 0); renderer.setRenderTarget(pickRT);
   camera.setViewOffset(W, H, Math.floor(x), Math.floor(y), 1, 1);
   for (const pass of [0, 1]) {
@@ -153,7 +161,7 @@ function pickAt(cx, cy) {
     renderer.readRenderTargetPixels(pickRT, 0, 0, 1, 1, buf);
     if (pass === 0) out.id = buf[0] + buf[1] * 256 + buf[2] * 65536 - 1; else out.d = (buf[0] + buf[1] * 256 + buf[2] * 65536) / 16777215;
   }
-  camera.clearViewOffset(); renderer.setRenderTarget(null); scene.overrideMaterial = null; scene.background = prevBg; overlay.visible = true; capGroup.visible = true; world.visible = wasWorld;
+  camera.clearViewOffset(); renderer.setRenderTarget(null); scene.overrideMaterial = null; if (hg) hg.visible = hgv; scene.background = prevBg; overlay.visible = true; capGroup.visible = true; world.visible = wasWorld;
   if (out.id < 0 || out.id >= S.N) return null;
   const ndc = new THREE.Vector3((x + .5) / W * 2 - 1, -((y + .5) / H) * 2 + 1, out.d * 2 - 1);
   camera.updateMatrixWorld(); camera.updateProjectionMatrix();
@@ -165,6 +173,7 @@ function initState(N) {
   const h = Math.max(1, Math.ceil(N / TW)); stateData = new Uint8Array(TW * h * 4);
   stateTex = new THREE.DataTexture(stateData, TW, h, THREE.RGBAFormat, THREE.UnsignedByteType);
   stateTex.minFilter = stateTex.magFilter = THREE.NearestFilter; stateTex.needsUpdate = true; U.tState.value = stateTex;
+  const od = new Uint8Array(TW * h * 4).fill(255); const ot = new THREE.DataTexture(od, TW, h, THREE.RGBAFormat, THREE.UnsignedByteType); ot.minFilter = ot.magFilter = THREE.NearestFilter; ot.needsUpdate = true; U.tOvr.value = ot; S.ovrData = od; S.ovrTex = ot;      // hidden-line style: per element surface colour (rgb) + opacity (a); see hl.js
 }
 const NOCAP_CATS = new Set(['Topography', 'Planting', 'Entourage', 'Detail Items', 'Rooms', 'Areas', 'Spaces', 'Mass', 'Site', 'Property Lines']);
 function refreshState() {
@@ -314,7 +323,7 @@ async function loadModel(mid, opts = {}) {
   buildOverlays(); fitShadow(); if (!opts.keepCamera) fitAll(); buildTabs(); setupLegend(); refreshState();
   $('#status').textContent = `${S.N.toLocaleString()} elements, ${tris.toLocaleString()} triangles - ${((performance.now() - t0) / 1000).toFixed(1)}s` + ((S.meta.phase || 'done') === 'done' ? '' : ' (box preview)');
   if (!opts.keepCamera && !S.hashRestored) { S.hashRestored = true; restoreHash(); }
-  dirty = true; window.__loaded = true;
+  dirty = true; window.__loaded = true; window.dispatchEvent(new Event('rvt-model-loaded'));
   if ((S.meta.phase || 'done') !== 'done') { renderParseBar(); refineLoop(mid, opts.partialRev || 0); }
   else if (!opts.keepCamera && !parseState) showCached(performance.now() - t0);
   else if (opts.keepCamera) { parseState = null; renderParseBar(); showFinished(performance.now() - t0); }
@@ -892,14 +901,14 @@ function openView(v) {
   const o = toV(v.origin), mb = modelBox(), c = mb.getCenter(new THREE.Vector3()), size = mb.getSize(new THREE.Vector3()).length();
   S.viewClip = null; S.viewCrop = null; S.openView = v; U.uBot.value = -1e9;
   if (v.kind === '3d') {
-    const d = dirV(v.dir); camera.position.copy(o); controls.target.copy(o).addScaledVector(d, Math.max(5, size / 4));
+    const d = dirV(v.dir); camera.position.copy(o); controls.target.copy(o).addScaledVector(d, -Math.max(5, size / 4));      // the stored view direction points from the target towards the eye (Revit's ViewDirection): the camera looks along -dir
     if (v.section_box) {      // the view's stored section box: six clip planes (box basis in revit axes -> three y-up), not capped
       const sb = v.section_box, O = new THREE.Vector3(...sb.origin);
       S.viewCrop = []; sb.ranges.forEach((rg, k) => { const ax = new THREE.Vector3(...sb.basis[k]).normalize(), n = new THREE.Vector3(ax.x, ax.z, -ax.y), p0 = toV(sb.origin), d0 = n.dot(p0);
         S.viewCrop.push(new THREE.Plane(n.clone(), -(d0 + rg[0])), new THREE.Plane(n.clone().negate(), d0 + rg[1])); });
       const bb = new THREE.Box3(); for (const i of [0, 1]) for (const j of [0, 1]) for (const k of [0, 1]) {      // frame the box corners (box basis axes)
         const q = O.clone(); [i, j, k].forEach((w, ax) => q.addScaledVector(new THREE.Vector3(...sb.basis[ax]), sb.ranges[ax][w])); bb.expandByPoint(toV([q.x, q.y, q.z])); }
-      const mb2 = bb.clone().intersect(modelBox()); fitBox(mb2.isEmpty() ? bb : mb2, d.clone().negate().add(new THREE.Vector3(0, .5, 0)));
+      const mb2 = bb.clone().intersect(modelBox()); fitBox(mb2.isEmpty() ? bb : mb2, d.clone().add(new THREE.Vector3(0, .5, 0)));
     }
   } else if (v.kind === 'Plan' && v.cut) {
     const z = v.cut.origin[2]; S.viewClip = new THREE.Plane(new THREE.Vector3(0, -1, 0), z);
@@ -908,10 +917,10 @@ function openView(v) {
     if (v.range && v.range.bottom != null && v.range.bottom < z) U.uBot.value = v.range.bottom - 0.05;      // view depth: nothing below it is drawn (5 cm slack for slab tops at the level); a shader discard, not a clip plane, so the section caps' stencil parity stays right
     controls.target.set(cx, z, cz); camera.position.set(cx, z + h, cz + 0.001);
   } else if (v.dir) {
-    const d = dirV(v.dir); S.viewClip = new THREE.Plane(d.clone(), -d.dot(o));
+    const d = dirV(v.dir); S.viewClip = new THREE.Plane(d.clone().negate(), d.dot(o));      // keep what lies beyond the cut plane, away from the eye (dir points to the eye)
     const cr = v.crop && cropFrame(v.crop, d);
-    if (cr) { const t = cr.c.clone().addScaledVector(d, -d.dot(cr.c) + d.dot(o)); controls.target.copy(t); camera.position.copy(t).addScaledVector(d, -cr.dist); }
-    else { controls.target.copy(o); camera.position.copy(o).addScaledVector(d, -size * 0.8); }
+    if (cr) { const t = cr.c.clone().addScaledVector(d, -d.dot(cr.c) + d.dot(o)); controls.target.copy(t); camera.position.copy(t).addScaledVector(d, cr.dist); }
+    else { controls.target.copy(o); camera.position.copy(o).addScaledVector(d, size * 0.8); }
   }
   camera.near = 0.05; camera.far = size * 20 + 500; camera.updateProjectionMatrix(); controls.update();
   if (S.lvlGroup) S.lvlGroup.visible = showLvl && v.kind !== 'Plan';          // level outlines seen from above are just lines across a plan
@@ -1031,6 +1040,8 @@ $('#bCmp').onclick = async () => {
   controls.addEventListener('change', drawCube); setInterval(drawCube, 400); drawCube(); window.drawCube = drawCube;
 }
 
+// 3D visual styles (hidden line / shaded / realistic / wireframe): web/hl.js
+(async () => { for (let k = 0; k < 4; k++) { try { await import('/hl.js' + (k ? '?r=' + k : '')); return; } catch (e) { console.warn('hl load attempt ' + k, e); await new Promise(r => setTimeout(r, 600)); } } })();
 // view control (annotations panel, overlay of view-dependent elements): web/viewctl.js
 window.__dirty = () => { dirty = true; }; window.__world = world; window.__overlay = overlay; window.__caps = capGroup;
 (async () => { for (let k = 0; k < 4; k++) { try { await import('/viewctl.js' + (k ? '?r=' + k : '')); return; } catch (e) { console.warn('viewctl load attempt ' + k, e); await new Promise(r => setTimeout(r, 600)); } } })();      // retried: a dropped first fetch must not lose the panel
