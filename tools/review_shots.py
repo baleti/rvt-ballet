@@ -5,7 +5,7 @@ H = os.path.expanduser('~'); R = H + '/review-compare/revit'; O = H + '/review-c
 for name in (sys.argv[1:] or sorted(os.listdir(R))):
     d = '%s/%s' % (R, name)
     if not os.path.exists(d + '/index.tsv'): continue
-    f = [p for p in glob.glob('%s/rvt-research/write-lab/scenes/%s.r[tv][et]' % (H, name))]
+    f = glob.glob('%s/rvt-research/rosetta/%s.rte' % (H, name)) or glob.glob('%s/rvt-research/write-lab/scenes/%s.r[tv][et]' % (H, name)) or glob.glob('%s/rvt-research/corpus/*/%s.rvt' % (H, name)) or glob.glob('%s/rvt-research/write-lab/**/%s.r[tv][et]' % (H, name), recursive=True)
     if not f: print('no model for', name); continue
     cams = {}
     if os.path.exists(d + '/cameras.tsv'):
@@ -22,6 +22,6 @@ for name in (sys.argv[1:] or sorted(os.listdir(R))):
         for suf, extra in (('', []), ('_hl', ['--hl'])):
             out = '%s/%s/%s__ours3d%s.png' % (O, name, vid, suf)
             if os.path.exists(out): continue
-            a = [D + '/tools/capped.sh', D + '/.venv/bin/python', D + '/tools/shot3d.py', f[0], vid if kind != 'View3D' else '3d', ','.join(cam) if cam else '-', out, '--clean', '--white', '--fit', '--like', png] + extra + (['--ortho'] if ortho else [])
+            a = [D + '/tools/capped.sh', D + '/.venv/bin/python', D + '/tools/shot3d.py', f[0], vid if kind != 'View3D' else '3d', ','.join(cam) if cam else '-', out, '--clean', '--white'] + (['--fit'] if kind == 'View3D' else []) + ['--like', png] + extra + (['--ortho'] if ortho else [])
             if kind == 'View3D' and not cam: continue
             print(' '.join(a[3:])); subprocess.run(a, env=dict(os.environ, RVT_MEM_CAP='3G'), timeout=1500)
