@@ -145,11 +145,14 @@ function textTexture(lines, font, bold, italic) {
   const key = JSON.stringify([lines, font, bold, italic]); if (texCache.has(key)) return texCache.get(key);
   const PX = 48, c = document.createElement('canvas'), g = c.getContext('2d');
   const fam = (font ? font + ', ' : '') + 'Arial, "Liberation Sans", Helvetica, sans-serif';
-  g.font = `${italic ? 'italic ' : ''}${bold ? 'bold ' : ''}${PX}px ${fam}`;
-  const w = Math.max(2, Math.ceil(Math.max(...lines.map(l => g.measureText(l).width)))), lh = PX * LINE_PITCH, h = Math.ceil(lh * lines.length + PX * 0.3);
+  // Revit's Arial Narrow is not installed in browsers (falls back to full-width Arial, ~20 % too wide): squeeze the fallback
+  const NARROW = /narrow|condensed/i.test(font || '') ? 0.82 : 1;
+  const F = `${italic ? 'italic ' : ''}${bold ? 'bold ' : ''}${PX}px ${fam}`;
+  g.font = F;
+  const w = Math.max(2, Math.ceil(Math.max(...lines.map(l => g.measureText(l).width)) * NARROW)), lh = PX * LINE_PITCH, h = Math.ceil(lh * lines.length + PX * 0.3);
   c.width = w + 8; c.height = h;
-  g.font = `${italic ? 'italic ' : ''}${bold ? 'bold ' : ''}${PX}px ${fam}`; g.fillStyle = '#fff'; g.textBaseline = 'alphabetic';
-  lines.forEach((l, i) => g.fillText(l, 4, PX * 0.95 + i * lh));
+  g.font = F; g.fillStyle = '#fff'; g.textBaseline = 'alphabetic'; g.setTransform(NARROW, 0, 0, 1, 0, 0);
+  lines.forEach((l, i) => g.fillText(l, 4 / NARROW, PX * 0.95 + i * lh));
   const tex = new THREE.CanvasTexture(c); tex.anisotropy = 4; tex.minFilter = THREE.LinearMipmapLinearFilter;
   const r = {tex, w: (w + 8) / PX, h: h / PX, lh: LINE_PITCH, asc: 0.95};
   texCache.set(key, r); return r;
