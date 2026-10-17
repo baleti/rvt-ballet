@@ -109,3 +109,4 @@
 * Panel layout: rows wrap and the panel no longer scrolls horizontally at 1280 px.
 * legend view tested (Commercial 206449): fixed dark/striped paper look (caps + level planes hidden), deef646
 * tools/vcalign.py (new): places the view datum linework with the overlay matrix and compares with the viewer's own reader grids: Structural L2 124186, 15/15 grids matched, offsets 0.00 mm (placement/orientation/units exact). Residential has no grids.
+* vcalign.py also checks section views (grids parallel to the view direction appear at the right u): Structural Cross Section 582397, East 201907, Longitudinal 579975, North 201922 all PASS (0.00 mm). One oblique grid (elem 598948, diagonal grid in 579975) is drawn at x=21.56 while the extended native line crosses the view plane at x=23.35 and its segment ends at z=15.71 (view plane z=21.55): possible sheets-side question for c3-annot (check against Revit DXF of 579975 if it exists).
