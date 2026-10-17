@@ -216,7 +216,12 @@ H.setStyle = function (st, user) {
   if (st === 'realistic') saved = null;
   for (const em of edgeMats) em.depthTest = st !== 'wire';
   if (H.group) H.group.visible = edgesOn; for (const t of H.twins) t.visible = st === 'hidden';
-  for (const m of H.meshes || []) { m.material.polygonOffset = edgesOn; }
+  for (const m of H.meshes || []) {
+    const mt = m.material; mt.polygonOffset = edgesOn;
+    if (!mt.userData.hlSaved) mt.userData.hlSaved = {t: mt.transparent, w: mt.depthWrite};
+    // hidden line draws faces opaque (translucency is the twin pass): source-transparent meshes must be in the opaque list and write depth
+    mt.transparent = st === 'hidden' ? false : mt.userData.hlSaved.t; mt.depthWrite = st === 'hidden' ? true : mt.userData.hlSaved.w;
+  }
   if (H.meshes) for (const m of H.meshes) { m.material.needsUpdate = true; }
   restyleOverlays(hl);
   if (window.__applySection && (prev === 'hidden') !== (st === 'hidden')) window.__applySection();      // cut-face caps change colour / appear for section-box views
