@@ -44,3 +44,12 @@ for i, el in enumerate(els):
     g = G.get(el['id'], {})
     print(el['id'], el['cls'], 'parts', len(parts), 'tris', len(F), 'verts', len(V), 'welded', len(u), '| plain', round(plain, 4), 'welded-plain', round(wv, 4), 'mesh_volume', round(C._vol(V, F), 4), 'ORIENTED', round(oriented_volume(V, F), 4), 'gt', g.get('vol'),
           '| edges', len(E), 'non-2-manifold', bad, 'same-direction (flipped) pairs', same)
+
+    import rvt_elemmesh as EM
+    try:
+        from rvtviewer import build as B
+        import rvt_geometry as GGm
+        dd = B._doc(GGm, src); m = EM.element_mesh(dd, int(el['id']))
+        T2 = np.array([p for t in m['tris'] for p in t]).reshape(-1, 3); F2 = np.arange(len(T2)).reshape(-1, 3)
+        print('   python element_mesh(detail=3): tris', len(F2), 'oriented volume', round(oriented_volume(T2, F2), 4), 'flags', m.get('flags'))
+    except Exception as ex: print('   python element_mesh probe failed', repr(ex)[:150])
