@@ -1085,6 +1085,10 @@ def reader_mesh(ctx, e, a_pre=None):
 
 _PF = {}
 
+def _rf():
+    """the rvt_fast module (Rust kernels: smooth_part, file_key, ...) when the fast path is on, else None"""
+    return sys.modules.get('rvt_fast') if fast_module() is not None else None
+
 def fast_module():
     """~/src/rvt-core/python/rvt_viewer_fast (Rust fast paths: element table in ~1 s, streamed meshes, progress file) or None (RVT_NOFAST=1, missing extension, import error)"""
     if os.environ.get('RVT_NOFAST'): return None
@@ -1343,6 +1347,14 @@ class Progress:
         if not self.src: return None
         try:
             import glob
+            try:                                       # only this input's progress file (rvt_fast.file_key), not a glob of the whole directory every second
+                RF = _rf(); k = RF.file_key(self.src) if RF is not None and hasattr(RF, 'file_key') else None
+                f = os.path.expanduser('~/.cache/rvt-progress/%s.json' % k) if k else None
+                if f and os.path.exists(f) and time.time() - os.path.getmtime(f) <= 600:
+                    d = json.load(open(f))
+                    if os.path.abspath(str(d.get('file') or d.get('path') or d.get('input') or '')) == os.path.abspath(self.src): return d
+                if f: return None
+            except Exception: pass
             for f in glob.glob(os.path.expanduser('~/.cache/rvt-progress/*.json')):
                 if time.time() - os.path.getmtime(f) > 600: continue
                 d = json.load(open(f))
@@ -1415,6 +1427,11 @@ def smooth_part(pv, pf):
     toward the flat screen-space normal per fragment (reader winding is not consistent). -> (positions, faces, normals)"""
     pv = np.asarray(pv, np.float64); pf = np.asarray(pf, np.int64).reshape(-1, 3)
     if len(pf) == 0: return pv, pf, np.zeros_like(pv)
+    if not os.environ.get('RVT_NO_RUST_SMOOTH'):          # Rust drop-in, bit-identical (c3-rust 2026-10-17, tests/diff_smooth.py)
+        try:
+            RF = _rf(); r = RF.smooth_part(pv, pf, SMOOTH_COS) if RF is not None and hasattr(RF, 'smooth_part') else None
+            if r is not None: return r
+        except Exception: pass
     q = np.round(pv * 2e4).astype(np.int64)                                   # 0.05 mm (feet)
     _, first, inv = np.unique(q, axis=0, return_index=True, return_inverse=True); inv = inv.reshape(-1)
     W = pv[first]; wf = inv[pf]
