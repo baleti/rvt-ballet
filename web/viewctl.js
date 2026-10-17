@@ -473,7 +473,7 @@ async function openVC(vid, preset) {
 function injectCss() {
   const st = document.createElement('style'); st.textContent = `
 #vcpanel{position:absolute;right:8px;top:8px;width:330px;max-height:calc(100% - 60px);overflow:auto;overflow-x:hidden;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:8px 10px;font-size:12px;z-index:30;box-shadow:0 4px 18px #0006}
-#vcpanel h4{margin:9px 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);display:flex;align-items:center;gap:6px}
+#vcpanel h4{margin:9px 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 #vcpanel h4 .sp{flex:1}
 #vcpanel .r{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:2px 0}#vcpanel .r label{color:var(--dim);min-width:84px}
 #vcpanel select,#vcpanel input[type=number],#vcpanel input[type=text]{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:2px 4px;font:inherit}
