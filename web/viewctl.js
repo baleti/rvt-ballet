@@ -418,8 +418,8 @@ function elementIndex(eid) {
 }
 // Revit's resolved graphics (V/G: view template, filters, overrides) of the picked element, from the sheets vg.json (c3-vg); silently absent when the route is missing
 const vgCache = new Map();
-function getVG(vid) {
-  const k = `${V.mid}:${vid}`; if (!vgCache.has(k)) vgCache.set(k, fetch(`/api/m/${V.mid}/vc/vg/${vid}`).then(r => r.ok ? r.json() : null).catch(() => null));
+function getVG(vid, full) {
+  const k = `${V.mid}:${vid}:${full ? 1 : 0}`; if (!vgCache.has(k)) vgCache.set(k, fetch(`/api/m/${V.mid}/vc/vg/${vid}${full ? '?full=1' : ''}`).then(r => r.ok ? r.json() : null).catch(() => null));
   return vgCache.get(k);
 }
 async function vgInfo(h) {
@@ -430,7 +430,13 @@ async function vgInfo(h) {
   const pat = f => f && f.pattern != null ? `${esc((vg.fill_patterns[f.pattern] || {}).name || 'pattern ' + f.pattern)}` : '';
   const rows = [line('projection', s.proj), line('cut', s.cut), s.transparency ? `transparency ${s.transparency} %` : '', pat(s.surf_fg) ? 'surface ' + pat(s.surf_fg) : '', pat(s.cut_fg) ? 'cut fill ' + pat(s.cut_fg) : ''].filter(Boolean);
   const hid = (vg.hidden_categories || []).includes(cat) ? ' <b>(category hidden in Revit)</b>' : '';
-  return `<details open><summary>Revit graphics (V/G)${ov != null ? ' - element override' : ''}${hid}</summary><div class="dim" style="line-height:1.6">${rows.join('<br>')}${vg.template ? '<br>view template: ' + esc(vg.template.name) : ''}</div></details>`;
+  let src = '';
+  if (ov != null) {      // which filter / category / phase produced each overridden member (full report, fetched only for overridden elements)
+    const fv = await getVG(V.vid, true), m = fv && fv.elements_src && fv.elements_src[h.eid];
+    if (m) { const fname = id => ((fv.filters || []).find(f => String(f.id) === String(id)) || {}).name;
+      src = '<br>' + Object.entries(m).map(([mem, from]) => { const [kind, id] = String(from).split(':'); return `${esc(mem.replace(/_/g, ' '))}: ${kind === 'filter' ? 'filter <b>' + esc(fname(id) || id) + '</b>' : esc(kind === 'category' ? 'category ' + ((vg.categories || {})[id] || {}).name : from)}`; }).join('<br>'); }
+  }
+  return `<details open><summary>Revit graphics (V/G)${ov != null ? ' - element override' : ''}${hid}</summary><div class="dim" style="line-height:1.6">${rows.join('<br>')}${src}${vg.template ? '<br>view template: ' + esc(vg.template.name) : ''}</div></details>`;
 }
 async function showPicked(h) {
   const box = $('#vcPicked'); if (!box) return;
