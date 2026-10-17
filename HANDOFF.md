@@ -27,3 +27,4 @@ Baseline smoke OK (2020 Residential). Rust fast path + preimport thread already 
 01:08:33 rust smooth_part + progress-file hook adopted (RVT_NO_RUST_SMOOTH=1 disables), Residential GLB identical, conversion 5.1 -> 2.9 s, smoke x3 OK, demo-ready moved
 01:11:14 vctl deef646 merged (legend paper look), smoke x3 + vctltest + uitest12 OK, demo-ready moved
 02:36:37 vctl 4ccad68 merged (vcsweep), smoke x3 OK, demo-ready moved
+05:54:09 vctl 4a122ba merged (narrow-window button, tabs wrap, Arial Narrow width), smoke x3 + vctltest + uitest12 OK, demo-ready moved
