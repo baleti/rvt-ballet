@@ -28,7 +28,10 @@ raw = reader.cached_load(src); ctx = build.Ctx(raw); ctx.src = src; els = build.
 ctx.raw_key = '%s|%s|%s|%s' % (os.path.abspath(src), os.path.getmtime(src), os.path.getsize(src), reader.reader_stamp())
 class _P:
     def set(self, *a, **k): pass
-res = build.run_geometry(ctx, els, _P()); got = {t[0]: t for t in res}
+sub = [i for i, el in enumerate(els) if el['id'] in ids]      # only the requested elements: the whole-file run_geometry of a big MEP file does not fit the 9 GB slice next to other jobs
+els_all = els; els = [els_all[i] for i in sub]
+build.prefetch_reader_meshes(ctx, els, _P(), None); build._G['ctx'] = ctx; build._G['els'] = els
+res = build._geo_chunk((0, len(els))); got = {t[0]: t for t in res}
 G = C.load_oracle(os.path.expanduser('~/rvt-research/gt_geom'), os.path.splitext(os.path.basename(src))[0])
 for i, el in enumerate(els):
     if el['id'] not in ids or i not in got: continue
