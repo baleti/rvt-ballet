@@ -17,19 +17,17 @@ H.defCat = {'Floors': {a: 0.85}};   // used when no view graphics are open
 H.cat = Object.assign({}, H.defCat);
 
 const WORKER_SRC = `
+class G { constructor(T, n) { this.T = T; this.a = new T(n); this.n = 0; } push(...v) { if (this.n + v.length > this.a.length) { const b = new this.T(this.a.length * 2 + v.length); b.set(this.a); this.a = b; } for (let i = 0; i < v.length; i++) this.a[this.n++] = v[i]; } get length() { return this.n; } out() { return this.a.slice(0, this.n); } }
 self.onmessage = ev => {
   const {pos, index, eidx, thr, id} = ev.data; const n = pos.length / 3, nt = index.length / 3;
-  const wid = new Int32Array(n), map = new Map(); let nw = 0; const rep = [];
+  const wid = new Int32Array(n), qx = new Int32Array(n), qy = new Int32Array(n), qz = new Int32Array(n);      // weld vertices that coincide within 1 mm (open addressing table)
+  let size = 1024; while (size < n * 2) size <<= 1; const mask = size - 1, tab = new Int32Array(size).fill(-1);
   for (let i = 0; i < n; i++) {
-    const x = Math.round(pos[3*i]*1000), y = Math.round(pos[3*i+1]*1000), z = Math.round(pos[3*i+2]*1000);
-    const k = (x * 73856093) ^ (y * 19349663) ^ (z * 83492791); let h = map.get(k);
-    // collision-safe: chain verified by coordinates
-    if (h === undefined) { h = []; map.set(k, h); }
-    let f = -1; for (let j = 0; j < h.length; j++) { const r = h[j]; if (rep[3*r] === x && rep[3*r+1] === y && rep[3*r+2] === z) { f = r; break; } }
-    if (f < 0) { f = nw++; rep.push(x, y, z); h.push(f); }
+    const x = qx[i] = Math.round(pos[3*i]*1000), y = qy[i] = Math.round(pos[3*i+1]*1000), z = qz[i] = Math.round(pos[3*i+2]*1000);
+    let h = (Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791)) & mask, f = -1;
+    for (;;) { const r = tab[h]; if (r < 0) { tab[h] = i; f = i; break; } if (qx[r] === x && qy[r] === y && qz[r] === z) { f = r; break; } h = (h + 1) & mask; }
     wid[i] = f;
   }
-  map.clear();
   const nrm = new Float32Array(nt * 3), cen = new Map();
   for (let t = 0; t < nt; t++) {
     const a = index[3*t], b = index[3*t+1], c = index[3*t+2];
@@ -38,26 +36,26 @@ self.onmessage = ev => {
     const e = eidx[a]; let s = cen.get(e); if (!s) { s = [0,0,0,0]; cen.set(e, s); }
     s[0] += (pos[3*a]+pos[3*b]+pos[3*c])/3; s[1] += (pos[3*a+1]+pos[3*b+1]+pos[3*c+1])/3; s[2] += (pos[3*a+2]+pos[3*b+2]+pos[3*c+2])/3; s[3]++;
   }
-  const em = new Map(); const ea = [], eb = [], t1 = [], t2 = [], cnt = [];   // edge table
+  const em = new Map(); const ea = new G(Int32Array, 1 << 16), eb = new G(Int32Array, 1 << 16), t1 = new G(Int32Array, 1 << 16), t2 = new G(Int32Array, 1 << 16), cnt = new G(Int32Array, 1 << 16);   // edge table
   const SH = 67108864;
   for (let t = 0; t < nt; t++) {
     for (let k = 0; k < 3; k++) {
       const va = index[3*t+k], vb = index[3*t+(k+1)%3]; let a = wid[va], b = wid[vb]; if (a === b) continue;
       const lo = Math.min(a, b), hi = Math.max(a, b), key = lo * SH + hi; const s = em.get(key);
       if (s === undefined) { em.set(key, ea.length); ea.push(va); eb.push(vb); t1.push(t); t2.push(-1); cnt.push(1); }
-      else { cnt[s]++; if (t2[s] < 0) t2[s] = t; }
+      else { cnt.a[s]++; if (t2.a[s] < 0) t2.a[s] = t; }
     }
   }
   const cosT = Math.cos(thr * Math.PI / 180), cosS = Math.cos(2 * Math.PI / 180);
-  const P = [], N1 = [], N2 = [], K = [], EI = [];
+  const P = new G(Float32Array, 1 << 16), N1 = new G(Float32Array, 1 << 16), N2 = new G(Float32Array, 1 << 16), K = new G(Float32Array, 1 << 14), EI = new G(Float32Array, 1 << 14);
   const push = (va, vb, n1, n2, kind) => {
     P.push(pos[3*va], pos[3*va+1], pos[3*va+2], pos[3*vb], pos[3*vb+1], pos[3*vb+2]);
     for (let q = 0; q < 2; q++) { N1.push(n1[0], n1[1], n1[2]); N2.push(n2[0], n2[1], n2[2]); K.push(kind); EI.push(eidx[va]); }
   };
   const Z = [0, 0, 0];
   for (let s = 0; s < ea.length; s++) {
-    const va = ea[s], vb = eb[s], A = t1[s], B = t2[s];
-    if (cnt[s] !== 2) { push(va, vb, Z, Z, 0); continue; }
+    const va = ea.a[s], vb = eb.a[s], A = t1.a[s], B = t2.a[s];
+    if (cnt.a[s] !== 2) { push(va, vb, Z, Z, 0); continue; }
     if (eidx[index[3*A]] !== eidx[index[3*B]]) { push(va, vb, Z, Z, 0); continue; }
     let n1 = [nrm[3*A], nrm[3*A+1], nrm[3*A+2]], n2 = [nrm[3*B], nrm[3*B+1], nrm[3*B+2]]; let d = n1[0]*n2[0]+n1[1]*n2[1]+n1[2]*n2[2];
     if (d < 0) { n2 = [-n2[0], -n2[1], -n2[2]]; d = -d; }
@@ -67,7 +65,7 @@ self.onmessage = ev => {
     if (n1[0]*mx+n1[1]*my+n1[2]*mz < 0) { n1 = [-n1[0], -n1[1], -n1[2]]; n2 = [-n2[0], -n2[1], -n2[2]]; }
     push(va, vb, n1, n2, d < cosT ? 2 : 1);
   }
-  const out = {id, pos: new Float32Array(P), n1: new Float32Array(N1), n2: new Float32Array(N2), kind: new Float32Array(K), eidx: new Float32Array(EI)};
+  const out = {id, pos: P.out(), n1: N1.out(), n2: N2.out(), kind: K.out(), eidx: EI.out()};
   self.postMessage(out, [out.pos.buffer, out.n1.buffer, out.n2.buffer, out.kind.buffer, out.eidx.buffer]);
 };`;
 
@@ -146,7 +144,7 @@ async function buildEdges() {
 H.applyOverrides = function () {
   if (!S.meta || !S.ovrData) return; const E = S.meta.elements, d = S.ovrData;
   for (let i = 0; i < S.N; i++) {
-    const c = H.cat[E[i][2]] || {}, o = (H.el && H.el[i]) || {}; const col = o.c || c.c || [255, 255, 255], a = o.a ?? c.a ?? 1;
+    const c = H.cat[E[i][2]] || {}, o = (H.el && H.el[i]) || {}; let col = o.c || c.c || [255, 255, 255]; const a = o.a ?? c.a ?? 1; if (o.ht) col = col.map(x => (x + 255) >> 1);
     d[4*i] = col[0]; d[4*i+1] = col[1]; d[4*i+2] = col[2]; d[4*i+3] = Math.round(a * 255);
   }
   S.ovrTex.needsUpdate = true; H.applyLines(); dirty();
@@ -156,7 +154,7 @@ H.applyLines = function () {
   if (!S.meta) return; const E = S.meta.elements, N = S.N, h = Math.max(1, Math.ceil(N / TW));
   if (!H.lnData || H.lnData.length !== TW * h * 4) { H.lnData = new Uint8Array(TW * h * 4); H.lnTex = new THREE.DataTexture(H.lnData, TW, h, THREE.RGBAFormat, THREE.UnsignedByteType); H.lnTex.minFilter = H.lnTex.magFilter = THREE.NearestFilter; tLn.value = H.lnTex; }
   const d = H.lnData;
-  for (let i = 0; i < N; i++) { const o = (H.el && H.el[i]) || {}; const c = o.lc || [0, 0, 0], w = o.lw || 1; d[4*i] = c[0]; d[4*i+1] = c[1]; d[4*i+2] = c[2]; d[4*i+3] = w * 50 + (SOFT.has(E[i][2]) ? 10 : 0); }
+  for (let i = 0; i < N; i++) { const o = (H.el && H.el[i]) || {}; let c = o.lc || [0, 0, 0]; const w = o.lw || 1; if (o.ht) c = c.map(x => (x + 255) >> 1); d[4*i] = c[0]; d[4*i+1] = c[1]; d[4*i+2] = c[2]; d[4*i+3] = w * 50 + (SOFT.has(E[i][2]) ? 10 : 0); }
   H.lnTex.needsUpdate = true;
 };
 H.setCat = function (cat, o) { H.cat[cat] = o; H.applyOverrides(); };
