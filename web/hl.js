@@ -200,7 +200,8 @@ H.setStyle = function (st, user) {
   const hl = st === 'hidden' || st === 'wire';
   if (st !== 'realistic' && U.uStyle.value === 0 && !saved) saved = {bg: scene.background, tex: U.uTex.value};
   U.uStyle.value = STYLE_ID[st];
-  if (hl && H.meshes === undefined) { setupTwins(); buildEdges(); }
+  const edgesOn = st !== 'realistic';      // Revit draws edges in Shaded and Consistent Colors too
+  if (edgesOn && H.meshes === undefined) { setupTwins(); buildEdges(); }
   if (hl) { if ($('#bShadow')?.classList.contains('on')) { H.shadowWas = true; $('#bShadow').click(); } scene.background = new THREE.Color(0xffffff); }
   else {
     if (H.shadowWas && !$('#bShadow').classList.contains('on')) $('#bShadow').click(); H.shadowWas = false;
@@ -210,8 +211,8 @@ H.setStyle = function (st, user) {
   $('#bTex')?.classList.toggle('on', !!U.uTex.value);
   if (st === 'realistic') saved = null;
   for (const em of edgeMats) em.depthTest = st !== 'wire';
-  if (H.group) H.group.visible = hl; for (const t of H.twins) t.visible = st === 'hidden';
-  for (const m of H.meshes || []) { m.material.polygonOffset = st === 'hidden'; }
+  if (H.group) H.group.visible = edgesOn; for (const t of H.twins) t.visible = st === 'hidden';
+  for (const m of H.meshes || []) { m.material.polygonOffset = edgesOn; }
   if (H.meshes) for (const m of H.meshes) { m.material.needsUpdate = true; }
   restyleOverlays(hl);
   if (window.__applySection && (prev === 'hidden') !== (st === 'hidden')) window.__applySection();      // cut-face caps change colour / appear for section-box views

@@ -50,7 +50,7 @@ async def main(a):
         a.style = a.style or 'realistic'      # the viewer now opens in hidden line; shots stay shaded unless --style hidden
         if a.style:
             await b.ev("(()=>{__hl.setStyle(%s);return 0})()" % json.dumps(a.style))
-            if a.style in ('hidden', 'wire'): await b.wait('window.__hlReady===true', 600); print('edges', await b.ev('__hl.edgeCount+" edges in "+__hl.edgeMs+" ms, meshes "+__hl.meshes.length'))
+            if a.style != 'realistic': await b.wait('window.__hlReady===true', 600); print('edges', await b.ev('__hl.edgeCount+" edges in "+__hl.edgeMs+" ms, meshes "+__hl.meshes.length'))
         if a.fit:
             await b.ev("""(()=>{const c=__camera,o=__controls,B=S.meta.bbox,bb=new THREE.Box3(new THREE.Vector3(B[0][0],B[0][2],-B[1][1]),new THREE.Vector3(B[1][0],B[1][2],-B[0][1]));      // model box from meta (stray far-off meshes must not shrink the view)
               
