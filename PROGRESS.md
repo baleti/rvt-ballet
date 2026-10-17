@@ -128,3 +128,4 @@
 * Cold re-render timing (uncached annotation scale, remote-host capped): Residential plan 180203 1:37 2.4 s (first, includes worker start), 1:61 0.44 s; Structural L1 124186 1:37 4.6 s, 1:61 0.86 s. Fine for a live demo.
 * Writer output (write-lab generated/full/full_fin_2024.rte, 11 plans + 4 sections) opens in the overlay: scenes render live (no warm needed for a small file), vcsweep OK, no JS exceptions.
 * re-warmed the four demo files with rvt-sheets 86a805b (patterns.hatch guard); vctltest ALL OK and vcsweep OK on each. One h1run pull of four dirs hit a broken pipe; pulling the dirs one at a time worked.
+* re-warmed the four demo files with rvt-sheets bf4ddfa (visibility lists); vctltest ALL OK and vcsweep OK on each. h1run pull of several dirs in one call breaks the pipe: pull one dir per call with a retry.
