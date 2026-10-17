@@ -120,3 +120,4 @@
 * 24bedb5: header button moved so it is visible in narrow windows; vcui.py real-input test added.
 * 2026 Structural (55_Snowdon) warmed (41 scenes) and swept: vcsweep OK, no JS exceptions (first check of a Revit 2026 Structural file in the overlay).
 * demo_smoke OK on vctl head for Residential, Structural 2024, Facades 2026 (all three demo files), 2026-10-17.
+* URL preset link checked: /?vc=180203&vcp=NAME#model opens the view with the saved preset (textSize 2, lineScale 1.5 applied; test preset removed afterwards).
