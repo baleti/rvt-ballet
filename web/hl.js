@@ -164,7 +164,7 @@ function restyleOverlays(on) {
   if (!S.lvlGroup) return;
   if (!H.ovl) {
     H.ovl = new THREE.Group(); H.ovl.userData.hl = 1; const mk = (c, d, g) => new THREE.LineDashedMaterial({color: c, dashSize: d, gapSize: g, transparent: true, opacity: .9});
-    const lm = mk(0x222222, 1.6, .5), gm = mk(0xd020d0, 1.2, .4);
+    const lm = mk(0x222222, 3.2, 1.2), gm = mk(0xd020d0, 2.4, 1);
     for (const o of S.lvlGroup.children) if (o.isLineLoop) { const pts = []; const a = o.geometry.attributes.position; for (let i = 0; i <= a.count; i++) pts.push(new THREE.Vector3().fromBufferAttribute(a, i % a.count)); const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lm); l.position.copy(o.position); l.computeLineDistances(); l.userData.src = o; H.ovl.add(l); }
     for (const o of S.gridGroup.children) if (o.isLine) { const l = new THREE.Line(o.geometry, gm); l.computeLineDistances(); l.userData.src = o; H.ovl.add(l); }
     S.lvlGroup.add(H.ovl); H.ovlSrc = [...S.lvlGroup.children.filter(o => o.isLineLoop), ...S.gridGroup.children.filter(o => o.isLine)];

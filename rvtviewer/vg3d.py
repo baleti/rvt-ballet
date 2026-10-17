@@ -5,7 +5,7 @@ from . import vcache
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHEETS_PY = os.environ.get('RVT_SHEETS_PY', os.path.expanduser('~/src/rvt-sheets/.venv/bin/python'))
-VER = 1
+VER = 2
 
 
 def register(app, ctx):

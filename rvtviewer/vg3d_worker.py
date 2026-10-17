@@ -6,7 +6,7 @@ from rvtsheets.decode import Decoder
 from rvtsheets.vg.resolve import resolve_view
 
 dec = Decoder(sys.argv[1]); doc = dec.doc(); vid = int(sys.argv[2])
-rep = resolve_view(dec, doc, vid)
+rep = resolve_view(dec, doc, vid, explain=True)
 els = {}
 for k, e in rep['elements'].items():
     o = e.get('overrides') or {}; p = e.get('proj') or {}

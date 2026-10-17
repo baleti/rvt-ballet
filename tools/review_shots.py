@@ -18,6 +18,7 @@ for name in (sys.argv[1:] or sorted(os.listdir(R))):
         if t[0] != 'VIEW': continue
         vid, kind, vname = t[1], t[2], t[4]; png = '%s/%s.png' % (d, vid)
         if not os.path.exists(png): continue
+        if os.environ.get('HL3D') and kind != 'View3D': continue
         cam, ortho = cams.get(vid, (None, False))
         for suf, extra in (('_hl2', ['--style', 'hidden', '--vg', vid]),):
             out = '%s/%s/%s__ours3d%s.png' % (O, name, vid, suf)
