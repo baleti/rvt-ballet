@@ -122,7 +122,7 @@ if(uMode>1.5 && uMode<2.5){ float dv=floor(stt.b*255.+.5); diffuseColor.rgb = dv
 if(mod(floor(fl/8.),2.)>.5){ if(mod(floor(gl_FragCoord.x)+2.*floor(gl_FragCoord.y),5.)>.5) discard; diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.6), .5); }
 if(mod(floor(fl/2.),2.)>.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.,.69,.1), .75);
 else if(mod(floor(fl/4.),2.)>.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.3,.7,1.), .5);`)
-      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\nif(uStyle>.5 && uStyle<1.5) gl_FragColor = vec4(diffuseColor.rgb, diffuseColor.a);\nif(uStyle>3.5){ float ndl = abs(dot(normalize(normal), normalize(vViewPosition))); gl_FragColor = vec4(diffuseColor.rgb*(.55+.45*ndl), diffuseColor.a); }');
+      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\nif(uStyle>.5 && uStyle<1.5) gl_FragColor = vec4(diffuseColor.rgb, diffuseColor.a);\n#ifdef FLAT_SHADED\nif(uStyle>3.5){ float ndl = abs(dot(normalize(normal), normalize(vViewPosition))); gl_FragColor = vec4(diffuseColor.rgb*(.55+.45*ndl), diffuseColor.a); }\n#endif');
   };
   mat.customProgramCacheKey = () => 'rvtpatch5';
   return mat;
