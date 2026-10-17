@@ -25,4 +25,4 @@ for name in (sys.argv[1:] or sorted(os.listdir(R))):
             if os.path.exists(out): continue
             a = [D + '/tools/capped.sh', os.environ.get('RVT_PY') or D + '/.venv/bin/python', D + '/tools/shot3d.py', f[0], vid if kind != 'View3D' else '3d', ','.join(cam) if cam else '-', out, '--clean', '--white'] + (['--fit'] if kind == 'View3D' else []) + ['--like', png] + extra + (['--ortho'] if ortho else [])
             if kind == 'View3D' and not cam: continue
-            print(' '.join(a[3:])); subprocess.run(a, env=dict(os.environ, RVT_MEM_CAP='3G'), timeout=1500)
+            print(' '.join(a[3:])); subprocess.run(a, env=dict(os.environ, RVT_MEM_CAP=os.environ.get('RVT_MEM_CAP', '1500M')), timeout=1500)
