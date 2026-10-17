@@ -26,6 +26,7 @@ async def main(a):
         w, h = map(int, a.size.split('x')); b = cdp.Browser(size=(w, h)); b.size = (w, h); await b.start()
         await b.goto(base + '/#' + mid); await b.wait('window.__loaded===true', 300); await asyncio.sleep(1)
         if a.clean: await b.ev("(()=>{const s=document.createElement('style');s.textContent='header,#side,#tabs,#panel,#inspector,#help,#status,#viewcube,#viewbar,#banner,.panel,#left,#right,#vcube,#vhome,.lbl{display:none!important}#view{position:fixed!important;inset:0!important;height:100vh!important}';document.head.appendChild(s);return 0})()")
+        await b.ev("window.dispatchEvent(new Event('resize'));0"); await asyncio.sleep(2)      # canvas takes the new size before the view framing is computed
         if a.view != '3d':
             js = "(async()=>{const q=%s;const V=(await (await fetch('/m/%s/meta.json')).json()).views||[];const v=V.find(x=>String(x.id)===q)||V.find(x=>(x.name||'').toLowerCase().includes(q.toLowerCase()));if(!v)return 'no such view (using model camera)';window.openView(v);return 'opened '+v.name})()" % (json.dumps(a.view), mid)
             print(await b.ev(js)); await asyncio.sleep(2)
@@ -40,7 +41,7 @@ async def main(a):
               else{c.position.copy(e);o.target.copy(t);%s}
               c.up.set(0,1,0);c.updateProjectionMatrix();o.update();__dirty();return 0})()""" % (','.join(map(str, e)), ','.join(map(str, t)), ','.join(map(str, up)), 'true' if a.ortho else 'false', a.vh or 0, 'c.fov=%s;' % a.fov if a.fov else ''))
         if a.white or a.hl:
-            await b.ev("(()=>{__scene.background=new THREE.Color(0xffffff);if(%s){__overlay.visible=false}else{[...document.querySelectorAll('.lbl')].forEach(e=>e.remove());__overlay.traverse(o=>{if(o.isMesh)o.visible=false})};__dirty();return 0})()" % ('false' if a.levels else 'true'))
+            await b.ev("(()=>{__scene.background=new THREE.Color(0xffffff);__renderer.shadowMap.enabled=false;__scene.traverse(o=>{if(o.material)[].concat(o.material).forEach(m=>m.needsUpdate=true)});if(%s){__overlay.visible=false}else{[...document.querySelectorAll('.lbl')].forEach(e=>e.remove());__overlay.traverse(o=>{if(o.isMesh)o.visible=false})};__dirty();return 0})()" % ('false' if a.levels else 'true'))
         if a.hl:
             await b.ev("""(()=>{const w=__world,add=[];w.traverse(o=>{if(!o.isMesh||o.userData.hl)return;o.userData.hl=1;o.material=new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
               const l=new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry,30),new THREE.LineBasicMaterial({color:0}));l.userData.hl=1;add.push([o,l])});add.forEach(([o,l])=>o.add(l));__dirty();return 0})()""")
