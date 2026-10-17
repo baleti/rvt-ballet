@@ -48,10 +48,10 @@ self.onmessage = ev => {
     }
   }
   const cosT = Math.cos(thr * Math.PI / 180), cosS = Math.cos(2 * Math.PI / 180);
-  const P = new G(Float32Array, 1 << 16), N1 = new G(Float32Array, 1 << 16), N2 = new G(Float32Array, 1 << 16), K = new G(Float32Array, 1 << 14), EI = new G(Float32Array, 1 << 14);
+  const P = new G(Float32Array, 1 << 16), N1 = new G(Int8Array, 1 << 16), N2 = new G(Int8Array, 1 << 16), K = new G(Int8Array, 1 << 14), EI = new G(Float32Array, 1 << 14);
   const push = (va, vb, n1, n2, kind) => {
     P.push(pos[3*va], pos[3*va+1], pos[3*va+2], pos[3*vb], pos[3*vb+1], pos[3*vb+2]);
-    for (let q = 0; q < 2; q++) { N1.push(n1[0], n1[1], n1[2]); N2.push(n2[0], n2[1], n2[2]); K.push(kind); EI.push(eidx[va]); }
+    for (let q = 0; q < 2; q++) { N1.push(Math.round(n1[0]*127), Math.round(n1[1]*127), Math.round(n1[2]*127)); N2.push(Math.round(n2[0]*127), Math.round(n2[1]*127), Math.round(n2[2]*127)); K.push(kind); EI.push(eidx[va]); }      // normals int8 normalized: 26 bytes per edge vertex
   };
   const Z = [0, 0, 0];
   for (let s = 0; s < ea.length; s++) {
@@ -132,7 +132,7 @@ async function buildEdges() {
     const r = await runEdge(m); if (ver !== H.version) return;
     if (!r.pos.length) continue;
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(r.pos, 3)); g.setAttribute('_eidx', new THREE.BufferAttribute(r.eidx, 1));
-    g.setAttribute('n1', new THREE.BufferAttribute(r.n1, 3)); g.setAttribute('n2', new THREE.BufferAttribute(r.n2, 3)); g.setAttribute('kind', new THREE.BufferAttribute(r.kind, 1));
+    g.setAttribute('n1', new THREE.BufferAttribute(r.n1, 3, true)); g.setAttribute('n2', new THREE.BufferAttribute(r.n2, 3, true)); g.setAttribute('kind', new THREE.BufferAttribute(r.kind, 1));
     m.updateWorldMatrix(true, false);
     for (const em of edgeMats) { const l = new THREE.LineSegments(g, em); l.frustumCulled = false; l.renderOrder = 11; l.matrixAutoUpdate = false; l.matrix.copy(m.matrixWorld); l.userData.hlEdge = 1; grp.add(l);
       if (em === edgeMat) l.onBeforeRender = r => { r.getDrawingBufferSize(_v2); uPx.value.set(2 / _v2.x, 2 / _v2.y); }; }
