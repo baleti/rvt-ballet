@@ -131,3 +131,14 @@
 * re-warmed the four demo files with rvt-sheets bf4ddfa (visibility lists); vctltest ALL OK and vcsweep OK on each. h1run pull of several dirs in one call breaks the pipe: pull one dir per call with a retry.
 * rvt-sheets schedule.py commits (2477c2b etc.) do not stale the view scenes: Residential 180203 still X-Vc-Stale 0 after them, no re-warm needed.
 * vstyletest.py runs against the real window.vstyle with VS_MOCK=0 (c3-viewer branch vstyle 19cf038+): ALL OK (default hiddenline with full opts, per-view autosave and restore, preset style). Residential plan 180203 overlay on top of the hidden-line 3D looks like the Revit plan (screenshot checked).
+
+## c1-hl (hidden line 3D style), branch hl
+* web/hl.js (new) + patches in web/app.js (shader uniforms uStyle/tOvr/uPassT, pick hides edges, events): styles Hidden Line (default), Shaded, Consistent Colors, Realistic (old default), Wireframe; select in the header, ?style=NAME, remembered in localStorage.
+* Edges: worker extracts sharp edges (>30 deg), element boundaries, open edges; smooth edges (2..30 deg) are silhouette candidates decided per frame in the vertex shader. Thick lines by 2 extra offset passes. Snowdon structural: 575k edges in 2.4 s. Models > 12M triangles open in Realistic until the user picks Hidden Line.
+* Faces: white unlit with polygonOffset, translucent elements (floors, transparency %) in a second pass (mesh twin) so edges behind them fade like Revit.
+* Resolved view graphics: rvtviewer/vg3d.py + vg3d_worker.py (GET /api/m/{mid}/vg3d/{viewId}, rvt-sheets resolve_view: filter/category overrides, fills, transparency, line colour/weight, hidden elements); applied when a view is opened (or window.__hl.loadView({id})).
+* Level outlines / grids drawn as dashed lines (levels black, grids magenta) in hidden-line, labels black on white.
+* Measured: tools/hl_score.py (registered line F1 vs Revit export). Snowdon Structural 'Structure Only' (600158): F1 0.885 (precision 0.86, recall 0.92); first version 0.74.
+* tools: shot3d.py --style hidden|shaded|consistent|wire|realistic --vg VIEWID (shots default to realistic), style_test.py (round trip, JS errors).
+* Open: surface patterns (hatch) on faces, halftone, yellow framing fills need the sheets filter evaluator (Z Offset filters match 6 of the beams Revit colours), annotation categories in 3D, edge cache.
+* DEMO NOTE: with hidden line as default the first demo step (materials/textures house) must pick Realistic in the Style select; merge decision with c3-viewer / orchestrator.

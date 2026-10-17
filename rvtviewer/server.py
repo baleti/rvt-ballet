@@ -195,6 +195,9 @@ def make_app(models):
     try:
         from . import viewctl; viewctl.register(app, PluginContext(models))
     except Exception as ex: print('view control not loaded: %r' % ex)
+    try:
+        from . import vg3d; vg3d.register(app, PluginContext(models))
+    except Exception as ex: print('3D view graphics not loaded: %r' % ex)
     async def list_plugins(req): return web.json_response(plugins)
     app.router.add_get('/api/plugins', list_plugins)
     app.router.add_static('/', WEB, follow_symlinks=False)
