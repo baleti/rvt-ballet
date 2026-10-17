@@ -36,13 +36,14 @@ self.onmessage = ev => {
     const e = eidx[a]; let s = cen.get(e); if (!s) { s = [0,0,0,0]; cen.set(e, s); }
     s[0] += (pos[3*a]+pos[3*b]+pos[3*c])/3; s[1] += (pos[3*a+1]+pos[3*b+1]+pos[3*c+1])/3; s[2] += (pos[3*a+2]+pos[3*b+2]+pos[3*c+2])/3; s[3]++;
   }
-  const em = new Map(); const ea = new G(Int32Array, 1 << 16), eb = new G(Int32Array, 1 << 16), t1 = new G(Int32Array, 1 << 16), t2 = new G(Int32Array, 1 << 16), cnt = new G(Int32Array, 1 << 16);   // edge table
-  const SH = 67108864;
+  const ea = new G(Int32Array, 1 << 16), eb = new G(Int32Array, 1 << 16), t1 = new G(Int32Array, 1 << 16), t2 = new G(Int32Array, 1 << 16), cnt = new G(Int32Array, 1 << 16), elo = new G(Int32Array, 1 << 16), ehi = new G(Int32Array, 1 << 16);   // edge table, open addressing on the welded vertex pair
+  let es = 1024; while (es < nt * 4) es <<= 1; const emask = es - 1, etab = new Int32Array(es).fill(-1);
   for (let t = 0; t < nt; t++) {
     for (let k = 0; k < 3; k++) {
-      const va = index[3*t+k], vb = index[3*t+(k+1)%3]; let a = wid[va], b = wid[vb]; if (a === b) continue;
-      const lo = Math.min(a, b), hi = Math.max(a, b), key = lo * SH + hi; const s = em.get(key);
-      if (s === undefined) { em.set(key, ea.length); ea.push(va); eb.push(vb); t1.push(t); t2.push(-1); cnt.push(1); }
+      const va = index[3*t+k], vb = index[3*t+(k+1)%3]; const a = wid[va], b = wid[vb]; if (a === b) continue;
+      const lo = a < b ? a : b, hi = a < b ? b : a; let h = (Math.imul(lo, 73856093) ^ Math.imul(hi, 19349663)) & emask, s = -1;
+      for (;;) { const r = etab[h]; if (r < 0) break; if (elo.a[r] === lo && ehi.a[r] === hi) { s = r; break; } h = (h + 1) & emask; }
+      if (s < 0) { etab[h] = ea.length; elo.push(lo); ehi.push(hi); ea.push(va); eb.push(vb); t1.push(t); t2.push(-1); cnt.push(1); }
       else { cnt.a[s]++; if (t2.a[s] < 0) t2.a[s] = t; }
     }
   }
