@@ -416,6 +416,22 @@ function elementIndex(eid) {
   if (!idxMap || idxMap.mid !== V.mid) { idxMap = new Map(); idxMap.mid = V.mid; (S.meta.elements || []).forEach((r, i) => idxMap.set(r[0], i)); }
   return idxMap.get(Number(eid));
 }
+// Revit's resolved graphics (V/G: view template, filters, overrides) of the picked element, from the sheets vg.json (c3-vg); silently absent when the route is missing
+const vgCache = new Map();
+function getVG(vid) {
+  const k = `${V.mid}:${vid}`; if (!vgCache.has(k)) vgCache.set(k, fetch(`/api/m/${V.mid}/vc/vg/${vid}`).then(r => r.ok ? r.json() : null).catch(() => null));
+  return vgCache.get(k);
+}
+async function vgInfo(h) {
+  const vg = await getVG(V.vid); if (!vg || !vg.styles) return '';
+  const ov = vg.elements && vg.elements[h.eid], cat = h.meta.cat;
+  const idx = ov != null ? (typeof ov === 'object' ? ov.style : ov) : (vg.cat_style && vg.cat_style[cat] != null ? vg.cat_style[cat] : vg.plain_style), s = vg.styles[idx || 0]; if (!s) return '';
+  const col = c => c ? `rgb(${c.join(',')})` : '#000', line = (n, l) => l ? `${n} <span style="display:inline-block;width:10px;height:10px;background:${col(l.rgb)};border:1px solid #888;vertical-align:-1px"></span> ${(+l.w).toFixed(2)} mm${l.dash ? ' dashed' : ''}${l.halftone ? ' halftone' : ''}` : '';
+  const pat = f => f && f.pattern != null ? `${esc((vg.fill_patterns[f.pattern] || {}).name || 'pattern ' + f.pattern)}` : '';
+  const rows = [line('projection', s.proj), line('cut', s.cut), s.transparency ? `transparency ${s.transparency} %` : '', pat(s.surf_fg) ? 'surface ' + pat(s.surf_fg) : '', pat(s.cut_fg) ? 'cut fill ' + pat(s.cut_fg) : ''].filter(Boolean);
+  const hid = (vg.hidden_categories || []).includes(cat) ? ' <b>(category hidden in Revit)</b>' : '';
+  return `<details open><summary>Revit graphics (V/G)${ov != null ? ' - element override' : ''}${hid}</summary><div class="dim" style="line-height:1.6">${rows.join('<br>')}${vg.template ? '<br>view template: ' + esc(vg.template.name) : ''}</div></details>`;
+}
 async function showPicked(h) {
   const box = $('#vcPicked'); if (!box) return;
   if (!h) { box.innerHTML = '<span class="dim">click a drawn element</span>'; return; }
@@ -425,6 +441,7 @@ async function showPicked(h) {
   const hl = $('#vcHost'); if (hl) hl.onclick = ev => { ev.preventDefault(); const i = elementIndex(e.hostId); if (i != null && window.selectEl) window.selectEl(i); };
   const pe = Object.entries(e.params || {}).filter(([k, v]) => !/\|ElementId$|^(Family|Type|Family and Type|Type Id)$/.test(k) || typeof v !== 'number');
   if (pe.length) { const rows = pe.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="mono">${esc(typeof v === 'number' ? +v.toFixed(5) : v)}</td></tr>`).join(''); box.insertAdjacentHTML('beforeend', `<details open><summary>parameters (${pe.length})</summary><table class="kv">${rows}</table></details>`); }
+  vgInfo(h).then(html => { if (html && V.sel === h.eid) box.insertAdjacentHTML('beforeend', html); });
   $('#vcHideEl').onclick = () => { (V.state.elems[h.eid] ||= {}).vis = false; V.sel = null; applyStyles(); renderTree(); };
   $('#vcHideCat').onclick = () => { (V.state.cats[catKey(h.meta.cat)] ||= {}).vis = false; applyStyles(); renderTree(); };
   $('#vcIsoCat').onclick = () => { for (const k of Object.keys(V.sc.elements)) { const c = V.sc.elements[k].cat; (V.state.cats[catKey(c)] ||= {}).vis = c === h.meta.cat; } applyStyles(); renderTree(); };
@@ -661,7 +678,7 @@ window.addEventListener('vstylechange', e => { const d = e.detail; if (d && d.id
   sel.innerHTML = vsOptions(); sel.style.display = 'none'; sel.onchange = () => vsSet(sel.value, undefined, true); $('#navSel').before(sel); }
 setTimeout(() => { vsKey = null; }, 0);
 
-window.vctl = {vstyle: {get: () => vsCur, set: vsSet, setDefault: vsSetDefault}, rebuild: () => V.sc && makeScene(V.sc), loadGhosts, state: () => V.state, V, openView: openVC, toggle, apply: applyStyles, set: patch => { Object.assign(V.state, patch); applyStyles(); }, pick: hitTest};
+window.vctl = {vg: getVG, vstyle: {get: () => vsCur, set: vsSet, setDefault: vsSetDefault}, rebuild: () => V.sc && makeScene(V.sc), loadGhosts, state: () => V.state, V, openView: openVC, toggle, apply: applyStyles, set: patch => { Object.assign(V.state, patch); applyStyles(); }, pick: hitTest};
 // switching model closes the overlay
 setInterval(() => { if (V.on && V.mid !== S.mid) { closeVC(); } }, 1000);
 

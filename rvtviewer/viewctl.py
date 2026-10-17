@@ -117,7 +117,15 @@ def register(app, ctx):
         os.makedirs(os.path.dirname(PRESETS), exist_ok=True); tmp = PRESETS + '.tmp'; json.dump(d, open(tmp, 'w'), indent=1); os.replace(tmp, PRESETS)
         return web.json_response({'ok': True})
 
+    async def vg(req):
+        """graphics resolution of a view (rvt-sheets /view/{id}/vg.json, c3-vg): styles table + category / element style index, fill patterns, materials; 404 when the sheets release has no such route"""
+        mid, vid = req.match_info['mid'], req.match_info['vid']
+        st, body = await sheets_get(req, '/api/%s/view/%s/vg.json%s' % (mid, vid, '?full=1' if req.query.get('full') == '1' else ''))
+        if st == 200: return web.Response(body=body, content_type='application/json', headers={'Cache-Control': 'no-cache'})
+        return web.json_response({'error': 'graphics resolution not available (sheets status %s)' % st}, status=404 if st in (0, 404) else st)
+
     app.router.add_get('/api/m/{mid}/vc/views', views)
+    app.router.add_get('/api/m/{mid}/vc/vg/{vid}', vg)
     app.router.add_get('/api/m/{mid}/vc/scene/{vid}', scene)
     app.router.add_get('/api/m/{mid}/vc/element/{eid}', element)
     app.router.add_get('/api/vc/presets', presets_get); app.router.add_put('/api/vc/presets', presets_put)
