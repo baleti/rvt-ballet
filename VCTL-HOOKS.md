@@ -20,3 +20,4 @@ Merge protocol: tell me the vctl commit range here; I run the smoke test on a sc
 - vctl aa172a5: JS only (textTexture narrow fonts). vctltest ALL OK Structural 579516 (126 Arial Narrow texts).
 - vctl head 2e7abe5 (3 unmerged viewer commits: 24bedb5 button, 26b0d44 tabs, narrow-font text): demo_smoke OK on Residential, Structural, Facades.
 - vctl 6efffa9: visual style UI (selector #vsSel + panel row, per-view autosave, default hiddenline, presets with style, ?vs=). Hidden until window.vstyle exists, so safe to merge before c3-viewer lands the renderer. vstyletest ALL OK (mock), vctltest ALL OK. Contract docs/VSTYLE-API.md. Smoke before merge please.
+- vctl 0668c25: vg proxy route + V/G block in the picking box (silent when sheets has no vg.json route yet: 404). After c3-sheets merges branch vg into dev the vctl scene cache key changes: re-warm needed (I do it). vctltest/vcui ALL OK.
