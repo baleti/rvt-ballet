@@ -61,6 +61,7 @@ async def main(a):
                 const cx=(a[0]+a[1])/2,cy=(a[2]+a[3])/2,right=new THREE.Vector3().setFromMatrixColumn(c.matrixWorld,0),upv=new THREE.Vector3().setFromMatrixColumn(c.matrixWorld,1),hh=D*Math.tan(c.fov*Math.PI/360);
                 tg.addScaledVector(right,cx*hh*c.aspect).addScaledVector(upv,cy*hh)}
               let lo=0.5,hi=1e5;for(let k=0;k<60;k++){const m=Math.sqrt(lo*hi);if(ndc(m,tg)>0.95)lo=m;else hi=m}ndc(hi,tg);o.target.copy(tg);o.update();__dirty();return 0})()""")
+        print('camera', await b.ev('JSON.stringify([__camera.position.toArray().map(x=>+x.toFixed(2)),__controls.target.toArray().map(x=>+x.toFixed(2)),__camera.fov,__camera.aspect])'))
         await asyncio.sleep(3); await b.shot(a.out); print('wrote', a.out)
     finally:
         if b: await b.close()
