@@ -129,3 +129,4 @@
 * Writer output (write-lab generated/full/full_fin_2024.rte, 11 plans + 4 sections) opens in the overlay: scenes render live (no warm needed for a small file), vcsweep OK, no JS exceptions.
 * re-warmed the four demo files with rvt-sheets 86a805b (patterns.hatch guard); vctltest ALL OK and vcsweep OK on each. One h1run pull of four dirs hit a broken pipe; pulling the dirs one at a time worked.
 * re-warmed the four demo files with rvt-sheets bf4ddfa (visibility lists); vctltest ALL OK and vcsweep OK on each. h1run pull of several dirs in one call breaks the pipe: pull one dir per call with a retry.
+* rvt-sheets schedule.py commits (2477c2b etc.) do not stale the view scenes: Residential 180203 still X-Vc-Stale 0 after them, no re-warm needed.
