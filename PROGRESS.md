@@ -119,3 +119,4 @@
 * Facades 2026 (demo file 3) warmed with sheets cb53624 (22 scenes); vcsweep OK, vctltest ALL OK on plan 873465. All four demo files (Residential, Commercial, Structural, Facades) now have current scenes.
 * 24bedb5: header button moved so it is visible in narrow windows; vcui.py real-input test added.
 * 2026 Structural (55_Snowdon) warmed (41 scenes) and swept: vcsweep OK, no JS exceptions (first check of a Revit 2026 Structural file in the overlay).
+* demo_smoke OK on vctl head for Residential, Structural 2024, Facades 2026 (all three demo files), 2026-10-17.

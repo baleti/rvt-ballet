@@ -16,3 +16,4 @@ Merge protocol: tell me the vctl commit range here; I run the smoke test on a sc
 - vctl 5e929a4: tools only (vcalign.py, vcsweep.py) + PROGRESS notes; no viewer code change since deef646. Merge when convenient.
 - vctl 24bedb5: the Annotations header button was inserted before bFid (x=1712, off-screen at a 1280 px window; header scrolls). Now before #navSel (x=899). tools/vcui.py (real mouse: button, view, text click, hide element) ALL OK, vctltest ALL OK, demo_smoke OK Residential. JS-only (web/viewctl.js one line).
 - vctl 26b0d44: CSS only (visibility tabs wrap). vctltest ALL OK Residential.
+- vctl head: demo_smoke OK on all three demo files (Residential, Structural, Facades).
