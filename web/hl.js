@@ -225,9 +225,18 @@ H.setStyle = function (st, user) {
   if (H.meshes) for (const m of H.meshes) { m.material.needsUpdate = true; }
   restyleOverlays(hl);
   if (window.__applySection && (prev === 'hidden') !== (st === 'hidden')) window.__applySection();      // cut-face caps change colour / appear for section-box views
-  const sel = $('#styleSel'); if (sel) sel.value = st; dirty();
+  const sel = $('#styleSel'); if (sel) sel.value = st; window.dispatchEvent(new CustomEvent('vstylechange', {detail: vstyle.get()})); dirty();
 };
 
+// window.vstyle contract (docs/VSTYLE-API.md, c3-vctl selector #vsSel): ids hiddenline/shaded/consistent/realistic/wireframe map to this module's styles
+const VMAP = {hiddenline: 'hidden', shaded: 'shaded', consistent: 'consistent', realistic: 'realistic', wireframe: 'wire'}, VBACK = Object.fromEntries(Object.entries(VMAP).map(([a, b]) => [b, a]));
+let vopts = {edgeAngle: 30, silhouettes: true, hiddenLines: 'faint', lineWeight: 1, transparency: true, patterns: true, halftone: true, faceColor: '#ffffff'};
+const vstyle = {
+  list: () => [['hiddenline', 'Hidden line'], ['shaded', 'Shaded'], ['consistent', 'Consistent colors'], ['realistic', 'Realistic'], ['wireframe', 'Wireframe']].map(([id, label]) => ({id, label})),
+  get: () => ({id: VBACK[H.style], opts: {...vopts}}),
+  set(id, opts) { if (!VMAP[id]) throw new Error('unknown style ' + id); vopts = {...vopts, ...(opts || {})}; H.setStyle(VMAP[id], true); },
+};
+Object.defineProperty(vstyle, 'defaultId', {value: 'hiddenline'}); window.vstyle = vstyle;
 function onLoaded() {
   H.ovl = null; H.twins = []; H.group = null; H.meshes = undefined; H.ready = false; window.__hlReady = false; H.version++;
   H.applyOverrides();
@@ -239,6 +248,7 @@ function onLoaded() {
 const sel = document.createElement('select'); sel.id = 'styleSel'; sel.title = 'Visual style';
 sel.innerHTML = Object.entries(STYLES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
 $('#bShadow').before(sel); sel.onchange = () => H.setStyle(sel.value, true);
+sel.style.display = 'none';      // c3-vctl's #vsSel (window.vstyle) is the visible selector
 window.addEventListener('rvt-model-loaded', onLoaded);
 let st0 = new URLSearchParams(location.search).get('style'); try { st0 = st0 || localStorage.getItem('rvtStyle'); } catch (e) {}
 H.userChose = !!STYLES[st0]; H.style = STYLES[st0] ? st0 : 'hidden'; sel.value = H.style;      // Revit's default 3D look is hidden line

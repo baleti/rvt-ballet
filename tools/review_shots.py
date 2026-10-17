@@ -21,7 +21,7 @@ for name in (sys.argv[1:] or sorted(os.listdir(R))):
         if os.environ.get('HL3D') and kind != 'View3D': continue
         if os.environ.get('HLV') and vid not in os.environ['HLV'].split(','): continue
         cam, ortho = cams.get(vid, (None, False))
-        for suf, extra in (('_hl2', ['--style', 'hidden', '--vg', vid]),):
+        for suf, extra in (('', ['--style', 'shaded']), ('_hl', ['--style', 'hidden', '--vg', vid])):
             out = '%s/%s/%s__ours3d%s.png' % (O, name, vid, suf)
             if os.path.exists(out): continue
             a = [D + '/tools/capped.sh', os.environ.get('RVT_PY') or D + '/.venv/bin/python', D + '/tools/shot3d.py', f[0], vid if (kind != 'View3D' or os.environ.get('HL3D')) else '3d', ','.join(cam) if cam else '-', out, '--clean', '--white'] + (['--fit'] if kind == 'View3D' else []) + ['--like', png] + extra + (['--ortho'] if ortho else [])

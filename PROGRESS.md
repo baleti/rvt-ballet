@@ -129,6 +129,8 @@
 * Writer output (write-lab generated/full/full_fin_2024.rte, 11 plans + 4 sections) opens in the overlay: scenes render live (no warm needed for a small file), vcsweep OK, no JS exceptions.
 * re-warmed the four demo files with rvt-sheets 86a805b (patterns.hatch guard); vctltest ALL OK and vcsweep OK on each. One h1run pull of four dirs hit a broken pipe; pulling the dirs one at a time worked.
 * re-warmed the four demo files with rvt-sheets bf4ddfa (visibility lists); vctltest ALL OK and vcsweep OK on each. h1run pull of several dirs in one call breaks the pipe: pull one dir per call with a retry.
+* rvt-sheets schedule.py commits (2477c2b etc.) do not stale the view scenes: Residential 180203 still X-Vc-Stale 0 after them, no re-warm needed.
+* vstyletest.py runs against the real window.vstyle with VS_MOCK=0 (c3-viewer branch vstyle 19cf038+): ALL OK (default hiddenline with full opts, per-view autosave and restore, preset style). Residential plan 180203 overlay on top of the hidden-line 3D looks like the Revit plan (screenshot checked).
 
 ## c1-hl (hidden line 3D style), branch hl
 * web/hl.js (new) + patches in web/app.js (shader uniforms uStyle/tOvr/uPassT, pick hides edges, events): styles Hidden Line (default), Shaded, Consistent Colors, Realistic (old default), Wireframe; select in the header, ?style=NAME, remembered in localStorage.
@@ -144,3 +146,4 @@
 * Edge worker stress (node, synthetic wavy grid): 0.98M tris -> 1.29M edges in 0.7 s (342 MB RSS); 3.9M tris -> 5.1M edges in 2.9 s (1.15 GB RSS). Edge vertex = 26 bytes (int8 normals), Snowdon F1 unchanged (0.900). remote-host has no chromium, so big-model browser tests stay on remote-host (3 GB cap).
 * 23_rme_advanced (118 MB glb, 48 meshes) opens in hidden line under a 3 GB cap: 1.2M edges, 7-43 s edge build (worker, progressive). Edges shorter than 2 cm (?minedge=M, H.minEdge) and sliver-adjacent edges are dropped (-27% edges). Known artifact: a translucent block on that model still shows scattered 1-3 px specks inside its faces (not a depth-offset issue: tested offsets 0.5..6); suspect interior geometry of the translucent mass seen through, to investigate.
 * 2024_writer_house1 Review Iso: geometry matches Revit visually but the registered line F1 is 0.34 because Revit's export includes long dashed level lines with labels (extents far larger than the house) that the registration and recall count; hl_score cannot separate them (a density filter removed the house instead). Compare these files with levels in both (shot3d --levels) or crop Revit's image by hand.
+* vg: sheets dev has the vg.json route (67a24e0), sheets master does not; my four-file re-warm used master code (scenes fresh, X-Vc-Stale 0). Re-warm again when dev is promoted to master.

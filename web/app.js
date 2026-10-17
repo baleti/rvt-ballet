@@ -67,6 +67,7 @@ const world = new THREE.Group(); world.renderOrder = 100; scene.add(world);     
 const overlay = new THREE.Group(); scene.add(overlay);
 let selBoxDummy;
 let stateTex, stateData;
+try { for (const f of ['400 16px', '700 16px', 'italic 400 16px', 'italic 700 16px']) document.fonts.load(f + ' "Liberation Sans"'); } catch (e) {}      // text overlays draw to canvas: have the local Arial twin ready before the first view opens
 const U = {tState: {value: null}, uMode: {value: 0}, tMat: {value: null}, tPat: {value: null}, tImg: {value: null}, tBump: {value: null}, uTex: {value: 1}, uBot: {value: -1e9}, uStyle: {value: 0}, tOvr: {value: null}};
 window.__U = U; setTimeout(() => { window.__applySection = applySection; }, 0); setTimeout(() => { window.__refreshState = refreshState; }, 0);
 setTimeout(() => { window.__patch = patch; }, 0);
@@ -121,7 +122,7 @@ if(uMode>1.5 && uMode<2.5){ float dv=floor(stt.b*255.+.5); diffuseColor.rgb = dv
 if(mod(floor(fl/8.),2.)>.5){ if(mod(floor(gl_FragCoord.x)+2.*floor(gl_FragCoord.y),5.)>.5) discard; diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.6), .5); }
 if(mod(floor(fl/2.),2.)>.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.,.69,.1), .75);
 else if(mod(floor(fl/4.),2.)>.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.3,.7,1.), .5);`)
-      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\nif(uStyle>.5 && uStyle<1.5) gl_FragColor = vec4(diffuseColor.rgb, diffuseColor.a);\nif(uStyle>3.5){ float ndl = abs(dot(normalize(normal), normalize(vViewPosition))); gl_FragColor = vec4(diffuseColor.rgb*(.55+.45*ndl), diffuseColor.a); }');
+      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\nif(uStyle>.5 && uStyle<1.5) gl_FragColor = vec4(diffuseColor.rgb, diffuseColor.a);\n#ifdef FLAT_SHADED\nif(uStyle>3.5){ float ndl = abs(dot(normalize(normal), normalize(vViewPosition))); gl_FragColor = vec4(diffuseColor.rgb*(.55+.45*ndl), diffuseColor.a); }\n#endif');
   };
   mat.customProgramCacheKey = () => 'rvtpatch5';
   return mat;
@@ -900,14 +901,14 @@ function openView(v) {
   const o = toV(v.origin), mb = modelBox(), c = mb.getCenter(new THREE.Vector3()), size = mb.getSize(new THREE.Vector3()).length();
   S.viewClip = null; S.viewCrop = null; S.openView = v; U.uBot.value = -1e9;
   if (v.kind === '3d') {
-    const d = dirV(v.dir); camera.position.copy(o); controls.target.copy(o).addScaledVector(d, Math.max(5, size / 4));
+    const d = dirV(v.dir); camera.position.copy(o); controls.target.copy(o).addScaledVector(d, -Math.max(5, size / 4));      // the stored view direction points from the target towards the eye (Revit's ViewDirection): the camera looks along -dir
     if (v.section_box) {      // the view's stored section box: six clip planes (box basis in revit axes -> three y-up), not capped
       const sb = v.section_box, O = new THREE.Vector3(...sb.origin);
       S.viewCrop = []; sb.ranges.forEach((rg, k) => { const ax = new THREE.Vector3(...sb.basis[k]).normalize(), n = new THREE.Vector3(ax.x, ax.z, -ax.y), p0 = toV(sb.origin), d0 = n.dot(p0);
         S.viewCrop.push(new THREE.Plane(n.clone(), -(d0 + rg[0])), new THREE.Plane(n.clone().negate(), d0 + rg[1])); });
       const bb = new THREE.Box3(); for (const i of [0, 1]) for (const j of [0, 1]) for (const k of [0, 1]) {      // frame the box corners (box basis axes)
         const q = O.clone(); [i, j, k].forEach((w, ax) => q.addScaledVector(new THREE.Vector3(...sb.basis[ax]), sb.ranges[ax][w])); bb.expandByPoint(toV([q.x, q.y, q.z])); }
-      const mb2 = bb.clone().intersect(modelBox()); fitBox(mb2.isEmpty() ? bb : mb2, d.clone().negate().add(new THREE.Vector3(0, .5, 0)));
+      const mb2 = bb.clone().intersect(modelBox()); fitBox(mb2.isEmpty() ? bb : mb2, d.clone().add(new THREE.Vector3(0, .5, 0)));
     }
   } else if (v.kind === 'Plan' && v.cut) {
     const z = v.cut.origin[2]; S.viewClip = new THREE.Plane(new THREE.Vector3(0, -1, 0), z);
@@ -916,10 +917,10 @@ function openView(v) {
     if (v.range && v.range.bottom != null && v.range.bottom < z) U.uBot.value = v.range.bottom - 0.05;      // view depth: nothing below it is drawn (5 cm slack for slab tops at the level); a shader discard, not a clip plane, so the section caps' stencil parity stays right
     controls.target.set(cx, z, cz); camera.position.set(cx, z + h, cz + 0.001);
   } else if (v.dir) {
-    const d = dirV(v.dir); S.viewClip = new THREE.Plane(d.clone(), -d.dot(o));
+    const d = dirV(v.dir); S.viewClip = new THREE.Plane(d.clone().negate(), d.dot(o));      // keep what lies beyond the cut plane, away from the eye (dir points to the eye)
     const cr = v.crop && cropFrame(v.crop, d);
-    if (cr) { const t = cr.c.clone().addScaledVector(d, -d.dot(cr.c) + d.dot(o)); controls.target.copy(t); camera.position.copy(t).addScaledVector(d, -cr.dist); }
-    else { controls.target.copy(o); camera.position.copy(o).addScaledVector(d, -size * 0.8); }
+    if (cr) { const t = cr.c.clone().addScaledVector(d, -d.dot(cr.c) + d.dot(o)); controls.target.copy(t); camera.position.copy(t).addScaledVector(d, cr.dist); }
+    else { controls.target.copy(o); camera.position.copy(o).addScaledVector(d, size * 0.8); }
   }
   camera.near = 0.05; camera.far = size * 20 + 500; camera.updateProjectionMatrix(); controls.update();
   if (S.lvlGroup) S.lvlGroup.visible = showLvl && v.kind !== 'Plan';          // level outlines seen from above are just lines across a plan
