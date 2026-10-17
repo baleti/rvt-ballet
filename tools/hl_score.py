@@ -29,10 +29,10 @@ def f1(Os, dR):
     p = (Os & dR).sum() / max(Os.sum(), 1); return p
 dR = dil(R); bestf = (-1, s, dx, dy)
 for s2 in s * np.linspace(.96, 1.04, 9):                  # refine: the line F1 itself is maximised over a small scale / shift neighbourhood
-    Or = resize(O, s2)
+    Or = resize(O, s2); Od = dil(Or)
     for ddx in range(-6, 7, 2):
         for ddy in range(-6, 7, 2):
-            Q = place(Or, dx + ddx, dy + ddy, R.shape); pp = (Q & dR).sum() / max(Q.sum(), 1); rr = (R & dil(Q)).sum() / max(R.sum(), 1); ff = 2 * pp * rr / max(pp + rr, 1e-9)
+            Q = place(Or, dx + ddx, dy + ddy, R.shape); Qd = place(Od, dx + ddx, dy + ddy, R.shape); pp = (Q & dR).sum() / max(Q.sum(), 1); rr = (R & Qd).sum() / max(R.sum(), 1); ff = 2 * pp * rr / max(pp + rr, 1e-9)
             if ff > bestf[0]: bestf = (ff, s2, dx + ddx, dy + ddy)
 _, s, dx, dy = bestf; Os = place(resize(O, s), dx, dy, R.shape)
 p = (Os & dil(R)).sum() / max(Os.sum(), 1); r = (R & dil(Os)).sum() / max(R.sum(), 1); f = 2 * p * r / max(p + r, 1e-9)

@@ -214,6 +214,7 @@ H.setStyle = function (st, user) {
   for (const m of H.meshes || []) { m.material.polygonOffset = st === 'hidden'; }
   if (H.meshes) for (const m of H.meshes) { m.material.needsUpdate = true; }
   restyleOverlays(hl);
+  if (window.__applySection && (prev === 'hidden') !== (st === 'hidden')) window.__applySection();      // cut-face caps change colour / appear for section-box views
   const sel = $('#styleSel'); if (sel) sel.value = st; dirty();
 };
 
