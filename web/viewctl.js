@@ -463,6 +463,7 @@ function saveLocal() { try { localStorage[stateKey()] = JSON.stringify(V.state);
 
 async function openVC(vid, preset) {
   if (preset) V.state = Object.assign(DEFAULT_STATE(), JSON.parse(JSON.stringify(preset)));
+  if (preset && preset.style) vsSet(preset.style.id, preset.style.opts, true);
   else if (V.vid !== vid) {
     try { const j = localStorage[`vctl:${V.mid}:${vid}`]; V.state = Object.assign(DEFAULT_STATE(), j ? JSON.parse(j) : {}); } catch (e) { V.state = DEFAULT_STATE(); }
     // drafting / legend views have no model position: show them as a white sheet by default
@@ -554,6 +555,7 @@ function renderPanel() {
   const opt = (v, cur, lab) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${lab}</option>`;
   p.innerHTML = `<div id="vcHead" style="display:flex;align-items:center;cursor:move" title="drag to move the panel"><b>View control</b><span class="sp" style="flex:1"></span><button id="vcOff" title="remove the overlay and close the panel">close</button></div>
   <div class="r"><label>View</label><select id="vcView" style="flex:1;min-width:0"><option value="">select a plan / section...</option>${vs.map(v => opt(v.id, V.vid, `${v.name} (${v.kind}${v.scale ? ' 1:' + v.scale : ''})`)).join('')}</select></div>
+  <div class="r" style="${window.vstyle ? '' : 'display:none'}"><label>Visual style</label><select id="vcVS" style="flex:1;min-width:0" title="Revit visual style of the 3D scene (saved per view)">${vsOptions()}</select><button id="vcVSDef" title="use this style for every view that has none saved">default</button></div>
   <h4>Display (re-draws the view)</h4>
   <div class="r"><label>Annotation scale</label><select id="vcScale">${opt('', st.scale || '', 'view default' + (sc ? ' (1:' + (sc.view.scale_stored || sc.view.scale) + ')' : ''))}${SCALES.map(s => opt(s, st.scale, '1:' + s)).join('')}</select></div>
   <div class="r"><label>Detail level</label><select id="vcDetail">${opt('', st.detail || '', 'view default')}${opt(1, st.detail, 'Coarse')}${opt(2, st.detail, 'Medium')}${opt(3, st.detail, 'Fine')}</select></div>
@@ -603,8 +605,10 @@ function renderPanel() {
   on('vcAnnOff', () => { ['annotation', 'text', 'datum', 'annotation_fill'].forEach(l => st.layers[l] = false); applyStyles(); saveLocal(); renderPanel(); }, 'onclick');
   on('vcModelOff', () => { [...MODEL_LAYERS].forEach(l => st.layers[l] = false); applyStyles(); saveLocal(); renderPanel(); }, 'onclick');
   on('vcResetAll', () => { const keep = {scale: st.scale, detail: st.detail}; V.state = Object.assign(DEFAULT_STATE(), keep); saveLocal(); loadScene(V.vid); }, 'onclick');
-  on('vcPreSave', async () => { const n = $('#vcPreName').value.trim(); if (!n) return; V.presets[n] = JSON.parse(JSON.stringify(V.state)); await savePresets(); renderPanel(); }, 'onclick');
-  on('vcPreLoad', async () => { const n = $('#vcPre').value; if (!n || !V.presets[n]) return; const needs = JSON.stringify([V.presets[n].scale, V.presets[n].detail, V.presets[n].template, V.presets[n].filters]) !== JSON.stringify([st.scale, st.detail, st.template, st.filters]); V.state = Object.assign(DEFAULT_STATE(), JSON.parse(JSON.stringify(V.presets[n]))); saveLocal(); if (needs) await loadScene(V.vid); else { makeScene(V.sc); renderPanel(); } }, 'onclick');
+  on('vcVS', () => vsSet($('#vcVS').value, undefined, true));
+  on('vcVSDef', () => { vsSetDefault(); setStatus('default visual style: ' + vsLabel(vsCur.id)); }, 'onclick');
+  on('vcPreSave', async () => { const n = $('#vcPreName').value.trim(); if (!n) return; V.presets[n] = JSON.parse(JSON.stringify(V.state)); V.presets[n].style = {id: vsCur.id, opts: vsCur.opts}; await savePresets(); renderPanel(); }, 'onclick');
+  on('vcPreLoad', async () => { const n = $('#vcPre').value; if (!n || !V.presets[n]) return; const needs = JSON.stringify([V.presets[n].scale, V.presets[n].detail, V.presets[n].template, V.presets[n].filters]) !== JSON.stringify([st.scale, st.detail, st.template, st.filters]); V.state = Object.assign(DEFAULT_STATE(), JSON.parse(JSON.stringify(V.presets[n]))); if (V.presets[n].style) vsSet(V.presets[n].style.id, V.presets[n].style.opts, true); saveLocal(); if (needs) await loadScene(V.vid); else { makeScene(V.sc); renderPanel(); } }, 'onclick');
   on('vcPreDel', async () => { const n = $('#vcPre').value; if (!n) return; delete V.presets[n]; await savePresets(); renderPanel(); }, 'onclick');
   on('vcExport', () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({view: V.vid, state: V.state}, null, 1)], {type: 'application/json'})); a.download = `view-${V.vid}-controls.json`; a.click(); }, 'onclick');
   renderTree();
@@ -624,7 +628,40 @@ async function toggle() {
 }
 const btn = document.createElement('button'); btn.id = 'bVC'; btn.textContent = 'Annotations'; btn.title = 'View-dependent elements: tags, text, dimensions, grids, hatches - per view / category / element controls';
 btn.onclick = toggle; $('#navSel').before(btn);      // left end of the right-hand buttons: stays visible in a narrow window
-window.vctl = {rebuild: () => V.sc && makeScene(V.sc), loadGhosts, state: () => V.state, V, openView: openVC, toggle, apply: applyStyles, set: patch => { Object.assign(V.state, patch); applyStyles(); }, pick: hitTest};
+// ------------------------------------------------------------------ visual style (selector, per-view autosave, default; contract: docs/VSTYLE-API.md)
+// c3-viewer implements window.vstyle (list / get / set + 'vstylechange'); this part stores and restores the choice and drives the selectors.
+const VS_FALLBACK = [{id: 'hiddenline', label: 'Hidden line'}, {id: 'shaded', label: 'Shaded'}, {id: 'consistent', label: 'Consistent colors'}, {id: 'realistic', label: 'Realistic'}, {id: 'wireframe', label: 'Wireframe'}];
+const vsList = () => { try { const l = window.vstyle && window.vstyle.list && window.vstyle.list(); if (l && l.length) return l; } catch (e) {} return VS_FALLBACK; };
+const vsLabel = id => (vsList().find(x => x.id === id) || {label: id}).label;
+const vsRead = k => { try { const j = JSON.parse(localStorage[k] || 'null'); return j && j.id ? j : null; } catch (e) { return null; } };
+const vsWrite = (k, v) => { try { localStorage[k] = JSON.stringify(v); } catch (e) {} };
+const vsViewKey = () => `vstyle:${S.mid || 'x'}:${S.openView ? S.openView.id : 'model'}`;
+function vsDefault() {
+  const u = new URLSearchParams(location.search).get('vs'); if (u && vsList().some(x => x.id === u)) return {id: u, opts: {}};
+  return vsRead('vstyle:default') || {id: (window.vstyle && window.vstyle.defaultId) || 'hiddenline', opts: {}};
+}
+let vsCur = vsDefault(), vsKey = null;
+const vsOptions = () => vsList().map(x => `<option value="${x.id}" ${x.id === vsCur.id ? 'selected' : ''}>${esc(x.label)}</option>`).join('');
+function vsSync() { document.querySelectorAll('#vsSel,#vcVS').forEach(s => { if (s.value !== vsCur.id) s.value = vsCur.id; }); }
+function vsSet(id, opts, save) {
+  if (!id) return; vsCur = {id, opts: opts || (vsCur.id === id ? vsCur.opts : {})};
+  try { if (window.vstyle && window.vstyle.set) window.vstyle.set(vsCur.id, vsCur.opts); } catch (e) { console.warn('vstyle.set', e); }
+  vsSync(); if (save) vsWrite(vsViewKey(), vsCur);
+}
+function vsSetDefault() { vsWrite('vstyle:default', vsCur); }
+// opening / closing a view (also from the Views tab) switches to that view's saved style, else the default
+let vsHad = false;
+setInterval(() => {
+  const vs = document.getElementById('vsSel'); if (vs) vs.style.display = window.vstyle ? '' : 'none';
+  const k = vsViewKey(), first = !!window.vstyle && !vsHad; if (window.vstyle) vsHad = true;
+  if (k === vsKey && !first) return; vsKey = k; const st = vsRead(k) || vsDefault(); vsSet(st.id, st.opts);
+}, 400);
+window.addEventListener('vstylechange', e => { const d = e.detail; if (d && d.id && d.id !== vsCur.id) { vsCur = {id: d.id, opts: d.opts || {}}; vsSync(); vsWrite(vsViewKey(), vsCur); } });
+{ const sel = document.createElement('select'); sel.id = 'vsSel'; sel.title = 'Visual style (Revit): saved per view, "default" in the View control panel sets the style for new views';
+  sel.innerHTML = vsOptions(); sel.style.display = 'none'; sel.onchange = () => vsSet(sel.value, undefined, true); $('#navSel').before(sel); }
+setTimeout(() => { vsKey = null; }, 0);
+
+window.vctl = {vstyle: {get: () => vsCur, set: vsSet, setDefault: vsSetDefault}, rebuild: () => V.sc && makeScene(V.sc), loadGhosts, state: () => V.state, V, openView: openVC, toggle, apply: applyStyles, set: patch => { Object.assign(V.state, patch); applyStyles(); }, pick: hitTest};
 // switching model closes the overlay
 setInterval(() => { if (V.on && V.mid !== S.mid) { closeVC(); } }, 1000);
 
