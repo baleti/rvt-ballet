@@ -118,7 +118,7 @@ function setupTwins() {
   for (const m of meshes) {
     m.material.polygonOffset = true; m.material.polygonOffsetFactor = 2; m.material.polygonOffsetUnits = 4;
     if (m.userData.twin) continue;
-    const mat = window.__patch(new THREE.MeshStandardMaterial({color: m.material.color, roughness: .85, metalness: 0, side: THREE.DoubleSide, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4}));
+    const mat = window.__patch(new THREE.MeshStandardMaterial({color: m.material.color, roughness: .85, metalness: 0, side: THREE.DoubleSide, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1}));
     mat.userData.pt = {value: 1};
     const t = new THREE.Mesh(m.geometry, mat); t.userData.hlTwin = 1; t.userData.bi = m.userData.bi; t.frustumCulled = false; t.renderOrder = 12; t.visible = false; t.matrixAutoUpdate = false;
     t.customDepthMaterial = m.customDepthMaterial; t.castShadow = false;
@@ -186,7 +186,7 @@ H.loadView = async function (v) {
       const r = await fetch(`/api/m/${S.mid}/vg3d/${vid}`); if (!r.ok) throw new Error(r.status); const d = await r.json(); if (H.viewId !== vid) return;
       const E = S.meta.elements, idx = new Map(); E.forEach((e, i) => idx.set(String(e[0]), i)); H.el = {}; H.cat = {};
       for (const [k, a] of Object.entries(d.els)) { const i = idx.get(k); if (i === undefined) continue;
-        H.el[i] = {c: [a[0], a[1], a[2]], a: a[3], lc: [a[4], a[5], a[6]], lw: a[7] < .7 ? 1 : a[7] < 1 ? 2 : 3, ht: a[8]}; }
+        H.el[i] = {c: [a[0], a[1], a[2]], a: a[3], lc: [a[4], a[5], a[6]], lw: a[7] < .8 ? 1 : a[7] < 1.5 ? 2 : 3, ht: a[8]}; }
       for (const id of d.hidden) { const i = idx.get(String(id)); if (i !== undefined && !S.hidden[i]) { S.hidden[i] = 1; viewHidden.add(i); } }
     } catch (e) { console.warn('view graphics', e); }
   }
