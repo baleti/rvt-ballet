@@ -61,12 +61,11 @@ self.onmessage = ev => {
     if (eidx[index[3*A]] !== eidx[index[3*B]]) { push(va, vb, Z, Z, 0); continue; }
     let n1 = [nrm[3*A], nrm[3*A+1], nrm[3*A+2]], n2 = [nrm[3*B], nrm[3*B+1], nrm[3*B+2]]; let d = n1[0]*n2[0]+n1[1]*n2[1]+n1[2]*n2[2];
     if (d < 0) { n2 = [-n2[0], -n2[1], -n2[2]]; d = -d; }
-    if (d < cosT) { push(va, vb, Z, Z, 0); continue; }
-    if (d > cosS) continue;
-    // smooth edge: silhouette candidate; orient both normals away from the element centre
+    if (d > cosS && d >= cosT) continue;
+    // smooth edge: silhouette candidate (kind 1); sharp edge: kind 2 = always drawn, except on 'soft' elements (foliage, terrain) that only get their silhouette. Normals oriented away from the element centre
     const c = cen.get(eidx[va]); const mx = (pos[3*va]+pos[3*vb])/2 - c[0]/c[3], my = (pos[3*va+1]+pos[3*vb+1])/2 - c[1]/c[3], mz = (pos[3*va+2]+pos[3*vb+2])/2 - c[2]/c[3];
     if (n1[0]*mx+n1[1]*my+n1[2]*mz < 0) { n1 = [-n1[0], -n1[1], -n1[2]]; n2 = [-n2[0], -n2[1], -n2[2]]; }
-    push(va, vb, n1, n2, 1);
+    push(va, vb, n1, n2, d < cosT ? 2 : 1);
   }
   const out = {id, pos: new Float32Array(P), n1: new Float32Array(N1), n2: new Float32Array(N2), kind: new Float32Array(K), eidx: new Float32Array(EI)};
   self.postMessage(out, [out.pos.buffer, out.n1.buffer, out.n2.buffer, out.kind.buffer, out.eidx.buffer]);
@@ -83,9 +82,9 @@ attribute float _eidx; attribute vec3 n1; attribute vec3 n2; attribute float kin
 void main(){
   vec4 wp = modelMatrix * vec4(position, 1.0); vec4 mvPosition = viewMatrix * wp; gl_Position = projectionMatrix * mvPosition;
   float eI = floor(_eidx + .5); ivec2 ix = ivec2(int(mod(eI, ${TW}.)), int(eI / ${TW}.)); vec4 stt = texelFetch(tState, ix, 0); float fl = floor(stt.r * 255. + .5);
-  vec4 ln = texelFetch(tLn, ix, 0); vC = ln.rgb; float wpx = floor(ln.a * 255. / 50. + .5);
+  vec4 ln = texelFetch(tLn, ix, 0); vC = ln.rgb; float la = ln.a * 255.; float wpx = floor(la / 50. + .5); bool soft = mod(la + 25., 50.) >= 30.;
   bool hide = mod(fl, 2.) > .5 || mod(floor(fl / 8.), 2.) > .5 || (uK > .5 && wpx < uK + .5);
-  if (kind > .5) { vec3 v = cameraPosition - wp.xyz; vec3 a = mat3(modelMatrix) * n1, b = mat3(modelMatrix) * n2; if (dot(a, v) * dot(b, v) > 0.) hide = true; }
+  if (kind > .5 && (kind < 1.5 || soft)) { vec3 v = cameraPosition - wp.xyz; vec3 a = mat3(modelMatrix) * n1, b = mat3(modelMatrix) * n2; if (dot(a, v) * dot(b, v) > 0.) hide = true; }
   if (uK > .5) gl_Position.xy += (uK < 1.5 ? vec2(.7, .7) : vec2(-.7, .7)) * uPx * gl_Position.w;
   if (hide) gl_Position = vec4(2., 2., 2., 1.);
 #include <clipping_planes_vertex>
@@ -152,11 +151,12 @@ H.applyOverrides = function () {
   }
   S.ovrTex.needsUpdate = true; H.applyLines(); dirty();
 };
+const SOFT = new Set(['Planting', 'Entourage', 'Topography']);
 H.applyLines = function () {
   if (!S.meta) return; const E = S.meta.elements, N = S.N, h = Math.max(1, Math.ceil(N / TW));
   if (!H.lnData || H.lnData.length !== TW * h * 4) { H.lnData = new Uint8Array(TW * h * 4); H.lnTex = new THREE.DataTexture(H.lnData, TW, h, THREE.RGBAFormat, THREE.UnsignedByteType); H.lnTex.minFilter = H.lnTex.magFilter = THREE.NearestFilter; tLn.value = H.lnTex; }
   const d = H.lnData;
-  for (let i = 0; i < N; i++) { const o = (H.el && H.el[i]) || {}; const c = o.lc || [0, 0, 0], w = o.lw || 1; d[4*i] = c[0]; d[4*i+1] = c[1]; d[4*i+2] = c[2]; d[4*i+3] = w * 50; }
+  for (let i = 0; i < N; i++) { const o = (H.el && H.el[i]) || {}; const c = o.lc || [0, 0, 0], w = o.lw || 1; d[4*i] = c[0]; d[4*i+1] = c[1]; d[4*i+2] = c[2]; d[4*i+3] = w * 50 + (SOFT.has(E[i][2]) ? 10 : 0); }
   H.lnTex.needsUpdate = true;
 };
 H.setCat = function (cat, o) { H.cat[cat] = o; H.applyOverrides(); };
