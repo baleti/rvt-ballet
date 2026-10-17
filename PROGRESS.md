@@ -113,3 +113,4 @@
 * c3-annot answered: Revit omits the diagonal grid 598948 in 579975 (plane not perpendicular); fixed on branch annot. Scenes of Structural need a re-warm (tools/vc_warm.sh) once that fix is merged into rvt-sheets main.
 * 2026-10-17 re-warmed all three demo files with sheets release 16 (Structural 41, Residential 17, Commercial 20 scenes), vctltest ALL OK on Structural 124186, Residential 180203, Commercial 193216 (VC_RERENDER=0). Diagonal grid 598948 still drawn: annot fix not yet in rvt-sheets main; re-warm Structural after it lands.
 * Structural re-warmed with annot perpendicular-datum fix (sheets e31c92f+): 579975 now 8 grids, all 0.00 mm, the diagonal grid 598948 is gone; vctltest ALL OK on 124186.
+* tools/vcsweep.py (new): opens every drawable view (plan/section/drafting/legend) in the overlay and reports prims, segs, texts, JS exceptions. SWEEP OK: Structural 47 views, Residential, Commercial (all cached scenes, 0.0-9.7 s per view).
