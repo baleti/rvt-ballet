@@ -18,3 +18,4 @@ Merge protocol: tell me the vctl commit range here; I run the smoke test on a sc
 - vctl 26b0d44: CSS only (visibility tabs wrap). vctltest ALL OK Residential.
 - vctl head: demo_smoke OK on all three demo files (Residential, Structural, Facades).
 - vctl aa172a5: JS only (textTexture narrow fonts). vctltest ALL OK Structural 579516 (126 Arial Narrow texts).
+- vctl head 2e7abe5 (3 unmerged viewer commits: 24bedb5 button, 26b0d44 tabs, narrow-font text): demo_smoke OK on Residential, Structural, Facades.
