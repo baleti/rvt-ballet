@@ -56,3 +56,11 @@ for i, el in enumerate(els):
         T2 = np.array([p for t in m['tris'] for p in t]).reshape(-1, 3); F2 = np.arange(len(T2)).reshape(-1, 3)
         print('   python element_mesh(detail=3): tris', len(F2), 'oriented volume', round(oriented_volume(T2, F2), 4), 'flags', m.get('flags'))
     except Exception as ex: print('   python element_mesh probe failed', repr(ex)[:150])
+    try:
+        nid = np.array(m.get('nid') or []); fidm = np.array(m.get('fid') or [])
+        if len(nid) == len(F2):
+            for b in sorted(set(nid.tolist())):
+                sel = np.where(nid == b)[0]; Tb = T2.reshape(-1, 3, 3)[sel]; Fb = np.arange(len(Tb) * 3).reshape(-1, 3)
+                lo = Tb.reshape(-1, 3).min(0); hi = Tb.reshape(-1, 3).max(0)
+                print('     body', b, 'tris', len(sel), 'faces', len(set(fidm[sel].tolist())) if len(fidm) == len(F2) else '?', 'oriented volume', round(oriented_volume(Tb.reshape(-1, 3), Fb), 4), 'bbox size', np.round(hi - lo, 3).tolist())
+    except Exception as ex: print('   per-body probe failed', repr(ex)[:150])
