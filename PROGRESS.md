@@ -126,3 +126,4 @@
 * re-warmed the four demo files with rvt-sheets 0070540 (Residential 17, Commercial 20, Structural 41, Facades 22 scenes); vctltest ALL OK and vcsweep OK on each. Older caches (2017, Structural 2026) are stale (served with the redraw button).
 * 2026-10-17 (c5-viewer): after merging vctl 4a122ba..1a48e76 and the Rust smooth_part hook: uitest6 / 7 / 12 ALL OK, uitest11 all PASS, demo_smoke x3 OK on master a17687b.
 * Cold re-render timing (uncached annotation scale, remote-host capped): Residential plan 180203 1:37 2.4 s (first, includes worker start), 1:61 0.44 s; Structural L1 124186 1:37 4.6 s, 1:61 0.86 s. Fine for a live demo.
+* Writer output (write-lab generated/full/full_fin_2024.rte, 11 plans + 4 sections) opens in the overlay: scenes render live (no warm needed for a small file), vcsweep OK, no JS exceptions.
