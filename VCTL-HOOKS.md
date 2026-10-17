@@ -14,3 +14,8 @@ Merge protocol: tell me the vctl commit range here; I run the smoke test on a sc
 - vctl 940d633 (panel rows wrap, master merged in) ready to merge; vctltest ALL OK on Residential 180203. CSS only.
 - vctl deef646: legend view (Commercial Frame Types) rendered dark/striped in paper look (section caps + level planes still visible); fixed. app.js: one export (window.__caps). vctltest ALL OK Commercial plan 193216 + legend 206449, demo_smoke OK Residential. Please merge.
 - vctl 5e929a4: tools only (vcalign.py, vcsweep.py) + PROGRESS notes; no viewer code change since deef646. Merge when convenient.
+- vctl 24bedb5: the Annotations header button was inserted before bFid (x=1712, off-screen at a 1280 px window; header scrolls). Now before #navSel (x=899). tools/vcui.py (real mouse: button, view, text click, hide element) ALL OK, vctltest ALL OK, demo_smoke OK Residential. JS-only (web/viewctl.js one line).
+- vctl 26b0d44: CSS only (visibility tabs wrap). vctltest ALL OK Residential.
+- vctl head: demo_smoke OK on all three demo files (Residential, Structural, Facades).
+- vctl aa172a5: JS only (textTexture narrow fonts). vctltest ALL OK Structural 579516 (126 Arial Narrow texts).
+- vctl head 2e7abe5 (3 unmerged viewer commits: 24bedb5 button, 26b0d44 tabs, narrow-font text): demo_smoke OK on Residential, Structural, Facades.

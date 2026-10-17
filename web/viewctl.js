@@ -145,11 +145,14 @@ function textTexture(lines, font, bold, italic) {
   const key = JSON.stringify([lines, font, bold, italic]); if (texCache.has(key)) return texCache.get(key);
   const PX = 48, c = document.createElement('canvas'), g = c.getContext('2d');
   const fam = (font ? font + ', ' : '') + 'Arial, "Liberation Sans", Helvetica, sans-serif';
-  g.font = `${italic ? 'italic ' : ''}${bold ? 'bold ' : ''}${PX}px ${fam}`;
-  const w = Math.max(2, Math.ceil(Math.max(...lines.map(l => g.measureText(l).width)))), lh = PX * LINE_PITCH, h = Math.ceil(lh * lines.length + PX * 0.3);
+  // Revit's Arial Narrow is not installed in browsers (falls back to full-width Arial, ~20 % too wide): squeeze the fallback
+  const NARROW = /narrow|condensed/i.test(font || '') ? 0.82 : 1;
+  const F = `${italic ? 'italic ' : ''}${bold ? 'bold ' : ''}${PX}px ${fam}`;
+  g.font = F;
+  const w = Math.max(2, Math.ceil(Math.max(...lines.map(l => g.measureText(l).width)) * NARROW)), lh = PX * LINE_PITCH, h = Math.ceil(lh * lines.length + PX * 0.3);
   c.width = w + 8; c.height = h;
-  g.font = `${italic ? 'italic ' : ''}${bold ? 'bold ' : ''}${PX}px ${fam}`; g.fillStyle = '#fff'; g.textBaseline = 'alphabetic';
-  lines.forEach((l, i) => g.fillText(l, 4, PX * 0.95 + i * lh));
+  g.font = F; g.fillStyle = '#fff'; g.textBaseline = 'alphabetic'; g.setTransform(NARROW, 0, 0, 1, 0, 0);
+  lines.forEach((l, i) => g.fillText(l, 4 / NARROW, PX * 0.95 + i * lh));
   const tex = new THREE.CanvasTexture(c); tex.anisotropy = 4; tex.minFilter = THREE.LinearMipmapLinearFilter;
   const r = {tex, w: (w + 8) / PX, h: h / PX, lh: LINE_PITCH, asc: 0.95};
   texCache.set(key, r); return r;
@@ -473,7 +476,7 @@ async function openVC(vid, preset) {
 function injectCss() {
   const st = document.createElement('style'); st.textContent = `
 #vcpanel{position:absolute;right:8px;top:8px;width:330px;max-height:calc(100% - 60px);overflow:auto;overflow-x:hidden;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:8px 10px;font-size:12px;z-index:30;box-shadow:0 4px 18px #0006}
-#vcpanel h4{margin:9px 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);display:flex;align-items:center;gap:6px}
+#vcpanel h4{margin:9px 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 #vcpanel h4 .sp{flex:1}
 #vcpanel .r{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:2px 0}#vcpanel .r label{color:var(--dim);min-width:84px}
 #vcpanel select,#vcpanel input[type=number],#vcpanel input[type=text]{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:2px 4px;font:inherit}
@@ -620,7 +623,7 @@ async function toggle() {
   if (cur) openVC(cur.id);
 }
 const btn = document.createElement('button'); btn.id = 'bVC'; btn.textContent = 'Annotations'; btn.title = 'View-dependent elements: tags, text, dimensions, grids, hatches - per view / category / element controls';
-btn.onclick = toggle; $('#bFid').before(btn);
+btn.onclick = toggle; $('#navSel').before(btn);      // left end of the right-hand buttons: stays visible in a narrow window
 window.vctl = {rebuild: () => V.sc && makeScene(V.sc), loadGhosts, state: () => V.state, V, openView: openVC, toggle, apply: applyStyles, set: patch => { Object.assign(V.state, patch); applyStyles(); }, pick: hitTest};
 // switching model closes the overlay
 setInterval(() => { if (V.on && V.mid !== S.mid) { closeVC(); } }, 1000);
