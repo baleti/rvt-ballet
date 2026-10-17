@@ -7,4 +7,7 @@ build.convert(src, out, log=lambda *a: None); compare_gt.main(out, os.path.expan
 m = json.load(open(out + '/meta.json'))['elements']; c = json.load(open(out + '/compare.json'))['elements']
 rows = [(v.get('vratio'), int(i), v) for i, v in c.items() if m[int(i)][1] == cls and v.get('vratio') and abs(v['vratio'] - 1) > .02]
 print(len(rows), 'bad of', sum(1 for i in c if m[int(i)][1] == cls))
-for r, i, v in sorted(rows, key=lambda x: x[0])[:60]: print(m[i][0], m[i][1], '|', m[i][2], '|', m[i][3], '| ratio', r, 'iou', v.get('iou'), v.get('fid'), 'area', v.get('aratio'))
+bands = [(float(a), float(b)) for a, b in (x.split(',') for x in os.environ.get('RVT_BAD_BANDS', '0,0.9/0.9,0.99/1.01,2/2,10/10,1e9').split('/'))]
+for lo, hi in bands:
+    sel = [r for r in rows if lo <= r[0] < hi]; print('-- ratio in [%g, %g): %d' % (lo, hi, len(sel)))
+    for r, i, v in sorted(sel, key=lambda x: x[0])[:int(os.environ.get('RVT_BAD_N', '25'))]: print(m[i][0], m[i][1], '|', m[i][2], '|', m[i][3], '| ratio', r, 'iou', v.get('iou'), v.get('fid'), 'area ratio', v.get('aratio'))

@@ -28,7 +28,10 @@ raw = reader.cached_load(src); ctx = build.Ctx(raw); ctx.src = src; els = build.
 ctx.raw_key = '%s|%s|%s|%s' % (os.path.abspath(src), os.path.getmtime(src), os.path.getsize(src), reader.reader_stamp())
 class _P:
     def set(self, *a, **k): pass
-res = build.run_geometry(ctx, els, _P()); got = {t[0]: t for t in res}
+sub = [i for i, el in enumerate(els) if el['id'] in ids]      # only the requested elements: the whole-file run_geometry of a big MEP file does not fit the 9 GB slice next to other jobs
+els_all = els; els = [els_all[i] for i in sub]
+build.prefetch_reader_meshes(ctx, els, _P(), None); build._G['ctx'] = ctx; build._G['els'] = els
+res = build._geo_chunk((0, len(els))); got = {t[0]: t for t in res}
 G = C.load_oracle(os.path.expanduser('~/rvt-research/gt_geom'), os.path.splitext(os.path.basename(src))[0])
 for i, el in enumerate(els):
     if el['id'] not in ids or i not in got: continue
@@ -44,3 +47,20 @@ for i, el in enumerate(els):
     g = G.get(el['id'], {})
     print(el['id'], el['cls'], 'parts', len(parts), 'tris', len(F), 'verts', len(V), 'welded', len(u), '| plain', round(plain, 4), 'welded-plain', round(wv, 4), 'mesh_volume', round(C._vol(V, F), 4), 'ORIENTED', round(oriented_volume(V, F), 4), 'gt', g.get('vol'),
           '| edges', len(E), 'non-2-manifold', bad, 'same-direction (flipped) pairs', same)
+
+    import rvt_elemmesh as EM
+    try:
+        from rvtviewer import build as B
+        import rvt_geometry as GGm
+        dd = B._doc(GGm, src); m = EM.element_mesh(dd, int(el['id']))
+        T2 = np.array([p for t in m['tris'] for p in t]).reshape(-1, 3); F2 = np.arange(len(T2)).reshape(-1, 3)
+        print('   python element_mesh(detail=3): tris', len(F2), 'oriented volume', round(oriented_volume(T2, F2), 4), 'flags', m.get('flags'))
+    except Exception as ex: print('   python element_mesh probe failed', repr(ex)[:150])
+    try:
+        nid = np.array(m.get('nid') or []); fidm = np.array(m.get('fid') or [])
+        if len(nid) == len(F2):
+            for b in sorted(set(nid.tolist())):
+                sel = np.where(nid == b)[0]; Tb = T2.reshape(-1, 3, 3)[sel]; Fb = np.arange(len(Tb) * 3).reshape(-1, 3)
+                lo = Tb.reshape(-1, 3).min(0); hi = Tb.reshape(-1, 3).max(0)
+                print('     body', b, 'tris', len(sel), 'faces', len(set(fidm[sel].tolist())) if len(fidm) == len(F2) else '?', 'oriented volume', round(oriented_volume(Tb.reshape(-1, 3), Fb), 4), 'bbox size', np.round(hi - lo, 3).tolist())
+    except Exception as ex: print('   per-body probe failed', repr(ex)[:150])

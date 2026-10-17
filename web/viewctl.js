@@ -325,10 +325,11 @@ function applyStyles() {
   });
   U.uRankMode.value = st.onTop ? 1 : 0;
   if (window.__world) window.__world.visible = !!st.model && !st.paper;
+  if (window.__caps) window.__caps.visible = !!st.model && !st.paper;      // section caps are model content too
   if (st.paper) { if (V.prevBg === undefined) V.prevBg = scene.background; scene.background = new THREE.Color(0xffffff); }
   else if (V.prevBg !== undefined) { scene.background = V.prevBg; V.prevBg = undefined; }
   // the view's own grids / levels (extents, heads per view) replace the viewer's whole-model grid and level planes
-  const hideNative = st.nativeOff && st.layers.datum !== false && B.layers.includes('datum');
+  const hideNative = st.paper || (st.nativeOff && st.layers.datum !== false && B.layers.includes('datum'));
   if (hideNative && !V.prevNative) V.prevNative = {g: S.gridGroup?.visible, l: S.lvlGroup?.visible};
   if (V.prevNative) { if (S.gridGroup) S.gridGroup.visible = hideNative ? false : V.prevNative.g; if (S.lvlGroup) S.lvlGroup.visible = hideNative ? false : V.prevNative.l; if (!hideNative) V.prevNative = null; }
   // lift along the view normal (metres), crop
@@ -471,10 +472,10 @@ async function openVC(vid, preset) {
 // ------------------------------------------------------------------ panel
 function injectCss() {
   const st = document.createElement('style'); st.textContent = `
-#vcpanel{position:absolute;right:8px;top:8px;width:330px;max-height:calc(100% - 60px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:8px 10px;font-size:12px;z-index:30;box-shadow:0 4px 18px #0006}
+#vcpanel{position:absolute;right:8px;top:8px;width:330px;max-height:calc(100% - 60px);overflow:auto;overflow-x:hidden;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:8px 10px;font-size:12px;z-index:30;box-shadow:0 4px 18px #0006}
 #vcpanel h4{margin:9px 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);display:flex;align-items:center;gap:6px}
 #vcpanel h4 .sp{flex:1}
-#vcpanel .r{display:flex;align-items:center;gap:5px;margin:2px 0}#vcpanel .r label{color:var(--dim);min-width:84px}
+#vcpanel .r{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:2px 0}#vcpanel .r label{color:var(--dim);min-width:84px}
 #vcpanel select,#vcpanel input[type=number],#vcpanel input[type=text]{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:2px 4px;font:inherit}
 #vcpanel input[type=number]{width:62px}#vcpanel input[type=color]{width:24px;height:18px;padding:0;border:1px solid var(--line);background:none}
 #vcpanel .vcbtns{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}#vcpanel button{padding:2px 7px;font-size:11px}
@@ -605,7 +606,7 @@ function renderPanel() {
   on('vcExport', () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({view: V.vid, state: V.state}, null, 1)], {type: 'application/json'})); a.download = `view-${V.vid}-controls.json`; a.click(); }, 'onclick');
   renderTree();
 }
-function closeVC() { V.on = false; if (V.prevBg !== undefined) { scene.background = V.prevBg; V.prevBg = undefined; } clearGhosts(); if (V.prevNative) { if (S.gridGroup) S.gridGroup.visible = V.prevNative.g; if (S.lvlGroup) S.lvlGroup.visible = V.prevNative.l; V.prevNative = null; } if (window.__world) window.__world.visible = true; disposeGroup(); V.sc = null; const p = $('#vcpanel'); if (p) p.hidden = true; $('#bVC')?.classList.remove('on'); dirty(); }
+function closeVC() { V.on = false; if (V.prevBg !== undefined) { scene.background = V.prevBg; V.prevBg = undefined; } clearGhosts(); if (V.prevNative) { if (S.gridGroup) S.gridGroup.visible = V.prevNative.g; if (S.lvlGroup) S.lvlGroup.visible = V.prevNative.l; V.prevNative = null; } if (window.__world) window.__world.visible = true; if (window.__caps) window.__caps.visible = true; disposeGroup(); V.sc = null; const p = $('#vcpanel'); if (p) p.hidden = true; $('#bVC')?.classList.remove('on'); dirty(); }
 
 // ------------------------------------------------------------------ entry
 async function toggle() {

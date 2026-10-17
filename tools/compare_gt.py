@@ -18,6 +18,7 @@ def oriented_volume(V, F):
     for v in E.values():
         if len(v) == 2: (t1, d1), (t2, d2) = v; adj[t1].append((t2, d1 == d2)); adj[t2].append((t1, d1 == d2))      # same direction on the shared edge = one of them must flip
     flip = np.zeros(n, bool); seen = np.zeros(n, bool); tot = 0.0
+    if any(len(v) == 1 for v in E.values()): return float('nan')      # open surface (boundary edges): its signed volume depends on the origin, not defined
     for s0 in range(n):
         if seen[s0]: continue
         comp = [s0]; seen[s0] = True; k = 0
@@ -37,7 +38,7 @@ def _xyz(t): return [float(v) for v in t.split(',')]
 
 def load_oracle(gtdir, stem=None):
     """session-181 gt_geom format (FORMAT.md): BB rows (id, min, max as x,y,z) and G rows (key=<id>.<depth>.<solid>, volume=..); depth-0 solids are summed per element"""
-    G = {}
+    G = {}; seen_sig = set()
     for f in glob.glob(os.path.join(gtdir, '*.tsv')):
         if stem and stem not in os.path.basename(f): continue
         for l in open(f, errors='ignore'):
@@ -48,6 +49,9 @@ def load_oracle(gtdir, stem=None):
             elif x[0] == 'G' and len(x) >= 3:
                 k = x[1].split('.')
                 try:
+                    sig = (k[0], k[1], round(float(x[2].split('=')[1]), 4), round(float(x[3].split('=')[1]), 3) if len(x) > 3 and '=' in x[3] else None, tuple(round(float(c), 3) for c in x[4].split('=')[1].split(',')) if len(x) > 4 and '=' in x[4] else None)      # tolerance: copies of one solid differ in the 6th digit (volume 0.128071 vs 0.128080)      # coincident duplicate solids (same volume, area, centroid; only the material differs, e.g. duct fittings with 3 copies): the viewer drops duplicate bodies on purpose, so the oracle counts them once
+                    if sig in seen_sig: continue
+                    seen_sig.add(sig)
                     d = G.setdefault(int(k[0]), {}); vol = float(x[2].split('=')[1]); d.setdefault('vd', {}).setdefault(k[1], 0.0); d['vd'][k[1]] += vol; d.setdefault('ad', {}).setdefault(k[1], 0.0); d['ad'][k[1]] += float(x[3].split('=')[1])
                 except (ValueError, IndexError): pass
     return {i: {'bb': v.get('bb'), 'vol': (v['vd'][min(v['vd'], key=int)] if v.get('vd') else None), 'area': (v['ad'][min(v['ad'], key=int)] if v.get('ad') else None)} for i, v in G.items() if v.get('bb')}      # solids of the shallowest depth present (family instances are depth 1)
@@ -94,7 +98,8 @@ def main(mdir, gtdir):
         V = np.vstack([p[0] for p in parts]); F = np.vstack([p[1] + sum(len(q[0]) for q in parts[:k]) for k, p in enumerate(parts)])
         lo, hi = V.min(0), V.max(0); r = {'fid': fid, 'iou': round(build.box_iou(lo, hi, np.array(g['bb'][0]), np.array(g['bb'][1])), 3)}
         if g['vol']:
-            vol = _vol(V, F); r['vratio'] = round(vol / g['vol'], 3)
+            vol = _vol(V, F)
+            if vol == vol: r['vratio'] = round(vol / g['vol'], 3)
         r['id'] = el['id']; r['mesh_area'] = round(float(np.linalg.norm(np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]]), axis=1).sum() / 2), 4)
         if g.get('area'): r['aratio'] = round(r['mesh_area'] / g['area'], 3)
         for cand in (os.path.join(gtdir, '%d.obj' % el['id']), os.path.join(gtdir, stem, '%d.obj' % el['id'])):
