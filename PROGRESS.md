@@ -117,3 +117,4 @@
 * Visual check of the paper-look overlay (Residential first floor 180203, headless top-down shot) against Revit's own PNG export: layout, wall cuts, door swings, plants, callout heads A-4 with their numbers, area label, UP stair labels, text size and position all match. Only visible difference: the floor hatch shows horizontal lines clearly but the vertical lines of the crosshatch are faint at 14x zoom (pattern data comes from rvt-sheets).
 * re-warmed all three demo files again with sheets cb53624 (Residential 17, Commercial 20, Structural 41 scenes); vctltest ALL OK and vcsweep OK on each.
 * Facades 2026 (demo file 3) warmed with sheets cb53624 (22 scenes); vcsweep OK, vctltest ALL OK on plan 873465. All four demo files (Residential, Commercial, Structural, Facades) now have current scenes.
+* 24bedb5: header button moved so it is visible in narrow windows; vcui.py real-input test added.
