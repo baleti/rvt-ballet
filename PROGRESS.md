@@ -124,3 +124,4 @@
 * aa172a5: Arial Narrow texts (fonts Arial Narrow bold italic: 2184 prims in the corpus scenes, Trebuchet MS and Arial are installed, ARchitxt falls back to Arial) drawn with a 0.82 horizontal squeeze instead of full-width Arial.
 * Revit 2017 rst_basic warmed (20 scenes) and swept: vcsweep OK, no JS exceptions (year coverage: 2017, 2020, 2024, 2026).
 * re-warmed the four demo files with rvt-sheets 0070540 (Residential 17, Commercial 20, Structural 41, Facades 22 scenes); vctltest ALL OK and vcsweep OK on each. Older caches (2017, Structural 2026) are stale (served with the redraw button).
+* 2026-10-17 (c5-viewer): after merging vctl 4a122ba..1a48e76 and the Rust smooth_part hook: uitest6 / 7 / 12 ALL OK, uitest11 all PASS, demo_smoke x3 OK on master a17687b.
