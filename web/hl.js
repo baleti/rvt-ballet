@@ -10,7 +10,7 @@ const $ = s => document.querySelector(s);
 const dirty = () => window.__dirty();
 const STYLES = {hidden: 'Hidden Line', shaded: 'Shaded', consistent: 'Consistent Colors', realistic: 'Realistic', wire: 'Wireframe'};
 const STYLE_ID = {realistic: 0, shaded: 0, hidden: 1, wire: 2, consistent: 4};
-const H = window.__hl = {style: 'realistic', edges: [], twins: [], cat: {}, thresholdDeg: 30, group: null, version: 0};
+const H = window.__hl = {style: 'realistic', edges: [], twins: [], cat: {}, thresholdDeg: 30, minEdge: +(new URLSearchParams(location.search).get('minedge') || 0.02), group: null, version: 0};
 
 // default hidden-line graphics per category (until the view's resolved overrides are applied through H.setCat)
 H.defCat = {'Floors': {a: 0.85}};   // used when no view graphics are open
@@ -19,7 +19,7 @@ H.cat = Object.assign({}, H.defCat);
 const WORKER_SRC = `
 class G { constructor(T, n) { this.T = T; this.a = new T(n); this.n = 0; } push(...v) { if (this.n + v.length > this.a.length) { const b = new this.T(this.a.length * 2 + v.length); b.set(this.a); this.a = b; } for (let i = 0; i < v.length; i++) this.a[this.n++] = v[i]; } get length() { return this.n; } out() { return this.a.slice(0, this.n); } }
 self.onmessage = ev => {
-  const {pos, index, eidx, thr, id} = ev.data; const n = pos.length / 3, nt = index.length / 3;
+  const {pos, index, eidx, thr, id, minLen} = ev.data; const ml2 = (minLen || 0) * (minLen || 0); const n = pos.length / 3, nt = index.length / 3;
   const wid = new Int32Array(n), qx = new Int32Array(n), qy = new Int32Array(n), qz = new Int32Array(n);      // weld vertices that coincide within 1 mm (open addressing table)
   let size = 1024; while (size < n * 2) size <<= 1; const mask = size - 1, tab = new Int32Array(size).fill(-1);
   for (let i = 0; i < n; i++) {
@@ -28,11 +28,12 @@ self.onmessage = ev => {
     for (;;) { const r = tab[h]; if (r < 0) { tab[h] = i; f = i; break; } if (qx[r] === x && qy[r] === y && qz[r] === z) { f = r; break; } h = (h + 1) & mask; }
     wid[i] = f;
   }
-  const nrm = new Float32Array(nt * 3), cen = new Map();
+  const nrm = new Float32Array(nt * 3), cen = new Map(), sliver = new Uint8Array(nt);
   for (let t = 0; t < nt; t++) {
     const a = index[3*t], b = index[3*t+1], c = index[3*t+2];
     const ux = pos[3*b]-pos[3*a], uy = pos[3*b+1]-pos[3*a+1], uz = pos[3*b+2]-pos[3*a+2], vx = pos[3*c]-pos[3*a], vy = pos[3*c+1]-pos[3*a+1], vz = pos[3*c+2]-pos[3*a+2];
     let nx = uy*vz-uz*vy, ny = uz*vx-ux*vz, nz = ux*vy-uy*vx; const l = Math.hypot(nx, ny, nz) || 1; nrm[3*t] = nx/l; nrm[3*t+1] = ny/l; nrm[3*t+2] = nz/l;
+    const wx = pos[3*c]-pos[3*b], wy = pos[3*c+1]-pos[3*b+1], wz = pos[3*c+2]-pos[3*b+2], me = Math.max(ux*ux+uy*uy+uz*uz, vx*vx+vy*vy+vz*vz, wx*wx+wy*wy+wz*wz); if (l < 2e-4 * me) sliver[t] = 1;      // needle triangles have unstable normals
     const e = eidx[a]; let s = cen.get(e); if (!s) { s = [0,0,0,0]; cen.set(e, s); }
     s[0] += (pos[3*a]+pos[3*b]+pos[3*c])/3; s[1] += (pos[3*a+1]+pos[3*b+1]+pos[3*c+1])/3; s[2] += (pos[3*a+2]+pos[3*b+2]+pos[3*c+2])/3; s[3]++;
   }
@@ -58,6 +59,8 @@ self.onmessage = ev => {
     const va = ea.a[s], vb = eb.a[s], A = t1.a[s], B = t2.a[s];
     if (cnt.a[s] !== 2) { push(va, vb, Z, Z, 0); continue; }
     if (eidx[index[3*A]] !== eidx[index[3*B]]) { push(va, vb, Z, Z, 0); continue; }
+    if (sliver[A] || sliver[B]) continue;
+    { const dx = pos[3*va]-pos[3*vb], dy = pos[3*va+1]-pos[3*vb+1], dz = pos[3*va+2]-pos[3*vb+2]; if (dx*dx+dy*dy+dz*dz < ml2) continue; }      // specks: tiny conditional edges
     let n1 = [nrm[3*A], nrm[3*A+1], nrm[3*A+2]], n2 = [nrm[3*B], nrm[3*B+1], nrm[3*B+2]]; let d = n1[0]*n2[0]+n1[1]*n2[1]+n1[2]*n2[2];
     if (d < 0) { n2 = [-n2[0], -n2[1], -n2[2]]; d = -d; }
     if (d > cosS && d >= cosT) continue;
@@ -106,7 +109,7 @@ function runEdge(mesh) {
     let w = workers[0]; if (!w) { w = new Worker(URL.createObjectURL(new Blob([WORKER_SRC], {type: 'text/javascript'}))); w.onmessage = ev => { const j = jobs.get(ev.data.id); jobs.delete(ev.data.id); j && j(ev.data); }; workers.push(w); }
     const g = mesh.geometry, id = ++jid; jobs.set(id, res);
     const ei = g.attributes._eidx; const idx = g.index.array;
-    w.postMessage({id, pos: g.attributes.position.array, index: idx, eidx: ei ? ei.array : new Float32Array(g.attributes.position.count), thr: H.thresholdDeg});
+    w.postMessage({id, pos: g.attributes.position.array, index: idx, eidx: ei ? ei.array : new Float32Array(g.attributes.position.count), thr: H.thresholdDeg, minLen: H.minEdge});
   });
 }
 
@@ -193,6 +196,7 @@ H.loadView = async function (v) {
 };
 let lastView; setInterval(() => { if (S.openView !== lastView) { lastView = S.openView; H.viewReady = false; H.loadView(S.openView); } }, 400);
 
+H.setOffset = function (f, u) { H.off = [f, u]; for (const m of (H.meshes || []).concat(H.twins)) { m.material.polygonOffsetFactor = f; m.material.polygonOffsetUnits = u; } dirty(); };
 let saved = null;
 H.setStyle = function (st, user) {
   if (user) H.userChose = true;
