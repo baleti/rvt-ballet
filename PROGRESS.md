@@ -144,3 +144,4 @@
 * DEMO NOTE: with hidden line as default the first demo step (materials/textures house) must pick Realistic in the Style select; merge decision with c3-viewer / orchestrator.
 * vg: sheets dev has the vg.json route (67a24e0), sheets master does not; my four-file re-warm used master code (scenes fresh, X-Vc-Stale 0). Re-warm again when dev is promoted to master.
 * vg.json is in sheets master (merge of branch vg): /api/m/{mid}/vc/vg/{vid} returns 200 for the four demo files; real end-to-end pick on Structural L1 shows the V/G block (view template Structural Framing Plan). Scenes still X-Vc-Stale 0, no re-warm needed.
+* 2026-10-17: after c3-viewer camera fix (91ee8c3, views looked along the wrong direction) vcalign on Structural sections 582397/201907/579975/201922 still PASS (placement is independent of the camera); section North overlay renders in the right place over the model. remote-host rule from the user: heavy tests only on remote-host from now on.
