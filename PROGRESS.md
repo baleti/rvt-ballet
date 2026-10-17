@@ -121,3 +121,4 @@
 * 2026 Structural (55_Snowdon) warmed (41 scenes) and swept: vcsweep OK, no JS exceptions (first check of a Revit 2026 Structural file in the overlay).
 * demo_smoke OK on vctl head for Residential, Structural 2024, Facades 2026 (all three demo files), 2026-10-17.
 * URL preset link checked: /?vc=180203&vcp=NAME#model opens the view with the saved preset (textSize 2, lineScale 1.5 applied; test preset removed afterwards).
+* aa172a5: Arial Narrow texts (fonts Arial Narrow bold italic: 2184 prims in the corpus scenes, Trebuchet MS and Arial are installed, ARchitxt falls back to Arial) drawn with a 0.82 horizontal squeeze instead of full-width Arial.
