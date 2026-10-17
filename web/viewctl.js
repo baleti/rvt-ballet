@@ -146,7 +146,7 @@ function textTexture(lines, font, bold, italic) {
   const PX = 48, c = document.createElement('canvas'), g = c.getContext('2d');
   const fam = (font ? font + ', ' : '') + 'Arial, "Liberation Sans", Helvetica, sans-serif';
   // Revit's Arial Narrow is not installed in browsers (falls back to full-width Arial, ~20 % too wide): squeeze the fallback
-  const NARROW = /narrow|condensed/i.test(font || '') ? 0.82 : 1;
+  const NARROW = 1;      // Revit PDFs print Arial Narrow as plain Arial (reference exports lack the font): no squeeze
   const F = `${italic ? 'italic ' : ''}${bold ? 'bold ' : ''}${PX}px ${fam}`;
   g.font = F;
   const w = Math.max(2, Math.ceil(Math.max(...lines.map(l => g.measureText(l).width)) * NARROW)), lh = PX * LINE_PITCH, h = Math.ceil(lh * lines.length + PX * 0.3);
