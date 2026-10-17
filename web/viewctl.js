@@ -325,10 +325,11 @@ function applyStyles() {
   });
   U.uRankMode.value = st.onTop ? 1 : 0;
   if (window.__world) window.__world.visible = !!st.model && !st.paper;
+  if (window.__caps) window.__caps.visible = !!st.model && !st.paper;      // section caps are model content too
   if (st.paper) { if (V.prevBg === undefined) V.prevBg = scene.background; scene.background = new THREE.Color(0xffffff); }
   else if (V.prevBg !== undefined) { scene.background = V.prevBg; V.prevBg = undefined; }
   // the view's own grids / levels (extents, heads per view) replace the viewer's whole-model grid and level planes
-  const hideNative = st.nativeOff && st.layers.datum !== false && B.layers.includes('datum');
+  const hideNative = st.paper || (st.nativeOff && st.layers.datum !== false && B.layers.includes('datum'));
   if (hideNative && !V.prevNative) V.prevNative = {g: S.gridGroup?.visible, l: S.lvlGroup?.visible};
   if (V.prevNative) { if (S.gridGroup) S.gridGroup.visible = hideNative ? false : V.prevNative.g; if (S.lvlGroup) S.lvlGroup.visible = hideNative ? false : V.prevNative.l; if (!hideNative) V.prevNative = null; }
   // lift along the view normal (metres), crop
@@ -605,7 +606,7 @@ function renderPanel() {
   on('vcExport', () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({view: V.vid, state: V.state}, null, 1)], {type: 'application/json'})); a.download = `view-${V.vid}-controls.json`; a.click(); }, 'onclick');
   renderTree();
 }
-function closeVC() { V.on = false; if (V.prevBg !== undefined) { scene.background = V.prevBg; V.prevBg = undefined; } clearGhosts(); if (V.prevNative) { if (S.gridGroup) S.gridGroup.visible = V.prevNative.g; if (S.lvlGroup) S.lvlGroup.visible = V.prevNative.l; V.prevNative = null; } if (window.__world) window.__world.visible = true; disposeGroup(); V.sc = null; const p = $('#vcpanel'); if (p) p.hidden = true; $('#bVC')?.classList.remove('on'); dirty(); }
+function closeVC() { V.on = false; if (V.prevBg !== undefined) { scene.background = V.prevBg; V.prevBg = undefined; } clearGhosts(); if (V.prevNative) { if (S.gridGroup) S.gridGroup.visible = V.prevNative.g; if (S.lvlGroup) S.lvlGroup.visible = V.prevNative.l; V.prevNative = null; } if (window.__world) window.__world.visible = true; if (window.__caps) window.__caps.visible = true; disposeGroup(); V.sc = null; const p = $('#vcpanel'); if (p) p.hidden = true; $('#bVC')?.classList.remove('on'); dirty(); }
 
 // ------------------------------------------------------------------ entry
 async function toggle() {
