@@ -7,9 +7,10 @@ async def main():
     try:
         cdp.wait_http(base + '/api/models', 600); mid = json.load(urllib.request.urlopen(base + '/api/models'))[0]['id']
         b = cdp.Browser(size=(1400, 900)); await b.start(); await b.goto(base + '/#' + mid); await b.wait('window.__loaded===true', 300); await b.wait('window.__hlReady===true', 300)
-        print(await b.ev("(async()=>{const V=S.meta.views;const v=V.find(x=>x.id===783882);window.openView(v);return v.name+' '+v.kind})()"))
+        print(await b.ev("(async()=>{const V=S.meta.views;const v=V.find(x=>x.id===756129);window.openView(v);return v.name+' '+v.kind+' '+JSON.stringify(v.display||null)})()"))
         await b.wait('__hl.viewReady===true', 60); await asyncio.sleep(2)
         print(await b.ev("JSON.stringify({viewId:__hl.viewId, el:Object.keys(__hl.el||{}).length, hidden:Array.from(S.hidden).reduce((a,x)=>a+x,0)})"))
+        await asyncio.sleep(3); print('style', await b.ev('JSON.stringify(vstyle.get())'))
         await b.shot(out + '/v_open.png')
         await b.ev("document.getElementById('vbOff').click();0"); await asyncio.sleep(2)
         print(await b.ev("JSON.stringify({viewId:__hl.viewId, el:__hl.el?Object.keys(__hl.el).length:null, hidden:Array.from(S.hidden).reduce((a,x)=>a+x,0)})"))
