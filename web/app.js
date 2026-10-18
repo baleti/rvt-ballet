@@ -940,6 +940,7 @@ function openView(v) {
   } else if (v.dir) {
     const d = dirV(v.dir); S.viewClip = new THREE.Plane(d.clone().negate(), d.dot(o));      // keep what lies beyond the cut plane, away from the eye (dir points to the eye)
     const cr = v.crop && cropFrame(v.crop, d);
+    if (v.depth > 0) S.viewCrop = (S.viewCrop || []).concat(new THREE.Plane(d.clone(), -d.dot(o) + v.depth));      // view depth (far clip, metres beyond the cut plane) when the reader supplies views[].depth
     if (cr) { const t = cr.c.clone().addScaledVector(d, -d.dot(cr.c) + d.dot(o)); controls.target.copy(t); camera.position.copy(t).addScaledVector(d, cr.dist); }
     else { controls.target.copy(o); camera.position.copy(o).addScaledVector(d, size * 0.8); }
   }

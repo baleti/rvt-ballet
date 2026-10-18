@@ -12,7 +12,7 @@ async def main(f, out):
         mid = [m for m in json.load(urllib.request.urlopen(base + '/api/models')) if m['name'] == os.path.basename(f)][0]['id']
         while json.load(urllib.request.urlopen('%s/m/%s/meta.json' % (base, mid))).get('phase') != 'done': time.sleep(2)
         b = cdp.Browser(size=(1100, 700)); await b.start()
-        await b.goto(base + '/#' + mid); await b.wait('window.__loaded===true', 300)
+        await b.goto(base + '/#' + mid); await b.wait('window.__loaded===true', 300); await b.wait('window.__hl!==undefined', 120)
         await b.ev("window.__errs=[];addEventListener('error',e=>__errs.push(String(e.message)));const ce=console.error;console.error=(...a)=>{__errs.push(a.join(' '));ce(...a)};0")
         for st in ['hidden', 'shaded', 'consistent', 'wire', 'realistic', 'hidden']:
             await b.ev("__hl.setStyle(%s);0" % json.dumps(st))

@@ -77,6 +77,12 @@ def views_sheets(ctx):
                     if rg: v['range'] = rg
                 cr = _crop(ctx, f)
                 if cr: v['crop'] = cr
+                if c == 'DBViewSection':      # view depth: Viewer.m_boundedSpace z axis, far side offset in ft, when its far bound is active (m_boundActive[2][0])
+                    try:
+                        vr = ctx.recs.get(ctx.eid_int(f.get('m_viewerId')) or -1); bs = (vr['fields'].get('m_boundedSpace') if vr else None) or {}
+                        dz = float(bs['m_boundOffset'][2][0]) * 0.3048
+                        if (bs.get('m_boundActive') or [[], [], []])[2][0] and 0 < dz < 1e4: v['depth'] = round(dz, 4)
+                    except Exception: pass
             views.append(v)
     # 3D views' section boxes: ModelClipBox.m_viewer3dId -> Viewer3d.m_dbViewId -> view; stored as origin + basis + per-axis [max, min] offsets (ft)
     byid = {v['id']: v for v in views}
