@@ -189,3 +189,4 @@
 - merged master (app.js, materials.js, viewctl.js changes) into vctl: demo_smoke OK, vctltest ALL OK, vcui ALL OK, X-Vc-Stale 0 on Residential 180203.
 - queued Structural re-warm for sheets d44ec2b in H1-QUEUE (remote-host 10.4 GB free, below gate).
 - vg route check Residential 180203 (?full=1): works, filters [] so 'colour from filter' still has no real-data case here; remote-host 7.9 GB free, Structural re-warm still queued.
+- 'colour from filter' real-data case: only Snowdon Structural has filtered views (54 filters); the pick-box V/G block was already verified with that real full JSON (mock fetch, 3840c90). A live browser check on Structural would need a >1.5 GB server on remote-host (forbidden) and remote-host has no chromium: parked until chromium exists on remote-host.
