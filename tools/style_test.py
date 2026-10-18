@@ -16,7 +16,7 @@ async def main(f, out):
         await b.ev("window.__errs=[];addEventListener('error',e=>__errs.push(String(e.message)));const ce=console.error;console.error=(...a)=>{__errs.push(a.join(' '));ce(...a)};0")
         for st in ['hidden', 'shaded', 'consistent', 'wire', 'realistic', 'hidden']:
             await b.ev("__hl.setStyle(%s);0" % json.dumps(st))
-            if st in ('hidden', 'wire'): await b.wait('window.__hlReady===true', 600)
+            if st != 'realistic': await b.wait('window.__hlReady===true', 600)
             await asyncio.sleep(1.5); await b.shot('%s/%s.png' % (out, st)); print(st, 'ok', await b.ev("__hl.style+' bg='+__scene.background+' uStyle='+__world.parent.children.length"))
         errs = await b.ev('JSON.stringify(__errs)'); print('js errors:', errs); ok = errs == '[]'
     finally:
