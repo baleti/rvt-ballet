@@ -157,3 +157,4 @@
 * Edge cache: extraction results go to IndexedDB (key: model id, build stamp, mesh, edge angle, min edge); Snowdon rebuild 2112 ms -> 208 ms (tools/hl_cache_test.py). Default minimum conditional edge 1 cm (2 cm cost 1% F1: 0.900 -> 0.891).
 * Material graphics (surface/cut pattern + colour per material) requested from the reader: Revit paints a material's surface pattern colour in hidden line (the grey interior walls of house1).
 * f1012fb: style options row in the panel.
+* 2026-10-18: sheets master 0cb42bd (vg + annot merges) staled the scenes: Residential 17 and Commercial 20 re-warmed and pulled; Structural and Facades queued (remote-host busy). No browser tests run.
