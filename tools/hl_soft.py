@@ -92,6 +92,7 @@ for P, EI, T in prims:
 P0 = np.concatenate([e[0] for e in EDGES]); P1 = np.concatenate([e[1] for e in EDGES]); EL = np.concatenate([e[2] for e in EDGES]); KD = np.concatenate([e[3] for e in EDGES])
 N1 = np.concatenate([e[4] for e in EDGES]); N2 = np.concatenate([e[5] for e in EDGES])
 sil = (N1 @ view_vec) * (N2 @ view_vec) < 0
+if os.environ.get('HL_DEBUG'): print('conditional edges', int((KD == 1).sum()), 'silhouettes', int(sil[KD == 1].sum()), 'view_vec', view_vec, 'sample n1.v', (N1[KD == 1] @ view_vec)[:6], 'n2.v', (N2[KD == 1] @ view_vec)[:6])
 drawn = (KD == 0) | sil
 P0, P1, EL = P0[drawn], P1[drawn], EL[drawn]
 
@@ -140,6 +141,8 @@ for Pp, EI, T in prims:
         Q = proj(Pp); tt = T[sel]; tal = alpha[te[sel]]
         raster(np.ascontiguousarray(Q[tt, 0]), np.ascontiguousarray(Q[tt, 1]), np.ascontiguousarray(Q[tt, 2]), np.ascontiguousarray(tal), W, H, zb, ab)
 # translucent faces in front of the opaque ones fade the lines behind them: ta holds the opacity of the nearest translucent face (single value per view: mean alpha of translucent elements)
+from scipy.ndimage import maximum_filter
+zo = maximum_filter(zo, size=3); zt = maximum_filter(zt, size=3)      # silhouette edges lie where the surface is edge-on: its depth changes by a lot within a pixel, so occlusion is tested against the farthest depth of the 3x3 neighbourhood (the browser's polygonOffset slope factor)
 img = np.full((H, W), 255, np.uint8)
 Q0, Q1 = proj(P0), proj(P1); eps = np.ptp(bb @ d) * a.eps
 thick = (lw[EL] >= 0.8).astype(np.int64)
