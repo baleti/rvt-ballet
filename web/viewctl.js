@@ -684,7 +684,8 @@ function vsSet(id, opts, save) {
 // a view without a saved style takes the Revit display setting stored in the view (meta views[].display.vstyle), before the global default
 function vsFromView() {
   const d = S.openView && S.openView.display; if (!d || !vsList().some(x => x.id === d.vstyle)) return null;
-  const o = {}; if (typeof d.silhouettes === 'boolean') o.silhouettes = d.silhouettes; if (['off', 'faint', 'dashed'].includes(d.hidden_lines)) o.hiddenLines = d.hidden_lines;
+  const o = {}; if (d.silhouettes != null) o.silhouettes = !!d.silhouettes;      // viewdisp.json stores 0 / 1
+  if (['off', 'faint', 'dashed'].includes(d.hidden_lines)) o.hiddenLines = d.hidden_lines; else if (d.hidden_lines != null) o.hiddenLines = d.hidden_lines ? 'faint' : 'off';      // 1 = hidden lines shown
   return {id: d.vstyle, opts: o};
 }
 // views[].display is computed in the background on the first load of a model and appears in a later meta.json: re-read it (once per model per page) and apply it to the open view unless a style was saved meanwhile
