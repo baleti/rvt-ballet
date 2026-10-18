@@ -29,6 +29,9 @@ async def main(url, vid):
         check('closing the view returns to the default style', await b.ev('(vstyle.get().id)==="hiddenline"'), await b.ev('(vstyle.get().id)'))
         await b.ev('window.vctl.openView(%s).then(()=>1)' % vid); await asyncio.sleep(1.5)
         check('reopening the view restores its saved style', await b.ev('(vstyle.get().id)==="realistic"'), await b.ev('(vstyle.get().id)'))
+        await b.ev('(()=>{const s=document.getElementById("vsSel");s.value="hiddenline";s.dispatchEvent(new Event("change"));return 1})()'); await asyncio.sleep(0.8)
+        await b.ev('(()=>{const e=document.getElementById("vsEA");e.value="45";e.dispatchEvent(new Event("change"));return 1})()'); await asyncio.sleep(0.3)
+        check('style options control reaches vstyle', await b.ev('(vstyle.get().opts||{}).edgeAngle===45'), await b.ev('JSON.stringify(vstyle.get().opts)'))
         # preset roundtrip
         await b.ev('(async()=>{const V=vctl.V;V.presets.__vs=Object.assign(JSON.parse(JSON.stringify(V.state)),{style:{id:"hiddenline",opts:{}}});vctl.vstyle.set("shaded");return 1})()')
         check('preset has a style field', await b.ev('!!vctl.V.presets.__vs.style'))

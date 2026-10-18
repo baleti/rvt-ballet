@@ -17,14 +17,24 @@ def place(m, dx, dy, shape):
 def best(R, O):
     Rb = blur(R, 4); Rb -= Rb.mean(); res = (-1, 1, 0, 0); S = (2048, 2048)
     FR = np.fft.rfft2(Rb, S)
-    for s in np.linspace(.6, 1.6, 51):
+    for s in np.geomspace(.3, 2.5, 61):
         Os = resize(O, s); Ob = blur(Os, 4); Ob -= Ob.mean(); c = np.fft.irfft2(FR * np.conj(np.fft.rfft2(Ob, S)), S)
         c = c / (np.linalg.norm(Rb) * np.linalg.norm(Ob) + 1e-9); i = np.unravel_index(np.argmax(c), c.shape)
         if c[i] > res[0]: res = (c[i], s, i[1] if i[1] < 1024 else i[1] - 2048, i[0] if i[0] < 1024 else i[0] - 2048)
     return res
 def dil(m, r=3): return np.asarray(Image.fromarray((m * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(2 * r + 1))) > 0
 R, O = load(sys.argv[1]), load(sys.argv[2])
-cor, s, dx, dy = best(R, O); Os = place(resize(O, s), dx, dy, R.shape)
+cor, s, dx, dy = best(R, O)
+def f1(Os, dR):
+    p = (Os & dR).sum() / max(Os.sum(), 1); return p
+dR = dil(R); bestf = (-1, s, dx, dy)
+for s2 in s * np.linspace(.96, 1.04, 9):                  # refine: the line F1 itself is maximised over a small scale / shift neighbourhood
+    Or = resize(O, s2); Od = dil(Or)
+    for ddx in range(-6, 7, 2):
+        for ddy in range(-6, 7, 2):
+            Q = place(Or, dx + ddx, dy + ddy, R.shape); Qd = place(Od, dx + ddx, dy + ddy, R.shape); pp = (Q & dR).sum() / max(Q.sum(), 1); rr = (R & Qd).sum() / max(R.sum(), 1); ff = 2 * pp * rr / max(pp + rr, 1e-9)
+            if ff > bestf[0]: bestf = (ff, s2, dx + ddx, dy + ddy)
+_, s, dx, dy = bestf; Os = place(resize(O, s), dx, dy, R.shape)
 p = (Os & dil(R)).sum() / max(Os.sum(), 1); r = (R & dil(Os)).sum() / max(R.sum(), 1); f = 2 * p * r / max(p + r, 1e-9)
 print('registration: scale %.3f shift (%d, %d) corr %.2f | precision %.3f recall %.3f F1 %.3f' % (s, dx, dy, cor, p, r, f))
 if len(sys.argv) > 3:
