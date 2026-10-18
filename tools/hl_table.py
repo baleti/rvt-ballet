@@ -9,7 +9,7 @@ for name in (sys.argv[1:] or sorted(os.listdir(O))):
             t = l.rstrip('\n').split('\t')
             if t[0] == 'VIEW': names[t[1]] = '%s %s' % (t[2], t[4])
     for f in sorted(os.listdir('%s/%s' % (O, name))):
-        m = re.match(r'(\d+)__ours3d_hl2\.png$', f)
+        m = re.match(r'(\d+)__ours3d_hl2?\.png$', f)
         if not m: continue
         vid = m.group(1); rv = '%s/%s/%s.png' % (R, name, vid)
         if not os.path.exists(rv): continue

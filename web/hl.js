@@ -14,7 +14,7 @@ const STYLE_ID = {realistic: 0, shaded: 0, hidden: 1, wire: 2, consistent: 4};
 const H = window.__hl = {style: 'realistic', edges: [], twins: [], cat: {}, thresholdDeg: 30, minEdge: +(new URLSearchParams(location.search).get('minedge') || 0.01), group: null, version: 0};
 
 // default hidden-line graphics per category (until the view's resolved overrides are applied through H.setCat)
-H.defCat = {'Floors': {a: 0.85}};   // used when no view graphics are open
+H.defCat = {};   // used when no view graphics are open
 H.cat = Object.assign({}, H.defCat);
 
 const WORKER_SRC = `
