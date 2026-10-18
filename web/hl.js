@@ -11,7 +11,7 @@ const $ = s => document.querySelector(s);
 const dirty = () => window.__dirty();
 const STYLES = {hidden: 'Hidden Line', shaded: 'Shaded', consistent: 'Consistent Colors', realistic: 'Realistic', wire: 'Wireframe'};
 const STYLE_ID = {realistic: 0, shaded: 0, hidden: 1, wire: 2, consistent: 4};
-const H = window.__hl = {style: 'realistic', edges: [], twins: [], cat: {}, thresholdDeg: 30, minEdge: +(new URLSearchParams(location.search).get('minedge') || 0.02), group: null, version: 0};
+const H = window.__hl = {style: 'realistic', edges: [], twins: [], cat: {}, thresholdDeg: 30, minEdge: +(new URLSearchParams(location.search).get('minedge') || 0.01), group: null, version: 0};
 
 // default hidden-line graphics per category (until the view's resolved overrides are applied through H.setCat)
 H.defCat = {'Floors': {a: 0.85}};   // used when no view graphics are open
@@ -108,6 +108,12 @@ const edgeMat = edgeMats[0];
 
 const _v2 = new THREE.Vector2();
 let workers = [], jobs = new Map(), jid = 0;
+// edge results are cached in IndexedDB per model build / mesh / extraction parameters (only for completed models): re-opening a model costs no extraction
+let _db = null;
+function idb() { return _db || (_db = new Promise((res, rej) => { try { const r = indexedDB.open('rvt-hl-edges', 1); r.onupgradeneeded = () => r.result.createObjectStore('e'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } })); }
+async function idbGet(k) { try { const db = await idb(); return await new Promise(res => { const q = db.transaction('e').objectStore('e').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(null); }); } catch (e) { return null; } }
+async function idbPut(k, v) { try { const db = await idb(); db.transaction('e', 'readwrite').objectStore('e').put(v, k); } catch (e) {} }
+const edgeKey = i => (S.meta && (S.meta.phase || 'done') === 'done') ? [S.mid, S.meta.built, S.N, H.meshes.length, i, H.thresholdDeg, H.minEdge, 3].join('|') : null;
 function runEdge(mesh) {
   return new Promise(res => {
     let w = workers[0]; if (!w) { w = new Worker(URL.createObjectURL(new Blob([WORKER_SRC], {type: 'text/javascript'}))); w.onmessage = ev => { const j = jobs.get(ev.data.id); jobs.delete(ev.data.id); j && j(ev.data); }; workers.push(w); }
@@ -136,7 +142,7 @@ async function buildEdges() {
   H.ready = false; const t0 = performance.now();
   for (const m of H.meshes) {
     if (ver !== H.version) return;
-    const r = await runEdge(m); if (ver !== H.version) return;
+    const ck = edgeKey(H.meshes.indexOf(m)); let r = ck && await idbGet(ck); if (!r) { r = await runEdge(m); if (ck && r.pos.length) idbPut(ck, r); } if (ver !== H.version) return;
     if (!r.pos.length) continue;
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(r.pos, 3)); g.setAttribute('_eidx', new THREE.BufferAttribute(r.eidx, 1));
     g.setAttribute('n1', new THREE.BufferAttribute(r.n1, 3, true)); g.setAttribute('n2', new THREE.BufferAttribute(r.n2, 3, true)); g.setAttribute('kind', new THREE.BufferAttribute(r.kind, 1));
