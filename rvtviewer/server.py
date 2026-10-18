@@ -90,6 +90,13 @@ def make_app(models):
     async def meta(req):
         mid, d = mdir(req); fn = os.path.join(d, 'meta.json')
         if not os.path.exists(fn): raise web.HTTPNotFound()
+        try:      # per-view display options arrive after the first open (viewdisp.py), merged here
+            from . import viewdisp
+            b = viewdisp.merged_meta(fn, d)
+            if b is not None: return web.Response(body=b, content_type='application/json')
+            sf = os.path.join(d, 'summary.json')      # written when the model is complete
+            if os.path.exists(sf): viewdisp.kick(d, json.load(open(sf)).get('src'))
+        except Exception: pass
         return web.FileResponse(fn)
     async def glb(req):
         mid, d = mdir(req); return web.FileResponse(os.path.join(d, 'model.glb'))
