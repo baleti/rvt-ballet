@@ -186,3 +186,4 @@
 * 2026-10-18 (c6-viewer): review-compare 3d_55_Snowdon_Structural elevation views (e.g. 4969 South hidden line, reg_score 0.227) look wrong in our hidden-line render (scattered lines, framing/clip of the elevation camera): candidate next item, needs a Structural-size browser run (remote-host rule: not now; remote-host has no chromium). vsmoke6 still refused (remote-host 8.9 GB free).
 * 2026-10-18 (c6-viewer): Residential South elevation (hidden line, shot3d, remote-host capped): renders correctly with brick / siding / shingle hatch from the new pattern shader. So the Snowdon elevation failure (4969) is specific to that file (size, crop, far clip), not the elevation path in general.
 * 2026-10-18 (c6-viewer): demo_smoke OK on 2020 Commercial (remote-host, 3G cap, 7 MB file), so vsmoke6 withdrawn from the h1 queue.
+- merged master (app.js, materials.js, viewctl.js changes) into vctl: demo_smoke OK, vctltest ALL OK, vcui ALL OK, X-Vc-Stale 0 on Residential 180203.
