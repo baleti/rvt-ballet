@@ -52,7 +52,7 @@ async def main(a):
         a.style = a.style or 'realistic'      # the viewer now opens in hidden line; shots stay shaded unless --style hidden
         if a.style:
             await b.ev("(()=>{__hl.setStyle(%s);return 0})()" % json.dumps(a.style))
-            if a.style in ('hidden', 'wire'): await b.wait('window.__hlReady===true', 600); print('edges', await b.ev('__hl.edgeCount+" edges in "+__hl.edgeMs+" ms, meshes "+__hl.meshes.length'))
+            if a.style != 'realistic': await b.wait('window.__hlReady===true', 600); print('edges', await b.ev('__hl.edgeCount+" edges in "+__hl.edgeMs+" ms, meshes "+__hl.meshes.length'))
         if a.fit:
             await b.ev("""(()=>{const c=__camera,o=__controls,B=S.meta.bbox,bb=new THREE.Box3(new THREE.Vector3(B[0][0],B[0][2],-B[1][1]),new THREE.Vector3(B[1][0],B[1][2],-B[0][1]));      // model box from meta (stray far-off meshes must not shrink the view)
               
@@ -63,6 +63,7 @@ async def main(a):
                 const cx=(a[0]+a[1])/2,cy=(a[2]+a[3])/2,right=new THREE.Vector3().setFromMatrixColumn(c.matrixWorld,0),upv=new THREE.Vector3().setFromMatrixColumn(c.matrixWorld,1),hh=D*Math.tan(c.fov*Math.PI/360);
                 tg.addScaledVector(right,cx*hh*c.aspect).addScaledVector(upv,cy*hh)}
               let lo=0.5,hi=1e5;for(let k=0;k<60;k++){const m=Math.sqrt(lo*hi);if(ndc(m,tg)>0.95)lo=m;else hi=m}ndc(hi,tg);o.target.copy(tg);o.update();__dirty();return 0})()""")
+        print('camera', await b.ev('JSON.stringify([__camera.position.toArray().map(x=>+x.toFixed(2)),__controls.target.toArray().map(x=>+x.toFixed(2)),__camera.fov,__camera.aspect])'))
         if a.sky:
             await b.ev("""(()=>{const c=document.createElement('canvas');c.width=2;c.height=256;const g=c.getContext('2d'),gr=g.createLinearGradient(0,0,0,256);gr.addColorStop(0,'#5f9bd8');gr.addColorStop(.55,'#a9cdee');gr.addColorStop(.8,'#e4eef7');gr.addColorStop(1,'#e4eef7');g.fillStyle=gr;g.fillRect(0,0,2,256);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;__scene.background=t;__dirty();return 0})()""")
         await asyncio.sleep(3); await b.shot(a.out); print('wrote', a.out)

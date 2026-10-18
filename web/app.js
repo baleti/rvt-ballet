@@ -69,7 +69,7 @@ let selBoxDummy;
 let stateTex, stateData;
 try { for (const f of ['400 16px', '700 16px', 'italic 400 16px', 'italic 700 16px']) document.fonts.load(f + ' "Liberation Sans"'); } catch (e) {}      // text overlays draw to canvas: have the local Arial twin ready before the first view opens
 const U = {tState: {value: null}, uMode: {value: 0}, tMat: {value: null}, tPat: {value: null}, tImg: {value: null}, tBump: {value: null}, uTex: {value: 1}, uBot: {value: -1e9}, uStyle: {value: 0}, tOvr: {value: null}};
-window.__U = U; setTimeout(() => { window.__refreshState = refreshState; }, 0);
+window.__U = U; setTimeout(() => { window.__applySection = applySection; }, 0); setTimeout(() => { window.__refreshState = refreshState; }, 0);
 setTimeout(() => { window.__patch = patch; }, 0);
 
 function depthMat() {
@@ -700,7 +700,7 @@ function applySection() {
     });
   }
   if (S.viewClip) planes.push(S.viewClip);
-  renderer.clippingPlanes = planes.concat(S.viewCrop || []); updateCaps(planes); dirty = true; shadowDirty = true; scheduleHash();      // the crop region of an open view clips the model but is not capped (Revit crops a plan, it does not cut it)
+  renderer.clippingPlanes = planes.concat(S.viewCrop || []); updateCaps(planes.concat(S.openView && S.openView.kind === '3d' && window.__hl && window.__hl.style === 'hidden' ? S.viewCrop || [] : []));      // a 3D view's section box cuts the model: capped in hidden line like Revit's cut faces dirty = true; shadowDirty = true; scheduleHash();      // the crop region of an open view clips the model but is not capped (Revit crops a plan, it does not cut it)
 }
 // ------------------------------------------------------------------ section caps (poche): where a clip plane cuts a closed solid, fill the cut with a flat dark surface.
 // Stencil technique: every opaque batch is drawn once more into the stencil only (both sides, each face crossing inverts bit 0, clipped like the scene): a ray through
@@ -729,7 +729,7 @@ function updateCaps(planes) {
       if (!o.isMesh || o.material.transparent || !o.visible) return;
       const m = new THREE.Mesh(o.geometry, STM); m.matrixAutoUpdate = false; m.matrix.copy(o.matrixWorld); m.renderOrder = k + 1; m.frustumCulled = false; g.add(m);
     });
-    const pm = new THREE.MeshBasicMaterial({color: isDark ? 0x6a6f78 : 0x2a2c30, side: THREE.DoubleSide, stencilWrite: true, stencilRef: 0, stencilFuncMask: 1,
+    const pm = new THREE.MeshBasicMaterial({color: window.__hl && window.__hl.style === 'hidden' ? 0x9b9b94 : isDark ? 0x6a6f78 : 0x2a2c30, side: THREE.DoubleSide, stencilWrite: true, stencilRef: 0, stencilFuncMask: 1,
       stencilFunc: THREE.NotEqualStencilFunc, stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp,
       clippingPlanes: [], polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1});
     const cap = new THREE.Mesh(new THREE.PlaneGeometry(size, size), pm); cap.userData.capPlane = true; cap.renderOrder = k + 1.1; cap.frustumCulled = false;

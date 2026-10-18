@@ -11,7 +11,7 @@ for name in (sys.argv[1:] or sorted(os.listdir(R))):
     if os.path.exists(d + '/cameras.tsv'):
         for l in open(d + '/cameras.tsv'):
             t = l.rstrip('\n').split('\t')
-            if l[0] != '#' and len(t) >= 7: cams[t[0]] = (t[2].split() + t[3].split(), t[6] == 'False')
+            if l[0] != '#' and len(t) >= 7: cams[t[0]] = (t[2].split() + t[3].split(), t[5] == 'False')
     os.makedirs('%s/%s' % (O, name), exist_ok=True)
     for l in open(d + '/index.tsv'):
         t = l.split('\t')
@@ -19,10 +19,11 @@ for name in (sys.argv[1:] or sorted(os.listdir(R))):
         vid, kind, vname = t[1], t[2], t[4]; png = '%s/%s.png' % (d, vid)
         if not os.path.exists(png): continue
         if os.environ.get('HL3D') and kind != 'View3D': continue
+        if os.environ.get('HLV') and vid not in os.environ['HLV'].split(','): continue
         cam, ortho = cams.get(vid, (None, False))
         for suf, extra in (('', ['--style', 'shaded']), ('_hl', ['--style', 'hidden', '--vg', vid])):
             out = '%s/%s/%s__ours3d%s.png' % (O, name, vid, suf)
             if os.path.exists(out): continue
-            a = [D + '/tools/capped.sh', os.environ.get('RVT_PY') or D + '/.venv/bin/python', D + '/tools/shot3d.py', f[0], vid if kind != 'View3D' else '3d', ','.join(cam) if cam else '-', out, '--clean', '--white'] + (['--fit'] if kind == 'View3D' else []) + ['--like', png] + extra + (['--ortho'] if ortho else [])
+            a = [D + '/tools/capped.sh', os.environ.get('RVT_PY') or D + '/.venv/bin/python', D + '/tools/shot3d.py', f[0], vid if (kind != 'View3D' or os.environ.get('HL3D')) else '3d', ','.join(cam) if cam else '-', out, '--clean', '--white'] + (['--fit'] if kind == 'View3D' else []) + ['--like', png] + extra + (['--ortho'] if ortho else [])
             if kind == 'View3D' and not cam: continue
             print(' '.join(a[3:])); subprocess.run(a, env=dict(os.environ, RVT_MEM_CAP=os.environ.get('RVT_MEM_CAP', '1500M')), timeout=1500)
