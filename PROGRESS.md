@@ -148,3 +148,4 @@
 * remote-host rule: remote-host has no chromium, so browser tests (vctltest/vcsweep/vcalign/vcui/vstyletest) cannot move there. They stay on remote-host as single-view Residential-size checks (MemoryMax 1.5G, one at a time); sweeps over many views and Structural/Facades-size runs are paused until remote-host has a browser (decision for the user: install chromium on remote-host, or accept remote-host for single-view checks).
 * re-warmed Residential 17, Commercial 20, Structural 41 scenes with sheets 01cddd3 (bricks/schedule merge); Facades queued (remote-host MemAvailable 9.4 GB when tried). No browser tests run (remote-host rule).
 * Facades re-warmed (sheets 01cddd3): all four demo files current.
+* 2026-10-18: single-view check on remote-host (Residential 180203, server + test each capped at 1.5 GB): X-Vc-Stale 0, vctltest ALL OK on the re-warmed (sheets 01cddd3) scenes. Server stopped.
