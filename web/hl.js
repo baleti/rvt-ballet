@@ -186,7 +186,7 @@ function buildLevelL() {
     const P = (u, w) => { const q = [0, 1, 2].map(k => (d.o[k] + d.x[k] * u + d.y[k] * w) * F); return new THREE.Vector3(q[0], q[2], -q[1]); };
     const C = [P(u0, w0), P(u1, w0), P(u1, w1), P(u0, w1)], E = [];
     for (let j = 0; j < 4; j++) { const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints([C[j], C[(j + 1) % 4]]), mat); l.computeLineDistances(); l.visible = false; H.ovl.add(l); E.push(l); }
-    copies[i].userData.replaced = true; H.lvlL.push({C, E, copy: copies[i]});
+    copies[i].userData.replaced = true; H.lvlL.push({C, E, copy: copies[i], lbl: (window.__lbls || []).filter(q => q.d.classList.contains('lvl'))[i]});
   });
   updateL();
 }
@@ -195,6 +195,8 @@ function updateL() {
   for (const g of H.lvlL) {
     let k = 0, best = -1; g.C.forEach((c, j) => { const dd = (c.x - e.x) ** 2 + (c.z - e.z) ** 2; if (dd > best) { best = dd; k = j; } });
     g.copy.visible = false; g.E.forEach((l, j) => { l.visible = j === k || j === (k + 3) % 4; });
+    if (g.lbl) { const ends = [g.C[(k + 1) % 4], g.C[(k + 3) % 4]].map(c => ({c, x: c.clone().project(camera).x})); g.lbl.pos = (ends[0].x < ends[1].x ? ends[0] : ends[1]).c;      // level head at the arm end that is further left on screen (Revit)
+    }
   }
   dirty();
 }
