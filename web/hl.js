@@ -232,7 +232,7 @@ H.loadView = async function (v) {
       for (const id of d.hidden) { const i = idx.get(String(id)); if (i !== undefined && !S.hidden[i]) { S.hidden[i] = 1; viewHidden.add(i); } }
     } catch (e) { console.warn('view graphics', e); }
   }
-  window.__refreshState && window.__refreshState(); H.applyOverrides(); H.viewReady = true;
+  window.__refreshState && window.__refreshState(); H.applyOverrides(); H.applyBackground(); H.viewReady = true;
 };
 let lastView; setInterval(() => { if (S.openView !== lastView) { lastView = S.openView; H.viewReady = false; H.loadView(S.openView); } }, 400);
 
@@ -243,6 +243,17 @@ H.applyOpts = function (prevAngle) {
   if (S.meta) H.applyOverrides();
 };
 H.setOffset = function (f, u) { H.off = [f, u]; for (const m of (H.meshes || []).concat(H.twins)) { m.material.polygonOffsetFactor = f; m.material.polygonOffsetUnits = u; } dirty(); };
+// background of the open view (views[].display: sky / ground colours, bg type) in the shaded styles; hidden line / wireframe stay white
+H.applyBackground = function () {
+  const d = S.openView && S.openView.display, st = H.style;
+  if (st === 'hidden' || st === 'wire') return;
+  if (d && d.sky && d.ground && d.bg) {
+    const c = document.createElement('canvas'); c.width = 2; c.height = 256; const g = c.getContext('2d'), rgb = a => `rgb(${a.join(',')})`, mix = (a, b, t) => a.map((x, i) => Math.round(x * (1 - t) + b[i] * t));
+    const gr = g.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, rgb(d.sky)); gr.addColorStop(.5, rgb(mix(d.sky, [255, 255, 255], .55))); gr.addColorStop(.5, rgb(mix(d.ground, [255, 255, 255], .25))); gr.addColorStop(1, rgb(d.ground));
+    g.fillStyle = gr; g.fillRect(0, 0, 2, 256); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; scene.background = t; H.viewBg = true;
+  } else if (H.viewBg) { scene.background = saved ? saved.bg : scene.background; H.viewBg = false; }
+  dirty();
+};
 let saved = null;
 H.setStyle = function (st, user) {
   if (user) H.userChose = true;
@@ -270,6 +281,7 @@ H.setStyle = function (st, user) {
   }
   if (H.meshes) for (const m of H.meshes) { m.material.needsUpdate = true; }
   restyleOverlays(hl);
+  H.applyBackground();
   if (window.__applySection && (prev === 'hidden') !== (st === 'hidden')) window.__applySection();      // cut-face caps change colour / appear for section-box views
   const sel = $('#styleSel'); if (sel) sel.value = st; window.dispatchEvent(new CustomEvent('vstylechange', {detail: vstyle.get()})); dirty();
 };
