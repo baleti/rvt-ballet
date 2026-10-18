@@ -1,14 +1,16 @@
-# HANDOFF c3-vctl (2026-10-17)
-Worktree ~/src/rvt-viewer-vctl, branch vctl. View control v1 complete (docs/VIEW-CONTROL.md, docs/CONTROL-API.md). Nothing running; no servers, no h1run jobs.
-## Done this session
-* Legend/drafting paper look fixed (caps + level planes hidden; app.js exports window.__caps) - merged in master (deef646).
-* Annotations header button moved next to #navSel (was off-screen at 1280 px) 24bedb5; visibility tabs wrap 26b0d44. NOT yet merged in master unless VCTL-HOOKS.md says so; demo_smoke OK on Residential, Structural 2024, Facades 2026.
-* Tests: tools/vctltest.py (API), vcalign.py (placement vs reader grids, plans+sections, 0.00 mm), vcsweep.py (every view), vcui.py (real mouse). All OK on Residential, Commercial, Structural 2024, Facades 2026; sweep OK on Structural 2026 (55).
-* Scenes re-warmed with rvt-sheets cb53624 for Residential, Commercial, Structural 2024, Facades 2026, Structural 2026 (55).
-* 3D views: not overlaid by design (scene = projected model linework only).
+# HANDOFF c3-vctl (updated 2026-10-18)
+Worktree ~/src/rvt-viewer-vctl, branch vctl. Nothing running (no servers, no h1run jobs). View control v1 complete (docs/VIEW-CONTROL.md, docs/CONTROL-API.md), plus the visual-style UI.
+## Done
+* Panel/overlay: legend/drafting paper look fix, button visible at 1280 px, wrapping rows/tabs, Arial Narrow width, picking box with Revit V/G block (proxy /api/m/{mid}/vc/vg/{vid} -> sheets vg.json; filter/category sources via ?full=1 elements_src).
+* Visual style (contract docs/VSTYLE-API.md, c3-viewer implements window.vstyle in hl.js): header select #vsSel + panel row + 'Style options' row (edge angle, silhouettes, hidden lines, line weight, face colour), per-view autosave localStorage vstyle:{mid}:{view|model}, default 'hiddenline' (vstyle:default, ?vs=), presets carry style, view default from meta views[].display.vstyle (0/1 flags mapped; late display re-read once after 10 s).
+* Tools: vctltest.py, vcalign.py (placement vs reader grids, plans+sections 0.00 mm), vcsweep.py (every view), vcui.py (real mouse), vstyletest.py (VS_MOCK=0 for the real vstyle). All need headless chromium: NOT available on remote-host; on remote-host only single-view Residential-size checks capped at 1.5 GB (user rule, memory guard kills big jobs).
+## State at handoff
+* Last vctl head merged into master unless VCTL-HOOKS.md lists newer commits (late display, 0/1 flags: ask c3-viewer to merge).
+* Scene caches (tools/vc_warm.sh FILE NAME on remote-host, pull one dir per h1run call): Residential, Commercial, Structural 2024 current with sheets 0cb42bd; Facades 2026 QUEUED in ~/demo-state/H1-QUEUE.md (remote-host MemAvailable was < 11 GB each try; single attempt per keepalive, no loops).
 ## Next
-1. Re-warm (tools/vc_warm.sh FILE NAME, retry until output has a line starting 'started'; pull the cache dir printed in the log) whenever rvt-sheets drawing code changes; log in ~/demo-state/H1-QUEUE.md. In zsh pass args explicitly (no `set -- $var`).
-2. Keep merging master into vctl; tell c5-viewer the commit in VCTL-HOOKS.md plus tmux nudge.
-3. Open: numeric visual diff vs Revit exports is covered by c3-qa on the same primitives; viewer-only rendering was checked by eye (Residential 180203).
+1. Facades re-warm when remote-host has 11 GB; re-warm all four after any rvt-sheets drawing-code change (schedule-only commits do not stale scenes).
+2. Merge master into vctl regularly (PROGRESS.md conflicts: keep both sides).
+3. Open decision for the user: install chromium on remote-host so sweeps/UI tests can run there.
+4. Optional: show 'colour from filter X' with real data once a view with filters is sampled in a browser test; extend style options as hl.js adds them.
 ## Gotchas
-* Never `pkill -f` a pattern that appears in your own command line (kills your shell, exit 144); kill test servers by pid from `ss -ltnp`.
+* Never `pkill -f` with a pattern in your own command line; kill test servers by pid from `ss -ltnp`. zsh does not word-split unquoted variables (use ${=var}). h1run pull with several dirs in one call breaks the pipe: one dir per call.
