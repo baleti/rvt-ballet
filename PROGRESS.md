@@ -167,3 +167,7 @@
 * hl merged into master (14670fd). View display style request answered by c3-geometry/c3-vctl (views[].display.vstyle applied on openView). Open: material graphics, per-view level/grid extents, grid/level filter evaluation (sheets), writer roofs/floors without geometry.
 * 8c02aad: display flags 0/1 mapping fixed.
 * Shaded / consistent / realistic views with a stored sky + ground (views[].display bg, sky, ground) now show that background as a horizon gradient (H.applyBackground); hidden line and wireframe stay white. Verified on Snowdon view 756129 (consistent).
+
+## 2026-10-18 c6-vctl takeover (from c3-vctl)
+- Read handoff; master already merged into vctl; Facades warm shows done in H1-QUEUE. demo_smoke OK on Residential 2020 (vctl head). Nothing running. Only unmerged vctl commit: HANDOFF-c3-vctl doc; viewer code is fully merged-ready (see VCTL-HOOKS.md).
+- Next: plan real-data check of 'colour from filter' once a filtered view is sampled; extend style options as hl.js grows.
