@@ -203,3 +203,4 @@
 - Structural re-warm done on remote-host (sheets d44ec2b): 41 scenes, cache dir ec41b69d50d677a6 pulled.
 - correction: the vc_warm log printed cache dir ec41b69d50d677a6 but the scenes are in 7fa5aad359029116 (found by mtime on remote-host); pulled, 39 scene files on remote-host.
 - vc_warm_sheets: m.dir == m.cache.dir on Residential (remote-host check), so the remote-host mismatch has another cause; the tool now prints the dir of the newest scene file.
+- merged master (app.js +1 line): demo_smoke OK, vctltest ALL OK, vcui ALL OK.
