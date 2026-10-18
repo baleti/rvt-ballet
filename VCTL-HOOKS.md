@@ -28,3 +28,4 @@ Merge protocol: tell me the vctl commit range here; I run the smoke test on a sc
 - vctl a02629a: tolerates views[].display arriving late (re-reads /m/{mid}/meta.json 10 s after opening a view without display; synthetic check on Residential: hiddenline at open, wireframe after the late display). Contains master 14670fd merge (PROGRESS conflict only).
 - vctl 8c02aad: display 0/1 flags mapped (c1-hl report): silhouettes !!, hidden_lines 1 -> faint / 0 -> off; synthetic check ok. Replaces the earlier boolean-only check.
 - vctl 4e71205 +1: 'Also show' labels get #id for same-name views (JS only, vctltest ALL OK). Smoke before merge please.
+- vctl 50bff13+1: panel rows wrap label+input together (JS only, vctltest ALL OK). Smoke before merge please.
