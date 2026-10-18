@@ -58,6 +58,7 @@ self.onmessage = ev => {
   const Z = [0, 0, 0];
   for (let s = 0; s < ea.length; s++) {
     const va = ea.a[s], vb = eb.a[s], A = t1.a[s], B = t2.a[s];
+    { const dx = pos[3*va]-pos[3*vb], dy = pos[3*va+1]-pos[3*vb+1], dz = pos[3*va+2]-pos[3*vb+2]; if (dx*dx+dy*dy+dz*dz < ml2) continue; }      // specks: tiny edges (tessellation noise, leaf cards); boundary edges included
     if (cnt.a[s] !== 2) { push(va, vb, Z, Z, 0); continue; }
     if (eidx[index[3*A]] !== eidx[index[3*B]]) { push(va, vb, Z, Z, 0); continue; }
     if (sliver[A] || sliver[B]) continue;
