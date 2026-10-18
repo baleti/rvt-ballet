@@ -202,3 +202,4 @@
 * 2026-10-18 (c6-viewer): merged hl (edge worker pool, hl_soft, docs/HIDDEN-LINE.md) into master, clean merge, node --check ok, demo_smoke OK. Browser shots under the 1.5 GB remote-host cap time out (no screenshot re-check after the merge).
 - Structural re-warm done on remote-host (sheets d44ec2b): 41 scenes, cache dir ec41b69d50d677a6 pulled.
 - correction: the vc_warm log printed cache dir ec41b69d50d677a6 but the scenes are in 7fa5aad359029116 (found by mtime on remote-host); pulled, 39 scene files on remote-host.
+- vc_warm_sheets: m.dir == m.cache.dir on Residential (remote-host check), so the remote-host mismatch has another cause; the tool now prints the dir of the newest scene file.
