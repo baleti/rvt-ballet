@@ -117,7 +117,9 @@ async function idbPut(k, v) { try { const db = await idb(); db.transaction('e', 
 const edgeKey = i => (S.meta && (S.meta.phase || 'done') === 'done') ? [S.mid, S.meta.built, S.N, H.meshes.length, i, H.thresholdDeg, H.minEdge, 3].join('|') : null;
 function runEdge(mesh) {
   return new Promise(res => {
-    let w = workers[0]; if (!w) { w = new Worker(URL.createObjectURL(new Blob([WORKER_SRC], {type: 'text/javascript'}))); w.onmessage = ev => { const j = jobs.get(ev.data.id); jobs.delete(ev.data.id); j && j(ev.data); }; workers.push(w); }
+    const K = Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 2) - 1)); let w;      // small pool: meshes are extracted concurrently (memory stays bounded by K meshes)
+    if (workers.length < K) { w = new Worker(URL.createObjectURL(new Blob([WORKER_SRC], {type: 'text/javascript'}))); w.onmessage = ev => { const j = jobs.get(ev.data.id); jobs.delete(ev.data.id); j && j(ev.data); }; workers.push(w); }
+    else w = workers[jid % workers.length];
     const g = mesh.geometry, id = ++jid; jobs.set(id, res);
     const ei = g.attributes._eidx; const idx = g.index.array;
     w.postMessage({id, pos: g.attributes.position.array, index: idx, eidx: ei ? ei.array : new Float32Array(g.attributes.position.count), thr: H.thresholdDeg, minLen: H.minEdge});
@@ -138,21 +140,24 @@ function setupTwins() {
   }
 }
 
+async function one(m, mi, ver, grp) {
+  const ck = edgeKey(mi); let r = ck && await idbGet(ck); if (!r) { r = await runEdge(m); if (ck && r.pos.length) idbPut(ck, r); } if (ver !== H.version) return;
+  if (!r.pos.length) return;
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(r.pos, 3)); g.setAttribute('_eidx', new THREE.BufferAttribute(r.eidx, 1));
+  g.setAttribute('n1', new THREE.BufferAttribute(r.n1, 3, true)); g.setAttribute('n2', new THREE.BufferAttribute(r.n2, 3, true)); g.setAttribute('kind', new THREE.BufferAttribute(r.kind, 1));
+  m.updateWorldMatrix(true, false);
+  { const l = new THREE.LineSegments(g, ghostMat); l.frustumCulled = false; l.renderOrder = 11.5; l.matrixAutoUpdate = false; l.matrix.copy(m.matrixWorld); l.userData.hlEdge = 1; l.userData.ghost = 1; l.visible = vopts.hiddenLines !== 'off'; grp.add(l); }
+  for (const em of edgeMats) { const l = new THREE.LineSegments(g, em); l.frustumCulled = false; l.renderOrder = 11; l.matrixAutoUpdate = false; l.matrix.copy(m.matrixWorld); l.userData.hlEdge = 1; grp.add(l);
+    if (em === edgeMat) l.onBeforeRender = rr => { rr.getDrawingBufferSize(_v2); uPx.value.set(2 / _v2.x, 2 / _v2.y); }; }
+  H.edgeCount += r.pos.length / 6; dirty();
+}
+
 async function buildEdges() {
   const ver = ++H.version, grp = new THREE.Group(); grp.renderOrder = 11; grp.visible = false; world.add(grp); H.group = grp; window.__hlGroup = grp; H.edgeCount = 0;
   H.ready = false; const t0 = performance.now();
-  for (const m of H.meshes) {
-    if (ver !== H.version) return;
-    const ck = edgeKey(H.meshes.indexOf(m)); let r = ck && await idbGet(ck); if (!r) { r = await runEdge(m); if (ck && r.pos.length) idbPut(ck, r); } if (ver !== H.version) return;
-    if (!r.pos.length) continue;
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(r.pos, 3)); g.setAttribute('_eidx', new THREE.BufferAttribute(r.eidx, 1));
-    g.setAttribute('n1', new THREE.BufferAttribute(r.n1, 3, true)); g.setAttribute('n2', new THREE.BufferAttribute(r.n2, 3, true)); g.setAttribute('kind', new THREE.BufferAttribute(r.kind, 1));
-    m.updateWorldMatrix(true, false);
-    { const l = new THREE.LineSegments(g, ghostMat); l.frustumCulled = false; l.renderOrder = 11.5; l.matrixAutoUpdate = false; l.matrix.copy(m.matrixWorld); l.userData.hlEdge = 1; l.userData.ghost = 1; l.visible = vopts.hiddenLines !== 'off'; grp.add(l); }
-    for (const em of edgeMats) { const l = new THREE.LineSegments(g, em); l.frustumCulled = false; l.renderOrder = 11; l.matrixAutoUpdate = false; l.matrix.copy(m.matrixWorld); l.userData.hlEdge = 1; grp.add(l);
-      if (em === edgeMat) l.onBeforeRender = r => { r.getDrawingBufferSize(_v2); uPx.value.set(2 / _v2.x, 2 / _v2.y); }; }
- H.edgeCount += r.pos.length / 6; dirty();
-  }
+  const todo = H.meshes.map((m, i) => [m, i]); const lanes = Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 2) - 1));
+  const lane = async () => { for (let it; (it = todo.shift());) { if (ver !== H.version) return; await one(it[0], it[1], ver, grp); } };
+  await Promise.all(Array.from({length: lanes}, lane)); if (ver !== H.version) return;
   H.edgeMs = Math.round(performance.now() - t0); H.ready = true; window.__hlReady = true; dirty();
 }
 
