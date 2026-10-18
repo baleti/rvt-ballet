@@ -159,3 +159,4 @@
 * f1012fb: style options row in the panel.
 * 2026-10-18: sheets master 0cb42bd (vg + annot merges) staled the scenes: Residential 17 and Commercial 20 re-warmed and pulled; Structural and Facades queued (remote-host busy). No browser tests run.
 * 9d3e782: view display.vstyle honoured as the per-view default style.
+* Structural re-warmed after sheets 0cb42bd (41 scenes). Facades still queued: remote-host busy. Residential, Commercial, Structural current.
