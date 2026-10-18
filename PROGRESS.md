@@ -178,3 +178,4 @@
 - vctl: 'Also show' list disambiguates views with the same name and kind by id (#id); vctltest ALL OK Residential 180203. JS only (web/viewctl.js).
 - vctl: Text row and Placement row keep each label with its input when the panel wraps (nowrap spans; screenshots checked at 1280 px). vctltest ALL OK, demo_smoke OK on the prior commit; JS only.
 - vctl d6865a2: demo_smoke OK, vctltest ALL OK, vcui ALL OK (first vcui run timed out waiting for #vcpanel right after server start; retry passed: start-up flake, wait longer after convert).
+- tools/vcui.py: re-measures the Annotations button before every click (the header re-flows while the model loads, which caused the start-up flake); ALL OK right after server start.
