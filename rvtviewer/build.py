@@ -1559,6 +1559,16 @@ def convert(path, outdir, log=print, workers=None):
                 if v in lvl_by_id: lv = v; break
         el['level'] = lvl_by_id.get(lv)
     views, sheets = datums.views_sheets(ctx); rooms = datums.rooms(ctx, lvl_by_id); grids = build_grids(ctx)
+    try:      # per-view display options (visual style, background sky/ground colours, silhouettes), reader rvt_viewdisp: the viewer opens a stored view in its own style
+        if not os.environ.get('RVT_NO_VIEWDISP'):
+            import rvt_viewdisp
+            vd = rvt_viewdisp.view_display(path); VS = {1: 'wireframe', 2: 'hiddenline', 7: 'consistent', 3: 'shaded', 4: 'shaded', 5: 'shaded', 6: 'shaded'}
+            for v_ in views:
+                d_ = vd.get(v_.get('id'))
+                if d_ and d_.get('surfaces') is not None:
+                    v_['display'] = {'surfaces': d_['surfaces'], 'vstyle': VS.get(d_['surfaces']), 'silhouettes': d_.get('silhouettes'), 'bg': d_.get('background_type'), 'sky': d_.get('sky_color'), 'ground': d_.get('ground_color'),
+                                     'shadows': d_.get('cast_shadows'), 'hidden_lines': d_.get('hidden_lines')}
+    except Exception as ex: log('view display options skipped: %r' % (ex,))
     ph_names, ph_ids = datums.phases(ctx)
     for el in els:
         v = ctx.par.get(el['id'], {}).get('params', {}).get('Phase Created'); el['phase'] = ph_ids.get(ctx.eid_int(v), -1) if isinstance(v, int) else -1

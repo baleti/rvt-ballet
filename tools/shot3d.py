@@ -22,6 +22,13 @@ async def main(a):
             if time.time() - t > 1800: raise SystemExit('model not complete')
             time.sleep(2)
         if a.spec and json.load(open(a.spec)).get('size'): sz = json.load(open(a.spec))['size']; a.size = sz if isinstance(sz, str) else '%dx%d' % tuple(sz)
+        if a.style == 'auto' or a.sky_top == 'auto':      # the view's own stored display options (meta views[].display)
+            try:
+                disp = next((v.get('display') for v in json.load(urllib.request.urlopen('%s/m/%s/meta.json' % (base, mid)))['views'] if str(v['id']) == str(a.view) or v['name'] == a.view), None) or {}
+            except Exception: disp = {}
+            if a.style == 'auto': a.style = {'hiddenline': 'hidden', 'wireframe': 'wire', 'consistent': 'consistent'}.get(disp.get('vstyle'), 'realistic')
+            if a.sky_top == 'auto':
+                sk = disp.get('sky') or [180, 205, 220]; a.sky_top = '#%02x%02x%02x' % tuple(sk); a.sky_bottom = '#%02x%02x%02x' % tuple(int(c + (255 - c) * .45) for c in sk)
         if a.like:
             import struct; hd = open(a.like, 'rb').read(24); a.size = '%dx%d' % struct.unpack('>II', hd[16:24])
         w, h = map(int, a.size.split('x')); b = cdp.Browser(size=(w, h)); b.size = (w, h); await b.start()
