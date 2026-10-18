@@ -894,6 +894,17 @@ addEventListener('keydown', e => { if (e.target.tagName !== 'INPUT' && (e.key ==
 
 // ------------------------------------------------------------------ opening a Revit view (3D camera / plan cut / section-elevation plane) from its stored frame
 const dirV = d => new THREE.Vector3(d[0], d[2], -d[1]).normalize();
+// parallel-projection look for plan / section / elevation views: fov 2 deg, camera pushed back so the framing at the target is unchanged (real ortho would break the section-cap / pick code that
+// reads camera.fov); closing the view restores the perspective fov
+const PERSP_FOV = 45;
+function orthoLook(on) {
+  const f = on ? 2 : PERSP_FOV; if (Math.abs(camera.fov - f) < 1e-6) return;
+  const dist = camera.position.distanceTo(controls.target), k = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.tan(THREE.MathUtils.degToRad(f / 2));
+  const dir = camera.position.clone().sub(controls.target).normalize(); camera.fov = f; camera.position.copy(controls.target).addScaledVector(dir, dist * k);
+  const sz = (S.meta && S.meta.bbox) ? new THREE.Vector3(...S.meta.bbox[1]).distanceTo(new THREE.Vector3(...S.meta.bbox[0])) : 200;
+  camera.near = Math.max(.05, dist * k - sz * 2); camera.far = dist * k + sz * 2 + 500; camera.updateProjectionMatrix(); controls.update(); dirty = true;
+}
+window.orthoLook = orthoLook;
 function cropFrame(crop, axis) {
   // crop rectangle (4 corners, revit metres) of a plan/section/elevation -> 4 clip planes around it (normals inward, 5 cm slack), its centre, and the camera
   // distance along axis (the view direction) that fits it on screen
@@ -909,6 +920,7 @@ function openView(v) {
   if (!v || !v.origin) { $('#status').textContent = 'this view stores no camera/cut plane'; return; }
   const o = toV(v.origin), mb = modelBox(), c = mb.getCenter(new THREE.Vector3()), size = mb.getSize(new THREE.Vector3()).length();
   S.viewClip = null; S.viewCrop = null; S.openView = v; U.uBot.value = -1e9;
+  if (camera.fov !== PERSP_FOV) { camera.fov = PERSP_FOV; camera.updateProjectionMatrix(); }      // framing below assumes the perspective fov (orthoLook re-applies the telephoto at the end)
   if (v.kind === '3d') {
     const d = dirV(v.dir); camera.position.copy(o); controls.target.copy(o).addScaledVector(d, -Math.max(5, size / 4));      // the stored view direction points from the target towards the eye (Revit's ViewDirection): the camera looks along -dir
     if (v.section_box) {      // the view's stored section box: six clip planes (box basis in revit axes -> three y-up), not capped
@@ -932,10 +944,11 @@ function openView(v) {
     else { controls.target.copy(o); camera.position.copy(o).addScaledVector(d, size * 0.8); }
   }
   camera.near = 0.05; camera.far = size * 20 + 500; camera.updateProjectionMatrix(); controls.update();
+  if (v.kind !== '3d' && (v.dir || v.cut)) orthoLook(true);      // Revit plans / sections / elevations are parallel projections: telephoto look, same framing
   if (S.lvlGroup) S.lvlGroup.visible = showLvl && v.kind !== 'Plan';          // level outlines seen from above are just lines across a plan
   if (S.gridMat) { S.gridMat.depthTest = v.kind !== 'Plan'; S.gridMat.needsUpdate = true; S.gridGroup.renderOrder = v.kind === 'Plan' ? 200 : 0; }      // plans draw grids on top, as Revit does
   const vb = $('#viewbar'); vb.hidden = false; vb.innerHTML = `<b>${esc(v.name)}</b> <span class="dim">${esc(v.kind)}${S.viewClip ? ' (cut plane active' + (S.viewCrop ? ', cropped' : '') + ')' : ''}</span> <button id="vbOff">close view</button>`;
-  $('#vbOff').onclick = () => { S.viewClip = null; S.viewCrop = null; U.uBot.value = -1e9; vb.hidden = true; S.openView = null; if (S.lvlGroup) S.lvlGroup.visible = showLvl; if (S.gridMat) { S.gridMat.depthTest = true; S.gridMat.needsUpdate = true; } applySection(); fitAll(); };
+  $('#vbOff').onclick = () => { orthoLook(false); S.viewClip = null; S.viewCrop = null; U.uBot.value = -1e9; vb.hidden = true; S.openView = null; if (S.lvlGroup) S.lvlGroup.visible = showLvl; if (S.gridMat) { S.gridMat.depthTest = true; S.gridMat.needsUpdate = true; } applySection(); fitAll(); };
   applySection(); dirty = true;
 }
 window.openView = openView;
