@@ -200,3 +200,4 @@
 * 2026-10-18 (c6-viewer): uitest6/uitest12 after orthoLook NOT re-run: both time out under the new ALLOW_remote-host 1.5 GB cap (headless chromium needs ~3 GB); demo_smoke OK and shot3d of Residential South elevation OK. Re-run uitest6 + uitest12 when a browser host with memory exists.
 - merged master (hl.js soft-hidden-line changes): demo_smoke OK, vctltest ALL OK, vcui ALL OK on Residential 180203.
 * 2026-10-18 (c6-viewer): merged hl (edge worker pool, hl_soft, docs/HIDDEN-LINE.md) into master, clean merge, node --check ok, demo_smoke OK. Browser shots under the 1.5 GB remote-host cap time out (no screenshot re-check after the merge).
+- Structural re-warm done on remote-host (sheets d44ec2b): 41 scenes, cache dir ec41b69d50d677a6 pulled.
