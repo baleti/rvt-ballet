@@ -174,6 +174,32 @@ H.applyLines = function () {
 };
 H.setCat = function (cat, o) { H.cat[cat] = o; H.applyOverrides(); };
 
+// Revit draws a level in 3D as dashed lines along its datum plane envelope (rvtviewer/datums3d_worker.py): only the two edges at the corner farthest from the eye are shown (an L)
+H.datums = null;
+async function loadDatums() { H.datums = null; try { const r = await fetch(`/api/m/${S.mid}/datums3d`); if (r.ok) H.datums = await r.json(); } catch (e) {} if (H.ovl) { H.lvlL = null; buildLevelL(); } }
+function buildLevelL() {
+  if (!H.ovl || !H.datums || !S.lvlGroup) return;
+  const loops = S.lvlGroup.children.filter(o => o.isLineLoop), copies = H.ovl.children.filter(o => o.userData.src && o.userData.src.isLineLoop); H.lvlL = [];
+  const mat = copies[0] && copies[0].material; if (!mat) return;
+  S.meta.levels.forEach((lv, i) => {
+    const d = H.datums.levels[String(lv.id)]; if (!d || !copies[i]) return; const F = .3048, [[u0, w0], [u1, w1]] = d.env;
+    const P = (u, w) => { const q = [0, 1, 2].map(k => (d.o[k] + d.x[k] * u + d.y[k] * w) * F); return new THREE.Vector3(q[0], q[2], -q[1]); };
+    const C = [P(u0, w0), P(u1, w0), P(u1, w1), P(u0, w1)], E = [];
+    for (let j = 0; j < 4; j++) { const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints([C[j], C[(j + 1) % 4]]), mat); l.computeLineDistances(); l.visible = false; H.ovl.add(l); E.push(l); }
+    copies[i].userData.replaced = true; H.lvlL.push({C, E, copy: copies[i]});
+  });
+  updateL();
+}
+function updateL() {
+  if (!H.lvlL || !H.ovl) return; const e = camera.position;
+  for (const g of H.lvlL) {
+    let k = 0, best = -1; g.C.forEach((c, j) => { const dd = (c.x - e.x) ** 2 + (c.z - e.z) ** 2; if (dd > best) { best = dd; k = j; } });
+    g.copy.visible = false; g.E.forEach((l, j) => { l.visible = j === k || j === (k + 3) % 4; });
+  }
+  dirty();
+}
+window.__controls.addEventListener('change', () => { if (H.style === 'hidden' || H.style === 'wire') updateL(); });
+
 // level outlines and grids in the Revit look: thin dashed lines (levels black, grids magenta), no tinted planes
 function restyleOverlays(on) {
   if (!S.lvlGroup) return;
@@ -184,6 +210,7 @@ function restyleOverlays(on) {
     for (const o of S.gridGroup.children) if (o.isLine) { const l = new THREE.Line(o.geometry, gm); l.computeLineDistances(); l.userData.src = o; H.ovl.add(l); }
     S.lvlGroup.add(H.ovl); H.ovlSrc = [...S.lvlGroup.children.filter(o => o.isLineLoop), ...S.gridGroup.children.filter(o => o.isLine)];
   }
+  if (!H.lvlL) buildLevelL();
   H.ovl.visible = on; for (const o of H.ovlSrc) o.visible = !on;
   if (S.lvlGroup.children[0]?.isMesh) S.lvlGroup.children.forEach(o => { if (o.isMesh) o.visible = !on; });
   document.body.classList.toggle('hlstyle', on);
@@ -254,7 +281,7 @@ const vstyle = {
 };
 Object.defineProperty(vstyle, 'defaultId', {value: 'hiddenline'}); window.vstyle = vstyle;
 function onLoaded() {
-  H.ovl = null; H.twins = []; H.group = null; H.meshes = undefined; H.ready = false; window.__hlReady = false; H.version++;
+  H.ovl = null; H.lvlL = null; loadDatums(); H.twins = []; H.group = null; H.meshes = undefined; H.ready = false; window.__hlReady = false; H.version++;
   H.applyOverrides();
   H.viewId = null; H.el = null; lastView = undefined; saved = null;
   if (!H.userChose && H.style === 'hidden' && S.tris > 12e6) H.style = 'realistic';      // very large models open in the cheap style until the user asks for hidden line
