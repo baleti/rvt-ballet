@@ -118,13 +118,22 @@ if(uStyle>.5 && uStyle<1.5){ if(uPassT<.5 && ovr.a<.99) discard; if(uPassT>.5 &&
     else if(uTex>.5 && uMode<.5 && mq.r>.5){ float L = mq.r-1.; vec3 tc = texture(tImg, vec3(u1, L)).rgb*ww.x + texture(tImg, vec3(u2, L)).rgb*ww.y + texture(tImg, vec3(u3, L)).rgb*ww.z; diffuseColor.rgb = tc; }
     else if(uTex>.5 && uMode<.5 && cls>.5){ float tt = texture(tPat, vec3(u1, cls)).r*ww.x + texture(tPat, vec3(u2, cls)).r*ww.y + texture(tPat, vec3(u3, cls)).r*ww.z; diffuseColor.rgb *= clamp(2.*tt,.3,1.6); } } }
 if(uStyle>.5 && uStyle<1.5){ diffuseColor.rgb = ovr.rgb; diffuseColor.a *= ovr.a; }
+if(uStyle>.5 && uStyle<1.5 && uMode<.5){ // surface pattern hatch (model patterns, Revit feet) in hidden line: black lines per pattern grid, faded out when the spacing falls below ~4 px
+  float mI = floor(vM+.5); if(mI>-.5){ int mi = int(mI); vec3 nn = normalize(cross(dFdx(vWP), dFdy(vWP))); vec3 an = abs(nn);
+    vec2 pl = an.y>an.x && an.y>an.z ? vWP.xz : (an.x>an.z ? vWP.zy : vWP.xy); float hk = 0.;
+    for(int g=0; g<2; g++){ vec4 a = texelFetch(tMat, ivec2(mi,6+2*g), 0); if(a.a>.5){ vec4 b = texelFetch(tMat, ivec2(mi,7+2*g), 0);
+      float ca = cos(a.r), sa = sin(a.r); vec2 q = vec2(ca*(pl.x-b.b)+sa*(pl.y-b.a), -sa*(pl.x-b.b)+ca*(pl.y-b.a));
+      float px = max(fwidth(q.y), 1e-6), kk = floor(q.y/a.g+.5), d = abs(q.y-kk*a.g)/px; float on = 1.;
+      if(b.r>0.){ float per = b.r+b.g, s = mod(q.x-kk*a.b, per); on = s<b.r ? 1. : 0.; }
+      hk = max(hk, on*(1.-smoothstep(.5,1.5,d))*smoothstep(2.,5.,a.g/px)); } }
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.), hk*.85); } }
 if(uMode>1.5 && uMode<2.5){ float dv=floor(stt.b*255.+.5); diffuseColor.rgb = dv<.5?vec3(.55):dv<1.5?vec3(.18,.7,.3):dv<2.5?vec3(.9,.8,.2):dv<3.5?vec3(.95,.55,.15):vec3(.9,.2,.2); } else if(uMode>.5 && uMode<1.5) diffuseColor.rgb = fidCol(floor(stt.g*255.+.5)).rgb;
 if(mod(floor(fl/8.),2.)>.5){ if(mod(floor(gl_FragCoord.x)+2.*floor(gl_FragCoord.y),5.)>.5) discard; diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.6), .5); }
 if(mod(floor(fl/2.),2.)>.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.,.69,.1), .75);
 else if(mod(floor(fl/4.),2.)>.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.3,.7,1.), .5);`)
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\nif(uStyle>.5 && uStyle<1.5) gl_FragColor = vec4(diffuseColor.rgb, diffuseColor.a);\n#ifdef FLAT_SHADED\nif(uStyle>3.5){ float ndl = abs(dot(normalize(normal), normalize(vViewPosition))); gl_FragColor = vec4(diffuseColor.rgb*(.55+.45*ndl), diffuseColor.a); }\n#endif');
   };
-  mat.customProgramCacheKey = () => 'rvtpatch5';
+  mat.customProgramCacheKey = () => 'rvtpatch6';
   return mat;
 }
 
@@ -500,7 +509,7 @@ const chip = (m, k, px) => m.swatch ? `<img src="/m/${S.mid}/swatch/${k}.png" wi
 function matLine(m, k) {
   if (k == null) k = S.mats.indexOf(m);
   return `<div style="margin:3px 0;display:flex;align-items:flex-start">${chip(m, k, 40)}<div><b>${esc(m.name)}</b> <span class="dim">${esc(m.class || '')}${m.alpha < 0.97 ? ' &middot; transparency ' + Math.round((1 - m.alpha) * 100) + '%' : ''}${m.shin != null ? ' &middot; shininess ' + m.shin : ''}${m.smooth != null ? ' &middot; smoothness ' + m.smooth : ''}${m.metal ? ' &middot; metal' : ''}</span><br>` +
-    `<span class="dim" style="font-size:11px">colour: ${esc(m.color_source)}<br>swatch: ${m.swatch ? "Revit's swatch image from the file" : 'none stored'}<br>texture: ${esc(m.texture_source)}${m.tex_class !== 'none' && !m.tex_img ? ' [' + esc(m.tex_class) + ']' : ''}${m.schema ? '<br>appearance: ' + esc(m.schema) + (m.asset ? ' / ' + esc(m.asset) : '') : ''}</span></div></div>`;
+    `<span class="dim" style="font-size:11px">colour: ${esc(m.color_source)}<br>swatch: ${m.swatch ? "Revit's swatch image from the file" : 'none stored'}<br>texture: ${esc(m.texture_source)}${m.tex_class !== 'none' && !m.tex_img ? ' [' + esc(m.tex_class) + ']' : ''}${m.schema ? '<br>appearance: ' + esc(m.schema) + (m.asset ? ' / ' + esc(m.asset) : '') : ''}${m.surface_pattern ? '<br>surface pattern: ' + esc(m.surface_pattern.name || m.surface_pattern.id) : ''}${m.cut_pattern ? '<br>cut pattern: ' + esc(m.cut_pattern.name || m.cut_pattern.id) : ''}</span></div></div>`;
 }
 function renderMaterials(tb) {
   const M = S.mats || []; if (!M.length) { tb.innerHTML = '<p class="dim">No material table in this model (convert again to extract materials).</p>'; return; }

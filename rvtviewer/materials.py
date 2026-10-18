@@ -189,6 +189,12 @@ def load(src, log=print):
         log('materials unavailable: %r' % ex); return {'list': [], 'index': {}}
     try: ext = asset_extras(src)
     except Exception as ex: log('appearance extras unavailable: %r' % ex); ext = {}
+    try: fpat = RM.fill_patterns(src)
+    except Exception as ex: log('fill patterns unavailable: %r' % ex); fpat = {}
+    def gfx(p):          # material graphics pattern (surface / cut): None when the material has none
+        if not p or p.get('id') is None: return None
+        return {'id': p['id'], 'name': (fpat.get(p['id']) or {}).get('name'), 'color': p.get('color'), 'background': p.get('background_color') if p.get('background_id') is not None else None,
+                'target': (fpat.get(p['id']) or {}).get('target'), 'grids': [{k: ([round(x, 6) for x in v] if isinstance(v, list) else round(v, 6)) for k, v in g.items()} for g in ((fpat.get(p['id']) or {}).get('grids') or [])[:2]]}
     out = []; index = {}; thumbs = {}
     for mid, m in mt.items():
         ax = ext.get(m.get('appearance_asset_id')) or {}
@@ -207,6 +213,7 @@ def load(src, log=print):
         rec = {'id': mid, 'name': m.get('name') or str(mid), 'class': m.get('class'), 'category': m.get('category'), 'rgb': [round(c / 255.0, 3) for c in col[:3]], 'alpha': round(1.0 - float(tr), 3),
                'smooth': m.get('smoothness'), 'shin': m.get('shininess'), 'metal': bool(a.get('metal')), 'glossiness': a.get('glossiness'), 'schema': a.get('schema'), 'asset': a.get('name'),
                'tex_class': cls, 'tex_path': (ax.get('path') if 'prop' in ax else tex.get('path')), 'tex_prop': ax.get('prop'), 'tex_colour': bool(ax.get('colour') and ax.get('path')), 'tex_scale_ft': scale[:2] or None, 'tex_angle': ax.get('angle_deg', tex.get('angle')), 'tex_offset_ft': ax.get('offset_ft'),
+               'surface_pattern': gfx(m.get('surface_pattern')), 'cut_pattern': gfx(m.get('cut_pattern')),
                'color_source': csrc, **{k: ax[k] for k in ('bump_path', 'bump_scale_ft', 'bump_offset_ft', 'bump_angle', 'bump_amount') if k in ax},
                'texture_source': ('texture asset ' + str(tex.get('path')) + ' is not stored in the .rvt: built-in procedural "' + cls + '" (fallback)') if tex.get('path') and cls != 'none' else
                                  ('no texture asset: procedural "' + cls + '" chosen from the material name (fallback)' if cls != 'none' else 'no texture')}

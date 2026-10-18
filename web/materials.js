@@ -50,20 +50,26 @@ export function patternTexture() {
 // row4 = bump layer (0 = none, n = layer n-1 of bumpTextures), bump tile size x/y (m), relief strength (m), row5 = bump offset x/y (m), bump angle (rad)
 const DEF_FT = {brick: 2.2, concrete: 6, wood: 4, stone: 4, metal: 3, glass: 6, tile: 2, plaster: 8, grass: 4, water: 6, roof: 3, insulation: 3, siding: 4, carpet: 3};
 export function paletteTexture(mats, layers, blayers) {
-  const n = Math.max(1, mats.length), D = new Float32Array(n * 4 * 6);
+  const n = Math.max(1, mats.length), D = new Float32Array(n * 4 * 10);
   mats.forEach((m, i) => {
     D.set([m.rgb[0], m.rgb[1], m.rgb[2], m.alpha], i * 4);
     const cls = Math.max(0, CLASSES.indexOf(m.tex_class)), s = m.tex_scale_ft && m.tex_scale_ft[0] ? m.tex_scale_ft : [DEF_FT[m.tex_class] || 4, DEF_FT[m.tex_class] || 4];
     const mul = m.tex_tile_mul || 1; D.set([cls, s[0] * .3048 * mul, (s[1] || s[0]) * .3048 * mul, (m.tex_angle || 0) * Math.PI / 180], (n + i) * 4);
     const h = (i * 0.61803398875) % 1, c = hsl(h, .62, .52); D.set([c[0], c[1], c[2], 1], (2 * n + i) * 4);
     const o = m.tex_offset_ft || [0, 0]; D.set([layers && layers[i] != null ? layers[i] + 1 : 0, (o[0] || 0) * .3048, (o[1] || 0) * .3048, 0], (3 * n + i) * 4);
+    const sp = m.surface_pattern;       // model-space surface pattern (target 1, feet): up to two line grids -> rows 6..9 [angle, spacing m, shift m, 1], [dash m, gap m, origin x m, origin y m]
+    if (sp && sp.target === 1 && sp.grids) sp.grids.forEach((g, j) => {
+      const sg = (g.segs || []).map(Math.abs), per = sg.length >= 2 ? (sg[0] + sg[1]) * .3048 : 0;
+      D.set([g.angle, Math.abs(g.deltas[1]) * .3048, g.deltas[0] * .3048, Math.abs(g.deltas[1]) > 1e-6 ? 1 : 0], (6 * n + 2 * j * n + i) * 4);
+      D.set([per ? sg[0] * .3048 : 0, per ? sg[1] * .3048 : 0, g.origin[0] * .3048, g.origin[1] * .3048], ((7 + 2 * j) * n + i) * 4);
+    });
     if (blayers && blayers[i] != null) {                 // Revit *_bump_amount (1 = default) -> height scale 0.02 m per unit of the grey map (tuned visually on the 2020 Residential siding / concrete)
       const bs = m.bump_scale_ft && m.bump_scale_ft[0] ? m.bump_scale_ft : s, bo = m.bump_offset_ft || [0, 0], amt = Math.min(4, Math.max(.2, m.bump_amount ?? 1));
       D.set([blayers[i] + 1, bs[0] * .3048 * mul, (bs[1] || bs[0]) * .3048 * mul, .02 * amt], (4 * n + i) * 4);
       D.set([(bo[0] || 0) * .3048, (bo[1] || 0) * .3048, (m.bump_angle || 0) * Math.PI / 180, 0], (5 * n + i) * 4);
     }
   });
-  const t = new THREE.DataTexture(D, n, 6, THREE.RGBAFormat, THREE.FloatType); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t;
+  const t = new THREE.DataTexture(D, n, 10, THREE.RGBAFormat, THREE.FloatType); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t;
 }
 // image textures (library bitmaps or Revit's flat swatches, 256 px PNGs from /m/<mid>/tex/<k>.png) -> one RGBA DataArrayTexture; returns {tex, layers: {material k: layer}}
 const IS = 256;
