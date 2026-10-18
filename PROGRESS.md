@@ -177,3 +177,4 @@
 - correction: c6-annot already draws keynotes (generic annotation FamilyInstance), spot coordinates and revision-cloud-free views; the classes missing from the 63 cached scenes are only absent in those samples or stale-cache. No action for c6-annot; angular/radial dimensions and revision clouds remain 'not started' there (HANDOFF-c2-annot).
 - vctl: 'Also show' list disambiguates views with the same name and kind by id (#id); vctltest ALL OK Residential 180203. JS only (web/viewctl.js).
 - vctl: Text row and Placement row keep each label with its input when the panel wraps (nowrap spans; screenshots checked at 1280 px). vctltest ALL OK, demo_smoke OK on the prior commit; JS only.
+- vctl d6865a2: demo_smoke OK, vctltest ALL OK, vcui ALL OK (first vcui run timed out waiting for #vcpanel right after server start; retry passed: start-up flake, wait longer after convert).
