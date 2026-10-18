@@ -165,3 +165,4 @@
 * 55_Snowdon (2026) Structural 3D, hidden-line views (tools/hl_table.py): Structure Only 0.896, Framing 0.992, Slabs 0.964, Columns 0.864, CoverSheet 0.878, Walls 0.780, Foundations 0.246 (43/2024 Foundations scores 0.80: investigate the 2026 file's foundation view); mean 0.80 over the 7 HLR views. FlatColors views 0.13-0.56 (not hidden line in Revit). hl_score.drop_datums now keeps any component with a dense window (it had deleted a whole connected drawing and scored Walls/Slabs 0.0).
 * a02629a: late display fallback.
 * hl merged into master (14670fd). View display style request answered by c3-geometry/c3-vctl (views[].display.vstyle applied on openView). Open: material graphics, per-view level/grid extents, grid/level filter evaluation (sheets), writer roofs/floors without geometry.
+* 8c02aad: display flags 0/1 mapping fixed.
