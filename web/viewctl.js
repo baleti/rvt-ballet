@@ -579,6 +579,12 @@ function renderPanel() {
   p.innerHTML = `<div id="vcHead" style="display:flex;align-items:center;cursor:move" title="drag to move the panel"><b>View control</b><span class="sp" style="flex:1"></span><button id="vcOff" title="remove the overlay and close the panel">close</button></div>
   <div class="r"><label>View</label><select id="vcView" style="flex:1;min-width:0"><option value="">select a plan / section...</option>${vs.map(v => opt(v.id, V.vid, `${v.name} (${v.kind}${v.scale ? ' 1:' + v.scale : ''})`)).join('')}</select></div>
   <div class="r" style="${window.vstyle ? '' : 'display:none'}"><label>Visual style</label><select id="vcVS" style="flex:1;min-width:0" title="Revit visual style of the 3D scene (saved per view)">${vsOptions()}</select><button id="vcVSDef" title="use this style for every view that has none saved">default</button></div>
+  <div class="r" style="${window.vstyle && /^(hiddenline|wireframe|shaded|consistent)$/.test(vsCur.id) ? '' : 'display:none'}"><label>Style options</label>
+    <span title="edges between faces meeting at more than this angle (degrees)">edge &deg;<input type="number" id="vsEA" min="1" max="89" step="1" value="${vsCur.opts.edgeAngle ?? 30}"></span>
+    <label class="chk" title="outline of every object against what is behind it"><input type="checkbox" id="vsSil" ${vsCur.opts.silhouettes === false ? '' : 'checked'}> silhouettes</label>
+    <span title="occluded lines">hidden <select id="vsHL"><option ${vsCur.opts.hiddenLines === 'off' ? 'selected' : ''}>off</option><option ${vsCur.opts.hiddenLines === 'faint' ? 'selected' : ''}>faint</option><option ${vsCur.opts.hiddenLines === 'dashed' ? 'selected' : ''}>dashed</option></select></span>
+    <span title="line weight multiplier">weight &times;<input type="number" id="vsLW" min="0.25" max="4" step="0.25" value="${vsCur.opts.lineWeight ?? 1}"></span>
+    <span title="face colour of hidden line / shaded">face <input type="color" id="vsFC" value="${vsCur.opts.faceColor || '#ffffff'}"></span></div>
   <h4>Display (re-draws the view)</h4>
   <div class="r"><label>Annotation scale</label><select id="vcScale">${opt('', st.scale || '', 'view default' + (sc ? ' (1:' + (sc.view.scale_stored || sc.view.scale) + ')' : ''))}${SCALES.map(s => opt(s, st.scale, '1:' + s)).join('')}</select></div>
   <div class="r"><label>Detail level</label><select id="vcDetail">${opt('', st.detail || '', 'view default')}${opt(1, st.detail, 'Coarse')}${opt(2, st.detail, 'Medium')}${opt(3, st.detail, 'Fine')}</select></div>
@@ -629,6 +635,9 @@ function renderPanel() {
   on('vcModelOff', () => { [...MODEL_LAYERS].forEach(l => st.layers[l] = false); applyStyles(); saveLocal(); renderPanel(); }, 'onclick');
   on('vcResetAll', () => { const keep = {scale: st.scale, detail: st.detail}; V.state = Object.assign(DEFAULT_STATE(), keep); saveLocal(); loadScene(V.vid); }, 'onclick');
   on('vcVS', () => vsSet($('#vcVS').value, undefined, true));
+  const vo = (k, f) => () => vsSet(vsCur.id, Object.assign({}, vsCur.opts, {[k]: f()}), true);
+  on('vsEA', vo('edgeAngle', () => +$('#vsEA').value || 30)); on('vsSil', vo('silhouettes', () => $('#vsSil').checked)); on('vsHL', vo('hiddenLines', () => $('#vsHL').value));
+  on('vsLW', vo('lineWeight', () => +$('#vsLW').value || 1)); on('vsFC', vo('faceColor', () => $('#vsFC').value));
   on('vcVSDef', () => { vsSetDefault(); setStatus('default visual style: ' + vsLabel(vsCur.id)); }, 'onclick');
   on('vcPreSave', async () => { const n = $('#vcPreName').value.trim(); if (!n) return; V.presets[n] = JSON.parse(JSON.stringify(V.state)); V.presets[n].style = {id: vsCur.id, opts: vsCur.opts}; await savePresets(); renderPanel(); }, 'onclick');
   on('vcPreLoad', async () => { const n = $('#vcPre').value; if (!n || !V.presets[n]) return; const needs = JSON.stringify([V.presets[n].scale, V.presets[n].detail, V.presets[n].template, V.presets[n].filters]) !== JSON.stringify([st.scale, st.detail, st.template, st.filters]); V.state = Object.assign(DEFAULT_STATE(), JSON.parse(JSON.stringify(V.presets[n]))); if (V.presets[n].style) vsSet(V.presets[n].style.id, V.presets[n].style.opts, true); saveLocal(); if (needs) await loadScene(V.vid); else { makeScene(V.sc); renderPanel(); } }, 'onclick');
@@ -667,9 +676,10 @@ let vsCur = vsDefault(), vsKey = null;
 const vsOptions = () => vsList().map(x => `<option value="${x.id}" ${x.id === vsCur.id ? 'selected' : ''}>${esc(x.label)}</option>`).join('');
 function vsSync() { document.querySelectorAll('#vsSel,#vcVS').forEach(s => { if (s.value !== vsCur.id) s.value = vsCur.id; }); }
 function vsSet(id, opts, save) {
-  if (!id) return; vsCur = {id, opts: opts || (vsCur.id === id ? vsCur.opts : {})};
+  if (!id) return; const idChanged = id !== vsCur.id; vsCur = {id, opts: opts || (vsCur.id === id ? vsCur.opts : {})};
   try { if (window.vstyle && window.vstyle.set) window.vstyle.set(vsCur.id, vsCur.opts); } catch (e) { console.warn('vstyle.set', e); }
   vsSync(); if (save) vsWrite(vsViewKey(), vsCur);
+  if (idChanged && V.on && typeof renderPanel === 'function') { const pn = document.getElementById('vcpanel'); if (pn && !pn.hidden) renderPanel(); }      // the options row depends on the style
 }
 function vsSetDefault() { vsWrite('vstyle:default', vsCur); }
 // opening / closing a view (also from the Views tab) switches to that view's saved style, else the default
