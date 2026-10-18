@@ -39,14 +39,15 @@ if a.vg:
     for k, v in vg['els'].items():
         if int(k) in idx: alpha[idx[int(k)]] = v[3]; lw[idx[int(k)]] = v[7]
 soft = np.array([e[2] in SOFT for e in E])
-hidden |= np.array([e[2] in set(meta.get('defaultHidden') or []) for e in E])      # categories the viewer hides by default (meta.defaultHidden)
+_dh = set(meta.get('defaultHidden') or []); hidden |= np.array([e[2] in _dh for e in E])      # categories the viewer hides by default (meta.defaultHidden)
 
 # ---------------------------------------------------------------- camera (three axes)
 rows = [l.rstrip('\n').split('\t') for l in open(a.cameras) if l[0] != '#']
 row = [r for r in rows if r[0] == a.view][0]; v6 = [float(x) for x in row[2].split() + row[3].split()]
 r3 = lambda q: np.array([q[0], q[2], -q[1]]) * 0.3048
 eye, tgt = r3(v6[0:3]), r3(v6[3:6]); d = tgt - eye; d /= np.linalg.norm(d)
-right = np.cross(d, [0, 1, 0]); right /= np.linalg.norm(right); up = np.cross(right, d)
+ref = np.array([0.0, 1.0, 0.0]) if abs(d[1]) < 0.999 else np.array([0.0, 0.0, -1.0])      # straight-down / up views: any horizontal reference
+right = np.cross(d, ref); right /= np.linalg.norm(right); up = np.cross(right, d)
 view_vec = -d      # towards the eye (orthographic)
 
 # ---------------------------------------------------------------- edges
@@ -57,8 +58,8 @@ for P, EI, T in prims:
     q = np.round(P * 1000).astype(np.int64); _, w = np.unique(q, axis=0, return_inverse=True); w = w.reshape(-1)
     A, B, C = P[T[:, 0]], P[T[:, 1]], P[T[:, 2]]; cr = np.cross(B - A, C - A); l = np.linalg.norm(cr, axis=1); Nn = cr / np.maximum(l, 1e-30)[:, None]
     me = np.maximum.reduce([((B - A) ** 2).sum(1), ((C - A) ** 2).sum(1), ((C - B) ** 2).sum(1)]); sliver = l < 2e-4 * me
-    te = EI[T[:, 0]]; cen = np.zeros((N, 3)); cnt_e = np.zeros(N)
-    cc = (A + B + C) / 3; np.add.at(cen, te, cc); np.add.at(cnt_e, te, 1); cen /= np.maximum(cnt_e, 1)[:, None]
+    te = EI[T[:, 0]]; ue, inv = np.unique(te, return_inverse=True); cen_u = np.zeros((len(ue), 3)); cnt_u = np.zeros(len(ue))      # element centres, only for the elements of this primitive
+    cc = (A + B + C) / 3; np.add.at(cen_u, inv, cc); np.add.at(cnt_u, inv, 1); cen_u /= cnt_u[:, None]
     ks, ts, vs = [], [], []
     for k in range(3):
         va, vb = T[:, k], T[:, (k + 1) % 3]; ok = (w[va] != w[vb]) & keep_t
@@ -77,7 +78,7 @@ for P, EI, T in prims:
     smooth = two & same & (dd >= cosT) & (dd <= cosS) & long_ & ~sliver[tA] & ~sliver[tB]
     # oriented normals for conditional edges
     mid = (p0 + p1) / 2; n1 = Nn[tA].copy(); n2 = Nn[tB].copy(); flip2 = (n1 * n2).sum(1) < 0; n2[flip2] *= -1
-    out_ = ((mid - cen[el]) * n1).sum(1) < 0; n1[out_] *= -1; n2[out_] *= -1
+    out_ = ((mid - cen_u[np.searchsorted(ue, el)]) * n1).sum(1) < 0; n1[out_] *= -1; n2[out_] *= -1
     softe = soft[el]
     always = bnd | elem | (sharp & ~softe)
     cond = smooth | (sharp & softe)
@@ -91,14 +92,13 @@ drawn = (KD == 0) | sil
 P0, P1, EL = P0[drawn], P1[drawn], EL[drawn]
 
 # ---------------------------------------------------------------- project + rasterise
-allp = np.concatenate([p[0] for p in prims])
 B = meta['bbox']; bb = np.array([[x, z, -y] for x in (B[0][0], B[1][0]) for y in (B[0][1], B[1][1]) for z in (B[0][2], B[1][2])])      # frame on meta's model box (stray huge elements must not shrink the view)
 xs = bb @ right; ys = bb @ up
 x0, x1, y0, y1 = xs.min(), xs.max(), ys.min(), ys.max(); S = a.size / max(x1 - x0, y1 - y0) * 0.9; W = int((x1 - x0) * S + a.size * 0.1); H = int((y1 - y0) * S + a.size * 0.1)
 def proj(Pp): return np.stack([(Pp @ right - x0) * S + a.size * 0.05, (y1 - Pp @ up) * S + a.size * 0.05, Pp @ d], 1)
 
 @njit(cache=True)
-def raster(tx, ty, tz, W, H, zb):
+def raster(tx, ty, tz, tal, W, H, zb, ab):
     for t in range(tx.shape[0]):
         x0, x1, x2 = tx[t, 0], tx[t, 1], tx[t, 2]; y0, y1, y2 = ty[t, 0], ty[t, 1], ty[t, 2]
         den = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2)
@@ -110,14 +110,15 @@ def raster(tx, ty, tz, W, H, zb):
                 px = xx + 0.5; u = ((y1 - y2) * (px - x2) + (x2 - x1) * (py - y2)) / den; v = ((y2 - y0) * (px - x2) + (x0 - x2) * (py - y2)) / den; w = 1.0 - u - v
                 if u < -1e-9 or v < -1e-9 or w < -1e-9: continue
                 z = u * tz[t, 0] + v * tz[t, 1] + w * tz[t, 2]
-                if z < zb[yy, xx]: zb[yy, xx] = z
+                if z < zb[yy, xx]:
+                    zb[yy, xx] = z; ab[yy, xx] = tal[t]
 
 @njit(cache=True)
 def lines(px0, py0, pz0, px1, py1, pz1, el, zo, zt, ta, W, H, eps, img, thick):
     for i in range(px0.shape[0]):
         n = int(max(abs(px1[i] - px0[i]), abs(py1[i] - py0[i]))) + 1
         for s in range(n + 1):
-            f = s / n; x = int(px0[i] + (px1[i] - px0[i]) * f); y = int(py0[i] + (py1[i] - py0[i]) * f); z = pz0[i] + (pz1[i] - pz0[i]) * f
+            f = s / n; x = int(np.floor(px0[i] + (px1[i] - px0[i]) * f)); y = int(np.floor(py0[i] + (py1[i] - py0[i]) * f)); z = pz0[i] + (pz1[i] - pz0[i]) * f
             if x < 0 or y < 0 or x >= W or y >= H: continue
             if z > zo[y, x] + eps: continue
             val = 0
@@ -127,15 +128,14 @@ def lines(px0, py0, pz0, px1, py1, pz1, el, zo, zt, ta, W, H, eps, img, thick):
                     xx = x + dx; yy = y + dy
                     if xx < W and yy < H and val < img[yy, xx]: img[yy, xx] = val
 
-zo = np.full((H, W), 1e30); zt = np.full((H, W), 1e30); ta = np.ones((H, W))
+zo = np.full((H, W), 1e30); zt = np.full((H, W), 1e30); ta = np.ones((H, W)); ao = np.ones((H, W))
 for Pp, EI, T in prims:
     te = EI[T[:, 0]]; ok = ~hidden[te]; opaque = ok & (alpha[te] >= 0.99); trans = ok & ~opaque
-    for sel, zb in ((opaque, zo), (trans, zt)):
+    for sel, zb, ab in ((opaque, zo, ao), (trans, zt, ta)):
         if not sel.any(): continue
-        Q = proj(Pp); tt = T[sel]
-        raster(np.ascontiguousarray(Q[tt, 0]), np.ascontiguousarray(Q[tt, 1]), np.ascontiguousarray(Q[tt, 2]), W, H, zb)
+        Q = proj(Pp); tt = T[sel]; tal = alpha[te[sel]]
+        raster(np.ascontiguousarray(Q[tt, 0]), np.ascontiguousarray(Q[tt, 1]), np.ascontiguousarray(Q[tt, 2]), np.ascontiguousarray(tal), W, H, zb, ab)
 # translucent faces in front of the opaque ones fade the lines behind them: ta holds the opacity of the nearest translucent face (single value per view: mean alpha of translucent elements)
-tr_alpha = alpha[(alpha < 0.99) & ~hidden]; ta[:] = float(tr_alpha.mean()) if len(tr_alpha) else 1.0
 img = np.full((H, W), 255, np.uint8)
 Q0, Q1 = proj(P0), proj(P1); eps = np.ptp(bb @ d) * 3e-4
 thick = (lw[EL] >= 0.8).astype(np.int64)

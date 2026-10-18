@@ -10,5 +10,9 @@ for l in open(R + '/cameras.tsv'):
     a = [sys.executable, D + '/hl_soft.py', model, R + '/cameras.tsv', vid, out] + (['--vg', vg] if os.path.exists(vg) else [])
     p = subprocess.run(a, capture_output=True, text=True)
     if p.returncode: print(vid, 'render failed', p.stderr[-200:]); continue
-    s = subprocess.run([sys.executable, D + '/hl_score.py', R + '/%s.png' % vid, out], capture_output=True, text=True).stdout.strip()
-    print(name, vid, s, flush=True); rows.append(s)
+    q = subprocess.run([sys.executable, D + '/hl_score.py', R + '/%s.png' % vid, out], capture_output=True, text=True)
+    if q.returncode: print(vid, 'score failed', q.stderr[-200:]); continue
+    s = q.stdout.strip(); print(name, vid, 'vg' if os.path.exists(vg) else 'NO-VG', s, flush=True); rows.append(s)
+import re
+f1 = [float(m.group(1)) for r in rows for m in [re.search(r'F1 ([\d.]+)', r)] if m]
+if f1: print('%s mean F1 %.3f over %d HLR views' % (name, sum(f1) / len(f1), len(f1)))
