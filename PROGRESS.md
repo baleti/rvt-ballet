@@ -195,3 +195,4 @@
 * 2026-10-18 (c6-viewer): plan / section / elevation views now use a parallel-projection look (fov 2 telephoto, camera pushed back, same framing; orthoLook() in app.js, restored when the view is closed). Residential South elevation is a true elevation. demo_smoke OK. Merged hl (1 cm boundary edges).
 - merged master (app.js, hl.js) into vctl: demo_smoke OK, vctltest ALL OK, vcui see next line. (a first vctltest run timed out once, rerun ALL OK: first-load flake after the smoke run.)
 - vcui ALL OK on rerun (first vcui and first vctltest after the smoke run timed out once each: cold-start flakes, rerun passes).
+* 2026-10-18 (c6-viewer): uitest6/uitest12 after orthoLook NOT re-run: both time out under the new ALLOW_remote-host 1.5 GB cap (headless chromium needs ~3 GB); demo_smoke OK and shot3d of Residential South elevation OK. Re-run uitest6 + uitest12 when a browser host with memory exists.
