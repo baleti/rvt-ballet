@@ -158,3 +158,4 @@
 * Material graphics (surface/cut pattern + colour per material) requested from the reader: Revit paints a material's surface pattern colour in hidden line (the grey interior walls of house1).
 * f1012fb: style options row in the panel.
 * 2026-10-18: sheets master 0cb42bd (vg + annot merges) staled the scenes: Residential 17 and Commercial 20 re-warmed and pulled; Structural and Facades queued (remote-host busy). No browser tests run.
+* 9d3e782: view display.vstyle honoured as the per-view default style.
