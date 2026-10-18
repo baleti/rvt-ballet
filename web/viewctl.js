@@ -681,13 +681,19 @@ function vsSet(id, opts, save) {
   vsSync(); if (save) vsWrite(vsViewKey(), vsCur);
   if (idChanged && V.on && typeof renderPanel === 'function') { const pn = document.getElementById('vcpanel'); if (pn && !pn.hidden) renderPanel(); }      // the options row depends on the style
 }
+// a view without a saved style takes the Revit display setting stored in the view (meta views[].display.vstyle), before the global default
+function vsFromView() {
+  const d = S.openView && S.openView.display; if (!d || !vsList().some(x => x.id === d.vstyle)) return null;
+  const o = {}; if (typeof d.silhouettes === 'boolean') o.silhouettes = d.silhouettes; if (['off', 'faint', 'dashed'].includes(d.hidden_lines)) o.hiddenLines = d.hidden_lines;
+  return {id: d.vstyle, opts: o};
+}
 function vsSetDefault() { vsWrite('vstyle:default', vsCur); }
 // opening / closing a view (also from the Views tab) switches to that view's saved style, else the default
 let vsHad = false;
 setInterval(() => {
   const vs = document.getElementById('vsSel'); if (vs) vs.style.display = window.vstyle ? '' : 'none';
   const k = vsViewKey(), first = !!window.vstyle && !vsHad; if (window.vstyle) vsHad = true;
-  if (k === vsKey && !first) return; vsKey = k; const st = vsRead(k) || vsDefault(); vsSet(st.id, st.opts);
+  if (k === vsKey && !first) return; vsKey = k; const st = vsRead(k) || (S.openView ? vsFromView() : null) || vsDefault(); vsSet(st.id, st.opts);
 }, 400);
 window.addEventListener('vstylechange', e => { const d = e.detail; if (d && d.id && d.id !== vsCur.id) { vsCur = {id: d.id, opts: d.opts || {}}; vsSync(); vsWrite(vsViewKey(), vsCur); } });
 { const sel = document.createElement('select'); sel.id = 'vsSel'; sel.title = 'Visual style (Revit): saved per view, "default" in the View control panel sets the style for new views';
