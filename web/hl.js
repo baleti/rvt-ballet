@@ -5,6 +5,7 @@
 // turn from front to back facing = silhouette, decided per frame in the vertex shader).
 import * as THREE from 'three';
 
+let vopts = {edgeAngle: 30, silhouettes: true, hiddenLines: 'off', lineWeight: 1, transparency: true, patterns: true, halftone: true, faceColor: '#ffffff'};      // hiddenLines default 'off' = Revit's hidden line (occluded lines only show through translucent faces)
 const S = window.S, scene = window.__scene, camera = window.__camera, renderer = window.__renderer, world = window.__world, U = window.__U;
 const $ = s => document.querySelector(s);
 const dirty = () => window.__dirty();
@@ -75,31 +76,34 @@ self.onmessage = ev => {
 
 const TW = 2048, uPx = {value: new THREE.Vector2(.001, .001)}, tLn = {value: null};
 // edge material; k = 0 base line, k = 1, 2 extra passes offset by about a pixel that thicken the lines of elements whose line weight needs 2 / 3 px
-function mkEdgeMat(k) {
+function mkEdgeMat(k, ghost) {
   const m = new THREE.ShaderMaterial({
-  clipping: true, depthTest: true, uniforms: {tState: U.tState, tLn, uPx, uK: {value: k}},
+  clipping: true, depthTest: true, uniforms: {tState: U.tState, tLn, uPx, uK: {value: k}, uSil: uSil, uGhost: {value: ghost ? (ghost === 'dashed' ? 2 : 1) : 0}},
   vertexShader: `#include <common>
 #include <clipping_planes_pars_vertex>
-attribute float _eidx; attribute vec3 n1; attribute vec3 n2; attribute float kind; uniform sampler2D tState; uniform sampler2D tLn; uniform vec2 uPx; uniform float uK; varying vec3 vC;
+attribute float _eidx; attribute vec3 n1; attribute vec3 n2; attribute float kind; uniform sampler2D tState; uniform sampler2D tLn; uniform vec2 uPx; uniform float uK; uniform float uSil; varying vec3 vC;
 void main(){
   vec4 wp = modelMatrix * vec4(position, 1.0); vec4 mvPosition = viewMatrix * wp; gl_Position = projectionMatrix * mvPosition;
   float eI = floor(_eidx + .5); ivec2 ix = ivec2(int(mod(eI, ${TW}.)), int(eI / ${TW}.)); vec4 stt = texelFetch(tState, ix, 0); float fl = floor(stt.r * 255. + .5);
   vec4 ln = texelFetch(tLn, ix, 0); vC = ln.rgb; float la = ln.a * 255.; float wpx = floor(la / 50. + .5); bool soft = mod(la + 25., 50.) >= 30.;
   bool hide = mod(fl, 2.) > .5 || mod(floor(fl / 8.), 2.) > .5 || (uK > .5 && wpx < uK + .5);
+  if (kind > .5 && kind < 1.5 && uSil < .5) hide = true;
   if (kind > .5 && (kind < 1.5 || soft)) { vec3 v = cameraPosition - wp.xyz; vec3 a = mat3(modelMatrix) * n1, b = mat3(modelMatrix) * n2; if (dot(a, v) * dot(b, v) > 0.) hide = true; }
   if (uK > .5) gl_Position.xy += (uK < 1.5 ? vec2(.7, .7) : vec2(-.7, .7)) * uPx * gl_Position.w;
   if (hide) gl_Position = vec4(2., 2., 2., 1.);
 #include <clipping_planes_vertex>
 }`,
   fragmentShader: `#include <clipping_planes_pars_fragment>
-varying vec3 vC;
+varying vec3 vC; uniform float uGhost;
 void main(){
 #include <clipping_planes_fragment>
-  gl_FragColor = vec4(vC, 1.);
+  if (uGhost > 1.5 && mod(floor(gl_FragCoord.x + gl_FragCoord.y), 6.) > 2.) discard;
+  gl_FragColor = vec4(uGhost > .5 ? mix(vC, vec3(1.), .72) : vC, 1.);
 }`});
   return m;
 }
-const edgeMats = [mkEdgeMat(0), mkEdgeMat(1), mkEdgeMat(2)];
+const uSil = {value: 1};
+const edgeMats = [mkEdgeMat(0), mkEdgeMat(1), mkEdgeMat(2)], ghostMat = mkEdgeMat(0, 'faint'); ghostMat.depthFunc = THREE.GreaterDepth; ghostMat.depthWrite = false;
 const edgeMat = edgeMats[0];
 
 const _v2 = new THREE.Vector2();
@@ -137,6 +141,7 @@ async function buildEdges() {
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(r.pos, 3)); g.setAttribute('_eidx', new THREE.BufferAttribute(r.eidx, 1));
     g.setAttribute('n1', new THREE.BufferAttribute(r.n1, 3, true)); g.setAttribute('n2', new THREE.BufferAttribute(r.n2, 3, true)); g.setAttribute('kind', new THREE.BufferAttribute(r.kind, 1));
     m.updateWorldMatrix(true, false);
+    { const l = new THREE.LineSegments(g, ghostMat); l.frustumCulled = false; l.renderOrder = 11.5; l.matrixAutoUpdate = false; l.matrix.copy(m.matrixWorld); l.userData.hlEdge = 1; l.userData.ghost = 1; l.visible = vopts.hiddenLines !== 'off'; grp.add(l); }
     for (const em of edgeMats) { const l = new THREE.LineSegments(g, em); l.frustumCulled = false; l.renderOrder = 11; l.matrixAutoUpdate = false; l.matrix.copy(m.matrixWorld); l.userData.hlEdge = 1; grp.add(l);
       if (em === edgeMat) l.onBeforeRender = r => { r.getDrawingBufferSize(_v2); uPx.value.set(2 / _v2.x, 2 / _v2.y); }; }
  H.edgeCount += r.pos.length / 6; dirty();
@@ -148,7 +153,7 @@ async function buildEdges() {
 H.applyOverrides = function () {
   if (!S.meta || !S.ovrData) return; const E = S.meta.elements, d = S.ovrData;
   for (let i = 0; i < S.N; i++) {
-    const c = H.cat[E[i][2]] || {}, o = (H.el && H.el[i]) || {}; let col = o.c || c.c || [255, 255, 255]; const a = o.a ?? c.a ?? 1; if (o.ht) col = col.map(x => (x + 255) >> 1);
+    const c = H.cat[E[i][2]] || {}, o = (H.el && H.el[i]) || {}; const fc = vopts.faceColor.match(/[0-9a-f]{2}/gi).map(x => parseInt(x, 16)); let col = o.c || c.c || fc; const a = vopts.transparency ? (o.a ?? c.a ?? 1) : 1; if (o.ht && vopts.halftone) col = col.map(x => (x + 255) >> 1);
     d[4*i] = col[0]; d[4*i+1] = col[1]; d[4*i+2] = col[2]; d[4*i+3] = Math.round(a * 255);
   }
   S.ovrTex.needsUpdate = true; H.applyLines(); dirty();
@@ -158,7 +163,7 @@ H.applyLines = function () {
   if (!S.meta) return; const E = S.meta.elements, N = S.N, h = Math.max(1, Math.ceil(N / TW));
   if (!H.lnData || H.lnData.length !== TW * h * 4) { H.lnData = new Uint8Array(TW * h * 4); H.lnTex = new THREE.DataTexture(H.lnData, TW, h, THREE.RGBAFormat, THREE.UnsignedByteType); H.lnTex.minFilter = H.lnTex.magFilter = THREE.NearestFilter; tLn.value = H.lnTex; }
   const d = H.lnData;
-  for (let i = 0; i < N; i++) { const o = (H.el && H.el[i]) || {}; let c = o.lc || [0, 0, 0]; const w = o.lw || 1; if (o.ht) c = c.map(x => (x + 255) >> 1); d[4*i] = c[0]; d[4*i+1] = c[1]; d[4*i+2] = c[2]; d[4*i+3] = w * 50 + (SOFT.has(E[i][2]) ? 10 : 0); }
+  for (let i = 0; i < N; i++) { const o = (H.el && H.el[i]) || {}; let c = o.lc || [0, 0, 0]; const w = Math.max(1, Math.min(3, Math.round((o.lw || 1) * vopts.lineWeight))); if (o.ht && vopts.halftone) c = c.map(x => (x + 255) >> 1); d[4*i] = c[0]; d[4*i+1] = c[1]; d[4*i+2] = c[2]; d[4*i+3] = w * 50 + (SOFT.has(E[i][2]) ? 10 : 0); }
   H.lnTex.needsUpdate = true;
 };
 H.setCat = function (cat, o) { H.cat[cat] = o; H.applyOverrides(); };
@@ -196,6 +201,12 @@ H.loadView = async function (v) {
 };
 let lastView; setInterval(() => { if (S.openView !== lastView) { lastView = S.openView; H.viewReady = false; H.loadView(S.openView); } }, 400);
 
+H.applyOpts = function (prevAngle) {
+  uSil.value = vopts.silhouettes ? 1 : 0; ghostMat.uniforms.uGhost.value = vopts.hiddenLines === 'dashed' ? 2 : 1;
+  if (H.group) for (const l of H.group.children) if (l.userData.ghost) l.visible = vopts.hiddenLines !== 'off';
+  if (vopts.edgeAngle !== prevAngle && H.meshes) { H.thresholdDeg = vopts.edgeAngle; if (H.group) world.remove(H.group); window.__hlGroup = null; H.group = null; buildEdges(); }
+  if (S.meta) H.applyOverrides();
+};
 H.setOffset = function (f, u) { H.off = [f, u]; for (const m of (H.meshes || []).concat(H.twins)) { m.material.polygonOffsetFactor = f; m.material.polygonOffsetUnits = u; } dirty(); };
 let saved = null;
 H.setStyle = function (st, user) {
@@ -230,11 +241,10 @@ H.setStyle = function (st, user) {
 
 // window.vstyle contract (docs/VSTYLE-API.md, c3-vctl selector #vsSel): ids hiddenline/shaded/consistent/realistic/wireframe map to this module's styles
 const VMAP = {hiddenline: 'hidden', shaded: 'shaded', consistent: 'consistent', realistic: 'realistic', wireframe: 'wire'}, VBACK = Object.fromEntries(Object.entries(VMAP).map(([a, b]) => [b, a]));
-let vopts = {edgeAngle: 30, silhouettes: true, hiddenLines: 'faint', lineWeight: 1, transparency: true, patterns: true, halftone: true, faceColor: '#ffffff'};
 const vstyle = {
   list: () => [['hiddenline', 'Hidden line'], ['shaded', 'Shaded'], ['consistent', 'Consistent colors'], ['realistic', 'Realistic'], ['wireframe', 'Wireframe']].map(([id, label]) => ({id, label})),
   get: () => ({id: VBACK[H.style], opts: {...vopts}}),
-  set(id, opts) { if (!VMAP[id]) throw new Error('unknown style ' + id); vopts = {...vopts, ...(opts || {})}; H.setStyle(VMAP[id], true); },
+  set(id, opts) { if (!VMAP[id]) throw new Error('unknown style ' + id); const prevAngle = vopts.edgeAngle; vopts = {...vopts, ...(opts || {})}; H.applyOpts(prevAngle); H.setStyle(VMAP[id], true); },
 };
 Object.defineProperty(vstyle, 'defaultId', {value: 'hiddenline'}); window.vstyle = vstyle;
 function onLoaded() {
