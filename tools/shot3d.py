@@ -21,7 +21,7 @@ async def main(a):
         while phase() != 'done':
             if time.time() - t > 1800: raise SystemExit('model not complete')
             time.sleep(2)
-        if a.spec and json.load(open(a.spec)).get('size'): a.size = json.load(open(a.spec))['size']
+        if a.spec and json.load(open(a.spec)).get('size'): sz = json.load(open(a.spec))['size']; a.size = sz if isinstance(sz, str) else '%dx%d' % tuple(sz)
         if a.like:
             import struct; hd = open(a.like, 'rb').read(24); a.size = '%dx%d' % struct.unpack('>II', hd[16:24])
         w, h = map(int, a.size.split('x')); b = cdp.Browser(size=(w, h)); b.size = (w, h); await b.start()
@@ -29,7 +29,6 @@ async def main(a):
         if a.spec:
             sp = json.load(open(a.spec)); a.view = '3d'; k = 0.3048; e = sp['eye']; d = sp['dir']
             a.camera = '%s,%s,%s,%s,%s,%s' % (e[0], e[1], e[2], e[0] - d[0], e[1] - d[1], e[2] - d[2]); a.units = 'ft'
-            if sp.get('size'): a.size = sp['size']
             a.proj = [sp['tl'], sp['tr'], sp['tt'], sp['tb']] if 'tl' in sp else None
         if a.tan:
             import math; a.fov = 2 * math.degrees(math.atan(float(a.tan.split(',')[1])))
