@@ -69,7 +69,7 @@ let selBoxDummy;
 let stateTex, stateData;
 try { for (const f of ['400 16px', '700 16px', 'italic 400 16px', 'italic 700 16px']) document.fonts.load(f + ' "Liberation Sans"'); } catch (e) {}      // text overlays draw to canvas: have the local Arial twin ready before the first view opens
 const U = {tState: {value: null}, uMode: {value: 0}, tMat: {value: null}, tPat: {value: null}, tImg: {value: null}, tBump: {value: null}, uTex: {value: 1}, uBot: {value: -1e9}, uStyle: {value: 0}, tOvr: {value: null}};
-window.__U = U; setTimeout(() => { window.__applySection = applySection; }, 0); setTimeout(() => { window.__refreshState = refreshState; }, 0);
+window.__U = U; setTimeout(() => { window.__lbls = lbls; }, 0); setTimeout(() => { window.__applySection = applySection; }, 0); setTimeout(() => { window.__refreshState = refreshState; }, 0);
 setTimeout(() => { window.__patch = patch; }, 0);
 
 function depthMat() {

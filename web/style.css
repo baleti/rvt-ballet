@@ -73,3 +73,4 @@ body.hlstyle .lbl.room{background:none;color:#444}
 @font-face{font-family:"Liberation Sans";font-weight:700;font-style:normal;src:local("Liberation Sans Bold"),url(/fonts/LiberationSans-Bold.ttf)}
 @font-face{font-family:"Liberation Sans";font-weight:400;font-style:italic;src:local("Liberation Sans Italic"),url(/fonts/LiberationSans-Italic.ttf)}
 @font-face{font-family:"Liberation Sans";font-weight:700;font-style:italic;src:local("Liberation Sans Bold Italic"),url(/fonts/LiberationSans-BoldItalic.ttf)}
+body.hlstyle .lbl.lvl::before{content:'';display:inline-block;width:9px;height:9px;margin-right:4px;vertical-align:-1px;border:1.5px solid #111;border-radius:50%;background:linear-gradient(90deg,#111 50%,#fff 50%)}      /* level head symbol */

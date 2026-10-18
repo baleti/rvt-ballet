@@ -687,13 +687,27 @@ function vsFromView() {
   const o = {}; if (typeof d.silhouettes === 'boolean') o.silhouettes = d.silhouettes; if (['off', 'faint', 'dashed'].includes(d.hidden_lines)) o.hiddenLines = d.hidden_lines;
   return {id: d.vstyle, opts: o};
 }
+// views[].display is computed in the background on the first load of a model and appears in a later meta.json: re-read it (once per model per page) and apply it to the open view unless a style was saved meanwhile
+const vsMetaTried = new Set();
+function vsLateDisplay(key) {
+  const mid = S.mid; if (!mid || vsMetaTried.has(mid)) return; vsMetaTried.add(mid);
+  const go = async () => {
+    try {
+      const m = await (await fetch(`/m/${mid}/meta.json?t=${Date.now()}`)).json(), vs = m.views || [], mine = (S.meta && S.meta.views) || [];
+      let got = false; vs.forEach(v => { if (v.display) { const t = mine.find(x => x.id === v.id); if (t && !t.display) { t.display = v.display; got = true; } } });
+      if (!got && !vs.some(v => v.display)) { vsMetaTried.delete(mid); return; }
+      if (vsViewKey() === key && !vsRead(key) && S.openView) { const st = vsFromView(); if (st) vsSet(st.id, st.opts); }
+    } catch (e) {}
+  };
+  setTimeout(go, 10000);
+}
 function vsSetDefault() { vsWrite('vstyle:default', vsCur); }
 // opening / closing a view (also from the Views tab) switches to that view's saved style, else the default
 let vsHad = false;
 setInterval(() => {
   const vs = document.getElementById('vsSel'); if (vs) vs.style.display = window.vstyle ? '' : 'none';
   const k = vsViewKey(), first = !!window.vstyle && !vsHad; if (window.vstyle) vsHad = true;
-  if (k === vsKey && !first) return; vsKey = k; const st = vsRead(k) || (S.openView ? vsFromView() : null) || vsDefault(); vsSet(st.id, st.opts);
+  if (k === vsKey && !first) return; vsKey = k; const st = vsRead(k) || (S.openView ? vsFromView() : null) || vsDefault(); vsSet(st.id, st.opts); if (S.openView && !S.openView.display && !vsRead(k)) vsLateDisplay(k);
 }, 400);
 window.addEventListener('vstylechange', e => { const d = e.detail; if (d && d.id && d.id !== vsCur.id) { vsCur = {id: d.id, opts: d.opts || {}}; vsSync(); vsWrite(vsViewKey(), vsCur); } });
 { const sel = document.createElement('select'); sel.id = 'vsSel'; sel.title = 'Visual style (Revit): saved per view, "default" in the View control panel sets the style for new views';

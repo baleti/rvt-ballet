@@ -1560,7 +1560,7 @@ def convert(path, outdir, log=print, workers=None):
         el['level'] = lvl_by_id.get(lv)
     views, sheets = datums.views_sheets(ctx); rooms = datums.rooms(ctx, lvl_by_id); grids = build_grids(ctx)
     try:      # per-view display options (visual style, background sky/ground colours, silhouettes), reader rvt_viewdisp: the viewer opens a stored view in its own style
-        if not os.environ.get('RVT_NO_VIEWDISP'):
+        if os.environ.get('RVT_VIEWDISP_IN_CONVERT'):      # off by default: the reader pass costs a second extraction on cold files; rvtviewer/viewdisp.py fills it in after the model is usable
             import rvt_viewdisp
             vd = rvt_viewdisp.view_display(path); VS = {1: 'wireframe', 2: 'hiddenline', 7: 'consistent', 3: 'shaded', 4: 'shaded', 5: 'shaded', 6: 'shaded'}
             for v_ in views:
