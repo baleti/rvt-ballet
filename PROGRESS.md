@@ -156,3 +156,4 @@
 * vstyle opts (docs/VSTYLE-API.md) now implemented in hl.js: edgeAngle (re-extracts edges), silhouettes, hiddenLines off|faint|dashed (second edge pass with GreaterDepth, grey / stippled), lineWeight multiplier, transparency, halftone, faceColor. NOTE: default hiddenLines is 'off' (Revit's hidden line look), the draft doc says 'faint'. tools/vstyle_opts_test.py cycles the options on house1 (needs RVT_VIEW).
 * Edge cache: extraction results go to IndexedDB (key: model id, build stamp, mesh, edge angle, min edge); Snowdon rebuild 2112 ms -> 208 ms (tools/hl_cache_test.py). Default minimum conditional edge 1 cm (2 cm cost 1% F1: 0.900 -> 0.891).
 * Material graphics (surface/cut pattern + colour per material) requested from the reader: Revit paints a material's surface pattern colour in hidden line (the grey interior walls of house1).
+* f1012fb: style options row in the panel.
