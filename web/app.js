@@ -500,7 +500,7 @@ const chip = (m, k, px) => m.swatch ? `<img src="/m/${S.mid}/swatch/${k}.png" wi
 function matLine(m, k) {
   if (k == null) k = S.mats.indexOf(m);
   return `<div style="margin:3px 0;display:flex;align-items:flex-start">${chip(m, k, 40)}<div><b>${esc(m.name)}</b> <span class="dim">${esc(m.class || '')}${m.alpha < 0.97 ? ' &middot; transparency ' + Math.round((1 - m.alpha) * 100) + '%' : ''}${m.shin != null ? ' &middot; shininess ' + m.shin : ''}${m.smooth != null ? ' &middot; smoothness ' + m.smooth : ''}${m.metal ? ' &middot; metal' : ''}</span><br>` +
-    `<span class="dim" style="font-size:11px">colour: ${esc(m.color_source)}<br>swatch: ${m.swatch ? "Revit's swatch image from the file" : 'none stored'}<br>texture: ${esc(m.texture_source)}${m.tex_class !== 'none' && !m.tex_img ? ' [' + esc(m.tex_class) + ']' : ''}${m.schema ? '<br>appearance: ' + esc(m.schema) + (m.asset ? ' / ' + esc(m.asset) : '') : ''}</span></div></div>`;
+    `<span class="dim" style="font-size:11px">colour: ${esc(m.color_source)}<br>swatch: ${m.swatch ? "Revit's swatch image from the file" : 'none stored'}<br>texture: ${esc(m.texture_source)}${m.tex_class !== 'none' && !m.tex_img ? ' [' + esc(m.tex_class) + ']' : ''}${m.schema ? '<br>appearance: ' + esc(m.schema) + (m.asset ? ' / ' + esc(m.asset) : '') : ''}${m.surface_pattern ? '<br>surface pattern: ' + esc(m.surface_pattern.name || m.surface_pattern.id) : ''}${m.cut_pattern ? '<br>cut pattern: ' + esc(m.cut_pattern.name || m.cut_pattern.id) : ''}</span></div></div>`;
 }
 function renderMaterials(tb) {
   const M = S.mats || []; if (!M.length) { tb.innerHTML = '<p class="dim">No material table in this model (convert again to extract materials).</p>'; return; }
