@@ -164,3 +164,4 @@
 * Structural re-warmed after sheets 0cb42bd (41 scenes). Facades still queued: remote-host busy. Residential, Commercial, Structural current.
 * 55_Snowdon (2026) Structural 3D, hidden-line views (tools/hl_table.py): Structure Only 0.896, Framing 0.992, Slabs 0.964, Columns 0.864, CoverSheet 0.878, Walls 0.780, Foundations 0.246 (43/2024 Foundations scores 0.80: investigate the 2026 file's foundation view); mean 0.80 over the 7 HLR views. FlatColors views 0.13-0.56 (not hidden line in Revit). hl_score.drop_datums now keeps any component with a dense window (it had deleted a whole connected drawing and scored Walls/Slabs 0.0).
 * a02629a: late display fallback.
+* 8c02aad: display flags 0/1 mapping fixed.
