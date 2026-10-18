@@ -9,7 +9,7 @@ from numba import njit
 from PIL import Image
 
 ap = argparse.ArgumentParser(); ap.add_argument('model'); ap.add_argument('cameras'); ap.add_argument('view'); ap.add_argument('out')
-ap.add_argument('--vg'); ap.add_argument('--size', type=int, default=2400); ap.add_argument('--min-edge', type=float, default=0.01); ap.add_argument('--angle', type=float, default=30.0)
+ap.add_argument('--vg'); ap.add_argument('--eps', type=float, default=3e-4, help='line-vs-face depth tolerance as a fraction of the model depth range'); ap.add_argument('--only', type=int, help='render only this element index (diagnostics)'); ap.add_argument('--opaque', action='store_true', help='ignore view transparency (diagnostics)'); ap.add_argument('--size', type=int, default=2400); ap.add_argument('--min-edge', type=float, default=0.01); ap.add_argument('--angle', type=float, default=30.0)
 a = ap.parse_args()
 meta = json.load(open(a.model + '/meta.json')); E = meta['elements']
 SOFT = {'Planting', 'Entourage', 'Topography'}
@@ -29,6 +29,7 @@ for m in J['meshes']:
         if p.get('mode', 4) != 4 or 'POSITION' not in at or '_EIDX' not in at or 'indices' not in p: continue
         prims.append((acc(at['POSITION']).astype(np.float64), acc(at['_EIDX'])[:, 0].astype(np.int64), acc(p['indices'])[:, 0].astype(np.int64).reshape(-1, 3)))
 
+if a.only is not None: prims = [(P, EI, T[EI[T[:, 0]] == a.only]) for P, EI, T in prims]; prims = [p for p in prims if len(p[2])]
 # ---------------------------------------------------------------- view graphics
 idx = {int(e[0]): i for i, e in enumerate(E)}; N = len(E)
 hidden = np.zeros(N, bool); alpha = np.ones(N); lw = np.ones(N)
@@ -38,6 +39,7 @@ if a.vg:
         if eid in idx: hidden[idx[eid]] = True
     for k, v in vg['els'].items():
         if int(k) in idx: alpha[idx[int(k)]] = v[3]; lw[idx[int(k)]] = v[7]
+if a.opaque: alpha[:] = 1.0
 soft = np.array([e[2] in SOFT for e in E])
 _dh = set(meta.get('defaultHidden') or []); hidden |= np.array([e[2] in _dh for e in E])      # categories the viewer hides by default (meta.defaultHidden)
 
@@ -65,6 +67,7 @@ for P, EI, T in prims:
         va, vb = T[:, k], T[:, (k + 1) % 3]; ok = (w[va] != w[vb]) & keep_t
         lo = np.minimum(w[va], w[vb])[ok]; hi = np.maximum(w[va], w[vb])[ok]
         ks.append(lo.astype(np.int64) * (1 << 26) + hi); ts.append(np.where(ok)[0]); vs.append(np.stack([va[ok], vb[ok]], 1))
+    if os.environ.get('HL_DEBUG'): print('prim tris', len(T), 'elements', np.unique(te)[:5])
     keys = np.concatenate(ks); tri = np.concatenate(ts); vv = np.concatenate(vs); o = np.argsort(keys, kind='stable'); keys, tri, vv = keys[o], tri[o], vv[o]
     uniq, start, cnt = np.unique(keys, return_index=True, return_counts=True)
     p0 = P[vv[start, 0]]; p1 = P[vv[start, 1]]; ln = np.linalg.norm(p1 - p0, axis=1); tA = tri[start]; tB = tri[np.minimum(start + 1, len(tri) - 1)]
@@ -79,6 +82,7 @@ for P, EI, T in prims:
     # oriented normals for conditional edges
     mid = (p0 + p1) / 2; n1 = Nn[tA].copy(); n2 = Nn[tB].copy(); flip2 = (n1 * n2).sum(1) < 0; n2[flip2] *= -1
     out_ = ((mid - cen_u[np.searchsorted(ue, el)]) * n1).sum(1) < 0; n1[out_] *= -1; n2[out_] *= -1
+    if os.environ.get('HL_DEBUG'): print('classes: boundary', int(bnd.sum()), 'elem', int(elem.sum()), 'sharp', int(sharp.sum()), 'smooth', int(smooth.sum()), 'dd min/max', float(dd[two].min()) if two.any() else None, float(dd[two].max()) if two.any() else None)
     softe = soft[el]
     always = bnd | elem | (sharp & ~softe)
     cond = smooth | (sharp & softe)
@@ -137,7 +141,7 @@ for Pp, EI, T in prims:
         raster(np.ascontiguousarray(Q[tt, 0]), np.ascontiguousarray(Q[tt, 1]), np.ascontiguousarray(Q[tt, 2]), np.ascontiguousarray(tal), W, H, zb, ab)
 # translucent faces in front of the opaque ones fade the lines behind them: ta holds the opacity of the nearest translucent face (single value per view: mean alpha of translucent elements)
 img = np.full((H, W), 255, np.uint8)
-Q0, Q1 = proj(P0), proj(P1); eps = np.ptp(bb @ d) * 3e-4
+Q0, Q1 = proj(P0), proj(P1); eps = np.ptp(bb @ d) * a.eps
 thick = (lw[EL] >= 0.8).astype(np.int64)
 lines(Q0[:, 0], Q0[:, 1], Q0[:, 2], Q1[:, 0], Q1[:, 1], Q1[:, 2], EL, zo, zt, ta, W, H, eps, img, thick)
 Image.fromarray(img).save(a.out); print('wrote', a.out, img.shape, 'edges', len(P0), 'tris', sum(len(p[2]) for p in prims))
