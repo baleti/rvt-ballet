@@ -1,5 +1,5 @@
 """Build rvtviewer/data/category_names.json from Revit-produced ground-truth dumps (gt4/*.tsv: 'E id class Name|BuiltInCategoryId ...').
-Provenance: Revit API output only. No ODA-derived tables."""
+Provenance: Revit API output only. """
 import glob, json, os, sys
 gt = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/rvt-research/gt4')
 out = {}

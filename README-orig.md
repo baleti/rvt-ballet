@@ -130,4 +130,4 @@ Not done: true instancing (placeholders are tiny merged boxes; real symbol geome
 `.venv/bin/python tests/test_geom.py`; UI: `tools/uitest1.py|uitest2.py|uitest3.py MODELDIR PORT OUTPREFIX` (headless Chromium via CDP, real mouse events, screenshots).
 
 ## Provenance / rules
-See PROVENANCE.md (no ODA-derived tables). Test samples are Autodesk files kept local in ~/rvt-research/corpus and never copied here.
+See PROVENANCE.md. Test samples are Autodesk files kept local in ~/rvt-research/corpus and never copied here.

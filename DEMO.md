@@ -1,6 +1,6 @@
 # Demo script (one page)
 
-Everything runs offline, no Revit, no Autodesk SDK. Prepare once before the interview, then every open is instant.
+Everything runs offline, no Revit, no Autodesk SDK. Prepare once before the demo, then every open is instant.
 
 ## Before (5-10 minutes, any time earlier the same day)
     ~/src/rvt-viewer/bin/rvt-view --prepare ~/rvt-research/corpus/2020/20_Residential_Sample_Project.rvt ~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt ~/rvt-research/corpus/2026/58_Snowdon_Towers_Sample_Facades.rvt
