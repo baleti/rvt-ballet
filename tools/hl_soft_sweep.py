@@ -5,7 +5,8 @@ import sys, os, subprocess, re, itertools
 H = os.path.expanduser('~'); name, model = sys.argv[1], sys.argv[2]; D = os.path.dirname(os.path.abspath(__file__)); R = '%s/review-compare/revit/%s' % (H, name)
 views = sys.argv[3:] or ['600158', '783844', '783871', '783882', '783925', '923315']
 res = []
-for ang, me in itertools.product((20, 30, 45), (0.0, 0.01, 0.03)):
+SKIP = int(os.environ.get('HL_SWEEP_SKIP', 0))      # resume after a killed run: number of leading configurations already done
+for ang, me in list(itertools.product((20, 30, 45), (0.0, 0.01, 0.03)))[SKIP:]:
     f1 = []
     for vid in views:
         out = '/tmp/hlsweep_%s_%s_%s.png' % (ang, me, vid); vg = '%s/review-compare/vg3d/%s/%s.json' % (H, name, vid)
