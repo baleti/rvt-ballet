@@ -30,3 +30,6 @@ Baseline smoke OK (2020 Residential). Rust fast path + preimport thread already 
 05:54:09 vctl 4a122ba merged (narrow-window button, tabs wrap, Arial Narrow width), smoke x3 + vctltest + uitest12 OK, demo-ready moved
 07:55:21 demo models re-prepared (reader changed again), smoke x3 OK; queue_warm.sh retrying the sheets warm of Structural/Facades on remote-host
 08:30:13 all demo caches + sheets warm, smoke x3 OK, demo-ready on 05a248b
+
+## c6-viewer state (2026-10-19)
+Master has: Revit navigation, hidden-line default with surface-pattern hatch (web/app.js fragment shader + materials.js rows 6..9), parallel-projection views (orthoLook, view bar button, tools/uitest13.py), section far clip (datums.py views[].depth from Viewer m_boundedSpace z far bound; app.js clips beyond it). Tests that pass on 2020 Residential (remote-host, 2 GB cap, one at a time): demo_smoke.sh, uitest6, uitest12, uitest13. Pending: demo_smoke on Snowdon / Facades (vsmoke7) and tools/hl_score.py of the Residential building section (hlscore1), both queued in ~/demo-state/H1-QUEUE.md (remote-host gate blocked by its VMs, known). Models converted before 2026-10-18 lack surface patterns / depth until re-converted or `rvt-view --prepare` is re-run. Open ideas: cut-pattern hatch on section caps, drafting patterns in 3D, honour far_clipping / crop_active through rvt_viewdisp.view_clip.
