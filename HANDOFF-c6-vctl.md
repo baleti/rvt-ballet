@@ -8,4 +8,4 @@ ALLOW_remote-host=1 tools/demo_smoke.sh FILE PORT; start bin/rvt-view FILE --no-
 ## Open
 * Live browser check of 'colour from filter' on a filtered Snowdon Structural view (needs chromium on remote-host or a big remote-host run: parked).
 * Annotation classes not yet drawn by sheets: angular/radial dimensions, revision clouds.
-* 3D views carry no annotation overlay.
+* 3D views carry no annotation overlay (checked: sheets 3D scenes hold only model classes in Residential, no annotation classes).
