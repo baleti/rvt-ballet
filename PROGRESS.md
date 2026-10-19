@@ -212,3 +212,4 @@
 - merged master (rvtviewer/datums.py 1 line): demo_smoke OK, vctltest ALL OK, vcui ALL OK. Commercial re-warm still queued (remote-host 4.8 GB).
 * 2026-10-19 (c6-viewer): browser check of the section far clip (remote-host had 8.8 GB free; one shot3d at 2 GB cap): Residential 'building section' renders as a clean parallel section with cut caps, cabinets, windows and stairs inside the 4.37 m depth, nothing blank. Far clip + parallel look verified visually. (uitest6/12 still not re-run.)
 * 2026-10-19 (c6-viewer): uitest12 ALL OK and uitest6 ALL OK (14 PASS, no console errors) on master after orthoLook, section depth, hatch shader and the hl merges (remote-host 2 GB cap, 9 GB free; the 1.5 GB cap is too small for chromium).
+* 2026-10-19 (c6-viewer): hl_score of the viewer's Residential building section vs the Revit export needs ~2 GB (OOM-killed at the 1.5 GB remote-host cap): queued as hlscore1 in H1-QUEUE.md with inputs in ~/review-compare/viewer-shots/.
