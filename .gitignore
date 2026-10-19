@@ -13,3 +13,4 @@
 !*.cs
 !*.ps1
 !.gitignore
+!assets/*.png
