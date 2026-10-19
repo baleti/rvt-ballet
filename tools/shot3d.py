@@ -40,7 +40,7 @@ async def main(a):
         if a.tan:
             import math; a.fov = 2 * math.degrees(math.atan(float(a.tan.split(',')[1])))
         if not hasattr(a, 'proj'): a.proj = None
-        if a.clean: await b.ev("(()=>{const s=document.createElement('style');s.textContent='header,#side,#tabs,#panel,#inspector,#help,#status,#viewcube,#viewbar,#banner,.panel,#left,#right,#vcube,#vhome,.lbl{display:none!important}#view{position:fixed!important;inset:0!important;height:100vh!important}';document.head.appendChild(s);return 0})()")
+        if a.clean: await b.ev("(()=>{const s=document.createElement('style');s.textContent='header,#side,#tabs,#panel,#inspector,#help,#status,#viewcube,#viewbar,#banner,#stale,.panel,#left,#right,#vcube,#vhome,.lbl{display:none!important}#view{position:fixed!important;inset:0!important;height:100vh!important}';document.head.appendChild(s);return 0})()")
         await b.ev("window.dispatchEvent(new Event('resize'));0"); await asyncio.sleep(2)      # canvas takes the new size before the view framing is computed
         if a.view != '3d':
             js = "(async()=>{const q=%s;const V=(await (await fetch('/m/%s/meta.json')).json()).views||[];const v=V.find(x=>String(x.id)===q)||V.find(x=>(x.name||'').toLowerCase().includes(q.toLowerCase()));if(!v)return 'no such view (using model camera)';window.openView(v);return 'opened '+v.name})()" % (json.dumps(a.view), mid)
