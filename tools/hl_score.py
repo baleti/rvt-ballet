@@ -17,7 +17,7 @@ def place(m, dx, dy, shape):
 def best(R, O):
     Rb = blur(R, 4); Rb -= Rb.mean(); res = (-1, 1, 0, 0); S = (2048, 2048)
     FR = np.fft.rfft2(Rb, S)
-    for s in np.geomspace(.3, 2.5, 61):
+    for s in np.geomspace(.15, 8, 91):
         Os = resize(O, s); Ob = blur(Os, 4); Ob -= Ob.mean(); c = np.fft.irfft2(FR * np.conj(np.fft.rfft2(Ob, S)), S)
         c = c / (np.linalg.norm(Rb) * np.linalg.norm(Ob) + 1e-9); i = np.unravel_index(np.argmax(c), c.shape)
         if c[i] > res[0]: res = (c[i], s, i[1] if i[1] < 1024 else i[1] - 2048, i[0] if i[0] < 1024 else i[0] - 2048)

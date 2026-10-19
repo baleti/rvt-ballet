@@ -18,6 +18,9 @@ Revit exports: `~/review-compare/revit/<file>/<viewId>.png` + `cameras.tsv` (eye
 * Measured (registered line F1, hidden-line views): Snowdon 43 (2024) mean 0.88 over 7 views (Framing .99, Slabs .96, Structure Only .90, CoverSheet .89, Columns .87, Foundations .80, Walls .78); Snowdon 55 (2026) mean 0.80 (Foundations .25 is a scale artefact of the score, the render matches visually). FlatColors views (Consistent Colors in Revit) are not hidden-line and score lower by design.
 * Tests: `tools/style_test.py` (5-style round trip), `tools/vstyle_opts_test.py`, `tools/hl_cache_test.py`, `tools/hl_view_test.py`, `node tools/hl_worker_test.js`, `tools/hl_edge_stats.py` (numpy edge statistics per element).
 
+## Software renderer numbers (tools/hl_soft_all.py, host1, 2026-10-18)
+Registered line F1 vs Revit, hidden-line views of Snowdon 43 (2024) and 55 (2026) (identical to 3 decimals): Structure Only .919, Walls .929, Columns .930, Framing 1.000, Slabs .950, CoverSheet .953 (mean 0.947), Foundations .255 (mean over all 7: 0.848). The Foundations view scores low in the software renderer only: round piles lose one outline (the browser render matches Revit, F1 .80); `--only ELEMIDX`, `--opaque`, `--eps`, `HL_DEBUG=1` are the diagnostic switches, cause open (not the depth tolerance, not translucency).
+
 ## Known gaps
 * Surface patterns / material graphics colours (needs reader: material surface + cut pattern colours); grey interior faces of Revit walls come from them.
 * Level / grid per-view extents, level colours (filter 'Levels - Building'), grids hidden by filters: sheets filter evaluation for datums.
