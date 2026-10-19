@@ -948,7 +948,8 @@ function openView(v) {
   if (v.kind !== '3d' && (v.dir || v.cut)) orthoLook(true);      // Revit plans / sections / elevations are parallel projections: telephoto look, same framing
   if (S.lvlGroup) S.lvlGroup.visible = showLvl && v.kind !== 'Plan';          // level outlines seen from above are just lines across a plan
   if (S.gridMat) { S.gridMat.depthTest = v.kind !== 'Plan'; S.gridMat.needsUpdate = true; S.gridGroup.renderOrder = v.kind === 'Plan' ? 200 : 0; }      // plans draw grids on top, as Revit does
-  const vb = $('#viewbar'); vb.hidden = false; vb.innerHTML = `<b>${esc(v.name)}</b> <span class="dim">${esc(v.kind)}${S.viewClip ? ' (cut plane active' + (S.viewCrop ? ', cropped' : '') + ')' : ''}</span> <button id="vbOff">close view</button>`;
+  const vb = $('#viewbar'); vb.hidden = false; vb.innerHTML = `<b>${esc(v.name)}</b> <span class="dim">${esc(v.kind)}${S.viewClip ? ' (cut plane active' + (S.viewCrop ? ', cropped' : '') + ')' : ''}</span> <button id="vbProj" title="parallel (orthographic-looking) or perspective projection for this view">${camera.fov < 10 ? 'perspective' : 'parallel'}</button> <button id="vbOff">close view</button>`;
+  const vp = $('#vbProj'); if (vp) vp.onclick = () => { orthoLook(camera.fov > 10); vp.textContent = camera.fov < 10 ? 'perspective' : 'parallel'; };
   $('#vbOff').onclick = () => { orthoLook(false); S.viewClip = null; S.viewCrop = null; U.uBot.value = -1e9; vb.hidden = true; S.openView = null; if (S.lvlGroup) S.lvlGroup.visible = showLvl; if (S.gridMat) { S.gridMat.depthTest = true; S.gridMat.needsUpdate = true; } applySection(); fitAll(); };
   applySection(); dirty = true;
 }
