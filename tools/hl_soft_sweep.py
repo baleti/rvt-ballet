@@ -6,7 +6,8 @@ H = os.path.expanduser('~'); name, model = sys.argv[1], sys.argv[2]; D = os.path
 views = sys.argv[3:] or ['600158', '783844', '783871', '783882', '783925', '923315']
 res = []
 SKIP = int(os.environ.get('HL_SWEEP_SKIP', 0))      # resume after a killed run: number of leading configurations already done
-for ang, me in list(itertools.product((20, 30, 45), (0.0, 0.01, 0.03)))[SKIP:]:
+GRID = [tuple(float(x) for x in g.split(':')) for g in os.environ['HL_SWEEP_GRID'].split(',')] if os.environ.get('HL_SWEEP_GRID') else list(itertools.product((20, 30, 45), (0.0, 0.01, 0.03)))      # HL_SWEEP_GRID=30:0.01,45:0.01
+for ang, me in GRID[SKIP:]:
     f1 = []
     for vid in views:
         out = '/tmp/hlsweep_%s_%s_%s.png' % (ang, me, vid); vg = '%s/review-compare/vg3d/%s/%s.json' % (H, name, vid)
