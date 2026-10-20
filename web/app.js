@@ -784,7 +784,8 @@ function updateCaps(planes) {
     const cap = new THREE.Mesh(new THREE.PlaneGeometry(size, size), pm); cap.userData.capPlane = true; cap.renderOrder = k + 1.1; cap.frustumCulled = false;
     pl.coplanarPoint(cap.position); cap.position.add(pl.normal.clone().multiplyScalar(1e-4)); cap.position.add(c.clone().sub(cap.position).projectOnPlane(pl.normal));
     cap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), pl.normal.clone().normalize()); cap.onAfterRender = r => r.clearStencil();
-    g.add(cap); if (window.__hl && window.__hl.style === 'hidden') { const seg = cutSegments(pl); if (seg.length) g.add(outlineLines(seg)); } capGroup.add(g);
+    g.add(cap); if (window.__hl && window.__hl.style === 'hidden' && (S.tris || 0) <= 1.5e6) { const seg = cutSegments(pl);      // CPU pass over all vertices: skipped on very large models
+      if (seg.length) g.add(outlineLines(seg)); } capGroup.add(g);
   });
 }
 $('#bSection').onclick = () => { secOn ? (secOn = false, $('#secui').hidden = true, applySection()) : setSection('Y', (modelBox().min.y + modelBox().max.y) / 2); };
