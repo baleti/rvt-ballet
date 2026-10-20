@@ -11,4 +11,7 @@ for v in m._summary['views']:
     t0 = time.time()
     try: scene_text(m, v['id'], {}); n += 1; print('ok', v['id'], v['kind'], v['name'], '%.1fs' % (time.time() - t0), flush=True)
     except Exception as ex: print('FAIL', v['id'], v['name'], repr(ex)[:100], flush=True)
-print('warmed %d scenes; cache dir: .cache/rvt-sheets/%s' % (n, os.path.basename(m.dir)))
+import glob
+sc = [f for f in glob.glob(os.path.expanduser('~/.cache/rvt-sheets/*/scene_*.json')) if time.time() - os.path.getmtime(f) < 86400]
+d = os.path.basename(os.path.dirname(max(sc, key=os.path.getmtime))) if sc else os.path.basename(m.cache.dir)  # the dir that really holds the newest scenes (m.dir printed a dir that did not exist on host1)
+print('warmed %d scenes; cache dir: .cache/rvt-sheets/%s' % (n, d))

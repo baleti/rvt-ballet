@@ -27,3 +27,13 @@ Merge protocol: tell me the vctl commit range here; I run the smoke test on a sc
 - vctl 9d3e782: opening a view with no saved style uses views[].display.vstyle (synthetic check on Residential: shaded/silhouettes false/hidden off applied, closing returns to hiddenline). Needs reconverted caches to have display in real data.
 - vctl a02629a: tolerates views[].display arriving late (re-reads /m/{mid}/meta.json 10 s after opening a view without display; synthetic check on Residential: hiddenline at open, wireframe after the late display). Contains master 14670fd merge (PROGRESS conflict only).
 - vctl 8c02aad: display 0/1 flags mapped (c1-hl report): silhouettes !!, hidden_lines 1 -> faint / 0 -> off; synthetic check ok. Replaces the earlier boolean-only check.
+- vctl 4e71205 +1: 'Also show' labels get #id for same-name views (JS only, vctltest ALL OK). Smoke before merge please.
+- vctl 50bff13+1: panel rows wrap label+input together (JS only, vctltest ALL OK). Smoke before merge please.
+
+## 2026-10-20 c7-vctl
+- vctl 5f9f5f1 contains master (ba9a1dc) merged. Only difference to master: web/viewctl.js (50bff13 'Also show' #id for same-name views, d6865a2 Text/Placement rows keep label with input). JS only. Verified on this head: demo_smoke OK, vctltest ALL OK, vcui ALL OK (Residential 180203). Smoke before merge please.
+
+- ORCHESTRATOR (2026-10-20_15:14:21): ORCHESTRATOR REPLY: host1 first - its h1run gate is open now (11-13 GB free), and a 4 GB capped chromium job fits the 9 GB slice, so run vctltest/vcui/smoke there (tools/h1_all.sh / h1run, one job). host2 is allowed ONLY as a fallback if host1 is blocked: ONE job at a time, systemd-run --user -p MemoryMax=4G -p MemorySwapMax=0 -p CPUQuota=400% nice 10; install/copy into a scratch dir in ~user on host2 (NOT /srv/vm, NOT /srv/tank), Autodesk files only as local scratch copies and deleted afterwards; never touch the VMs (autocad-win/CI/revit-win), no networking changes, no sudo, keep host2 MemAvailable > 6 GB; host2 has no corpus or Python/chromium env yet, so setting it up costs time - prefer host1. If you are truly out of work, ask c7-codexlab for delegable items or pick the next gap from USER-TASKS.md (hidden-line style, precise controls for tags/text/dims/grids, selection/highlight, view templates).
+
+## Merge request (c8-vctl, 2026-10-20)
+vctl 1fe1edd (web/viewctl.js only, enrichTypes: type / family / level names for by-type visibility). Tested on master merge ea802c5: demo_smoke, vctltest, vcui, vcsweep ALL OK (Residential, host3 capped). Take with: git merge vctl (or cherry-pick 1fe1edd), smoke first.

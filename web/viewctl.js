@@ -173,8 +173,15 @@ function frameMatrix(view) {
   return {m, Z};
 }
 
+// family / type / level names of model elements come from the model's own element table when the scene does not carry them (tags, dimensions and datums do)
+function enrichTypes(sc) {
+  for (const [eid, e] of Object.entries(sc.elements)) {
+    if (e.typeName) continue; const i = elementIndex(eid), r = i != null ? (S.meta.elements || [])[i] : null;
+    if (r && r[4]) { e.typeName = r[4]; if (r[8] && !e.familyName) e.familyName = r[8]; if (r[5] && !e.levelName) e.levelName = r[5]; }
+  }
+}
 function makeScene(sc) {
-  disposeGroup();
+  disposeGroup(); try { enrichTypes(sc); } catch (er) { /* names are optional */ }
   const B = build(sc); V.B = B;
   const g = new THREE.Group(); g.matrixAutoUpdate = false; const fm = frameMatrix(sc.view); V.Z = fm.Z; V.base = fm.m.clone(); g.userData.vc = true;
   // stroke geometry: 4 vertices / segment
@@ -593,13 +600,13 @@ function renderPanel() {
   <div class="r"><label>Apply</label><label class="chk"><input type="checkbox" id="vcTpl" ${st.template ? 'checked' : ''}> view template</label><label class="chk"><input type="checkbox" id="vcFil" ${st.filters ? 'checked' : ''}> filters</label></div>
   <h4>Display (instant)</h4>
   <div class="r"><label>Crop region</label><input type="checkbox" id="vcCrop" ${st.crop ? 'checked' : ''}><span class="dim">${sc && sc.view.crop_uv ? 'model content only' : 'no stored crop'}</span></div>
-  <div class="r"><label>Text</label><input type="checkbox" id="vcText" ${st.textOn ? 'checked' : ''}> size &times;<input type="number" id="vcTS" step="0.1" min="0.1" value="${st.textSize}"> symbols &times;<input type="number" id="vcAS" step="0.1" min="0.1" value="${st.annoScale}" title="annotation symbol size about their anchor (instant); use Annotation scale for the exact re-draw"> <input type="text" id="vcFont" placeholder="font" value="${esc(st.font)}" style="width:80px"></div>
+  <div class="r"><label>Text</label><input type="checkbox" id="vcText" ${st.textOn ? 'checked' : ''}> <span style="white-space:nowrap">size &times;<input type="number" id="vcTS" step="0.1" min="0.1" value="${st.textSize}"></span> <span style="white-space:nowrap">symbols &times;<input type="number" id="vcAS" step="0.1" min="0.1" value="${st.annoScale}" title="annotation symbol size about their anchor (instant); use Annotation scale for the exact re-draw"></span> <input type="text" id="vcFont" placeholder="font" value="${esc(st.font)}" style="width:80px"></div>
   <div class="r"><label>Line weight &times;</label><input type="number" id="vcLS" step="0.25" min="0" value="${st.lineScale}"> min px<input type="number" id="vcMP" step="0.5" min="0" value="${st.minPx}"></div>
   <div class="r"><label>Paper look</label><label class="chk" title="white background, no 3D model, black linework: the drawing as printed"><input type="checkbox" id="vcPaper" ${st.paper ? 'checked' : ''}> white sheet, model hidden</label></div>
   <div class="r"><label>Markers</label><label class="chk" title="section / elevation / callout heads that sit outside the model extents"><input type="checkbox" id="vcHang" ${st.hideHang ? 'checked' : ''}> hide far-out heads</label></div>
   <div class="r"><label>3D model</label><input type="checkbox" id="vcModel" ${st.model ? 'checked' : ''}><span class="dim">under the drawing</span> <label class="chk" title="hide the viewer's own whole-model grids and level planes while the view's datums are shown"><input type="checkbox" id="vcNat" ${st.nativeOff ? 'checked' : ''}> own datums off</label></div>
-  <div class="r"><label>Also show</label><select id="vcGhost" multiple size="3" style="flex:1;min-width:0" title="other plan / section views drawn faintly at their own position (ctrl-click for several)">${vs.filter(v => v.id !== V.vid).map(v => `<option value="${v.id}" ${st.ghosts.includes(v.id) ? 'selected' : ''}>${esc(v.name)} (${v.kind})</option>`).join('')}</select></div>
-  <div class="r"><label>Placement</label><label class="chk"><input type="checkbox" id="vcTop" ${st.onTop ? 'checked' : ''}> on top</label> lift<input type="number" id="vcLift" step="0.05" value="${st.lift}" title="metres along the view normal"> &alpha;<input type="number" id="vcOp" step="0.1" min="0" max="1" value="${st.opacity}"></div>
+  <div class="r"><label>Also show</label><select id="vcGhost" multiple size="3" style="flex:1;min-width:0" title="other plan / section views drawn faintly at their own position (ctrl-click for several)">${vs.filter(v => v.id !== V.vid).map(v => `<option value="${v.id}" ${st.ghosts.includes(v.id) ? 'selected' : ''}>${esc(v.name)} (${v.kind})${vs.some(w => w !== v && w.name === v.name && w.kind === v.kind) ? ' #' + v.id : ''}</option>`).join('')}</select></div>
+  <div class="r"><label>Placement</label><label class="chk"><input type="checkbox" id="vcTop" ${st.onTop ? 'checked' : ''}> on top</label> <span style="white-space:nowrap">lift<input type="number" id="vcLift" step="0.05" value="${st.lift}" title="metres along the view normal"></span> <span style="white-space:nowrap">&alpha;<input type="number" id="vcOp" step="0.1" min="0" max="1" value="${st.opacity}"></span></div>
   <h4>Visibility <span class="sp"></span><span class="chk" style="gap:2px"><button data-m="cat" class="${(V.treeMode || 'cat') === 'cat' ? 'on' : ''}">category</button><button data-m="layer" class="${V.treeMode === 'layer' ? 'on' : ''}">layer</button><button data-m="type" class="${V.treeMode === 'type' ? 'on' : ''}">type</button><button data-m="ftype" class="${V.treeMode === 'ftype' ? 'on' : ''}" title="family type (tag / dimension / note types)">family type</button><button data-m="part" class="${V.treeMode === 'part' ? 'on' : ''}" title="leaders, witness lines, arrows, heads...">part</button><button data-m="el" class="${V.treeMode === 'el' ? 'on' : ''}">element</button></span></h4>
   ${V.treeMode === 'el' ? '<input type="text" id="vcQ" placeholder="filter id / class / category" style="width:100%;margin-bottom:3px">' : ''}
   <div class="vctree" id="vcTree"></div>
@@ -684,7 +691,7 @@ function vsSet(id, opts, save) {
 // a view without a saved style takes the Revit display setting stored in the view (meta views[].display.vstyle), before the global default
 function vsFromView() {
   const d = S.openView && S.openView.display; if (!d || !vsList().some(x => x.id === d.vstyle)) return null;
-  const o = {}; if (d.silhouettes != null) o.silhouettes = !!d.silhouettes;      // viewdisp.json stores 0 / 1
+  const o = {};      // d.silhouettes (0 / 1) is the Revit silhouette LINE STYLE override (0 = <None>: silhouettes keep their ordinary line weight, round piles / columns still show their sides in Revit's export), not an on/off switch: not applied
   if (['off', 'faint', 'dashed'].includes(d.hidden_lines)) o.hiddenLines = d.hidden_lines; else if (d.hidden_lines != null) o.hiddenLines = d.hidden_lines ? 'faint' : 'off';      // 1 = hidden lines shown
   return {id: d.vstyle, opts: o};
 }

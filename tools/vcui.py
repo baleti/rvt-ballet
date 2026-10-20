@@ -9,7 +9,14 @@ async def main(url, vid):
     try:
         await b.goto(url); await b.wait('window.__loaded===true', 120); await b.wait('typeof window.vctl==="object"', 30)
         r = json.loads(await b.ev('(()=>{const r=document.querySelector("#bVC").getBoundingClientRect();return JSON.stringify([r.x+r.width/2,r.y+r.height/2])})()'))
-        print('button at', r); await b.click(*r); await b.wait('!!document.querySelector("#vcpanel")', 90)
+        print('button at', r)
+        for _ in range(5):
+            await asyncio.sleep(3)  # the header re-flows while the model loads: measure the button again before each click
+            r = json.loads(await b.ev('(()=>{const r=document.querySelector("#bVC").getBoundingClientRect();return JSON.stringify([r.x+r.width/2,r.y+r.height/2])})()'))
+            await b.click(*r)
+            try: await b.wait('!!document.querySelector("#vcpanel")', 15); break
+            except TimeoutError: await asyncio.sleep(3)
+        await b.wait('!!document.querySelector("#vcpanel")', 30)
         check('panel opens on button click', await b.ev('!document.querySelector("#vcpanel").hidden'))
         await b.ev('(()=>{const s=document.querySelector("#vcView");s.value="%s";s.dispatchEvent(new Event("change",{bubbles:true}));return 1})()' % vid)
         await b.wait('vctl.V.sc&&vctl.V.sc.view.id==%s' % vid, 120); await asyncio.sleep(4)
