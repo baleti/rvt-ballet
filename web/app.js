@@ -480,7 +480,7 @@ async function showInspector() {
   ${(info.materials || []).length ? `<h3>Materials (${info.materials.length})</h3>` + info.materials.map(k => S.mats[k] ? matLine(S.mats[k], k) : '').join('') : ''}
   <table class="kv">${rows}</table>
   ${(info.typeParams || []).length ? `<h3>Type parameters / profile dimensions (${info.typeParams.length})</h3><table class="kv">${info.typeParams.filter(p => !/^(UniqueId|IfcGUID|Family|Type Id|Type|Family and Type)$/.test(p[0])).map(p => `<tr><td>${esc(p[0])}</td><td class="mono">${fmtVal(p[0], p[1])}</td></tr>`).join('')}</table>` : ''}
-  <h3>Parameters (${info.params.length})</h3><input id="pf" type="search" placeholder="filter parameters" style="width:100%;margin-bottom:5px">
+  <h3>Parameters (${info.params.length}) <span class="dim" style="font-weight:400;font-size:11px">reader matches Revit exactly for 96.2% of parameter values (60 files, docs/PARAMETERS.md)</span></h3><input id="pf" type="search" placeholder="filter parameters" style="width:100%;margin-bottom:5px">
   <table class="kv" id="ptab">${info.params.map(p => `<tr data-k="${esc((p[0] + ' ' + p[1]).toLowerCase())}"><td>${esc(p[0])}</td><td class="mono">${fmtVal(p[0], p[1])}</td></tr>`).join('')}</table>
   <div class="dim" style="margin-top:6px;font-size:11px">Doubles are Revit internal units (feet, radians) as stored in the file.</div>`;
   $('#pf').oninput = ev => { const q = ev.target.value.toLowerCase(); document.querySelectorAll('#ptab tr').forEach(tr => tr.hidden = q && !tr.dataset.k.includes(q)); };
@@ -727,8 +727,48 @@ function stencilMat() {
   m.customProgramCacheKey = () => 'rvtstencil'; return m;
 }
 let STM = null;
+// section outline: the segments where a clip plane cuts the model's triangles (world space), drawn over the caps in hidden line like Revit's heavy cut outline
+const _cv = new THREE.Vector3();
+function cutSegments(pl) {
+  const out = []; const n = pl.normal, c = pl.constant, others = renderer.clippingPlanes.filter(q => q !== pl && !(Math.abs(q.constant - c) < 1e-9 && q.normal.distanceToSquared(n) < 1e-12));
+  world.traverse(o => {
+    if (!o.isMesh || o.material.transparent || !o.visible || !o.geometry.attributes.position) return;
+    const pa = o.geometry.attributes.position, ix = o.geometry.index, m = o.matrixWorld, cnt = pa.count;
+    const d = new Float32Array(cnt), W = new Float32Array(cnt * 3); let any = false;
+    for (let i = 0; i < cnt; i++) { _cv.set(pa.getX(i), pa.getY(i), pa.getZ(i)).applyMatrix4(m); W[3 * i] = _cv.x; W[3 * i + 1] = _cv.y; W[3 * i + 2] = _cv.z; d[i] = n.x * _cv.x + n.y * _cv.y + n.z * _cv.z + c; }
+    const ea = o.geometry.attributes._eidx, nt = ix ? ix.count / 3 : cnt / 3, pt = [0, 0, 0, 0, 0, 0];
+    for (let t = 0; t < nt; t++) {
+      const a = ix ? ix.getX(3 * t) : 3 * t, b = ix ? ix.getX(3 * t + 1) : 3 * t + 1, e = ix ? ix.getX(3 * t + 2) : 3 * t + 2, v = [a, b, e];
+      if (ea) { const ei = Math.round(ea.getX(a)) * 4; if ((stateData[ei] & 9) || (stateData[ei + 3] === 255 && (S.meta.elements[ei / 4][2] || '') !== 'Topography')) continue; }      // hidden / ghosted elements and the no-cap categories (terrain, planting, ...) get no outline
+      const da = d[a], db = d[b], de = d[e]; if ((da > 0 && db > 0 && de > 0) || (da < 0 && db < 0 && de < 0)) continue;
+      let k = 0;
+      for (let j = 0; j < 3 && k < 2; j++) { const i0 = v[j], i1 = v[(j + 1) % 3], d0 = d[i0], d1 = d[i1]; if ((d0 > 0) === (d1 > 0)) continue; const u = d0 / (d0 - d1); for (let q = 0; q < 3; q++) pt[3 * k + q] = W[3 * i0 + q] + (W[3 * i1 + q] - W[3 * i0 + q]) * u; k++; }
+      if (k === 2) {      // keep the part inside the view's other clip planes (crop, depth, box faces)
+        let t0 = 0, t1 = 1, ok = true;
+        for (const q of others) { const e0 = q.normal.x * pt[0] + q.normal.y * pt[1] + q.normal.z * pt[2] + q.constant, e1 = q.normal.x * pt[3] + q.normal.y * pt[4] + q.normal.z * pt[5] + q.constant;
+          if (e0 < 0 && e1 < 0) { ok = false; break; } if (e0 < 0) t0 = Math.max(t0, e0 / (e0 - e1)); else if (e1 < 0) t1 = Math.min(t1, e0 / (e0 - e1)); }
+        if (ok && t0 < t1) out.push(pt[0] + (pt[3] - pt[0]) * t0, pt[1] + (pt[4] - pt[1]) * t0, pt[2] + (pt[5] - pt[2]) * t0, pt[0] + (pt[3] - pt[0]) * t1, pt[1] + (pt[4] - pt[1]) * t1, pt[2] + (pt[5] - pt[2]) * t1);
+      }
+    }
+  });
+  return new Float32Array(out);
+}
+const outlineUPx = {value: new THREE.Vector2(.001, .001)};
+function outlineLines(seg) {
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(seg, 3)); const grp = new THREE.Group(); grp.renderOrder = 200;      // after the model (group order 100)
+  [[0, 0], [.7, .7], [-.7, .7]].forEach(([ox, oy], i) => {
+    const mt = new THREE.ShaderMaterial({uniforms: {uPx: outlineUPx}, depthTest: false, depthWrite: false,
+      vertexShader: 'uniform vec2 uPx; void main(){ gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); gl_Position.xy += vec2(' + ox.toFixed(1) + ',' + oy.toFixed(1) + ') * uPx * gl_Position.w; }',
+      fragmentShader: 'void main(){ gl_FragColor = vec4(.07, .07, .07, 1.); }'});
+    const l = new THREE.LineSegments(g, mt); l.frustumCulled = false; l.renderOrder = 20 + i; l.userData.capOutline = true;
+    if (i === 0) l.onBeforeRender = r => { r.getDrawingBufferSize(_cv2); outlineUPx.value.set(2 / _cv2.x, 2 / _cv2.y); };
+    grp.add(l);
+  });
+  return grp;
+}
+const _cv2 = new THREE.Vector2();
 function updateCaps(planes) {
-  capGroup.traverse(o => { if (o.isMesh && o.userData.capPlane) { o.geometry.dispose(); o.material.dispose(); } }); capGroup.clear();
+  capGroup.traverse(o => { if ((o.isMesh && o.userData.capPlane) || o.userData.capOutline) { o.geometry.dispose(); o.material.dispose(); } }); capGroup.clear();
   if (!capsOn || !planes.length || !S.meta || (planes.length > 1 && (S.tris || 0) > 1.5e6)) return;      // a box re-draws the model up to 6 times into the stencil: skipped on very large models
   STM = STM || stencilMat();
   const mb = modelBox(), size = mb.getSize(new THREE.Vector3()).length() * 2 + 10, c = mb.getCenter(new THREE.Vector3());
@@ -738,13 +778,14 @@ function updateCaps(planes) {
       if (!o.isMesh || o.material.transparent || !o.visible) return;
       const m = new THREE.Mesh(o.geometry, STM); m.matrixAutoUpdate = false; m.matrix.copy(o.matrixWorld); m.renderOrder = k + 1; m.frustumCulled = false; g.add(m);
     });
-    const pm = new THREE.MeshBasicMaterial({color: window.__hl && window.__hl.style === 'hidden' ? 0x9b9b94 : isDark ? 0x6a6f78 : 0x2a2c30, side: THREE.DoubleSide, stencilWrite: true, stencilRef: 0, stencilFuncMask: 1,
+    const pm = new THREE.MeshBasicMaterial({color: window.__hl && window.__hl.style === 'hidden' ? 0xffffff : isDark ? 0x6a6f78 : 0x2a2c30, side: THREE.DoubleSide, stencilWrite: true, stencilRef: 0, stencilFuncMask: 1,
       stencilFunc: THREE.NotEqualStencilFunc, stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp,
       clippingPlanes: [], polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1});
     const cap = new THREE.Mesh(new THREE.PlaneGeometry(size, size), pm); cap.userData.capPlane = true; cap.renderOrder = k + 1.1; cap.frustumCulled = false;
     pl.coplanarPoint(cap.position); cap.position.add(pl.normal.clone().multiplyScalar(1e-4)); cap.position.add(c.clone().sub(cap.position).projectOnPlane(pl.normal));
     cap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), pl.normal.clone().normalize()); cap.onAfterRender = r => r.clearStencil();
-    g.add(cap); capGroup.add(g);
+    g.add(cap); if (window.__hl && window.__hl.style === 'hidden' && (S.tris || 0) <= 1.5e6) { const seg = cutSegments(pl);      // CPU pass over all vertices: skipped on very large models
+      if (seg.length) g.add(outlineLines(seg)); } capGroup.add(g);
   });
 }
 $('#bSection').onclick = () => { secOn ? (secOn = false, $('#secui').hidden = true, applySection()) : setSection('Y', (modelBox().min.y + modelBox().max.y) / 2); };
