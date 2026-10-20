@@ -684,7 +684,7 @@ function vsSet(id, opts, save) {
 // a view without a saved style takes the Revit display setting stored in the view (meta views[].display.vstyle), before the global default
 function vsFromView() {
   const d = S.openView && S.openView.display; if (!d || !vsList().some(x => x.id === d.vstyle)) return null;
-  const o = {}; if (d.silhouettes != null) o.silhouettes = !!d.silhouettes;      // viewdisp.json stores 0 / 1
+  const o = {};      // d.silhouettes (0 / 1) is the Revit silhouette LINE STYLE override (0 = <None>: silhouettes keep their ordinary line weight, round piles / columns still show their sides in Revit's export), not an on/off switch: not applied
   if (['off', 'faint', 'dashed'].includes(d.hidden_lines)) o.hiddenLines = d.hidden_lines; else if (d.hidden_lines != null) o.hiddenLines = d.hidden_lines ? 'faint' : 'off';      // 1 = hidden lines shown
   return {id: d.vstyle, opts: o};
 }
