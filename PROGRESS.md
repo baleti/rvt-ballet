@@ -250,3 +250,4 @@
 ## c8-viewer (2026-10-20)
 * Pile outlines in Snowdon elevation 4969 FIXED: cause was views[].display.silhouettes=0 (a Revit line-style override, 0 = none, true for all 104 views) being applied as 'silhouettes off'; viewctl.js vsFromView no longer applies it (round piles / columns keep their sides, checked in shot). Merged vctl 1fe1edd. uitest6 ALL OK, demo_smoke OK Residential. demo-ready NOT moved (Structural/Facades smoke needs remote-host).
 * 22:09:20 c8-viewer: vsmoke8 remote-host OK (Structural + Facades), Residential OK on remote-host, uitest6/12/13 OK; demo-ready moved to b803a12. Section F1 (hl_score_fast) 0.682.
+* 22:24:56 c8-viewer: merged cutfill (cut-pattern hatch on hidden-line section caps; Residential section checked, uitest6/12/13 OK; Snowdon not browser-checked, patterns skipped above 800k tris, max 6 groups). Earth poche needs terrain caps (NOCAP) - open.
