@@ -173,8 +173,15 @@ function frameMatrix(view) {
   return {m, Z};
 }
 
+// family / type / level names of model elements come from the model's own element table when the scene does not carry them (tags, dimensions and datums do)
+function enrichTypes(sc) {
+  for (const [eid, e] of Object.entries(sc.elements)) {
+    if (e.typeName) continue; const i = elementIndex(eid), r = i != null ? (S.meta.elements || [])[i] : null;
+    if (r && r[4]) { e.typeName = r[4]; if (r[8] && !e.familyName) e.familyName = r[8]; if (r[5] && !e.levelName) e.levelName = r[5]; }
+  }
+}
 function makeScene(sc) {
-  disposeGroup();
+  disposeGroup(); try { enrichTypes(sc); } catch (er) { /* names are optional */ }
   const B = build(sc); V.B = B;
   const g = new THREE.Group(); g.matrixAutoUpdate = false; const fm = frameMatrix(sc.view); V.Z = fm.Z; V.base = fm.m.clone(); g.userData.vc = true;
   // stroke geometry: 4 vertices / segment
