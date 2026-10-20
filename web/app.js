@@ -739,7 +739,7 @@ function cutSegments(pl) {
     const ea = o.geometry.attributes._eidx, nt = ix ? ix.count / 3 : cnt / 3, pt = [0, 0, 0, 0, 0, 0];
     for (let t = 0; t < nt; t++) {
       const a = ix ? ix.getX(3 * t) : 3 * t, b = ix ? ix.getX(3 * t + 1) : 3 * t + 1, e = ix ? ix.getX(3 * t + 2) : 3 * t + 2, v = [a, b, e];
-      if (ea) { const ei = Math.round(ea.getX(a)) * 4; if ((stateData[ei] & 9) || stateData[ei + 3] === 255) continue; }      // hidden / ghosted elements and the no-cap categories (terrain, planting, ...) get no outline
+      if (ea) { const ei = Math.round(ea.getX(a)) * 4; if ((stateData[ei] & 9) || (stateData[ei + 3] === 255 && (S.meta.elements[ei / 4][2] || '') !== 'Topography')) continue; }      // hidden / ghosted elements and the no-cap categories (terrain, planting, ...) get no outline
       const da = d[a], db = d[b], de = d[e]; if ((da > 0 && db > 0 && de > 0) || (da < 0 && db < 0 && de < 0)) continue;
       let k = 0;
       for (let j = 0; j < 3 && k < 2; j++) { const i0 = v[j], i1 = v[(j + 1) % 3], d0 = d[i0], d1 = d[i1]; if ((d0 > 0) === (d1 > 0)) continue; const u = d0 / (d0 - d1); for (let q = 0; q < 3; q++) pt[3 * k + q] = W[3 * i0 + q] + (W[3 * i1 + q] - W[3 * i0 + q]) * u; k++; }
