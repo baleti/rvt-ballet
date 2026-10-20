@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import {OrbitControls} from 'three/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/loaders/GLTFLoader.js';
 import {patternTexture, paletteTexture, imageTextures, CLASSES as TEXCLASSES} from '/materials.js';
+import {cutSegments as cutSegs} from '/cutsegs.js';
+import {elevGridLines, drawsGridsAsVertical} from '/elevgrids.js';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
@@ -368,18 +370,15 @@ function elBox(i) { const bb = S.bb?.[i]; return bb; }
 function elevGrids(v) {
   if (S.elevGrp) { overlay.remove(S.elevGrp); S.elevGrp.traverse(o => { if (o.geometry) o.geometry.dispose(); }); S.elevGrp = null; }
   const flat = on => { if (S.gridGroup) S.gridGroup.children.forEach(o => { if (o.isLine) o.visible = on; }); if (window.__hl && window.__hl.ovl) window.__hl.ovl.children.forEach(o => { if (o.userData.src) o.visible = on; }); };
-  if (!v || v.kind === '3d' || v.kind === 'Plan' || !v.dir) { flat(true); return; }
-  const o = toV(v.origin || v.cut.origin), dv = new THREE.Vector3(v.dir[0], v.dir[2], -v.dir[1]).setY(0).normalize(), lv = (S.meta.levels || []).map(l => l.elev), mb = modelBox();
-  const y0 = Math.min(mb.min.y, ...lv), top = Math.max(...lv, mb.min.y), y1 = top + (top - y0) * 0.12 + 1;
+  if (!drawsGridsAsVertical(v)) { flat(true); return; }
+  const lines = elevGridLines(S.meta.grids, {dir: v.dir, origin: v.origin || v.cut.origin}, (S.meta.levels || []).map(l => l.elev), modelBox().min.y);
   S.elevGrp = new THREE.Group(); const col = window.__hl && window.__hl.style !== 'realistic' && window.__hl.style !== 'consistent' ? 0xd020d0 : 0x1f8f4f;
-  const mt = new THREE.LineDashedMaterial({color: col, dashSize: 2.4, gapSize: 1, transparent: true, opacity: .9}); let n = 0;
-  for (const g of S.meta.grids) {
-    const a = toV(g.pts[0]), b = toV(g.pts[1]), gd = new THREE.Vector3().subVectors(b, a).setY(0); if (gd.length() < 1e-6 || Math.abs(gd.normalize().dot(dv)) < 0.95) continue;
-    const q = a.clone().addScaledVector(dv, new THREE.Vector3().subVectors(o, a).dot(dv) - 0.3);      // (Revit dir points to the eye) the grid's lateral position, 0.3 m beyond the cut plane (the clip planes would remove it in front of it)
-    const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(q.x, y0, q.z), new THREE.Vector3(q.x, y1, q.z)]), mt); ln.computeLineDistances(); S.elevGrp.add(ln);
-    addLabel(g.name, new THREE.Vector3(q.x, y1, q.z), 'grid', S.elevGrp); n++;
+  const mt = new THREE.LineDashedMaterial({color: col, dashSize: 2.4, gapSize: 1, transparent: true, opacity: .9});
+  for (const g of lines) {
+    const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(g.x, g.y0, g.z), new THREE.Vector3(g.x, g.y1, g.z)]), mt); ln.computeLineDistances(); S.elevGrp.add(ln);
+    addLabel(g.name, new THREE.Vector3(g.x, g.y1, g.z), 'grid', S.elevGrp);
   }
-  flat(!n); if (n) overlay.add(S.elevGrp); else S.elevGrp = null; dirty = true;
+  flat(!lines.length); if (lines.length) overlay.add(S.elevGrp); else S.elevGrp = null; dirty = true;
 }
 window.__elevGrids = elevGrids;
 // ------------------------------------------------------------------ overlays: levels, grids, rooms
@@ -746,30 +745,17 @@ function stencilMat() {
 }
 let STM = null;
 // section outline: the segments where a clip plane cuts the model's triangles (world space), drawn over the caps in hidden line like Revit's heavy cut outline
-const _cv = new THREE.Vector3();
 function cutSegments(pl) {
-  const out = []; const n = pl.normal, c = pl.constant, others = renderer.clippingPlanes.filter(q => q !== pl && !(Math.abs(q.constant - c) < 1e-9 && q.normal.distanceToSquared(n) < 1e-12));
+  const others = renderer.clippingPlanes.filter(q => q !== pl && !(Math.abs(q.constant - pl.constant) < 1e-9 && q.normal.distanceToSquared(pl.normal) < 1e-12)).map(q => ({nx: q.normal.x, ny: q.normal.y, nz: q.normal.z, c: q.constant}));
+  const meshes = [];
   world.traverse(o => {
     if (!o.isMesh || o.material.transparent || !o.visible || !o.geometry.attributes.position) return;
-    const pa = o.geometry.attributes.position, ix = o.geometry.index, m = o.matrixWorld, cnt = pa.count;
-    const d = new Float32Array(cnt), W = new Float32Array(cnt * 3); let any = false;
-    for (let i = 0; i < cnt; i++) { _cv.set(pa.getX(i), pa.getY(i), pa.getZ(i)).applyMatrix4(m); W[3 * i] = _cv.x; W[3 * i + 1] = _cv.y; W[3 * i + 2] = _cv.z; d[i] = n.x * _cv.x + n.y * _cv.y + n.z * _cv.z + c; }
-    const ea = o.geometry.attributes._eidx, nt = ix ? ix.count / 3 : cnt / 3, pt = [0, 0, 0, 0, 0, 0];
-    for (let t = 0; t < nt; t++) {
-      const a = ix ? ix.getX(3 * t) : 3 * t, b = ix ? ix.getX(3 * t + 1) : 3 * t + 1, e = ix ? ix.getX(3 * t + 2) : 3 * t + 2, v = [a, b, e];
-      if (ea) { const ei = Math.round(ea.getX(a)) * 4; if ((stateData[ei] & 9) || (stateData[ei + 3] === 255 && (S.meta.elements[ei / 4][2] || '') !== 'Topography')) continue; }      // hidden / ghosted elements and the no-cap categories (terrain, planting, ...) get no outline
-      const da = d[a], db = d[b], de = d[e]; if ((da > 0 && db > 0 && de > 0) || (da < 0 && db < 0 && de < 0)) continue;
-      let k = 0;
-      for (let j = 0; j < 3 && k < 2; j++) { const i0 = v[j], i1 = v[(j + 1) % 3], d0 = d[i0], d1 = d[i1]; if ((d0 > 0) === (d1 > 0)) continue; const u = d0 / (d0 - d1); for (let q = 0; q < 3; q++) pt[3 * k + q] = W[3 * i0 + q] + (W[3 * i1 + q] - W[3 * i0 + q]) * u; k++; }
-      if (k === 2) {      // keep the part inside the view's other clip planes (crop, depth, box faces)
-        let t0 = 0, t1 = 1, ok = true;
-        for (const q of others) { const e0 = q.normal.x * pt[0] + q.normal.y * pt[1] + q.normal.z * pt[2] + q.constant, e1 = q.normal.x * pt[3] + q.normal.y * pt[4] + q.normal.z * pt[5] + q.constant;
-          if (e0 < 0 && e1 < 0) { ok = false; break; } if (e0 < 0) t0 = Math.max(t0, e0 / (e0 - e1)); else if (e1 < 0) t1 = Math.min(t1, e0 / (e0 - e1)); }
-        if (ok && t0 < t1) out.push(pt[0] + (pt[3] - pt[0]) * t0, pt[1] + (pt[4] - pt[1]) * t0, pt[2] + (pt[5] - pt[2]) * t0, pt[0] + (pt[3] - pt[0]) * t1, pt[1] + (pt[4] - pt[1]) * t1, pt[2] + (pt[5] - pt[2]) * t1);
-      }
-    }
+    const pa = o.geometry.attributes.position, ix = o.geometry.index, ea = o.geometry.attributes._eidx;
+    const pos = pa.isInterleavedBufferAttribute || pa.normalized ? Float32Array.from({length: pa.count * 3}, (_, k) => [pa.getX, pa.getY, pa.getZ][k % 3].call(pa, (k / 3) | 0)) : pa.array;
+    meshes.push({pos, index: ix ? ix.array : null, matrix: o.matrixWorld.elements,
+      accept: ea ? (t, a) => { const ei = Math.round(ea.getX(a)) * 4; return !((stateData[ei] & 9) || (stateData[ei + 3] === 255 && (S.meta.elements[ei / 4][2] || '') !== 'Topography')); } : null});      // hidden / ghosted elements and the no-cap categories (terrain stays) get no outline
   });
-  return new Float32Array(out);
+  return cutSegs(meshes, {nx: pl.normal.x, ny: pl.normal.y, nz: pl.normal.z, c: pl.constant}, others);
 }
 const outlineUPx = {value: new THREE.Vector2(.001, .001)};
 function outlineLines(seg) {
