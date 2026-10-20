@@ -364,6 +364,24 @@ function fitBox(box, dir) {
 function fitAll(dir) { fitBox(modelBox(), dir); }
 function elBox(i) { const bb = S.bb?.[i]; return bb; }
 
+// grids in sections / elevations: grids running along the view direction are seen edge-on as vertical dashed lines from the lowest level to above the highest (Revit); the flat plan lines are hidden meanwhile
+function elevGrids(v) {
+  if (S.elevGrp) { overlay.remove(S.elevGrp); S.elevGrp.traverse(o => { if (o.geometry) o.geometry.dispose(); }); S.elevGrp = null; }
+  const flat = on => { if (S.gridGroup) S.gridGroup.children.forEach(o => { if (o.isLine) o.visible = on; }); if (window.__hl && window.__hl.ovl) window.__hl.ovl.children.forEach(o => { if (o.userData.src) o.visible = on; }); };
+  if (!v || v.kind === '3d' || v.kind === 'Plan' || !v.dir) { flat(true); return; }
+  const o = toV(v.origin || v.cut.origin), dv = new THREE.Vector3(v.dir[0], v.dir[2], -v.dir[1]).setY(0).normalize(), lv = (S.meta.levels || []).map(l => l.elev), mb = modelBox();
+  const y0 = Math.min(mb.min.y, ...lv), top = Math.max(...lv, mb.min.y), y1 = top + (top - y0) * 0.12 + 1;
+  S.elevGrp = new THREE.Group(); const col = window.__hl && window.__hl.style !== 'realistic' && window.__hl.style !== 'consistent' ? 0xd020d0 : 0x1f8f4f;
+  const mt = new THREE.LineDashedMaterial({color: col, dashSize: 2.4, gapSize: 1, transparent: true, opacity: .9}); let n = 0;
+  for (const g of S.meta.grids) {
+    const a = toV(g.pts[0]), b = toV(g.pts[1]), gd = new THREE.Vector3().subVectors(b, a).setY(0); if (gd.length() < 1e-6 || Math.abs(gd.normalize().dot(dv)) < 0.95) continue;
+    const q = a.clone().addScaledVector(dv, new THREE.Vector3().subVectors(o, a).dot(dv) - 0.3);      // (Revit dir points to the eye) the grid's lateral position, 0.3 m beyond the cut plane (the clip planes would remove it in front of it)
+    const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(q.x, y0, q.z), new THREE.Vector3(q.x, y1, q.z)]), mt); ln.computeLineDistances(); S.elevGrp.add(ln);
+    addLabel(g.name, new THREE.Vector3(q.x, y1, q.z), 'grid', S.elevGrp); n++;
+  }
+  flat(!n); if (n) overlay.add(S.elevGrp); else S.elevGrp = null; dirty = true;
+}
+window.__elevGrids = elevGrids;
 // ------------------------------------------------------------------ overlays: levels, grids, rooms
 const lbls = []; let showLvl = true, showGrid = true;
 function buildOverlays() {
@@ -988,10 +1006,11 @@ function openView(v) {
   camera.near = 0.05; camera.far = size * 20 + 500; camera.updateProjectionMatrix(); controls.update();
   if (v.kind !== '3d' && (v.dir || v.cut)) orthoLook(true);      // Revit plans / sections / elevations are parallel projections: telephoto look, same framing
   if (S.lvlGroup) S.lvlGroup.visible = showLvl && v.kind !== 'Plan';          // level outlines seen from above are just lines across a plan
+  elevGrids(v);
   if (S.gridMat) { S.gridMat.depthTest = v.kind !== 'Plan'; S.gridMat.needsUpdate = true; S.gridGroup.renderOrder = v.kind === 'Plan' ? 200 : 0; }      // plans draw grids on top, as Revit does
   const vb = $('#viewbar'); vb.hidden = false; vb.innerHTML = `<b>${esc(v.name)}</b> <span class="dim">${esc(v.kind)}${S.viewClip ? ' (cut plane active' + (S.viewCrop ? ', cropped' : '') + ')' : ''}</span> <button id="vbProj" title="parallel (orthographic-looking) or perspective projection for this view">${camera.fov < 10 ? 'perspective' : 'parallel'}</button> <button id="vbOff">close view</button>`;
   const vp = $('#vbProj'); if (vp) vp.onclick = () => { orthoLook(camera.fov > 10); vp.textContent = camera.fov < 10 ? 'perspective' : 'parallel'; };
-  $('#vbOff').onclick = () => { orthoLook(false); S.viewClip = null; S.viewCrop = null; U.uBot.value = -1e9; vb.hidden = true; S.openView = null; if (S.lvlGroup) S.lvlGroup.visible = showLvl; if (S.gridMat) { S.gridMat.depthTest = true; S.gridMat.needsUpdate = true; } applySection(); fitAll(); };
+  $('#vbOff').onclick = () => { orthoLook(false); elevGrids(null); S.viewClip = null; S.viewCrop = null; U.uBot.value = -1e9; vb.hidden = true; S.openView = null; if (S.lvlGroup) S.lvlGroup.visible = showLvl; if (S.gridMat) { S.gridMat.depthTest = true; S.gridMat.needsUpdate = true; } applySection(); fitAll(); };
   applySection(); dirty = true;
 }
 window.openView = openView;

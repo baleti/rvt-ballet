@@ -229,7 +229,7 @@ function restyleOverlays(on) {
   if (!H.lvlL) buildLevelL();
   H.ovl.visible = on; for (const o of H.ovlSrc) o.visible = !on;
   if (S.lvlGroup.children[0]?.isMesh) S.lvlGroup.children.forEach(o => { if (o.isMesh) o.visible = !on; });
-  document.body.classList.toggle('hlstyle', on);
+  document.body.classList.toggle('hlstyle', on); if (S.openView && window.__elevGrids) window.__elevGrids(S.openView);
 }
 
 // resolved view graphics (view template + filters + category overrides + transparency) from the server for the open view (rvtviewer/vg3d.py)
