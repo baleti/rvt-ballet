@@ -480,7 +480,7 @@ async function showInspector() {
   ${(info.materials || []).length ? `<h3>Materials (${info.materials.length})</h3>` + info.materials.map(k => S.mats[k] ? matLine(S.mats[k], k) : '').join('') : ''}
   <table class="kv">${rows}</table>
   ${(info.typeParams || []).length ? `<h3>Type parameters / profile dimensions (${info.typeParams.length})</h3><table class="kv">${info.typeParams.filter(p => !/^(UniqueId|IfcGUID|Family|Type Id|Type|Family and Type)$/.test(p[0])).map(p => `<tr><td>${esc(p[0])}</td><td class="mono">${fmtVal(p[0], p[1])}</td></tr>`).join('')}</table>` : ''}
-  <h3>Parameters (${info.params.length})</h3><input id="pf" type="search" placeholder="filter parameters" style="width:100%;margin-bottom:5px">
+  <h3>Parameters (${info.params.length}) <span class="dim" style="font-weight:400;font-size:11px">reader matches Revit exactly for 96.2% of parameter values (60 files, docs/PARAMETERS.md)</span></h3><input id="pf" type="search" placeholder="filter parameters" style="width:100%;margin-bottom:5px">
   <table class="kv" id="ptab">${info.params.map(p => `<tr data-k="${esc((p[0] + ' ' + p[1]).toLowerCase())}"><td>${esc(p[0])}</td><td class="mono">${fmtVal(p[0], p[1])}</td></tr>`).join('')}</table>
   <div class="dim" style="margin-top:6px;font-size:11px">Doubles are Revit internal units (feet, radians) as stored in the file.</div>`;
   $('#pf').oninput = ev => { const q = ev.target.value.toLowerCase(); document.querySelectorAll('#ptab tr').forEach(tr => tr.hidden = q && !tr.dataset.k.includes(q)); };

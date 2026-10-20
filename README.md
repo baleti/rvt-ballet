@@ -23,6 +23,7 @@ First conversion of a big file takes minutes (the reader decodes every record); 
 
 ## Features added 2026-10-16
 * **Annotations** (header button): the view-dependent content of a plan / section (tags, text, dimensions, grids, levels, markers, hatches) placed in model space on the 3D scene with per-category / type / element visibility, colour, line weight, text size, annotation scale, presets, picking (docs/VIEW-CONTROL.md, docs/CONTROL-API.md; built by the vctl branch, data from rvt-sheets).
+* Parameter reproduction vs Revit: 96.2% exact over 8.98 M values in 60 files (docs/PARAMETERS.md), shown in the inspector Parameters heading.
 * Inspector line "reader accuracy for <class>" from the corpus acceptance table (web/fidclass.json, docs/FIDELITY-FINAL.md for 2020-2026, docs/FIDELITY-2017-2019.md for the older files); full corpus table with timings (DEMO.md, docs/SWEEP.md, docs/SPEED.md); viewer mesh vs Revit per class (docs/ORACLE-SWEEP.md, tools/oracle_sweep.py).
 * Revit navigation: Shift+middle-drag orbit, middle-drag pan, wheel zoom at cursor (tools/uitest12.py).
 * Plan / section / elevation views open in a parallel-projection look (2 degree telephoto, same framing) and sections are clipped at their stored view depth (Viewer bounded space far bound -> `views[].depth`, rvtviewer/datums.py). Hidden line draws model surface patterns (target 1, feet) as hatch lines; `materials.json` carries each material's surface / cut pattern (name, colour, grids).
