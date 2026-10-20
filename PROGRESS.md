@@ -221,3 +221,4 @@
 - 2026-10-19 (c7-vctl): reviewed datums.py against rvt_viewdisp.view_clip: far clip honours m_backClipping == 0 (no clip) and m_boundActive z; crop uses the x/y bound active flags (same rule as view_clip crop_active). Open item 'honour far_clipping == 0 / crop-off' is already satisfied in code; no change. Re-warm still refused (remote-host 3.5 GB).
 - 2026-10-19 (c7-vctl): Residential re-warmed on remote-host for rvt-sheets 9cc31a8 (17 scenes, cache dir 88cf61b95d814491, pulled); vctltest + vcui ALL OK on 180203 afterwards. Commercial / Structural / Facades not re-warmed.
 - 2026-10-20 (c7-vctl): Commercial re-warmed on remote-host (20 scenes, cache dir 8b9c670af41798bc, pulled); demo_smoke OK on Commercial. Structural / Facades still on older sheets code (served stale by the sheets server).
+- 2026-10-20 (c7-vctl): Structural re-warmed on remote-host (41 scenes, cache dir 2a5b2e99daee1e9d, pulled, 191 files). Not smoke-tested on remote-host (size rule).
