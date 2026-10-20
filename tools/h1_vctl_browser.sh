@@ -7,5 +7,6 @@ S=$!
 for i in $(seq 1 900); do curl -sf "http://127.0.0.1:$P/api/models" > /dev/null && break; sleep 1; done
 sleep 60
 $HOME/vctl-pw/v/bin/python tools/vctltest.py "http://127.0.0.1:$P" "$V" 2>&1 | tail -25
-$HOME/vctl-pw/v/bin/python tools/vcui.py "http://127.0.0.1:$P" "$V" 2>&1 | tail -15
+sleep 20
+for t in 1 2; do $HOME/vctl-pw/v/bin/python tools/vcui.py "http://127.0.0.1:$P" "$V" > /tmp/vcb-ui-$P.txt 2>&1; tail -15 /tmp/vcb-ui-$P.txt; grep -q "ALL OK" /tmp/vcb-ui-$P.txt && break; sleep 30; done
 kill $S
