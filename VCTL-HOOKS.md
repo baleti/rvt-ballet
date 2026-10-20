@@ -29,3 +29,6 @@ Merge protocol: tell me the vctl commit range here; I run the smoke test on a sc
 - vctl 8c02aad: display 0/1 flags mapped (c1-hl report): silhouettes !!, hidden_lines 1 -> faint / 0 -> off; synthetic check ok. Replaces the earlier boolean-only check.
 - vctl 4e71205 +1: 'Also show' labels get #id for same-name views (JS only, vctltest ALL OK). Smoke before merge please.
 - vctl 50bff13+1: panel rows wrap label+input together (JS only, vctltest ALL OK). Smoke before merge please.
+
+## 2026-10-20 c7-vctl
+- vctl 5f9f5f1 contains master (ba9a1dc) merged. Only difference to master: web/viewctl.js (50bff13 'Also show' #id for same-name views, d6865a2 Text/Placement rows keep label with input). JS only. Verified on this head: demo_smoke OK, vctltest ALL OK, vcui ALL OK (Residential 180203). Smoke before merge please.
