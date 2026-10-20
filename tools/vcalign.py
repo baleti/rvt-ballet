@@ -6,7 +6,7 @@ async def main(url, vid):
     b = cdp.Browser(size=(1280, 720)); await b.start()
     try:
         await b.goto(url); await b.wait('window.__loaded===true', 120); await b.wait('typeof window.vctl==="object"', 30)
-        await b.ev('window.vctl.toggle().then(()=>1)'); await b.ev('window.vctl.openView(%s).then(()=>1)' % vid); await asyncio.sleep(1)
+        await b.ev('window.vctl.toggle().then(()=>1)'); await b.ev('(window.vctl.openView(%s),1)' % vid); await b.wait('vctl.V.sc&&vctl.V.sc.view.id==%s&&vctl.V.B' % vid, 300); await asyncio.sleep(3)      # big models: the scene takes longer than one evaluate call may wait
         r = json.loads(await b.ev('''(()=>{const V=vctl.V,B=V.B,sc=V.sc,M=V.base; const S=window.S;
           const nat=[]; S.gridGroup.children.forEach(o=>{if(o.isLine){const p=o.geometry.attributes.position;nat.push([new THREE.Vector3(p.getX(0),p.getY(0),p.getZ(0)),new THREE.Vector3(p.getX(1),p.getY(1),p.getZ(1))])}});
           const segs=[]; B.segs.forEach(s=>{const m=B.meta[s.p]; if(m.layer==='datum'){const a=new THREE.Vector3(s.a[0],s.a[1],0).applyMatrix4(M),c=new THREE.Vector3(s.b[0],s.b[1],0).applyMatrix4(M); segs.push([a,c,sc.prims[s.p].elem])}});
