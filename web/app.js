@@ -70,7 +70,7 @@ const overlay = new THREE.Group(); scene.add(overlay);
 let selBoxDummy;
 let stateTex, stateData;
 try { for (const f of ['400 16px', '700 16px', 'italic 400 16px', 'italic 700 16px']) document.fonts.load(f + ' "Liberation Sans"'); } catch (e) {}      // text overlays draw to canvas: have the local Arial twin ready before the first view opens
-const U = {tState: {value: null}, uMode: {value: 0}, tMat: {value: null}, tPat: {value: null}, tImg: {value: null}, tBump: {value: null}, uTex: {value: 1}, uBot: {value: -1e9}, uStyle: {value: 0}, tOvr: {value: null}};
+const U = {tCutG: {value: null}, tState: {value: null}, uMode: {value: 0}, tMat: {value: null}, tPat: {value: null}, tImg: {value: null}, tBump: {value: null}, uTex: {value: 1}, uBot: {value: -1e9}, uStyle: {value: 0}, tOvr: {value: null}};
 window.__U = U; setTimeout(() => { window.__lbls = lbls; }, 0); setTimeout(() => { window.__applySection = applySection; }, 0); setTimeout(() => { window.__refreshState = refreshState; }, 0);
 setTimeout(() => { window.__patch = patch; }, 0);
 
@@ -311,6 +311,7 @@ async function loadModel(mid, opts = {}) {
   world.clear(); overlay.clear(); S.bbCache = null;
   try { S.matData = await (await fetch(`/m/${mid}/materials.json`)).json(); } catch (e) { S.matData = null; }
   S.mats = (S.matData && S.matData.materials) || []; U.tMat.value = paletteTexture(S.mats.length ? S.mats : [{rgb: [.7, .7, .7], alpha: 1, tex_class: 'none'}]); U.tPat.value = patternTexture();
+  buildCutGroups();
   if (!U.tImg.value) { U.tImg.value = new THREE.DataArrayTexture(new Uint8Array(4).fill(128), 1, 1, 1); U.tImg.value.needsUpdate = true; }
   if (!U.tBump.value) { U.tBump.value = new THREE.DataArrayTexture(new Uint8Array(4).fill(128), 1, 1, 1); U.tBump.value.needsUpdate = true; }
   if (S.mats.some(m => m.tex_img || m.bump_img)) Promise.all([S.mats.some(m => m.tex_img) ? imageTextures(mid, S.mats) : null, S.mats.some(m => m.bump_img) ? imageTextures(mid, S.mats, 'bump') : null]).then(([r, rb]) => {
@@ -733,15 +734,30 @@ function applySection() {
 // the cut opening of a closed solid crosses an odd number of faces, so a large plane drawn on each clip plane with (stencil & 1) != 0 shows exactly the cut areas.
 // Parity, not front/back counting, because the reader's triangle winding is not consistent. Hidden / ghosted elements are discarded in the stencil pass too.
 const capGroup = new THREE.Group(); scene.add(capGroup); let capsOn = true;
-function stencilMat() {
+// cut patterns (Revit drafting patterns of the material's 'Cut Pattern'): one group per distinct pattern; tCutG maps a material to its group; paper feet are scaled by an assumed view scale
+const CUT_SCALE = 50;
+const cutGroups = [];      // [{name, grids: [{a: [angle, spacing m, shift m, 1], b: [dash m, gap m, ox m, oy m]}]}]
+function buildCutGroups() {
+  cutGroups.length = 0; const key = new Map(), n = Math.max(1, S.mats.length), D = new Float32Array(n * 4);
+  S.mats.forEach((m, i) => { const cp = m.cut_pattern; if (!cp || !cp.grids || !cp.grids.length || cp.target !== 0) return;
+    const k = JSON.stringify(cp.grids), F = .3048 * CUT_SCALE;
+    if (!key.has(k)) { key.set(k, cutGroups.length + 1); cutGroups.push({name: cp.name, grids: cp.grids.slice(0, 2).map(g => { const sg = (g.segs || []).map(Math.abs), per = sg.length >= 2, sp = Math.abs(g.deltas[1]) * F;
+      return {a: [g.angle, sp, g.deltas[0] * F, sp > 1e-6 ? 1 : 0], b: [per ? sg[0] * F : 0, per ? sg[1] * F : 0, g.origin[0] * F, g.origin[1] * F]}; })}); }
+    D[i * 4] = key.get(k); });
+  const t = new THREE.DataTexture(D, n, 1, THREE.RGBAFormat, THREE.FloatType); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; U.tCutG.value = t;
+}
+const stencilCache = new Map();
+function stencilMat(grp) { if (!grp) return stencilMat0(0); if (!stencilCache.has(grp)) stencilCache.set(grp, stencilMat0(grp)); return stencilCache.get(grp); }
+function stencilMat0(grp) {
   const op = THREE.InvertStencilOp, m = new THREE.MeshBasicMaterial({side: THREE.DoubleSide, colorWrite: false, depthWrite: false, depthTest: false, stencilWrite: true, stencilWriteMask: 1, stencilFunc: THREE.AlwaysStencilFunc, stencilFail: op, stencilZFail: op, stencilZPass: op});
   m.onBeforeCompile = sh => {
-    sh.uniforms.tState = U.tState;
-    sh.vertexShader = 'attribute float _eidx; varying float vE;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvE=_eidx;');
-    sh.fragmentShader = 'varying float vE; uniform sampler2D tState;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+    sh.uniforms.tState = U.tState; sh.uniforms.tCutG = U.tCutG; sh.uniforms.uG = {value: grp || 0};
+    sh.vertexShader = 'attribute float _eidx; attribute float _mat; varying float vE; varying float vM;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvE=_eidx; vM=_mat;');
+    sh.fragmentShader = 'varying float vE; varying float vM; uniform sampler2D tState; uniform sampler2D tCutG; uniform float uG;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+if(uG > .5){ float mI = floor(vM+.5); float gid = mI < -.5 ? 0. : texelFetch(tCutG, ivec2(int(mI),0), 0).r; if(abs(gid-uG) > .5) discard; }
 { float eI = floor(vE+.5); vec4 stt = texelFetch(tState, ivec2(int(mod(eI,${TW}.)), int(eI/${TW}.)), 0); float fl = floor(stt.r*255.+.5); if(mod(fl,2.)>.5 || mod(floor(fl/8.),2.)>.5 || stt.a>.5) discard; }`);
   };
-  m.customProgramCacheKey = () => 'rvtstencil'; return m;
+  m.customProgramCacheKey = () => 'rvtstencil' + (grp ? 'g' : ''); return m;
 }
 let STM = null;
 // section outline: the segments where a clip plane cuts the model's triangles (world space), drawn over the caps in hidden line like Revit's heavy cut outline
@@ -788,7 +804,26 @@ function updateCaps(planes) {
     const cap = new THREE.Mesh(new THREE.PlaneGeometry(size, size), pm); cap.userData.capPlane = true; cap.renderOrder = k + 1.1; cap.frustumCulled = false;
     pl.coplanarPoint(cap.position); cap.position.add(pl.normal.clone().multiplyScalar(1e-4)); cap.position.add(c.clone().sub(cap.position).projectOnPlane(pl.normal));
     cap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), pl.normal.clone().normalize()); cap.onAfterRender = r => r.clearStencil();
-    g.add(cap); if (window.__hl && window.__hl.style === 'hidden' && (S.tris || 0) <= 1.5e6) { const seg = cutSegments(pl);      // CPU pass over all vertices: skipped on very large models
+    g.add(cap);
+    if (window.__hl && window.__hl.style === 'hidden' && cutGroups.length && (S.tris || 0) <= 8e5) cutGroups.slice(0, 6).forEach((cg, j) => {      // per-material cut pattern: parity of only that group's faces, drawn as hatch over the white cap
+      const gi = j + 1, sm = stencilMat(gi), ro = k + 1.12 + .02 * j;
+      world.traverse(o => { if (!o.isMesh || o.material.transparent || !o.visible) return;
+        const m = new THREE.Mesh(o.geometry, sm); m.matrixAutoUpdate = false; m.matrix.copy(o.matrixWorld); m.renderOrder = ro; m.frustumCulled = false; g.add(m); });
+      const nrm = pl.normal.clone().normalize(), ax = Math.abs(nrm.y) > .9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0), U1 = ax.clone().cross(nrm).normalize(), V1 = nrm.clone().cross(U1).normalize();
+      const gu = cg.grids.map(q => ({a: new THREE.Vector4(...q.a), b: new THREE.Vector4(...q.b)})); while (gu.length < 2) gu.push({a: new THREE.Vector4(0, 1, 0, 0), b: new THREE.Vector4()});
+      const pmat = new THREE.ShaderMaterial({uniforms: {uU: {value: U1}, uV: {value: V1}, uA0: {value: gu[0].a}, uB0: {value: gu[0].b}, uA1: {value: gu[1].a}, uB1: {value: gu[1].b}}, side: THREE.DoubleSide,
+        stencilWrite: true, stencilRef: 0, stencilFuncMask: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp,
+        polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+        vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+        fragmentShader: `varying vec3 vW; uniform vec3 uU; uniform vec3 uV; uniform vec4 uA0; uniform vec4 uB0; uniform vec4 uA1; uniform vec4 uB1;
+float grid(vec4 a, vec4 b, vec2 pl){ if(a.a < .5) return 0.; float ca = cos(a.r), sa = sin(a.r); vec2 q = vec2(ca*(pl.x-b.b)+sa*(pl.y-b.a), -sa*(pl.x-b.b)+ca*(pl.y-b.a));
+  float px = max(fwidth(q.y), 1e-6), kk = floor(q.y/a.g+.5), d = abs(q.y-kk*a.g)/px; float on = 1.;
+  if(b.r > 0.){ float per = b.r+b.g, s = mod(q.x-kk*a.b, per); on = s < b.r ? 1. : 0.; }
+  return on*(1.-smoothstep(.5,1.5,d))*smoothstep(2.,5.,a.g/px); }
+void main(){ vec2 pl = vec2(dot(vW, uU), dot(vW, uV)); float h = max(grid(uA0, uB0, pl), grid(uA1, uB1, pl)); if(h < .05) discard; gl_FragColor = vec4(vec3(.1), 1.); }`});
+      const pc = new THREE.Mesh(cap.geometry, pmat); pc.userData.capPlane = true; pc.userData.noDispose = true; pc.renderOrder = ro + .01; pc.frustumCulled = false; pc.position.copy(cap.position); pc.quaternion.copy(cap.quaternion);
+      pc.onAfterRender = r => r.clearStencil(); g.add(pc); });
+    if (window.__hl && window.__hl.style === 'hidden' && (S.tris || 0) <= 1.5e6) { const seg = cutSegments(pl);      // CPU pass over all vertices: skipped on very large models
       if (seg.length) g.add(outlineLines(seg)); } capGroup.add(g);
   });
 }
