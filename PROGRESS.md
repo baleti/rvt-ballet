@@ -252,3 +252,4 @@
 * 22:09:20 c8-viewer: vsmoke8 remote-host OK (Structural + Facades), Residential OK on remote-host, uitest6/12/13 OK; demo-ready moved to b803a12. Section F1 (hl_score_fast) 0.682.
 * 22:24:56 c8-viewer: merged cutfill (cut-pattern hatch on hidden-line section caps; Residential section checked, uitest6/12/13 OK; Snowdon not browser-checked, patterns skipped above 800k tris, max 6 groups). Earth poche needs terrain caps (NOCAP) - open.
 * 01:41:26 c8-viewer: vsmoke9 remote-host OK (Structural + Facades), Residential uitests OK; demo-ready moved to 3fd50f7 (cut patterns included)
+* 01:49:05 c8-viewer: merged soil (earth poche under terrain cut line, hidden-line sections; Residential section checked, uitest12/13 OK, Snowdon Longitudinal unchanged). Earth pattern from reader is dash grids at assumed 1:50, not Revit basket weave.
