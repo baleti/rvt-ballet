@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/loaders/GLTFLoader.js';
+import {fitDistance, boxFrame} from '/viewframe.js';
+import {soilQuads} from '/soilquads.js';
 import {buildCutGroups as buildCutGroups0, scaleGrid, viewScaleN} from '/cutpattern.js';
 import {patternTexture, paletteTexture, imageTextures, CLASSES as TEXCLASSES} from '/materials.js';
 import {cutSegments as cutSegs} from '/cutsegs.js';
@@ -775,9 +777,7 @@ function cutSegments(pl, onlyTopo) {
 function soilPoche(pl, mb) {
   const seg = cutSegments(pl, true); if (!seg.length) return null;
   const cg = cutGroups.find(c => /earth|soil/i.test(c.name || '')) || cutGroups[0]; if (!cg) return null;
-  const y0 = mb.min.y - 3, pos = new Float32Array(seg.length / 6 * 18);
-  for (let i = 0, o = 0; i < seg.length; i += 6) { const ax = seg[i], ay = seg[i + 1], az = seg[i + 2], bx = seg[i + 3], by = seg[i + 4], bz = seg[i + 5];
-    pos.set([ax, ay, az, bx, by, bz, bx, y0, bz, ax, ay, az, bx, y0, bz, ax, y0, az], o); o += 18; }
+  const pos = soilQuads(seg, mb.min.y - 3); if (!pos.length) return null;
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   const nrm = pl.normal.clone().normalize(), U1 = new THREE.Vector3(0, 1, 0).cross(nrm).normalize(), V1 = nrm.clone().cross(U1).normalize();
   const gu = cg.grids.map(q => cutV4(q, cutScale())); while (gu.length < 2) gu.push({a: new THREE.Vector4(0, 1, 0, 0), b: new THREE.Vector4()});
@@ -1021,7 +1021,7 @@ function cropFrame(crop, axis) {
   const e1 = pts[1].distanceTo(pts[0]), e2 = pts[2].distanceTo(pts[1]);
   const horiz1 = Math.abs(axis.y) > 0.9 ? Math.abs(pts[1].x - pts[0].x) >= Math.abs(pts[1].z - pts[0].z) : Math.abs(pts[1].y - pts[0].y) < 0.5 * e1;      // which edge runs across the screen
   const w = horiz1 ? e1 : e2, h = horiz1 ? e2 : e1;
-  return {c, dist: Math.max(w / vpAspect(), h) / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.08 + 1};
+  return {c, dist: fitDistance(w, h, vpAspect(), camera.fov)};
 }
 function openView(v) {
   if (!v || !v.origin) { $('#status').textContent = 'this view stores no camera/cut plane'; return; }
@@ -1050,9 +1050,7 @@ function openView(v) {
     if (v.depth > 0) S.viewCrop = (S.viewCrop || []).concat(new THREE.Plane(d.clone(), -d.dot(o) + v.depth));      // view depth (far clip, metres beyond the cut plane) when the reader supplies views[].depth
     if (cr) { const t = cr.c.clone().addScaledVector(d, -d.dot(cr.c) + d.dot(o)); controls.target.copy(t); camera.position.copy(t).addScaledVector(d, cr.dist); }
     else {      // crop off: frame the whole model on the cut plane (Revit shows the model extents), not the section line's origin, which can lie at the model's edge
-      const t = c.clone().addScaledVector(d, d.dot(o) - d.dot(c)), up = new THREE.Vector3(0, 1, 0), rt = up.clone().cross(d).normalize(); let hw = 1, hh = 1;
-      for (const i of [0, 1]) for (const j of [0, 1]) for (const k of [0, 1]) { const q = new THREE.Vector3(i ? mb.max.x : mb.min.x, j ? mb.max.y : mb.min.y, k ? mb.max.z : mb.min.z).sub(c); hw = Math.max(hw, Math.abs(q.dot(rt))); hh = Math.max(hh, Math.abs(q.dot(up))); }
-      controls.target.copy(t); camera.position.copy(t).addScaledVector(d, Math.max(hw / vpAspect(), hh) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.08 + 1);
+      const f = boxFrame(mb.min.toArray(), mb.max.toArray(), d.toArray(), o.toArray(), vpAspect(), camera.fov); controls.target.fromArray(f.target); camera.position.fromArray(f.eye);
     }
   }
   camera.near = 0.05; camera.far = size * 20 + 500; camera.updateProjectionMatrix(); controls.update();
