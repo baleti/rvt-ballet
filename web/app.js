@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import {OrbitControls} from 'three/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/loaders/GLTFLoader.js';
 import {fitDistance, boxFrame} from '/viewframe.js';
+import {cropExtent} from '/cropextent.js';
 import {soilQuads} from '/soilquads.js';
-import {buildCutGroups as buildCutGroups0, scaleGrid, viewScaleN} from '/cutpattern.js';
+import {buildCutGroups as buildCutGroups0, scaleGrid, viewScaleN, MAX_GRIDS} from '/cutpattern.js';
 import {patternTexture, paletteTexture, imageTextures, CLASSES as TEXCLASSES} from '/materials.js';
 import {cutSegments as cutSegs} from '/cutsegs.js';
 import {elevGridLines, drawsGridsAsVertical} from '/elevgrids.js';
@@ -442,7 +443,7 @@ async function updateSelBox() {
 }
 async function bbOf(i) {
   let b = S.bbCache?.get(i);
-  if (!b) { const info = await elInfo(i); if (info.el.bb) { const bb = JSON.parse(info.el.bb).map(p => p.map(x => x * 0.3048)); b = new THREE.Box3().setFromPoints([toV(bb[0]), toV(bb[1])]); (S.bbCache ||= new Map()).set(i, b); } }
+  if (!b) { const info = await elInfo(i); if (info && info.el && info.el.bb) { const bb = JSON.parse(info.el.bb).map(p => p.map(x => x * 0.3048)); b = new THREE.Box3().setFromPoints([toV(bb[0]), toV(bb[1])]); (S.bbCache ||= new Map()).set(i, b); } }
   return b;
 }
 async function select(i, add = false) {
@@ -451,7 +452,7 @@ async function select(i, add = false) {
   refreshState(); markTree(); updateSelBox(); await showInspector();
 }
 function setSelection(ids) { S.sel = new Set(ids); refreshState(); markTree(); updateSelBox(); showInspector(); }
-async function elInfo(i) { return await (await fetch(`/api/m/${S.mid}/el/${i}`)).json(); }
+async function elInfo(i) { try { return await (await fetch(`/api/m/${S.mid}/el/${i}`)).json(); } catch (e) { return null; } }      // a failed request (page tearing down, server busy) is not an uncaught rejection
 const LEN_RE = /length|width|height|offset|elevation|thickness|diameter|depth|radius|distance|extension|size|top|bottom|base/i;
 function fmtVal(k, v) {
   if (v === '' || v == null) return '<span class="dim">-</span>';
@@ -488,7 +489,7 @@ async function showInspector() {
     el.innerHTML = `<h2>${ids.length} elements selected</h2><table class="kv">${Object.entries(cats).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join('')}</table>`; return;
   }
   const i = ids[0], m = S.meta.elements[i];
-  const info = await elInfo(i); if (S.sel.size !== 1 || !S.sel.has(i)) return;
+  const info = await elInfo(i); if (!info || S.sel.size !== 1 || !S.sel.has(i)) return;
   const e = info.el, bb = e.bb ? JSON.parse(e.bb) : null;
   const dims = bb ? bb[0].map((_, k) => ((bb[1][k] - bb[0][k]) * 0.3048).toFixed(3)).join(' x ') + ' m (x,y,z)' : null;
   const fidLabel = S.meta.fidLabels[e.fid] || e.fid;
@@ -773,6 +774,27 @@ function cutSegments(pl, onlyTopo) {
   });
   return cutSegs(meshes, {nx: pl.normal.x, ny: pl.normal.y, nz: pl.normal.z, c: pl.constant}, others);
 }
+// hatch material for a cut pattern group (up to MAX_GRIDS line grids, view-scaled): lines in plane coordinates (uU, uV), off-line pixels discarded; extra = material options (stencil / clipping)
+const FRAG_GRID = `float grid(vec4 a, vec4 b, vec2 pl){ if(a.a < .5) return 0.; float ca = cos(a.r), sa = sin(a.r); vec2 q = vec2(ca*(pl.x-b.b)+sa*(pl.y-b.a), -sa*(pl.x-b.b)+ca*(pl.y-b.a));
+  float px = max(fwidth(q.y), 1e-6), kk = floor(q.y/a.g+.5), d = abs(q.y-kk*a.g)/px; float on = 1.;
+  if(b.r > 0.){ float per = b.r+b.g, s = mod(q.x-kk*a.b, per); on = s < b.r ? 1. : 0.; }
+  return on*(1.-smoothstep(.15,.85,d))*smoothstep(2.,5.,a.g/px); }`;
+function cutHatchMat(cg, U1, V1, extra, clipping) {
+  const N = cutScale(), uA = [], uB = []; for (let i = 0; i < MAX_GRIDS; i++) { const q = cg.grids[i], v = q ? cutV4(q, N) : {a: new THREE.Vector4(0, 1, 0, 0), b: new THREE.Vector4()}; uA.push(v.a); uB.push(v.b); }
+  const cl = clipping ? ['#include <clipping_planes_pars_vertex>', '#include <clipping_planes_vertex>', '#include <clipping_planes_pars_fragment>', '#include <clipping_planes_fragment>'] : ['', '', '', ''];
+  return new THREE.ShaderMaterial(Object.assign({uniforms: {uU: {value: U1}, uV: {value: V1}, uA: {value: uA}, uB: {value: uB}, uN: {value: Math.min(cg.grids.length, MAX_GRIDS)}}, side: THREE.DoubleSide, clipping: !!clipping,
+    vertexShader: `#include <common>
+${cl[0]}
+varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
+${cl[1]}
+}`,
+    fragmentShader: `${cl[2]}
+varying vec3 vW; uniform vec3 uU; uniform vec3 uV; uniform vec4 uA[${MAX_GRIDS}]; uniform vec4 uB[${MAX_GRIDS}]; uniform float uN;
+${FRAG_GRID}
+void main(){
+${cl[3]}
+  vec2 pl = vec2(dot(vW, uU), dot(vW, uV)); float h = 0.; for(int i = 0; i < ${MAX_GRIDS}; i++){ if(float(i) >= uN) break; h = max(h, grid(uA[i], uB[i], pl)); } if(h < .05) discard; gl_FragColor = vec4(vec3(.1), 1.); }`}, extra));
+}
 // earth poche: the terrain's cut line (section plane x terrain triangles) extruded down to below the model, hatched with the earth cut pattern; drawn under the caps and the model, clipped by the view crop
 function soilPoche(pl, mb) {
   const seg = cutSegments(pl, true); if (!seg.length) return null;
@@ -780,22 +802,7 @@ function soilPoche(pl, mb) {
   const pos = soilQuads(seg, mb.min.y - 3); if (!pos.length) return null;
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   const nrm = pl.normal.clone().normalize(), U1 = new THREE.Vector3(0, 1, 0).cross(nrm).normalize(), V1 = nrm.clone().cross(U1).normalize();
-  const gu = cg.grids.map(q => cutV4(q, cutScale())); while (gu.length < 2) gu.push({a: new THREE.Vector4(0, 1, 0, 0), b: new THREE.Vector4()});
-  const mt = new THREE.ShaderMaterial({uniforms: {uU: {value: U1}, uV: {value: V1}, uA0: {value: gu[0].a}, uB0: {value: gu[0].b}, uA1: {value: gu[1].a}, uB1: {value: gu[1].b}}, side: THREE.DoubleSide, depthTest: false, depthWrite: false, clipping: true,
-    vertexShader: `#include <common>
-#include <clipping_planes_pars_vertex>
-varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
-#include <clipping_planes_vertex>
-}`,
-    fragmentShader: `#include <clipping_planes_pars_fragment>
-varying vec3 vW; uniform vec3 uU; uniform vec3 uV; uniform vec4 uA0; uniform vec4 uB0; uniform vec4 uA1; uniform vec4 uB1;
-float grid(vec4 a, vec4 b, vec2 pl){ if(a.a < .5) return 0.; float ca = cos(a.r), sa = sin(a.r); vec2 q = vec2(ca*(pl.x-b.b)+sa*(pl.y-b.a), -sa*(pl.x-b.b)+ca*(pl.y-b.a));
-  float px = max(fwidth(q.y), 1e-6), kk = floor(q.y/a.g+.5), d = abs(q.y-kk*a.g)/px; float on = 1.;
-  if(b.r > 0.){ float per = b.r+b.g, s = mod(q.x-kk*a.b, per); on = s < b.r ? 1. : 0.; }
-  return on*(1.-smoothstep(.5,1.5,d))*smoothstep(2.,5.,a.g/px); }
-void main(){
-#include <clipping_planes_fragment>
-  vec2 pl = vec2(dot(vW, uU), dot(vW, uV)); float h = max(grid(uA0, uB0, pl), grid(uA1, uB1, pl)); if(h < .05) discard; gl_FragColor = vec4(vec3(.1), 1.); }`});
+  const mt = cutHatchMat(cg, U1, V1, {depthTest: false, depthWrite: false}, true);
   const m = new THREE.Mesh(g, mt); m.frustumCulled = false; m.renderOrder = .5; return m;
 }
 const outlineUPx = {value: new THREE.Vector2(.001, .001)};
@@ -835,17 +842,7 @@ function updateCaps(planes) {
       world.traverse(o => { if (!o.isMesh || o.material.transparent || !o.visible) return;
         const m = new THREE.Mesh(o.geometry, sm); m.matrixAutoUpdate = false; m.matrix.copy(o.matrixWorld); m.renderOrder = ro; m.frustumCulled = false; g.add(m); });
       const nrm = pl.normal.clone().normalize(), ax = Math.abs(nrm.y) > .9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0), U1 = ax.clone().cross(nrm).normalize(), V1 = nrm.clone().cross(U1).normalize();
-      const gu = cg.grids.map(q => cutV4(q, cutScale())); while (gu.length < 2) gu.push({a: new THREE.Vector4(0, 1, 0, 0), b: new THREE.Vector4()});
-      const pmat = new THREE.ShaderMaterial({uniforms: {uU: {value: U1}, uV: {value: V1}, uA0: {value: gu[0].a}, uB0: {value: gu[0].b}, uA1: {value: gu[1].a}, uB1: {value: gu[1].b}}, side: THREE.DoubleSide,
-        stencilWrite: true, stencilRef: 0, stencilFuncMask: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp,
-        polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-        vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
-        fragmentShader: `varying vec3 vW; uniform vec3 uU; uniform vec3 uV; uniform vec4 uA0; uniform vec4 uB0; uniform vec4 uA1; uniform vec4 uB1;
-float grid(vec4 a, vec4 b, vec2 pl){ if(a.a < .5) return 0.; float ca = cos(a.r), sa = sin(a.r); vec2 q = vec2(ca*(pl.x-b.b)+sa*(pl.y-b.a), -sa*(pl.x-b.b)+ca*(pl.y-b.a));
-  float px = max(fwidth(q.y), 1e-6), kk = floor(q.y/a.g+.5), d = abs(q.y-kk*a.g)/px; float on = 1.;
-  if(b.r > 0.){ float per = b.r+b.g, s = mod(q.x-kk*a.b, per); on = s < b.r ? 1. : 0.; }
-  return on*(1.-smoothstep(.5,1.5,d))*smoothstep(2.,5.,a.g/px); }
-void main(){ vec2 pl = vec2(dot(vW, uU), dot(vW, uV)); float h = max(grid(uA0, uB0, pl), grid(uA1, uB1, pl)); if(h < .05) discard; gl_FragColor = vec4(vec3(.1), 1.); }`});
+      const pmat = cutHatchMat(cg, U1, V1, {stencilWrite: true, stencilRef: 0, stencilFuncMask: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2}, false);
       const pc = new THREE.Mesh(cap.geometry, pmat); pc.userData.capPlane = true; pc.userData.noDispose = true; pc.renderOrder = ro + .01; pc.frustumCulled = false; pc.position.copy(cap.position); pc.quaternion.copy(cap.quaternion);
       pc.onAfterRender = r => r.clearStencil(); g.add(pc); });
     if (window.__hl && window.__hl.style === 'hidden' && (S.tris || 0) <= 1.5e6 && Math.abs(pl.normal.y) < .1) { const soil = soilPoche(pl, mb); if (soil) g.add(soil); }      // earth poche under the terrain cut line
@@ -1018,9 +1015,7 @@ function cropFrame(crop, axis) {
   const pts = crop.map(toV), c = pts.reduce((a, p) => a.add(p), new THREE.Vector3()).multiplyScalar(0.25);
   S.viewCrop = pts.map((p, i) => { const q = pts[(i + 1) % 4], n = new THREE.Vector3().subVectors(q, p).cross(axis).normalize();
     if (n.dot(new THREE.Vector3().subVectors(c, p)) < 0) n.negate(); return new THREE.Plane(n, -n.dot(p) + 0.05); });
-  const e1 = pts[1].distanceTo(pts[0]), e2 = pts[2].distanceTo(pts[1]);
-  const horiz1 = Math.abs(axis.y) > 0.9 ? Math.abs(pts[1].x - pts[0].x) >= Math.abs(pts[1].z - pts[0].z) : Math.abs(pts[1].y - pts[0].y) < 0.5 * e1;      // which edge runs across the screen
-  const w = horiz1 ? e1 : e2, h = horiz1 ? e2 : e1;
+  const ex = cropExtent(pts.map(p => p.toArray()), axis.toArray()), w = ex.w, h = ex.h;      // w / h: crop edge lengths across / up the screen
   return {c, dist: fitDistance(w, h, vpAspect(), camera.fov)};
 }
 function openView(v) {
