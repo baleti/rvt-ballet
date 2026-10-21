@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCutGroups, scaleGrid, viewScaleN } from '../../web/cutpattern.js';
+import { buildCutGroups, scaleGrid, viewScaleN, MAX_GRIDS } from '../../web/cutpattern.js';
 const near = (a, b, e = 1e-9) => assert.ok(Math.abs(a - b) < e, `${a} vs ${b}`);
 const gA = [{ angle: 0.5, origin: [0.1, 0.2], deltas: [0.01, -0.02], segs: [0.003, -0.027] }];
 test('groups are distinct patterns and matGroup is 1-based', () => {
@@ -11,10 +11,10 @@ test('groups are distinct patterns and matGroup is 1-based', () => {
   near(g.a[0], 0.5); near(g.a[1], 0.02 * 0.3048); near(g.a[2], 0.01 * 0.3048); assert.equal(g.a[3], 1);
   near(g.b[0], 0.003 * 0.3048); near(g.b[1], 0.027 * 0.3048); near(g.b[2], 0.1 * 0.3048); near(g.b[3], 0.2 * 0.3048);
 });
-test('no segs gives zero dash, zero spacing clears flag, third grid dropped', () => {
+test('no segs gives zero dash, zero spacing clears flag, grids beyond MAX_GRIDS dropped', () => {
   const mk = a => ({ angle: a, origin: [0, 0], deltas: [0, 0.01], segs: [] });
-  const r = buildCutGroups([{ cut_pattern: { name: 'x', target: 0, grids: [mk(0), mk(1), mk(2)] } }, { cut_pattern: { name: 'z', target: 0, grids: [{ angle: 0, origin: [0, 0], deltas: [0, 0], segs: [] }] } }]);
-  assert.equal(r.groups[0].grids.length, 2); assert.equal(r.groups[0].grids[1].a[0], 1);
+  const r = buildCutGroups([{ cut_pattern: { name: 'x', target: 0, grids: Array.from({ length: MAX_GRIDS + 2 }, (_, i) => mk(i)) } }, { cut_pattern: { name: 'z', target: 0, grids: [{ angle: 0, origin: [0, 0], deltas: [0, 0], segs: [] }] } }]);
+  assert.equal(r.groups[0].grids.length, MAX_GRIDS); assert.equal(r.groups[0].grids[1].a[0], 1);
   assert.equal(r.groups[0].grids[0].b[0], 0); assert.equal(r.groups[0].grids[0].b[1], 0);
   assert.equal(r.groups[1].grids[0].a[3], 0);
   assert.equal(buildCutGroups([]).matGroup.length, 1);

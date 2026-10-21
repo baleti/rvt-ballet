@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/loaders/GLTFLoader.js';
-import {buildCutGroups as buildCutGroups0, scaleGrid, viewScaleN} from '/cutpattern.js';
+import {fitDistance, boxFrame} from '/viewframe.js';
+import {soilQuads} from '/soilquads.js';
+import {buildCutGroups as buildCutGroups0, scaleGrid, viewScaleN, MAX_GRIDS} from '/cutpattern.js';
 import {patternTexture, paletteTexture, imageTextures, CLASSES as TEXCLASSES} from '/materials.js';
 import {cutSegments as cutSegs} from '/cutsegs.js';
 import {elevGridLines, drawsGridsAsVertical} from '/elevgrids.js';
@@ -771,31 +773,35 @@ function cutSegments(pl, onlyTopo) {
   });
   return cutSegs(meshes, {nx: pl.normal.x, ny: pl.normal.y, nz: pl.normal.z, c: pl.constant}, others);
 }
+// hatch material for a cut pattern group (up to MAX_GRIDS line grids, view-scaled): lines in plane coordinates (uU, uV), off-line pixels discarded; extra = material options (stencil / clipping)
+const FRAG_GRID = `float grid(vec4 a, vec4 b, vec2 pl){ if(a.a < .5) return 0.; float ca = cos(a.r), sa = sin(a.r); vec2 q = vec2(ca*(pl.x-b.b)+sa*(pl.y-b.a), -sa*(pl.x-b.b)+ca*(pl.y-b.a));
+  float px = max(fwidth(q.y), 1e-6), kk = floor(q.y/a.g+.5), d = abs(q.y-kk*a.g)/px; float on = 1.;
+  if(b.r > 0.){ float per = b.r+b.g, s = mod(q.x-kk*a.b, per); on = s < b.r ? 1. : 0.; }
+  return on*(1.-smoothstep(.15,.85,d))*smoothstep(2.,5.,a.g/px); }`;
+function cutHatchMat(cg, U1, V1, extra, clipping) {
+  const N = cutScale(), uA = [], uB = []; for (let i = 0; i < MAX_GRIDS; i++) { const q = cg.grids[i], v = q ? cutV4(q, N) : {a: new THREE.Vector4(0, 1, 0, 0), b: new THREE.Vector4()}; uA.push(v.a); uB.push(v.b); }
+  const cl = clipping ? ['#include <clipping_planes_pars_vertex>', '#include <clipping_planes_vertex>', '#include <clipping_planes_pars_fragment>', '#include <clipping_planes_fragment>'] : ['', '', '', ''];
+  return new THREE.ShaderMaterial(Object.assign({uniforms: {uU: {value: U1}, uV: {value: V1}, uA: {value: uA}, uB: {value: uB}, uN: {value: Math.min(cg.grids.length, MAX_GRIDS)}}, side: THREE.DoubleSide, clipping: !!clipping,
+    vertexShader: `#include <common>
+${cl[0]}
+varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
+${cl[1]}
+}`,
+    fragmentShader: `${cl[2]}
+varying vec3 vW; uniform vec3 uU; uniform vec3 uV; uniform vec4 uA[${MAX_GRIDS}]; uniform vec4 uB[${MAX_GRIDS}]; uniform float uN;
+${FRAG_GRID}
+void main(){
+${cl[3]}
+  vec2 pl = vec2(dot(vW, uU), dot(vW, uV)); float h = 0.; for(int i = 0; i < ${MAX_GRIDS}; i++){ if(float(i) >= uN) break; h = max(h, grid(uA[i], uB[i], pl)); } if(h < .05) discard; gl_FragColor = vec4(vec3(.1), 1.); }`}, extra));
+}
 // earth poche: the terrain's cut line (section plane x terrain triangles) extruded down to below the model, hatched with the earth cut pattern; drawn under the caps and the model, clipped by the view crop
 function soilPoche(pl, mb) {
   const seg = cutSegments(pl, true); if (!seg.length) return null;
   const cg = cutGroups.find(c => /earth|soil/i.test(c.name || '')) || cutGroups[0]; if (!cg) return null;
-  const y0 = mb.min.y - 3, pos = new Float32Array(seg.length / 6 * 18);
-  for (let i = 0, o = 0; i < seg.length; i += 6) { const ax = seg[i], ay = seg[i + 1], az = seg[i + 2], bx = seg[i + 3], by = seg[i + 4], bz = seg[i + 5];
-    pos.set([ax, ay, az, bx, by, bz, bx, y0, bz, ax, ay, az, bx, y0, bz, ax, y0, az], o); o += 18; }
+  const pos = soilQuads(seg, mb.min.y - 3); if (!pos.length) return null;
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   const nrm = pl.normal.clone().normalize(), U1 = new THREE.Vector3(0, 1, 0).cross(nrm).normalize(), V1 = nrm.clone().cross(U1).normalize();
-  const gu = cg.grids.map(q => cutV4(q, cutScale())); while (gu.length < 2) gu.push({a: new THREE.Vector4(0, 1, 0, 0), b: new THREE.Vector4()});
-  const mt = new THREE.ShaderMaterial({uniforms: {uU: {value: U1}, uV: {value: V1}, uA0: {value: gu[0].a}, uB0: {value: gu[0].b}, uA1: {value: gu[1].a}, uB1: {value: gu[1].b}}, side: THREE.DoubleSide, depthTest: false, depthWrite: false, clipping: true,
-    vertexShader: `#include <common>
-#include <clipping_planes_pars_vertex>
-varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
-#include <clipping_planes_vertex>
-}`,
-    fragmentShader: `#include <clipping_planes_pars_fragment>
-varying vec3 vW; uniform vec3 uU; uniform vec3 uV; uniform vec4 uA0; uniform vec4 uB0; uniform vec4 uA1; uniform vec4 uB1;
-float grid(vec4 a, vec4 b, vec2 pl){ if(a.a < .5) return 0.; float ca = cos(a.r), sa = sin(a.r); vec2 q = vec2(ca*(pl.x-b.b)+sa*(pl.y-b.a), -sa*(pl.x-b.b)+ca*(pl.y-b.a));
-  float px = max(fwidth(q.y), 1e-6), kk = floor(q.y/a.g+.5), d = abs(q.y-kk*a.g)/px; float on = 1.;
-  if(b.r > 0.){ float per = b.r+b.g, s = mod(q.x-kk*a.b, per); on = s < b.r ? 1. : 0.; }
-  return on*(1.-smoothstep(.5,1.5,d))*smoothstep(2.,5.,a.g/px); }
-void main(){
-#include <clipping_planes_fragment>
-  vec2 pl = vec2(dot(vW, uU), dot(vW, uV)); float h = max(grid(uA0, uB0, pl), grid(uA1, uB1, pl)); if(h < .05) discard; gl_FragColor = vec4(vec3(.1), 1.); }`});
+  const mt = cutHatchMat(cg, U1, V1, {depthTest: false, depthWrite: false}, true);
   const m = new THREE.Mesh(g, mt); m.frustumCulled = false; m.renderOrder = .5; return m;
 }
 const outlineUPx = {value: new THREE.Vector2(.001, .001)};
@@ -835,17 +841,7 @@ function updateCaps(planes) {
       world.traverse(o => { if (!o.isMesh || o.material.transparent || !o.visible) return;
         const m = new THREE.Mesh(o.geometry, sm); m.matrixAutoUpdate = false; m.matrix.copy(o.matrixWorld); m.renderOrder = ro; m.frustumCulled = false; g.add(m); });
       const nrm = pl.normal.clone().normalize(), ax = Math.abs(nrm.y) > .9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0), U1 = ax.clone().cross(nrm).normalize(), V1 = nrm.clone().cross(U1).normalize();
-      const gu = cg.grids.map(q => cutV4(q, cutScale())); while (gu.length < 2) gu.push({a: new THREE.Vector4(0, 1, 0, 0), b: new THREE.Vector4()});
-      const pmat = new THREE.ShaderMaterial({uniforms: {uU: {value: U1}, uV: {value: V1}, uA0: {value: gu[0].a}, uB0: {value: gu[0].b}, uA1: {value: gu[1].a}, uB1: {value: gu[1].b}}, side: THREE.DoubleSide,
-        stencilWrite: true, stencilRef: 0, stencilFuncMask: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp,
-        polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-        vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
-        fragmentShader: `varying vec3 vW; uniform vec3 uU; uniform vec3 uV; uniform vec4 uA0; uniform vec4 uB0; uniform vec4 uA1; uniform vec4 uB1;
-float grid(vec4 a, vec4 b, vec2 pl){ if(a.a < .5) return 0.; float ca = cos(a.r), sa = sin(a.r); vec2 q = vec2(ca*(pl.x-b.b)+sa*(pl.y-b.a), -sa*(pl.x-b.b)+ca*(pl.y-b.a));
-  float px = max(fwidth(q.y), 1e-6), kk = floor(q.y/a.g+.5), d = abs(q.y-kk*a.g)/px; float on = 1.;
-  if(b.r > 0.){ float per = b.r+b.g, s = mod(q.x-kk*a.b, per); on = s < b.r ? 1. : 0.; }
-  return on*(1.-smoothstep(.5,1.5,d))*smoothstep(2.,5.,a.g/px); }
-void main(){ vec2 pl = vec2(dot(vW, uU), dot(vW, uV)); float h = max(grid(uA0, uB0, pl), grid(uA1, uB1, pl)); if(h < .05) discard; gl_FragColor = vec4(vec3(.1), 1.); }`});
+      const pmat = cutHatchMat(cg, U1, V1, {stencilWrite: true, stencilRef: 0, stencilFuncMask: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2}, false);
       const pc = new THREE.Mesh(cap.geometry, pmat); pc.userData.capPlane = true; pc.userData.noDispose = true; pc.renderOrder = ro + .01; pc.frustumCulled = false; pc.position.copy(cap.position); pc.quaternion.copy(cap.quaternion);
       pc.onAfterRender = r => r.clearStencil(); g.add(pc); });
     if (window.__hl && window.__hl.style === 'hidden' && (S.tris || 0) <= 1.5e6 && Math.abs(pl.normal.y) < .1) { const soil = soilPoche(pl, mb); if (soil) g.add(soil); }      // earth poche under the terrain cut line
@@ -1011,6 +1007,7 @@ function orthoLook(on) {
   camera.near = Math.max(.05, dist * k - sz * 2); camera.far = dist * k + sz * 2 + 500; camera.updateProjectionMatrix(); controls.update(); dirty = true;
 }
 window.orthoLook = orthoLook;
+const vpAspect = () => canvas.clientWidth > 0 && canvas.clientHeight > 0 ? canvas.clientWidth / canvas.clientHeight : camera.aspect;      // live canvas shape: camera.aspect is refreshed only in the next frame after a resize
 function cropFrame(crop, axis) {
   // crop rectangle (4 corners, revit metres) of a plan/section/elevation -> 4 clip planes around it (normals inward, 5 cm slack), its centre, and the camera
   // distance along axis (the view direction) that fits it on screen
@@ -1020,7 +1017,7 @@ function cropFrame(crop, axis) {
   const e1 = pts[1].distanceTo(pts[0]), e2 = pts[2].distanceTo(pts[1]);
   const horiz1 = Math.abs(axis.y) > 0.9 ? Math.abs(pts[1].x - pts[0].x) >= Math.abs(pts[1].z - pts[0].z) : Math.abs(pts[1].y - pts[0].y) < 0.5 * e1;      // which edge runs across the screen
   const w = horiz1 ? e1 : e2, h = horiz1 ? e2 : e1;
-  return {c, dist: Math.max(w / camera.aspect, h) / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.08 + 1};
+  return {c, dist: fitDistance(w, h, vpAspect(), camera.fov)};
 }
 function openView(v) {
   if (!v || !v.origin) { $('#status').textContent = 'this view stores no camera/cut plane'; return; }
@@ -1049,9 +1046,7 @@ function openView(v) {
     if (v.depth > 0) S.viewCrop = (S.viewCrop || []).concat(new THREE.Plane(d.clone(), -d.dot(o) + v.depth));      // view depth (far clip, metres beyond the cut plane) when the reader supplies views[].depth
     if (cr) { const t = cr.c.clone().addScaledVector(d, -d.dot(cr.c) + d.dot(o)); controls.target.copy(t); camera.position.copy(t).addScaledVector(d, cr.dist); }
     else {      // crop off: frame the whole model on the cut plane (Revit shows the model extents), not the section line's origin, which can lie at the model's edge
-      const t = c.clone().addScaledVector(d, d.dot(o) - d.dot(c)), up = new THREE.Vector3(0, 1, 0), rt = up.clone().cross(d).normalize(); let hw = 1, hh = 1;
-      for (const i of [0, 1]) for (const j of [0, 1]) for (const k of [0, 1]) { const q = new THREE.Vector3(i ? mb.max.x : mb.min.x, j ? mb.max.y : mb.min.y, k ? mb.max.z : mb.min.z).sub(c); hw = Math.max(hw, Math.abs(q.dot(rt))); hh = Math.max(hh, Math.abs(q.dot(up))); }
-      controls.target.copy(t); camera.position.copy(t).addScaledVector(d, Math.max(hw / camera.aspect, hh) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.08 + 1);
+      const f = boxFrame(mb.min.toArray(), mb.max.toArray(), d.toArray(), o.toArray(), vpAspect(), camera.fov); controls.target.fromArray(f.target); camera.position.fromArray(f.eye);
     }
   }
   camera.near = 0.05; camera.far = size * 20 + 500; camera.updateProjectionMatrix(); controls.update();

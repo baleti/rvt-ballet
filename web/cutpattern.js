@@ -1,4 +1,5 @@
 const F = 0.3048;
+export const MAX_GRIDS = 16;
 
 // Group drafting patterns by their complete, unscaled grid definitions.
 export function buildCutGroups(mats) {
@@ -12,7 +13,7 @@ export function buildCutGroups(mats) {
 
     const key = JSON.stringify(pattern.grids);
     if (!indices.has(key)) {
-      const grids = pattern.grids.slice(0, 2).map(grid => {
+      const grids = pattern.grids.slice(0, MAX_GRIDS).map(grid => {
         const sp = Math.abs(grid.deltas[1]) * F;
         const segs = (grid.segs || []).map(Math.abs);
         const dash = segs.length >= 2 ? segs[0] * F : 0;
