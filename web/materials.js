@@ -58,7 +58,7 @@ export function paletteTexture(mats, layers, blayers) {
     const h = (i * 0.61803398875) % 1, c = hsl(h, .62, .52); D.set([c[0], c[1], c[2], 1], (2 * n + i) * 4);
     const o = m.tex_offset_ft || [0, 0]; D.set([layers && layers[i] != null ? layers[i] + 1 : 0, (o[0] || 0) * .3048, (o[1] || 0) * .3048, 0], (3 * n + i) * 4);
     const sp = m.surface_pattern;       // model-space surface pattern (target 1, feet): up to two line grids -> rows 6..9 [angle, spacing m, shift m, 1], [dash m, gap m, origin x m, origin y m]
-    if (sp && sp.target === 1 && sp.grids) sp.grids.forEach((g, j) => {
+    if (sp && sp.target === 1 && sp.grids) sp.grids.slice(0, 2).forEach((g, j) => {
       const sg = (g.segs || []).map(Math.abs), per = sg.length >= 2 ? (sg[0] + sg[1]) * .3048 : 0;
       D.set([g.angle, Math.abs(g.deltas[1]) * .3048, g.deltas[0] * .3048, Math.abs(g.deltas[1]) > 1e-6 ? 1 : 0], (6 * n + 2 * j * n + i) * 4);
       D.set([per ? sg[0] * .3048 : 0, per ? sg[1] * .3048 : 0, g.origin[0] * .3048, g.origin[1] * .3048], ((7 + 2 * j) * n + i) * 4);
