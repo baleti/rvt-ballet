@@ -42,3 +42,8 @@ Open: roof gable of Residential 158021 missing = reader mesh (NEEDS-FROM-READER 
 ## c8-vctl state (2026-10-20)
 vctl head has master merged + enrichTypes (viewctl.js); merge request for c8-viewer in VCTL-HOOKS.md (1fe1edd). Verified on remote-host (Residential 180203, capped): demo_smoke, vctltest, vcui, vcsweep ALL OK. remote-host job vcb-fac (tools/h1_vctl_browser.sh Facades 614119) started to browser-check a big file; the view id may not exist (cache scene gone): check h1run tail vcb-fac and pick a real plan id from /api/m/MID/vc/views if it fails.
 Open: 3D views carry no annotation overlay (no data), keynote tags absent from all cached scenes, angular/radial dims depend on sheets.
+
+## c8-vctl update (2026-10-21)
+vctl head = master 5532338 merged + vcvis.js (codex) + by-type 'family : type' + tools (vcalign/vctltest/vcsweep wait for the scene, VC_LIGHT=1, h1_vcalign.sh, h1_vcsweep.sh WARM=1). Merge request for c8-viewer in VCTL-HOOKS.md (2026-10-21 entry).
+Verified: demo_smoke / vctltest / vcui on Residential (remote-host capped); remote-host browser checks Commercial plan 157296, Facades 614119, Structural 579516 and section 201907 (VC_LIGHT); vcalign Structural 4 views <= 0.02 mm; vcsweep Commercial 21/21, Facades 22/23.
+Open: Structural all-views sweep wedges the remote-host headless page (render contention, not data); Facades section South 29201 scene wait; 3D views carry no annotation overlay; keynotes absent from scenes. remote-host browser runs fail with 'window.__loaded' timeouts when remote-host has < 6 GB free: use remote-host.
