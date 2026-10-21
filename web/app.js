@@ -1051,7 +1051,11 @@ function openView(v) {
     const cr = v.crop && cropFrame(v.crop, d);
     if (v.depth > 0) S.viewCrop = (S.viewCrop || []).concat(new THREE.Plane(d.clone(), -d.dot(o) + v.depth));      // view depth (far clip, metres beyond the cut plane) when the reader supplies views[].depth
     if (cr) { const t = cr.c.clone().addScaledVector(d, -d.dot(cr.c) + d.dot(o)); controls.target.copy(t); camera.position.copy(t).addScaledVector(d, cr.dist); }
-    else { controls.target.copy(o); camera.position.copy(o).addScaledVector(d, size * 0.8); }
+    else {      // crop off: frame the whole model on the cut plane (Revit shows the model extents), not the section line's origin, which can lie at the model's edge
+      const t = c.clone().addScaledVector(d, d.dot(o) - d.dot(c)), up = new THREE.Vector3(0, 1, 0), rt = up.clone().cross(d).normalize(); let hw = 1, hh = 1;
+      for (const i of [0, 1]) for (const j of [0, 1]) for (const k of [0, 1]) { const q = new THREE.Vector3(i ? mb.max.x : mb.min.x, j ? mb.max.y : mb.min.y, k ? mb.max.z : mb.min.z).sub(c); hw = Math.max(hw, Math.abs(q.dot(rt))); hh = Math.max(hh, Math.abs(q.dot(up))); }
+      controls.target.copy(t); camera.position.copy(t).addScaledVector(d, Math.max(hw / camera.aspect, hh) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.08 + 1);
+    }
   }
   camera.near = 0.05; camera.far = size * 20 + 500; camera.updateProjectionMatrix(); controls.update();
   if (v.kind !== '3d' && (v.dir || v.cut)) orthoLook(true);      // Revit plans / sections / elevations are parallel projections: telephoto look, same framing
