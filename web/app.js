@@ -747,6 +747,7 @@ function buildCutGroups() {
   const n = Math.max(1, S.mats.length), D = new Float32Array(n * 4); r.matGroup.forEach((g, i) => { D[i * 4] = g; });
   const t = new THREE.DataTexture(D, n, 1, THREE.RGBAFormat, THREE.FloatType); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; U.tCutG.value = t;
 }
+const isElevView = () => !!(S.openView && S.openView.family === 'elevation');      // Revit elevations are not cuts: no cut patterns / poche
 const stencilCache = new Map();
 function stencilMat(grp) { if (!grp) return stencilMat0(0); if (!stencilCache.has(grp)) stencilCache.set(grp, stencilMat0(grp)); return stencilCache.get(grp); }
 function stencilMat0(grp) {
@@ -837,7 +838,7 @@ function updateCaps(planes) {
     pl.coplanarPoint(cap.position); cap.position.add(pl.normal.clone().multiplyScalar(1e-4)); cap.position.add(c.clone().sub(cap.position).projectOnPlane(pl.normal));
     cap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), pl.normal.clone().normalize()); cap.onAfterRender = r => r.clearStencil();
     g.add(cap);
-    if (window.__hl && window.__hl.style === 'hidden' && cutGroups.length && (S.tris || 0) <= 8e5) cutGroups.slice(0, 6).forEach((cg, j) => {      // per-material cut pattern: parity of only that group's faces, drawn as hatch over the white cap
+    if (window.__hl && window.__hl.style === 'hidden' && cutGroups.length && !isElevView() && (S.tris || 0) <= 8e5) cutGroups.slice(0, 6).forEach((cg, j) => {      // per-material cut pattern: parity of only that group's faces, drawn as hatch over the white cap
       const gi = j + 1, sm = stencilMat(gi), ro = k + 1.12 + .02 * j;
       world.traverse(o => { if (!o.isMesh || o.material.transparent || !o.visible) return;
         const m = new THREE.Mesh(o.geometry, sm); m.matrixAutoUpdate = false; m.matrix.copy(o.matrixWorld); m.renderOrder = ro; m.frustumCulled = false; g.add(m); });
@@ -845,7 +846,7 @@ function updateCaps(planes) {
       const pmat = cutHatchMat(cg, U1, V1, {stencilWrite: true, stencilRef: 0, stencilFuncMask: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2}, false);
       const pc = new THREE.Mesh(cap.geometry, pmat); pc.userData.capPlane = true; pc.userData.noDispose = true; pc.renderOrder = ro + .01; pc.frustumCulled = false; pc.position.copy(cap.position); pc.quaternion.copy(cap.quaternion);
       pc.onAfterRender = r => r.clearStencil(); g.add(pc); });
-    if (window.__hl && window.__hl.style === 'hidden' && (S.tris || 0) <= 1.5e6 && Math.abs(pl.normal.y) < .1) { const soil = soilPoche(pl, mb); if (soil) g.add(soil); }      // earth poche under the terrain cut line
+    if (window.__hl && window.__hl.style === 'hidden' && (S.tris || 0) <= 1.5e6 && Math.abs(pl.normal.y) < .1 && !isElevView()) { const soil = soilPoche(pl, mb); if (soil) g.add(soil); }      // earth poche under the terrain cut line
     if (window.__hl && window.__hl.style === 'hidden' && (S.tris || 0) <= 1.5e6) { const seg = cutSegments(pl);      // CPU pass over all vertices: skipped on very large models
       if (seg.length) g.add(outlineLines(seg)); } capGroup.add(g);
   });
