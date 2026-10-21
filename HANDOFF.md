@@ -42,3 +42,9 @@ Open: roof gable of Residential 158021 missing = reader mesh (NEEDS-FROM-READER 
 ## c8-vctl state (2026-10-20)
 vctl head has master merged + enrichTypes (viewctl.js); merge request for c8-viewer in VCTL-HOOKS.md (1fe1edd). Verified on remote-host (Residential 180203, capped): demo_smoke, vctltest, vcui, vcsweep ALL OK. remote-host job vcb-fac (tools/h1_vctl_browser.sh Facades 614119) started to browser-check a big file; the view id may not exist (cache scene gone): check h1run tail vcb-fac and pick a real plan id from /api/m/MID/vc/views if it fails.
 Open: 3D views carry no annotation overlay (no data), keynote tags absent from all cached scenes, angular/radial dims depend on sheets.
+
+## c8-viewer state (2026-10-21)
+master + demo-ready = 2d408de (smoke Residential remote-host, Structural + Facades remote-host via tools/queue_vsmokeN.sh retry loop, uitest6/12/13 ALL OK).
+Done this session: silhouettes flag fix (viewctl.js vsFromView: display.silhouettes is a line-style override, not off; piles/columns outlines back, Snowdon South elevation F1 0.195 -> 0.635), cut-pattern hatch on hidden-line section caps + earth poche under terrain (app.js updateCaps / soilPoche, web/cutpattern.js from codex), view-scale patterns, no-crop section framing = model extents, vctl merges (1fe1edd, 4abc0dd), hl_score_fast.py.
+Open: reader items 25 (roof gable mesh) and 26 (Earth pattern grid angles) in NEEDS-FROM-READER.md; hatch lowers the pixel F1 (0.68 -> 0.60) because patterns differ from Revit's; Longitudinal needs a hidden-line Revit export to score; framing at openView depends on the viewport aspect at that moment (shot tool artefact?); Plumbing first usable 11.8 s (reader).
+Smoke recipe: tools/queue_vsmokeN.sh (copy of queue_vsmoke7.sh with a new job name) then tag demo-ready.
