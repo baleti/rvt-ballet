@@ -6,5 +6,5 @@ cd "$D"; python -c "import sys; sys.path.insert(0, '$D'); from rvtviewer.cli imp
 S=$!
 for i in $(seq 1 900); do curl -sf "http://127.0.0.1:$P/api/models" > /dev/null && break; sleep 1; done
 sleep 60
-timeout 5400 $HOME/vctl-pw/v/bin/python tools/vcsweep.py "http://127.0.0.1:$P" 2>&1 | tail -80
+timeout 14400 $HOME/vctl-pw/v/bin/python -u tools/vcsweep.py "http://127.0.0.1:$P" 2>&1
 kill $S
