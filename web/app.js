@@ -735,12 +735,13 @@ function applySection() {
 // Parity, not front/back counting, because the reader's triangle winding is not consistent. Hidden / ghosted elements are discarded in the stencil pass too.
 const capGroup = new THREE.Group(); scene.add(capGroup); let capsOn = true;
 // cut patterns (Revit drafting patterns of the material's 'Cut Pattern'): one group per distinct pattern; tCutG maps a material to its group; paper feet are scaled by an assumed view scale
-const CUT_SCALE = 50;
+const cutScale = () => { const sc = S.openView && S.openView.scale; return sc > 0 ? Math.min(500, Math.max(1, 1 / sc)) : 50; };      // view scale 1:N (paper feet -> model feet)
+const cutV4 = (q, N) => ({a: new THREE.Vector4(q.a[0], q.a[1] * N, q.a[2] * N, q.a[3]), b: new THREE.Vector4(q.b[0] * N, q.b[1] * N, q.b[2] * N, q.b[3] * N)});
 const cutGroups = [];      // [{name, grids: [{a: [angle, spacing m, shift m, 1], b: [dash m, gap m, ox m, oy m]}]}]
 function buildCutGroups() {
   cutGroups.length = 0; const key = new Map(), n = Math.max(1, S.mats.length), D = new Float32Array(n * 4);
   S.mats.forEach((m, i) => { const cp = m.cut_pattern; if (!cp || !cp.grids || !cp.grids.length || cp.target !== 0) return;
-    const k = JSON.stringify(cp.grids), F = .3048 * CUT_SCALE;
+    const k = JSON.stringify(cp.grids), F = .3048;
     if (!key.has(k)) { key.set(k, cutGroups.length + 1); cutGroups.push({name: cp.name, grids: cp.grids.slice(0, 2).map(g => { const sg = (g.segs || []).map(Math.abs), per = sg.length >= 2, sp = Math.abs(g.deltas[1]) * F;
       return {a: [g.angle, sp, g.deltas[0] * F, sp > 1e-6 ? 1 : 0], b: [per ? sg[0] * F : 0, per ? sg[1] * F : 0, g.origin[0] * F, g.origin[1] * F]}; })}); }
     D[i * 4] = key.get(k); });
@@ -782,7 +783,7 @@ function soilPoche(pl, mb) {
     pos.set([ax, ay, az, bx, by, bz, bx, y0, bz, ax, ay, az, bx, y0, bz, ax, y0, az], o); o += 18; }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   const nrm = pl.normal.clone().normalize(), U1 = new THREE.Vector3(0, 1, 0).cross(nrm).normalize(), V1 = nrm.clone().cross(U1).normalize();
-  const gu = cg.grids.map(q => ({a: new THREE.Vector4(...q.a), b: new THREE.Vector4(...q.b)})); while (gu.length < 2) gu.push({a: new THREE.Vector4(0, 1, 0, 0), b: new THREE.Vector4()});
+  const gu = cg.grids.map(q => cutV4(q, cutScale())); while (gu.length < 2) gu.push({a: new THREE.Vector4(0, 1, 0, 0), b: new THREE.Vector4()});
   const mt = new THREE.ShaderMaterial({uniforms: {uU: {value: U1}, uV: {value: V1}, uA0: {value: gu[0].a}, uB0: {value: gu[0].b}, uA1: {value: gu[1].a}, uB1: {value: gu[1].b}}, side: THREE.DoubleSide, depthTest: false, depthWrite: false, clipping: true,
     vertexShader: `#include <common>
 #include <clipping_planes_pars_vertex>
@@ -837,7 +838,7 @@ function updateCaps(planes) {
       world.traverse(o => { if (!o.isMesh || o.material.transparent || !o.visible) return;
         const m = new THREE.Mesh(o.geometry, sm); m.matrixAutoUpdate = false; m.matrix.copy(o.matrixWorld); m.renderOrder = ro; m.frustumCulled = false; g.add(m); });
       const nrm = pl.normal.clone().normalize(), ax = Math.abs(nrm.y) > .9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0), U1 = ax.clone().cross(nrm).normalize(), V1 = nrm.clone().cross(U1).normalize();
-      const gu = cg.grids.map(q => ({a: new THREE.Vector4(...q.a), b: new THREE.Vector4(...q.b)})); while (gu.length < 2) gu.push({a: new THREE.Vector4(0, 1, 0, 0), b: new THREE.Vector4()});
+      const gu = cg.grids.map(q => cutV4(q, cutScale())); while (gu.length < 2) gu.push({a: new THREE.Vector4(0, 1, 0, 0), b: new THREE.Vector4()});
       const pmat = new THREE.ShaderMaterial({uniforms: {uU: {value: U1}, uV: {value: V1}, uA0: {value: gu[0].a}, uB0: {value: gu[0].b}, uA1: {value: gu[1].a}, uB1: {value: gu[1].b}}, side: THREE.DoubleSide,
         stencilWrite: true, stencilRef: 0, stencilFuncMask: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp,
         polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
