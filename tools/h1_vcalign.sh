@@ -6,5 +6,5 @@ cd "$D"; python -c "import sys; sys.path.insert(0, '$D'); from rvtviewer.cli imp
 S=$!
 for i in $(seq 1 900); do curl -sf "http://127.0.0.1:$P/api/models" > /dev/null && break; sleep 1; done
 sleep 60
-for v in "$@"; do echo "== view $v"; $HOME/vctl-pw/v/bin/python tools/vcalign.py "http://127.0.0.1:$P" "$v" 2>&1 | tail -8; done
+for v in "$@"; do echo "== view $v"; timeout 600 $HOME/vctl-pw/v/bin/python tools/vcalign.py "http://127.0.0.1:$P" "$v" 2>&1 | tail -8; done
 kill $S
