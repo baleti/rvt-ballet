@@ -77,6 +77,9 @@ def views_sheets(ctx):
                     if rg: v['range'] = rg
                 cr = _crop(ctx, f)
                 if cr: v['crop'] = cr
+                if c == 'DBViewSection':      # Revit view family from DBViewSection.m_sectionViewType (0 section, 2 elevation, 3 detail / callout; checked on 2020 Residential): elevations are not cut (no cut fills / poche)
+                    fam = {0: 'section', 2: 'elevation', 3: 'detail'}.get(f.get('m_sectionViewType'))
+                    if fam: v['family'] = fam
                 if c == 'DBViewSection':      # view depth: Viewer.m_boundedSpace z axis, far side offset in ft, when its far bound is active (m_boundActive[2][0])
                     try:
                         vr = ctx.recs.get(ctx.eid_int(f.get('m_viewerId')) or -1); bs = (vr['fields'].get('m_boundedSpace') if vr else None) or {}

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {OrbitControls} from 'three/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/loaders/GLTFLoader.js';
 import {fitDistance, boxFrame} from '/viewframe.js';
+import {cropExtent} from '/cropextent.js';
 import {soilQuads} from '/soilquads.js';
 import {buildCutGroups as buildCutGroups0, scaleGrid, viewScaleN, MAX_GRIDS} from '/cutpattern.js';
 import {patternTexture, paletteTexture, imageTextures, CLASSES as TEXCLASSES} from '/materials.js';
@@ -442,7 +443,7 @@ async function updateSelBox() {
 }
 async function bbOf(i) {
   let b = S.bbCache?.get(i);
-  if (!b) { const info = await elInfo(i); if (info.el.bb) { const bb = JSON.parse(info.el.bb).map(p => p.map(x => x * 0.3048)); b = new THREE.Box3().setFromPoints([toV(bb[0]), toV(bb[1])]); (S.bbCache ||= new Map()).set(i, b); } }
+  if (!b) { const info = await elInfo(i); if (info && info.el && info.el.bb) { const bb = JSON.parse(info.el.bb).map(p => p.map(x => x * 0.3048)); b = new THREE.Box3().setFromPoints([toV(bb[0]), toV(bb[1])]); (S.bbCache ||= new Map()).set(i, b); } }
   return b;
 }
 async function select(i, add = false) {
@@ -451,7 +452,7 @@ async function select(i, add = false) {
   refreshState(); markTree(); updateSelBox(); await showInspector();
 }
 function setSelection(ids) { S.sel = new Set(ids); refreshState(); markTree(); updateSelBox(); showInspector(); }
-async function elInfo(i) { return await (await fetch(`/api/m/${S.mid}/el/${i}`)).json(); }
+async function elInfo(i) { try { return await (await fetch(`/api/m/${S.mid}/el/${i}`)).json(); } catch (e) { return null; } }      // a failed request (page tearing down, server busy) is not an uncaught rejection
 const LEN_RE = /length|width|height|offset|elevation|thickness|diameter|depth|radius|distance|extension|size|top|bottom|base/i;
 function fmtVal(k, v) {
   if (v === '' || v == null) return '<span class="dim">-</span>';
@@ -488,7 +489,7 @@ async function showInspector() {
     el.innerHTML = `<h2>${ids.length} elements selected</h2><table class="kv">${Object.entries(cats).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join('')}</table>`; return;
   }
   const i = ids[0], m = S.meta.elements[i];
-  const info = await elInfo(i); if (S.sel.size !== 1 || !S.sel.has(i)) return;
+  const info = await elInfo(i); if (!info || S.sel.size !== 1 || !S.sel.has(i)) return;
   const e = info.el, bb = e.bb ? JSON.parse(e.bb) : null;
   const dims = bb ? bb[0].map((_, k) => ((bb[1][k] - bb[0][k]) * 0.3048).toFixed(3)).join(' x ') + ' m (x,y,z)' : null;
   const fidLabel = S.meta.fidLabels[e.fid] || e.fid;
@@ -746,6 +747,7 @@ function buildCutGroups() {
   const n = Math.max(1, S.mats.length), D = new Float32Array(n * 4); r.matGroup.forEach((g, i) => { D[i * 4] = g; });
   const t = new THREE.DataTexture(D, n, 1, THREE.RGBAFormat, THREE.FloatType); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; U.tCutG.value = t;
 }
+const isElevView = () => !!(S.openView && S.openView.family === 'elevation');      // Revit elevations are not cuts: no cut patterns / poche
 const stencilCache = new Map();
 function stencilMat(grp) { if (!grp) return stencilMat0(0); if (!stencilCache.has(grp)) stencilCache.set(grp, stencilMat0(grp)); return stencilCache.get(grp); }
 function stencilMat0(grp) {
@@ -836,7 +838,7 @@ function updateCaps(planes) {
     pl.coplanarPoint(cap.position); cap.position.add(pl.normal.clone().multiplyScalar(1e-4)); cap.position.add(c.clone().sub(cap.position).projectOnPlane(pl.normal));
     cap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), pl.normal.clone().normalize()); cap.onAfterRender = r => r.clearStencil();
     g.add(cap);
-    if (window.__hl && window.__hl.style === 'hidden' && cutGroups.length && (S.tris || 0) <= 8e5) cutGroups.slice(0, 6).forEach((cg, j) => {      // per-material cut pattern: parity of only that group's faces, drawn as hatch over the white cap
+    if (window.__hl && window.__hl.style === 'hidden' && cutGroups.length && !isElevView() && (S.tris || 0) <= 8e5) cutGroups.slice(0, 6).forEach((cg, j) => {      // per-material cut pattern: parity of only that group's faces, drawn as hatch over the white cap
       const gi = j + 1, sm = stencilMat(gi), ro = k + 1.12 + .02 * j;
       world.traverse(o => { if (!o.isMesh || o.material.transparent || !o.visible) return;
         const m = new THREE.Mesh(o.geometry, sm); m.matrixAutoUpdate = false; m.matrix.copy(o.matrixWorld); m.renderOrder = ro; m.frustumCulled = false; g.add(m); });
@@ -844,7 +846,7 @@ function updateCaps(planes) {
       const pmat = cutHatchMat(cg, U1, V1, {stencilWrite: true, stencilRef: 0, stencilFuncMask: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2}, false);
       const pc = new THREE.Mesh(cap.geometry, pmat); pc.userData.capPlane = true; pc.userData.noDispose = true; pc.renderOrder = ro + .01; pc.frustumCulled = false; pc.position.copy(cap.position); pc.quaternion.copy(cap.quaternion);
       pc.onAfterRender = r => r.clearStencil(); g.add(pc); });
-    if (window.__hl && window.__hl.style === 'hidden' && (S.tris || 0) <= 1.5e6 && Math.abs(pl.normal.y) < .1) { const soil = soilPoche(pl, mb); if (soil) g.add(soil); }      // earth poche under the terrain cut line
+    if (window.__hl && window.__hl.style === 'hidden' && (S.tris || 0) <= 1.5e6 && Math.abs(pl.normal.y) < .1 && !isElevView()) { const soil = soilPoche(pl, mb); if (soil) g.add(soil); }      // earth poche under the terrain cut line
     if (window.__hl && window.__hl.style === 'hidden' && (S.tris || 0) <= 1.5e6) { const seg = cutSegments(pl);      // CPU pass over all vertices: skipped on very large models
       if (seg.length) g.add(outlineLines(seg)); } capGroup.add(g);
   });
@@ -1014,9 +1016,7 @@ function cropFrame(crop, axis) {
   const pts = crop.map(toV), c = pts.reduce((a, p) => a.add(p), new THREE.Vector3()).multiplyScalar(0.25);
   S.viewCrop = pts.map((p, i) => { const q = pts[(i + 1) % 4], n = new THREE.Vector3().subVectors(q, p).cross(axis).normalize();
     if (n.dot(new THREE.Vector3().subVectors(c, p)) < 0) n.negate(); return new THREE.Plane(n, -n.dot(p) + 0.05); });
-  const e1 = pts[1].distanceTo(pts[0]), e2 = pts[2].distanceTo(pts[1]);
-  const horiz1 = Math.abs(axis.y) > 0.9 ? Math.abs(pts[1].x - pts[0].x) >= Math.abs(pts[1].z - pts[0].z) : Math.abs(pts[1].y - pts[0].y) < 0.5 * e1;      // which edge runs across the screen
-  const w = horiz1 ? e1 : e2, h = horiz1 ? e2 : e1;
+  const ex = cropExtent(pts.map(p => p.toArray()), axis.toArray()), w = ex.w, h = ex.h;      // w / h: crop edge lengths across / up the screen
   return {c, dist: fitDistance(w, h, vpAspect(), camera.fov)};
 }
 function openView(v) {

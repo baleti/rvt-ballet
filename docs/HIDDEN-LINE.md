@@ -26,3 +26,10 @@ Registered line F1 vs Revit, hidden-line views of Snowdon 43 (2024) and 55 (2026
 * Level / grid per-view extents, level colours (filter 'Levels - Building'), grids hidden by filters: sheets filter evaluation for datums.
 * Yellow framing fills depend on filter evaluation (Z Offset rules).
 * Writer scenes: roofs / floors without geometry show open tops.
+
+## Section cut patterns and soil poche (c8-viewer, 2026-10-21)
+* Cut faces of a hidden-line section / plan are filled with the material's Cut Pattern (Revit drafting pattern, `materials.json` `cut_pattern.grids`, up to 64 line grids, paper feet): one stencil parity pass per distinct pattern (max 6 patterns, models up to 800k triangles), hatch lines drawn in the cut plane's own coordinates at the opened view's scale 1:N (`views[].scale`). Module `web/cutpattern.js` (grouping, scaling), `cutHatchMat` in `web/app.js`.
+* Earth poche: the terrain's cut line (`cutSegments(pl, true)`) is extruded below the model (`web/soilquads.js`) and hatched with the Earth pattern, drawn under the caps and the model.
+* Elevations are not cut in Revit: `views[].family == 'elevation'` (DBViewSection.m_sectionViewType 2) gets no cut patterns / poche; sections are 0, details / callouts 3.
+* Views without a crop frame the whole model extents on the cut plane (`web/viewframe.js` boxFrame); framing uses the live canvas aspect.
+* Pixel scores (`tools/hl_score_fast.py`) drop when hatches are exact (1 px hairlines differ in phase from Revit): do not use them to judge hatches.

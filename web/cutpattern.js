@@ -1,5 +1,5 @@
 const F = 0.3048;
-export const MAX_GRIDS = 16;
+export const MAX_GRIDS = 64;
 
 // Group drafting patterns by their complete, unscaled grid definitions.
 export function buildCutGroups(mats) {
