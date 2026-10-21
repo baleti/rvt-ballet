@@ -194,7 +194,7 @@ def load(src, log=print):
     def gfx(p):          # material graphics pattern (surface / cut): None when the material has none
         if not p or p.get('id') is None: return None
         return {'id': p['id'], 'name': (fpat.get(p['id']) or {}).get('name'), 'color': p.get('color'), 'background': p.get('background_color') if p.get('background_id') is not None else None,
-                'target': (fpat.get(p['id']) or {}).get('target'), 'grids': [{k: ([round(x, 6) for x in v] if isinstance(v, list) else round(v, 6)) for k, v in g.items()} for g in ((fpat.get(p['id']) or {}).get('grids') or [])[:16]]}
+                'target': (fpat.get(p['id']) or {}).get('target'), 'grids': [{k: ([round(x, 6) for x in v] if isinstance(v, list) else round(v, 6)) for k, v in g.items()} for g in ((fpat.get(p['id']) or {}).get('grids') or [])[:64]]}
     out = []; index = {}; thumbs = {}
     for mid, m in mt.items():
         ax = ext.get(m.get('appearance_asset_id')) or {}
