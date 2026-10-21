@@ -10,7 +10,8 @@ async def main(url, vid, out):
     try:
         await b.goto(url); await b.wait('window.__loaded===true', 120); await b.wait('typeof window.vctl==="object"', 30)
         await b.ev('window.vctl.toggle().then(()=>1)')
-        await b.ev('window.vctl.openView(%s).then(()=>1)' % vid); await asyncio.sleep(1)
+        await b.ev('(window.vctl.openView(%s),1)' % vid); await b.wait('vctl.V.sc&&vctl.V.sc.view.id==%s&&vctl.V.B' % vid, 300); await asyncio.sleep(2)      # big models: opening takes longer than one evaluate may wait
+        if os.environ.get('VC_LIGHT'): await b.ev('(vctl.set({model:false}),1)')      # model hidden under the drawing: keeps the software renderer responsive on huge views
         st = json.loads(await b.ev('JSON.stringify({prims: vctl.V.sc.prims.length, segs: vctl.V.B.segs.length, texts: vctl.V.textObjs.length, tris: vctl.V.B.tris.length, scale: vctl.V.sc.view.scale, ts: vctl.V.textObjs.length ? vctl.V.sc.prims[vctl.V.textObjs[0].pi].size : 0})'))
         check('overlay built', st['prims'] > 0 and st['segs'] > 0, st)
         check('text objects', st['texts'] > 0)

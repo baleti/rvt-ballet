@@ -174,6 +174,7 @@ function frameMatrix(view) {
 }
 
 // family / type / level names of model elements come from the model's own element table when the scene does not carry them (tags, dimensions and datums do)
+const typeKey = e => e.typeName ? (e.familyName ? e.familyName + ' : ' : '') + e.typeName : null;      // family : type, so equal type names of different families stay apart
 function enrichTypes(sc) {
   for (const [eid, e] of Object.entries(sc.elements)) {
     if (e.typeName) continue; const i = elementIndex(eid), r = i != null ? (S.meta.elements || [])[i] : null;
@@ -286,7 +287,7 @@ function primVisible(m) {
   if (m.cls && st.classes[m.cls] === false) return false;
   if (m.part && st.parts[m.part] === false) return false;
   if (m.hang && st.hideHang) return false;
-  if (e && e.typeName && st.types[e.typeName] === false) return false;
+  if (e && e.typeName && st.types[typeKey(e)] === false) return false;
   if (m.t === 'text' && !st.textOn) return false;
   return true;
 }
@@ -543,7 +544,7 @@ function renderTree() {
       return h;
     }).join('');
   } else if (mode === 'ftype') {
-    const cnt = {}; for (const e of Object.values(sc.elements)) if (e.typeName) cnt[e.typeName] = (cnt[e.typeName] || 0) + 1;
+    const cnt = {}; for (const e of Object.values(sc.elements)) if (e.typeName) { const k = typeKey(e); cnt[k] = (cnt[k] || 0) + 1; }
     html = Object.entries(cnt).sort().map(([t, n]) => `<div class="vcrow" data-ft="${esc(t)}"><input type="checkbox" ${st.types[t] !== false ? 'checked' : ''} data-a="ftype"><span class="nm">${esc(t)}</span><span class="cnt">${n}</span></div>`).join('') || '<span class="dim">no family / type names in this view\'s data</span>';
   } else if (mode === 'part') {
     const cnt = {}; sc.prims.forEach(p => cnt[p.part || 'line'] = (cnt[p.part || 'line'] || 0) + 1);

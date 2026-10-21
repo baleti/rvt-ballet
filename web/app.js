@@ -735,12 +735,13 @@ function applySection() {
 // Parity, not front/back counting, because the reader's triangle winding is not consistent. Hidden / ghosted elements are discarded in the stencil pass too.
 const capGroup = new THREE.Group(); scene.add(capGroup); let capsOn = true;
 // cut patterns (Revit drafting patterns of the material's 'Cut Pattern'): one group per distinct pattern; tCutG maps a material to its group; paper feet are scaled by an assumed view scale
-const CUT_SCALE = 50;
+const cutScale = () => { const sc = S.openView && S.openView.scale; return sc > 0 ? Math.min(500, Math.max(1, 1 / sc)) : 50; };      // view scale 1:N (paper feet -> model feet)
+const cutV4 = (q, N) => ({a: new THREE.Vector4(q.a[0], q.a[1] * N, q.a[2] * N, q.a[3]), b: new THREE.Vector4(q.b[0] * N, q.b[1] * N, q.b[2] * N, q.b[3] * N)});
 const cutGroups = [];      // [{name, grids: [{a: [angle, spacing m, shift m, 1], b: [dash m, gap m, ox m, oy m]}]}]
 function buildCutGroups() {
   cutGroups.length = 0; const key = new Map(), n = Math.max(1, S.mats.length), D = new Float32Array(n * 4);
   S.mats.forEach((m, i) => { const cp = m.cut_pattern; if (!cp || !cp.grids || !cp.grids.length || cp.target !== 0) return;
-    const k = JSON.stringify(cp.grids), F = .3048 * CUT_SCALE;
+    const k = JSON.stringify(cp.grids), F = .3048;
     if (!key.has(k)) { key.set(k, cutGroups.length + 1); cutGroups.push({name: cp.name, grids: cp.grids.slice(0, 2).map(g => { const sg = (g.segs || []).map(Math.abs), per = sg.length >= 2, sp = Math.abs(g.deltas[1]) * F;
       return {a: [g.angle, sp, g.deltas[0] * F, sp > 1e-6 ? 1 : 0], b: [per ? sg[0] * F : 0, per ? sg[1] * F : 0, g.origin[0] * F, g.origin[1] * F]}; })}); }
     D[i * 4] = key.get(k); });
@@ -761,7 +762,7 @@ if(uG > .5){ float mI = floor(vM+.5); float gid = mI < -.5 ? 0. : texelFetch(tCu
 }
 let STM = null;
 // section outline: the segments where a clip plane cuts the model's triangles (world space), drawn over the caps in hidden line like Revit's heavy cut outline
-function cutSegments(pl) {
+function cutSegments(pl, onlyTopo) {
   const others = renderer.clippingPlanes.filter(q => q !== pl && !(Math.abs(q.constant - pl.constant) < 1e-9 && q.normal.distanceToSquared(pl.normal) < 1e-12)).map(q => ({nx: q.normal.x, ny: q.normal.y, nz: q.normal.z, c: q.constant}));
   const meshes = [];
   world.traverse(o => {
@@ -769,9 +770,36 @@ function cutSegments(pl) {
     const pa = o.geometry.attributes.position, ix = o.geometry.index, ea = o.geometry.attributes._eidx;
     const pos = pa.isInterleavedBufferAttribute || pa.normalized ? Float32Array.from({length: pa.count * 3}, (_, k) => [pa.getX, pa.getY, pa.getZ][k % 3].call(pa, (k / 3) | 0)) : pa.array;
     meshes.push({pos, index: ix ? ix.array : null, matrix: o.matrixWorld.elements,
-      accept: ea ? (t, a) => { const ei = Math.round(ea.getX(a)) * 4; return !((stateData[ei] & 9) || (stateData[ei + 3] === 255 && (S.meta.elements[ei / 4][2] || '') !== 'Topography')); } : null});      // hidden / ghosted elements and the no-cap categories (terrain stays) get no outline
+      accept: ea ? (t, a) => { const ei = Math.round(ea.getX(a)) * 4; const topo = (S.meta.elements[ei / 4][2] || '') === 'Topography'; if (onlyTopo) return topo && !(stateData[ei] & 9); return !((stateData[ei] & 9) || (stateData[ei + 3] === 255 && !topo)); } : null});      // hidden / ghosted elements and the no-cap categories (terrain stays) get no outline
   });
   return cutSegs(meshes, {nx: pl.normal.x, ny: pl.normal.y, nz: pl.normal.z, c: pl.constant}, others);
+}
+// earth poche: the terrain's cut line (section plane x terrain triangles) extruded down to below the model, hatched with the earth cut pattern; drawn under the caps and the model, clipped by the view crop
+function soilPoche(pl, mb) {
+  const seg = cutSegments(pl, true); if (!seg.length) return null;
+  const cg = cutGroups.find(c => /earth|soil/i.test(c.name || '')) || cutGroups[0]; if (!cg) return null;
+  const y0 = mb.min.y - 3, pos = new Float32Array(seg.length / 6 * 18);
+  for (let i = 0, o = 0; i < seg.length; i += 6) { const ax = seg[i], ay = seg[i + 1], az = seg[i + 2], bx = seg[i + 3], by = seg[i + 4], bz = seg[i + 5];
+    pos.set([ax, ay, az, bx, by, bz, bx, y0, bz, ax, ay, az, bx, y0, bz, ax, y0, az], o); o += 18; }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const nrm = pl.normal.clone().normalize(), U1 = new THREE.Vector3(0, 1, 0).cross(nrm).normalize(), V1 = nrm.clone().cross(U1).normalize();
+  const gu = cg.grids.map(q => cutV4(q, cutScale())); while (gu.length < 2) gu.push({a: new THREE.Vector4(0, 1, 0, 0), b: new THREE.Vector4()});
+  const mt = new THREE.ShaderMaterial({uniforms: {uU: {value: U1}, uV: {value: V1}, uA0: {value: gu[0].a}, uB0: {value: gu[0].b}, uA1: {value: gu[1].a}, uB1: {value: gu[1].b}}, side: THREE.DoubleSide, depthTest: false, depthWrite: false, clipping: true,
+    vertexShader: `#include <common>
+#include <clipping_planes_pars_vertex>
+varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
+#include <clipping_planes_vertex>
+}`,
+    fragmentShader: `#include <clipping_planes_pars_fragment>
+varying vec3 vW; uniform vec3 uU; uniform vec3 uV; uniform vec4 uA0; uniform vec4 uB0; uniform vec4 uA1; uniform vec4 uB1;
+float grid(vec4 a, vec4 b, vec2 pl){ if(a.a < .5) return 0.; float ca = cos(a.r), sa = sin(a.r); vec2 q = vec2(ca*(pl.x-b.b)+sa*(pl.y-b.a), -sa*(pl.x-b.b)+ca*(pl.y-b.a));
+  float px = max(fwidth(q.y), 1e-6), kk = floor(q.y/a.g+.5), d = abs(q.y-kk*a.g)/px; float on = 1.;
+  if(b.r > 0.){ float per = b.r+b.g, s = mod(q.x-kk*a.b, per); on = s < b.r ? 1. : 0.; }
+  return on*(1.-smoothstep(.5,1.5,d))*smoothstep(2.,5.,a.g/px); }
+void main(){
+#include <clipping_planes_fragment>
+  vec2 pl = vec2(dot(vW, uU), dot(vW, uV)); float h = max(grid(uA0, uB0, pl), grid(uA1, uB1, pl)); if(h < .05) discard; gl_FragColor = vec4(vec3(.1), 1.); }`});
+  const m = new THREE.Mesh(g, mt); m.frustumCulled = false; m.renderOrder = .5; return m;
 }
 const outlineUPx = {value: new THREE.Vector2(.001, .001)};
 function outlineLines(seg) {
@@ -810,7 +838,7 @@ function updateCaps(planes) {
       world.traverse(o => { if (!o.isMesh || o.material.transparent || !o.visible) return;
         const m = new THREE.Mesh(o.geometry, sm); m.matrixAutoUpdate = false; m.matrix.copy(o.matrixWorld); m.renderOrder = ro; m.frustumCulled = false; g.add(m); });
       const nrm = pl.normal.clone().normalize(), ax = Math.abs(nrm.y) > .9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0), U1 = ax.clone().cross(nrm).normalize(), V1 = nrm.clone().cross(U1).normalize();
-      const gu = cg.grids.map(q => ({a: new THREE.Vector4(...q.a), b: new THREE.Vector4(...q.b)})); while (gu.length < 2) gu.push({a: new THREE.Vector4(0, 1, 0, 0), b: new THREE.Vector4()});
+      const gu = cg.grids.map(q => cutV4(q, cutScale())); while (gu.length < 2) gu.push({a: new THREE.Vector4(0, 1, 0, 0), b: new THREE.Vector4()});
       const pmat = new THREE.ShaderMaterial({uniforms: {uU: {value: U1}, uV: {value: V1}, uA0: {value: gu[0].a}, uB0: {value: gu[0].b}, uA1: {value: gu[1].a}, uB1: {value: gu[1].b}}, side: THREE.DoubleSide,
         stencilWrite: true, stencilRef: 0, stencilFuncMask: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp,
         polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
@@ -823,6 +851,7 @@ float grid(vec4 a, vec4 b, vec2 pl){ if(a.a < .5) return 0.; float ca = cos(a.r)
 void main(){ vec2 pl = vec2(dot(vW, uU), dot(vW, uV)); float h = max(grid(uA0, uB0, pl), grid(uA1, uB1, pl)); if(h < .05) discard; gl_FragColor = vec4(vec3(.1), 1.); }`});
       const pc = new THREE.Mesh(cap.geometry, pmat); pc.userData.capPlane = true; pc.userData.noDispose = true; pc.renderOrder = ro + .01; pc.frustumCulled = false; pc.position.copy(cap.position); pc.quaternion.copy(cap.quaternion);
       pc.onAfterRender = r => r.clearStencil(); g.add(pc); });
+    if (window.__hl && window.__hl.style === 'hidden' && (S.tris || 0) <= 1.5e6 && Math.abs(pl.normal.y) < .1) { const soil = soilPoche(pl, mb); if (soil) g.add(soil); }      // earth poche under the terrain cut line
     if (window.__hl && window.__hl.style === 'hidden' && (S.tris || 0) <= 1.5e6) { const seg = cutSegments(pl);      // CPU pass over all vertices: skipped on very large models
       if (seg.length) g.add(outlineLines(seg)); } capGroup.add(g);
   });
@@ -1022,7 +1051,11 @@ function openView(v) {
     const cr = v.crop && cropFrame(v.crop, d);
     if (v.depth > 0) S.viewCrop = (S.viewCrop || []).concat(new THREE.Plane(d.clone(), -d.dot(o) + v.depth));      // view depth (far clip, metres beyond the cut plane) when the reader supplies views[].depth
     if (cr) { const t = cr.c.clone().addScaledVector(d, -d.dot(cr.c) + d.dot(o)); controls.target.copy(t); camera.position.copy(t).addScaledVector(d, cr.dist); }
-    else { controls.target.copy(o); camera.position.copy(o).addScaledVector(d, size * 0.8); }
+    else {      // crop off: frame the whole model on the cut plane (Revit shows the model extents), not the section line's origin, which can lie at the model's edge
+      const t = c.clone().addScaledVector(d, d.dot(o) - d.dot(c)), up = new THREE.Vector3(0, 1, 0), rt = up.clone().cross(d).normalize(); let hw = 1, hh = 1;
+      for (const i of [0, 1]) for (const j of [0, 1]) for (const k of [0, 1]) { const q = new THREE.Vector3(i ? mb.max.x : mb.min.x, j ? mb.max.y : mb.min.y, k ? mb.max.z : mb.min.z).sub(c); hw = Math.max(hw, Math.abs(q.dot(rt))); hh = Math.max(hh, Math.abs(q.dot(up))); }
+      controls.target.copy(t); camera.position.copy(t).addScaledVector(d, Math.max(hw / camera.aspect, hh) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.08 + 1);
+    }
   }
   camera.near = 0.05; camera.far = size * 20 + 500; camera.updateProjectionMatrix(); controls.update();
   if (v.kind !== '3d' && (v.dir || v.cut)) orthoLook(true);      // Revit plans / sections / elevations are parallel projections: telephoto look, same framing

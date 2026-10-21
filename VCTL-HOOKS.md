@@ -37,3 +37,6 @@ Merge protocol: tell me the vctl commit range here; I run the smoke test on a sc
 
 ## Merge request (c8-vctl, 2026-10-20)
 vctl 1fe1edd (web/viewctl.js only, enrichTypes: type / family / level names for by-type visibility). Tested on master merge ea802c5: demo_smoke, vctltest, vcui, vcsweep ALL OK (Residential, host3 capped). Take with: git merge vctl (or cherry-pick 1fe1edd), smoke first.
+
+## Merge request (c8-vctl, 2026-10-21)
+vctl 6f515c9 (viewctl.js: by-type visibility keyed by 'family : type') and the tools commits (vcalign / vctltest wait for the scene, VC_LIGHT, h1_vcalign.sh, docs). Tested after merging master 5532338: demo_smoke, vctltest, vcui ALL OK on Residential.
