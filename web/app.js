@@ -1011,6 +1011,7 @@ function orthoLook(on) {
   camera.near = Math.max(.05, dist * k - sz * 2); camera.far = dist * k + sz * 2 + 500; camera.updateProjectionMatrix(); controls.update(); dirty = true;
 }
 window.orthoLook = orthoLook;
+const vpAspect = () => canvas.clientWidth > 0 && canvas.clientHeight > 0 ? canvas.clientWidth / canvas.clientHeight : camera.aspect;      // live canvas shape: camera.aspect is refreshed only in the next frame after a resize
 function cropFrame(crop, axis) {
   // crop rectangle (4 corners, revit metres) of a plan/section/elevation -> 4 clip planes around it (normals inward, 5 cm slack), its centre, and the camera
   // distance along axis (the view direction) that fits it on screen
@@ -1020,7 +1021,7 @@ function cropFrame(crop, axis) {
   const e1 = pts[1].distanceTo(pts[0]), e2 = pts[2].distanceTo(pts[1]);
   const horiz1 = Math.abs(axis.y) > 0.9 ? Math.abs(pts[1].x - pts[0].x) >= Math.abs(pts[1].z - pts[0].z) : Math.abs(pts[1].y - pts[0].y) < 0.5 * e1;      // which edge runs across the screen
   const w = horiz1 ? e1 : e2, h = horiz1 ? e2 : e1;
-  return {c, dist: Math.max(w / camera.aspect, h) / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.08 + 1};
+  return {c, dist: Math.max(w / vpAspect(), h) / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.08 + 1};
 }
 function openView(v) {
   if (!v || !v.origin) { $('#status').textContent = 'this view stores no camera/cut plane'; return; }
@@ -1051,7 +1052,7 @@ function openView(v) {
     else {      // crop off: frame the whole model on the cut plane (Revit shows the model extents), not the section line's origin, which can lie at the model's edge
       const t = c.clone().addScaledVector(d, d.dot(o) - d.dot(c)), up = new THREE.Vector3(0, 1, 0), rt = up.clone().cross(d).normalize(); let hw = 1, hh = 1;
       for (const i of [0, 1]) for (const j of [0, 1]) for (const k of [0, 1]) { const q = new THREE.Vector3(i ? mb.max.x : mb.min.x, j ? mb.max.y : mb.min.y, k ? mb.max.z : mb.min.z).sub(c); hw = Math.max(hw, Math.abs(q.dot(rt))); hh = Math.max(hh, Math.abs(q.dot(up))); }
-      controls.target.copy(t); camera.position.copy(t).addScaledVector(d, Math.max(hw / camera.aspect, hh) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.08 + 1);
+      controls.target.copy(t); camera.position.copy(t).addScaledVector(d, Math.max(hw / vpAspect(), hh) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.08 + 1);
     }
   }
   camera.near = 0.05; camera.far = size * 20 + 500; camera.updateProjectionMatrix(); controls.update();
