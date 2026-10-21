@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/loaders/GLTFLoader.js';
+import {buildCutGroups as buildCutGroups0, scaleGrid, viewScaleN} from '/cutpattern.js';
 import {patternTexture, paletteTexture, imageTextures, CLASSES as TEXCLASSES} from '/materials.js';
 import {cutSegments as cutSegs} from '/cutsegs.js';
 import {elevGridLines, drawsGridsAsVertical} from '/elevgrids.js';
@@ -735,16 +736,12 @@ function applySection() {
 // Parity, not front/back counting, because the reader's triangle winding is not consistent. Hidden / ghosted elements are discarded in the stencil pass too.
 const capGroup = new THREE.Group(); scene.add(capGroup); let capsOn = true;
 // cut patterns (Revit drafting patterns of the material's 'Cut Pattern'): one group per distinct pattern; tCutG maps a material to its group; paper feet are scaled by an assumed view scale
-const cutScale = () => { const sc = S.openView && S.openView.scale; return sc > 0 ? Math.min(500, Math.max(1, 1 / sc)) : 50; };      // view scale 1:N (paper feet -> model feet)
-const cutV4 = (q, N) => ({a: new THREE.Vector4(q.a[0], q.a[1] * N, q.a[2] * N, q.a[3]), b: new THREE.Vector4(q.b[0] * N, q.b[1] * N, q.b[2] * N, q.b[3] * N)});
+const cutScale = () => viewScaleN(S.openView);      // view scale 1:N (paper feet -> model feet)
+const cutV4 = (q, N) => { const r = scaleGrid(q, N); return {a: new THREE.Vector4(...r.a), b: new THREE.Vector4(...r.b)}; };
 const cutGroups = [];      // [{name, grids: [{a: [angle, spacing m, shift m, 1], b: [dash m, gap m, ox m, oy m]}]}]
 function buildCutGroups() {
-  cutGroups.length = 0; const key = new Map(), n = Math.max(1, S.mats.length), D = new Float32Array(n * 4);
-  S.mats.forEach((m, i) => { const cp = m.cut_pattern; if (!cp || !cp.grids || !cp.grids.length || cp.target !== 0) return;
-    const k = JSON.stringify(cp.grids), F = .3048;
-    if (!key.has(k)) { key.set(k, cutGroups.length + 1); cutGroups.push({name: cp.name, grids: cp.grids.slice(0, 2).map(g => { const sg = (g.segs || []).map(Math.abs), per = sg.length >= 2, sp = Math.abs(g.deltas[1]) * F;
-      return {a: [g.angle, sp, g.deltas[0] * F, sp > 1e-6 ? 1 : 0], b: [per ? sg[0] * F : 0, per ? sg[1] * F : 0, g.origin[0] * F, g.origin[1] * F]}; })}); }
-    D[i * 4] = key.get(k); });
+  const r = buildCutGroups0(S.mats); cutGroups.length = 0; cutGroups.push(...r.groups);
+  const n = Math.max(1, S.mats.length), D = new Float32Array(n * 4); r.matGroup.forEach((g, i) => { D[i * 4] = g; });
   const t = new THREE.DataTexture(D, n, 1, THREE.RGBAFormat, THREE.FloatType); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; U.tCutG.value = t;
 }
 const stencilCache = new Map();
