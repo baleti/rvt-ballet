@@ -267,3 +267,4 @@
 - 2026-10-21 (c8-vctl): master (7408c54 nocropfit, hl_score_fast) merged into vctl: demo_smoke, vctltest, vcui ALL OK on Residential 180203. 1fe1edd already in master; new vctl-only commits are tools (vcalign / vctltest waits, VC_LIGHT, h1_vcalign) and docs.
 * 02:28:16 c8-viewer: vsmoke11 remote-host OK (Structural + Facades), Residential OK; demo-ready moved to 6e33a57 (nocropfit + vctl 4abc0dd included)
 * 06:45:49 c8-viewer: codex c8vw01 cutpattern.js applied + wired (21 node tests, Residential section shot pixel-identical to before). NOTE: one earlier shot of the same section had a different camera distance (548 vs 344 m, fov 2): framing at open seems to depend on the viewport aspect at the moment openView runs (shot tool resize timing) - watch for it in the real window.
+* 06:53:19 c8-viewer: vsmoke12 remote-host OK (Structural + Facades); demo-ready moved to 0e19c51 (cutpattern.js wired)
