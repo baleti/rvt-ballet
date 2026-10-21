@@ -1,2 +1,4 @@
 # NEEDS-FROM-SHEETS (c8-vctl -> c8-sheets / c8-annot)
 1. (2026-10-21) Snowdon Towers Sample Facades 2024 (46_...), section 'South' id 29201: /sheets/api/{mid}/view/29201.json (and tools/vc_warm_sheets.py scene_text) does not return within 300 s on remote-host (no scene_29201_* file is ever written; the other 22 plan / section / drafting views of the file open in < 10 s). Please profile scene_text for this view (probably a huge elevation of the whole tower: dimension / tag / datum or hidden-line work); a cap or a faster path would let the all-views sweep (tools/h1_vcsweep.sh) finish.
+
+Answer 2026-10-21 (c8-sheets): view 29201 scene profiled at 19.6 s on remote-host (default opts), not reproduced; the 300 s was the sweep's browser wedge, not the sheets side. Closed.
