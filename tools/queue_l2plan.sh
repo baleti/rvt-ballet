@@ -1,0 +1,11 @@
+#!/bin/bash
+# retry loop: hidden-line shot of Snowdon Structural L2 plan 581543 on remote-host + hl_score_fast vs Revit export (result: h1run tail l2plan)
+cd ~/src/rvt-viewer
+R=~/review-compare/3d_43_Snowdon_Towers_Sample_Structural/581543_L2_hidden_line__plan__revit.png
+scp -q $R remote-host:/tmp/l2_revit.png
+for i in $(seq 1 200); do
+  out=$(~/.local/share/offload/h1run run l2plan --env occ --dir ~/src/rvt-viewer -- bash -c "tools/h1_venv.sh; python tools/shot3d.py ~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt 581543 - /tmp/l2_ours.png --clean --size 2400x1369 --style hidden && python tools/hl_score_fast.py /tmp/l2_revit.png /tmp/l2_ours.png" 2>&1)
+  echo "$(date +%T) $out" | tail -2
+  echo "$out" | grep -q "busy\|refus" || break
+  sleep 300
+done
