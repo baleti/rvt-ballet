@@ -243,7 +243,7 @@ H.loadView = async function (v) {
       const E = S.meta.elements, idx = new Map(); E.forEach((e, i) => idx.set(String(e[0]), i)); H.el = {}; H.cat = {};
       for (const [k, a] of Object.entries(d.els)) { const i = idx.get(k); if (i === undefined) continue;
         H.el[i] = {c: [a[0], a[1], a[2]], a: a[3], lc: [a[4], a[5], a[6]], lw: a[7] < .8 ? 1 : a[7] < 1.5 ? 2 : 3, ht: a[8]}; }
-      for (const id of d.hidden) { const i = idx.get(String(id)); if (i !== undefined && !S.hidden[i]) { S.hidden[i] = 1; viewHidden.add(i); } }
+      for (const id of (d.hidden || []).concat(window.__noRangeHide ? [] : (d.range_hidden || []))) { const i = idx.get(String(id)); if (i !== undefined && !S.hidden[i]) { S.hidden[i] = 1; viewHidden.add(i); } }
     } catch (e) { console.warn('view graphics', e); }
   }
   window.__refreshState && window.__refreshState(); H.applyOverrides(); H.applyBackground(); H.viewReady = true;
