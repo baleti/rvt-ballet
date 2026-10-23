@@ -56,3 +56,9 @@ master, demo-ready = adfdbc3 (only docs/tools commits since; no rvtviewer/*.py o
 
 ## claude8 update 2026-10-22 13:12
 Snowdon Structural L2 plan 581543 hidden line scored on remote-host (tools/queue_l2plan.sh): F1 0.586 (P 0.452 R 0.833), registration scale 1.43 (crop off here, Revit export cropped); Revit shows joist lines and no floor fill, ours slab stipple. Diagnostic tools/vis_cats.py (hidden categories of view 581543) queued via tools/queue_viscats.sh but never ran (remote-host gate stuck at 7.7 GB); rerun with tools/queue_viscats.sh (a retry loop may still be running: check pgrep before starting). No viewer code changed; demo-ready still adfdbc3.
+
+## claude8 handoff (2026-10-23)
+State: master, demo-ready = 522efb8 (no rvtviewer/web/bin change since; all three demo models smoke OK from cache, 2.2 s each; node + python tests green).
+Running: remote-host job hlsweep2 (tools/queue_hlsweep.sh; hidden-line edge angle sweep, started 14:23). Result: ssh remote-host 'grep -a "^angle\|BEST" ~/offload/hlsweep2.log'. So far angle 20 (min-edge 0.00 and 0.01) mean F1 0.9502; 30/45 pending. Then update docs/HIDDEN-LINE.md and re-score Foundations; change the default edge angle only if clearly better AND browser-confirmed (needs rvtviewer/web edit => re-run rvt-view --prepare on the 3 demo files before moving demo-ready).
+Waiting on others: NEEDS-FROM-READER 25 (roof gable), NEEDS-FROM-ORACLE (end of file: toilet 152823 / section 228085, L2 floor stipple 581543). No c8-* tmux sessions exist on this host.
+Minor: explicit --port in use prints an OSError traceback (default port 0 is safe); bundle with the next rvtviewer change.
