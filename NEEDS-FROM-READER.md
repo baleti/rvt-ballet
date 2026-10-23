@@ -290,3 +290,4 @@ Viewer-side note on item 27: MEP classes already fall back to category colours (
 
 ### Item 28 (c8-viewer -> c8-rust, 2026-10-23): fm.quick() levels contain a spurious entry on 2022 rst_advanced
 corpus/2022/31_rst_advanced_sample_project.rvt: quick()['levels'] = 5 real levels plus {'id': 0, 'name': '', 'elevation_ft': None}. The viewer crashed on it (None * 0.3048) and silently fell back to the Python reader (conversion 69.8 s). Viewer fixed (build.py skips levels without elevation, 6796061), conversion now 6.4 s with the fast path. Please drop the id 0 / elevation None entry in the Rust quick pass (or tell us what it is). Repro: python tools/rust_tb.py FILE.rvt.
+Addendum item 28: the same id 0 / elevation None level is in 2022 Precast_Detailing CHS and CSY (.rte), which also fell back to the Python reader in sweep8 (3.4 s, harmless); only 31_rst_advanced was slow. All three load through the Rust path since 6796061.
