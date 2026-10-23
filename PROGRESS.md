@@ -318,3 +318,4 @@ hlsweep2 finished: edge angle 20/30/45 and min edge 0..0.03 all give mean F1 0.9
 2026-10-23 smoke after server.py port fix (aefd586): Residential DEMO-SMOKE OK on remote-host (capped), cache stamp unchanged.
 2026-10-23 vsmoke15 on remote-host: Snowdon Structural + Facades DEMO-SMOKE OK; with Residential (remote-host) all three OK on a688ba0; demo-ready moved.
 2026-10-23 sweep8 (remote-host, after reader param changes of 10-22): 89/89 ok, all functional checks ok, elements/tris/true/approx/box/sheets/views/materials identical to sweep7. Log tools/queue_vsweep8.sh.
+2026-10-23 vctl eaf4d8f merged (vcvis.js + viewctl.js; node tests 7/7, demo_smoke Residential, vctltest ALL OK); web-only so cache stamp unchanged.
