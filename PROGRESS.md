@@ -298,3 +298,4 @@ Read handoffs. HEAD 8cb243b differs from demo-ready 522efb8 only outside rvtview
 * 2026-10-23 claude8: cached re-open, demo_smoke end to end (server start, phase done, main/materials/sheets pages) 2.2 s for 2020 Residential and 2.2 s for 2024 Snowdon Structural (remote-host, 3.5G cap); both OK.
 * 2026-10-23 claude8: Facades 2026 (53 MB) cached re-open demo_smoke 2.2 s OK (remote-host, 3.5G cap, sheets doc OK). All three demo models verified from cache today.
 * 2026-10-23 claude8: bad-input check of bin/rvt-view: random bytes, 0-byte file, missing file and a 2 MB truncated real file all give a one-line explanatory error (not a traceback); the truncated file keeps serving the page with the error until stopped.
+* 2026-10-23 claude8: truncated .rvt via rvt-view: /api/m/ID/progress returns stage=error with the friendly message 2 s after start (UI polls it); verified by curl.
