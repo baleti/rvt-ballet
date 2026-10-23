@@ -11,7 +11,9 @@ async def main(url):
         for vid, name, kind in views:
             t = time.time()
             try:
-                r = json.loads(await b.ev('window.vctl.openView(%s).then(()=>JSON.stringify({p:vctl.V.sc.prims.length,s:vctl.V.B.segs.length,t:vctl.V.textObjs.length,e:window.__errs||[]}))' % vid))
+                await b.ev('(window.vctl.openView(%s%s),1)' % (vid, ', {model:false}' if os.environ.get('VC_LIGHT') else '')); await b.wait('vctl.V.sc&&vctl.V.sc.view.id==%s&&vctl.V.B' % vid, 300)      # waits outside one evaluate: big views take longer than 30 s
+                if os.environ.get('VC_LIGHT'): await b.ev('(vctl.set({model:false}),1)')
+                r = json.loads(await b.ev('JSON.stringify({p:vctl.V.sc.prims.length,s:vctl.V.B.segs.length,t:vctl.V.textObjs.length,e:window.__errs||[]})'))
             except Exception as ex: r = {'p': -1, 's': 0, 't': 0, 'e': [str(ex)]}
             ok = not r['e'] and r['p'] >= 0; bad += not ok
             print(('ok  ' if ok else 'FAIL'), vid, kind, name[:30], r['p'], r['s'], r['t'], '%.1fs' % (time.time() - t), r['e'][:2])
