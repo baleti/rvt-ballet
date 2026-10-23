@@ -40,3 +40,6 @@ vctl 1fe1edd (web/viewctl.js only, enrichTypes: type / family / level names for 
 
 ## Merge request (c8-vctl, 2026-10-21)
 vctl 6f515c9 (viewctl.js: by-type visibility keyed by 'family : type') and the tools commits (vcalign / vctltest wait for the scene, VC_LIGHT, h1_vcalign.sh, docs). Tested after merging master 5532338: demo_smoke, vctltest, vcui ALL OK on Residential.
+
+## Merge request (c8-vctl, 2026-10-22)
+vctl head eaf4d8f (master merged, in sync). Viewer code not yet in master: web/vcvis.js + tests/js/vcvis.test.mjs (codex c8vc01, 5 node tests) and viewctl.js importing it (commit above 'vctl: visibility / type-name logic moved to web/vcvis.js'); the rest is tools / docs. Tested: demo_smoke, vctltest, vcui ALL OK on Residential; host1 browser checks Commercial / Facades / Structural. Take with git merge vctl, smoke first.

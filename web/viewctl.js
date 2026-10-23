@@ -2,6 +2,7 @@
 // in model space (right orientation, sizes in model feet = paper size x view scale, so they scale with zoom as in Revit), with per-view,
 // per-layer / category / subcategory / element controls, picking, presets. Data: /api/m/{mid}/vc/scene/{vid} (rvtviewer/viewctl.py, CONTROL-API.md).
 import * as THREE from 'three';
+import {catKey, typeKey, primVisible as pv, enrichTypes} from '/vcvis.js';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
@@ -174,15 +175,8 @@ function frameMatrix(view) {
 }
 
 // family / type / level names of model elements come from the model's own element table when the scene does not carry them (tags, dimensions and datums do)
-const typeKey = e => e.typeName ? (e.familyName ? e.familyName + ' : ' : '') + e.typeName : null;      // family : type, so equal type names of different families stay apart
-function enrichTypes(sc) {
-  for (const [eid, e] of Object.entries(sc.elements)) {
-    if (e.typeName) continue; const i = elementIndex(eid), r = i != null ? (S.meta.elements || [])[i] : null;
-    if (r && r[4]) { e.typeName = r[4]; if (r[8] && !e.familyName) e.familyName = r[8]; if (r[5] && !e.levelName) e.levelName = r[5]; }
-  }
-}
 function makeScene(sc) {
-  disposeGroup(); try { enrichTypes(sc); } catch (er) { /* names are optional */ }
+  disposeGroup(); try { enrichTypes(sc.elements, S.meta.elements, elementIndex); } catch (er) { /* names are optional */ }
   const B = build(sc); V.B = B;
   const g = new THREE.Group(); g.matrixAutoUpdate = false; const fm = frameMatrix(sc.view); V.Z = fm.Z; V.base = fm.m.clone(); g.userData.vc = true;
   // stroke geometry: 4 vertices / segment
@@ -276,21 +270,7 @@ function updateUniforms(cam) {
 }
 
 // ------------------------------------------------------------------ state -> buffers
-const catKey = c => String(c);
-function primVisible(m) {
-  const st = V.state;
-  if (st.layers[m.layer] === false) return false;
-  if (m.cat != null && st.cats[catKey(m.cat)]?.vis === false) { return false; }
-  const e = V.sc.elements[m.eid];
-  if (e && e.parent != null && st.cats[catKey(e.parent)]?.vis === false) return false;
-  if (m.eid != null && st.elems[m.eid]?.vis === false) return false;
-  if (m.cls && st.classes[m.cls] === false) return false;
-  if (m.part && st.parts[m.part] === false) return false;
-  if (m.hang && st.hideHang) return false;
-  if (e && e.typeName && st.types[typeKey(e)] === false) return false;
-  if (m.t === 'text' && !st.textOn) return false;
-  return true;
-}
+const primVisible = m => pv(V.state, V.sc.elements, m);
 function applyStyles() {
   if (!V.group) return;
   const st = V.state, sc = V.sc, B = V.B, dark = matchMedia('(prefers-color-scheme: dark)').matches && !st.paper;

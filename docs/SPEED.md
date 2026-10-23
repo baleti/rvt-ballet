@@ -97,3 +97,6 @@ First usable = reader + tables + preview (`timings` of tools/sweep.py): the page
 ## Files of 25 MB and more
 
 Timings come from a shared host1 slice and can be inflated by neighbouring jobs (2026 Site went 48.7 s -> 7.4 s with the Rust face-edge index; 2017 rme_advanced reader 47 s -> 19 s cold, 7 s with a warm extraction cache). Median first usable 11.5 s, median total 45.2 s (n=29). Slowest first usable: 04_rme_basic_sample_project.rv 21 s, 41_rme_advanced_sample_project 19 s, 29_rme_advanced_sample_project 18 s.
+
+## Re-measured 2026-10-23 (sweep8, host1, n=78 project/template files, .rfa excluded; ~/.cache/rvt-viewer/sweep8.jsonl)
+Median first usable (reader + tables + preview) 5.9 s, median total 11.7 s (the table above is older; the Rust fast path and the quick-levels fix, 6796061, are in). Slowest first usable: 51 Snowdon Plumbing 15.8 s, 40 rme_basic 14.5 s, 45 Snowdon Plumbing 14.4 s (MEP-heavy; reader-owned). The element table, levels and grids arrive in 0.5-2 s (`quick`). The three demo files: total 11.4 s (Structural), 14 s (Facades), Residential 4.1 s; cached reopen about 0.3 s. Slowest total: 2022 rst_advanced 69.8 s before the fix (Python-reader fallback), 6.4 s after (single run, geometry cache warm).

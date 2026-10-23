@@ -20,8 +20,13 @@ async def main(url, vid):
         check('panel opens on button click', await b.ev('!document.querySelector("#vcpanel").hidden'))
         await b.ev('(()=>{const s=document.querySelector("#vcView");s.value="%s";s.dispatchEvent(new Event("change",{bubbles:true}));return 1})()' % vid)
         await b.wait('vctl.V.sc&&vctl.V.sc.view.id==%s' % vid, 120); await asyncio.sleep(4)
-        pt = json.loads(await b.ev('''(()=>{const V=vctl.V,cam=window.__camera,cv=document.querySelector("#gl").getBoundingClientRect(),pr=document.querySelector("#vcpanel").getBoundingClientRect();let best=null;
-          V.textObjs.forEach(t=>{if(!t.obj.visible)return;const v=new THREE.Vector3();t.obj.getWorldPosition(v);v.project(cam);if(Math.abs(v.x)>0.9||Math.abs(v.y)>0.9||v.z>1)return;const x=cv.left+(v.x+1)/2*cv.width,y=cv.top+(1-v.y)/2*cv.height;if(x>pr.left-10&&y<pr.bottom+10)return;if(!best||t.pi<best.pi)best={x,y,pi:t.pi}});return JSON.stringify(best)})()'''))
+        PTJS = '''(()=>{const V=vctl.V,cam=window.__camera,cv=document.querySelector("#gl").getBoundingClientRect(),pr=document.querySelector("#vcpanel").getBoundingClientRect();let best=null;
+          V.textObjs.forEach(t=>{if(!t.obj.visible)return;const v=new THREE.Vector3();t.obj.getWorldPosition(v);v.project(cam);if(Math.abs(v.x)>0.9||Math.abs(v.y)>0.9||v.z>1)return;const x=cv.left+(v.x+1)/2*cv.width,y=cv.top+(1-v.y)/2*cv.height;if(x>pr.left-10&&y<pr.bottom+10)return;if(!best||t.pi<best.pi)best={x,y,pi:t.pi}});return JSON.stringify(best)})()'''
+        pt = json.loads(await b.ev(PTJS))
+        if pt is None:      # big views (a whole tower in one frame): bring the first text of the overlay to the viewport centre and retry
+            await b.ev('''(()=>{const V=vctl.V,cam=window.__camera,ctl=window.__controls;const t=V.textObjs.find(t=>t.obj.visible);if(!t)return 0;const w=new THREE.Vector3();t.obj.getWorldPosition(w);const d=cam.position.clone().sub(ctl.target).normalize();ctl.target.copy(w);cam.position.copy(w.clone().add(d.multiplyScalar(25)));cam.lookAt(w);ctl.update&&ctl.update();window.__dirty&&window.__dirty();return 1})()''')
+            await asyncio.sleep(2); pt = json.loads(await b.ev(PTJS))
+
         print(await b.ev('JSON.stringify({n:vctl.V.textObjs.length,vis:vctl.V.textObjs.filter(t=>t.obj.visible).length,cam:__camera.position.toArray().map(x=>Math.round(x))})'))
         check('a text is on screen', pt is not None, pt)
         if pt:
