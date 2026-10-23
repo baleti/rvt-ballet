@@ -1,5 +1,5 @@
 """Local HTTP server: static front-end + per-model cache files + lazy metadata / search API."""
-import os, json, sqlite3, asyncio, gzip, re
+import sys, os, json, sqlite3, asyncio, gzip, re
 from aiohttp import web
 
 WEB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'web')
@@ -214,7 +214,10 @@ def serve(models, host='127.0.0.1', port=0, ready=None):
     app = make_app(models)
     async def run():
         runner = web.AppRunner(app); await runner.setup()
-        site = web.TCPSite(runner, host, port); await site.start()
+        site = web.TCPSite(runner, host, port)
+        try: await site.start()
+        except OSError as e:
+            sys.exit('rvt-view: cannot listen on port %d (%s). Omit --port to pick a free one.' % (port, e.strerror or e))
         p = site._server.sockets[0].getsockname()[1]
         if ready: ready(p)
         while True: await asyncio.sleep(3600)
