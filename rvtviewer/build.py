@@ -1300,7 +1300,7 @@ def write_quick_preview(outdir, q, path):
         b = geom.box(lo, hi); res.append((i, 'bbox', 'tri', [(b.v, b.f, None)]))
     pb, pm, pcovg, _, _ = pack_batches(els, res)
     glb.write_glb(os.path.join(outdir, 'preview.glb.tmp'), pb)
-    levels = sorted([{'id': l['id'], 'name': l['name'], 'elev': l['elevation_ft'] * 0.3048} for l in q.get('levels') or []], key=lambda l: l['elev'])
+    levels = sorted([{'id': l['id'], 'name': l['name'], 'elev': l['elevation_ft'] * 0.3048} for l in q.get('levels') or [] if l.get('elevation_ft') is not None], key=lambda l: l['elev'])
     meta = {'file': os.path.basename(path), 'levels': levels, 'grids': [], 'rooms': [], 'views': [], 'sheets': [], 'fidLabels': FID_LABEL, 'phases': [], 'defaultHidden': sorted({e['cat'] for e in els if default_hidden(e['cat'])}),
             'stamps': {'reader': reader.reader_stamp(), 'viewer': reader.viewer_stamp()}, 'phase': 'preview', 'quick': True, 'batches': pm, 'bbox': model_bbox(els), 'coverage': {k: dict(v) for k, v in pcovg.items()}, 'coverageByClass': {}, 'bboxAgreement': {},
             'elements': [[e['id'], e['cls'], e['cat'], e['name'], e['type'], e['level'], e['fid'], e['isType'], e['family'], e['phase']] for e in els], 'built': time.time(), 'buildSecs': 0}
