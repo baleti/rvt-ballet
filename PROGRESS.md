@@ -296,3 +296,4 @@ Read handoffs. HEAD 8cb243b differs from demo-ready 522efb8 only outside rvtview
 * 2026-10-23 claude8: regression check on remote-host (capped): 33 node tests, test_geom/surfaces/pipeline/plugins, test_glb, test_vcache pass; no code change. Remaining items are reader-side (NEEDS-FROM-READER 25) or need a Revit-side oracle (L2 floor stipple, toilet 152823).
 * 2026-10-23 claude8: filed NEEDS-FROM-ORACLE request (toilet 152823 / section 228085, L2 floor stipple 581543) for c8-writer.
 * 2026-10-23 claude8: cached re-open, demo_smoke end to end (server start, phase done, main/materials/sheets pages) 2.2 s for 2020 Residential and 2.2 s for 2024 Snowdon Structural (remote-host, 3.5G cap); both OK.
+* 2026-10-23 claude8: Facades 2026 (53 MB) cached re-open demo_smoke 2.2 s OK (remote-host, 3.5G cap, sheets doc OK). All three demo models verified from cache today.
