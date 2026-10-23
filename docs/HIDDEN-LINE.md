@@ -33,3 +33,6 @@ Registered line F1 vs Revit, hidden-line views of Snowdon 43 (2024) and 55 (2026
 * Elevations are not cut in Revit: `views[].family == 'elevation'` (DBViewSection.m_sectionViewType 2) gets no cut patterns / poche; sections are 0, details / callouts 3.
 * Views without a crop frame the whole model extents on the cut plane (`web/viewframe.js` boxFrame); framing uses the live canvas aspect.
 * Pixel scores (`tools/hl_score_fast.py`) drop when hatches are exact (1 px hairlines differ in phase from Revit): do not use them to judge hatches.
+
+## Edge angle sweep (2026-10-23, host1 job hlsweep2, tools/queue_hlsweep.sh)
+Edge crease angle 20 / 30 / 45 deg x min edge length 0.00 / 0.01 / 0.03 m on six Revit hidden-line section/plan exports: mean F1 0.9502 in all nine configurations (per view 0.945 0.928 0.907 0.999 0.969 0.953). The angle is not a lever on these views, so the default (30 deg, 1 cm) stays.
