@@ -41,7 +41,7 @@ It converts and caches each model, pre-renders all sheets and views, and prints 
 * Close with Ctrl+C in the terminal (or close the window).
 
 ## Verified (2026-10-16)
-* All three demo files pass tools/demo_smoke.sh on master (main page, materials, sheets page and doc); tools/uitest12.py (Revit navigation with real input events) and tools/vctltest.py (annotation control) pass. Whole corpus: 89 / 89 files pass (table below, docs/SWEEP.md); speed per file: docs/SPEED.md; geometry accuracy per class and year: docs/FIDELITY-FINAL.md.
+* All three demo files pass tools/demo_smoke.sh on master (main page, materials, sheets page and doc); tools/uitest12.py (Revit navigation with real input events) and tools/vctltest.py (annotation control) pass. Whole corpus: 89 / 89 files pass (re-swept 2026-10-23 after the latest reader changes, identical counts; table below, docs/SWEEP.md); speed per file: docs/SPEED.md; geometry accuracy per class and year: docs/FIDELITY-FINAL.md.
 
 ## Verified (2026-10-14)
 * `rvt-view FILE --sheets` end to end in headless Chromium (banner, 3D loads, Sheets page ready, Model button back, no JS exceptions): 2020 Residential (first picture 2.7 s, sheets page 2 s), 2024 Snowdon Structural (2.5 s, 12 sheets / 104 views), 2026 Snowdon Facades (3.1 s, 2 sheets / 47 views). The real app window (workspace 178, silent) opens too.
