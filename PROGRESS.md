@@ -305,3 +305,4 @@ Read handoffs. HEAD 8cb243b differs from demo-ready 522efb8 only outside rvtview
 ## 2026-10-23 claude8 (new account)
 hlsweep2 finished: edge angle 20/30/45 and min edge 0..0.03 all give mean F1 0.9502, default kept (docs/HIDDEN-LINE.md). No viewer code change; demo-ready 522efb8 still valid.
 2026-10-23 smoke after server.py port fix (aefd586): Residential DEMO-SMOKE OK on remote-host (capped), cache stamp unchanged.
+2026-10-23 vsmoke15 on remote-host: Snowdon Structural + Facades DEMO-SMOKE OK; with Residential (remote-host) all three OK on a688ba0; demo-ready moved.
