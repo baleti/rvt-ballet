@@ -80,3 +80,4 @@ Gotchas: never `pkill -f` / `pgrep -f` patterns that match your own command line
 
 ## claude8 (new account) 2026-10-25 remote-host
 slowmesh2 finished: 061/063/064 have NO slow element; root cause is OverflowError in rvt_fast._with_mat (material id -4000010 held as unsigned) that kills the Rust mesh stream and drops the viewer to the Python reader (NEEDS-FROM-READER item 30, commit on master of the remote-host copy; tools/stream_stall.py repro). Waiting on rvt-core fix (c8-rust); no rvtviewer/web change, demo-ready unchanged. studyx-008 remains the single 594k-tri element case (item 29).
+2026-10-25: 55_Snowdon Structural (2026) converts cold on remote-host in 50.9 s (667k tris, 27 batches; tools/queue_hlsoft_snow55.sh is the remote-host-style script, run locally on remote-host with systemd-run). hl F1 scoring for 55 impossible here: no ~/review-compare/revit/55_*/cameras.tsv (needs an oracle export from c8-writer / remote-host sync).
