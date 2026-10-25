@@ -34,3 +34,6 @@ Method: private map.tsv (rvt-extract-test/private, id -> original path) + tools/
 1. Finish the PDF scan, pick the models with a sheet-set PDF, run sheet-level qa-view / pdfvec on remote-host/remote-host.
 2. Regenerate the Snowdon 3D side-by-sides fresh (hl_soft_all on remote-host) and review all 38 views by eye; log classes with ids here.
 3. Fix top viewer-side classes: hl_soft/viewer level+grid lines in 3D, V/G filter colours (yellow fills, column colours), pile markers.
+
+### hl_soft --grids (2026-10-25)
+tools/hl_soft.py --grids draws meta.json grids as depth-tested lines (opt-in). Snowdon 43 view 600158: F1 0.960 without, 0.954 with (precision 0.955 -> 0.942): Revit's export of that view does not show grids, so the default stays off; use it only for views whose Revit export shows grids (check the V/G Grids category first).

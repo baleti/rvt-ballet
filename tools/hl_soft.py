@@ -10,6 +10,7 @@ from PIL import Image
 
 ap = argparse.ArgumentParser(); ap.add_argument('model'); ap.add_argument('cameras'); ap.add_argument('view'); ap.add_argument('out')
 ap.add_argument('--vg'); ap.add_argument('--eps', type=float, default=3e-4, help='line-vs-face depth tolerance as a fraction of the model depth range'); ap.add_argument('--only', type=int, help='render only this element index (diagnostics)'); ap.add_argument('--opaque', action='store_true', help='ignore view transparency (diagnostics)'); ap.add_argument('--size', type=int, default=2400); ap.add_argument('--min-edge', type=float, default=0.01); ap.add_argument('--angle', type=float, default=30.0)
+ap.add_argument('--grids', action='store_true', help='also draw the grid lines of meta.json (Revit shows grids in 3D views unless hidden)')
 a = ap.parse_args()
 meta = json.load(open(a.model + '/meta.json')); E = meta['elements']
 SOFT = {'Planting', 'Entourage', 'Topography'}
@@ -95,6 +96,12 @@ sil = (N1 @ view_vec) * (N2 @ view_vec) < 0
 if os.environ.get('HL_DEBUG'): print('conditional edges', int((KD == 1).sum()), 'silhouettes', int(sil[KD == 1].sum()), 'view_vec', view_vec, 'sample n1.v', (N1[KD == 1] @ view_vec)[:6], 'n2.v', (N2[KD == 1] @ view_vec)[:6])
 drawn = (KD == 0) | sil
 P0, P1, EL = P0[drawn], P1[drawn], EL[drawn]
+NG = 0
+if a.grids and meta.get('grids'):
+    G = [np.array(g['pts'], float) for g in meta['grids'] if len(g.get('pts') or []) >= 2]
+    if G:
+        g0 = np.array([g[0] for g in G]); g1 = np.array([g[-1] for g in G]); NG = len(G)
+        P0 = np.concatenate([P0, g0]); P1 = np.concatenate([P1, g1]); EL = np.concatenate([EL, np.zeros(NG, EL.dtype)])
 
 # ---------------------------------------------------------------- project + rasterise
 B = meta['bbox']; bb = np.array([[x, z, -y] for x in (B[0][0], B[1][0]) for y in (B[0][1], B[1][1]) for z in (B[0][2], B[1][2])])      # frame on meta's model box (stray huge elements must not shrink the view)
@@ -146,5 +153,6 @@ zo = maximum_filter(zo, size=3); zt = maximum_filter(zt, size=3)      # silhouet
 img = np.full((H, W), 255, np.uint8)
 Q0, Q1 = proj(P0), proj(P1); eps = np.ptp(bb @ d) * a.eps
 thick = (lw[EL] >= 0.8).astype(np.int64)
+if NG: thick[-NG:] = 0
 lines(Q0[:, 0], Q0[:, 1], Q0[:, 2], Q1[:, 0], Q1[:, 1], Q1[:, 2], EL, zo, zt, ta, W, H, eps, img, thick)
 Image.fromarray(img).save(a.out); print('wrote', a.out, img.shape, 'edges', len(P0), 'tris', sum(len(p[2]) for p in prims))
