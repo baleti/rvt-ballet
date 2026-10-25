@@ -291,3 +291,10 @@ Viewer-side note on item 27: MEP classes already fall back to category colours (
 ### Item 28 (c8-viewer -> c8-rust, 2026-10-23): fm.quick() levels contain a spurious entry on 2022 rst_advanced
 corpus/2022/31_rst_advanced_sample_project.rvt: quick()['levels'] = 5 real levels plus {'id': 0, 'name': '', 'elevation_ft': None}. The viewer crashed on it (None * 0.3048) and silently fell back to the Python reader (conversion 69.8 s). Viewer fixed (build.py skips levels without elevation, 6796061), conversion now 6.4 s with the fast path. Please drop the id 0 / elevation None entry in the Rust quick pass (or tell us what it is). Repro: python tools/rust_tb.py FILE.rvt.
 Addendum item 28: the same id 0 / elevation None level is in 2022 Precast_Detailing CHS and CSY (.rte), which also fell back to the Python reader in sweep8 (3.4 s, harmless); only 31_rst_advanced was slow. All three load through the Rust path since 6796061.
+
+### Item 29 (c8-viewer, 2026-10-25): real-world studyx conversion sweep, 41 files (remote-host, tools/queue_vsweep_studyx.sh, 7 GB per-file cap, 20 min timeout)
+Result 29 ok / 9 killed / 2 timeout / 1 fail. Details (~/.cache/rvt-viewer/sweep_studyx.jsonl):
+* studyx-031 (79 MB): rvt_fast quick() failed with TypeError("'NoneType' object is not iterable") after the element table (14850 boxes, 43 levels, 22.7 s); the Python fallback then died with the same TypeError in cli convert. Please find the None iterable (levels? same family as item 28).
+* studyx-008 (66 MB, 33k elements, 2.79M tris): ok but 1147 s, geometry stage 1109 s (rvt_fast available on remote-host). Other files of similar size need 50-90 s. Something is pathological in saved-graphics mesh reading.
+* studyx-061 (63 MB) and studyx-064 (130 MB): timeout at 1200 s inside "[geometry] reading saved-graphics meshes" (4840/5789 and 1440/5179), studyx-063 (118 MB) killed at 1107 s in the same loop.
+* killed by the 7 GB cap (no traceback): studyx-019, 022, 023, 030, 038, 041, 063, 065, 066; being re-run with a 16 GB cap to separate a cap artefact from a real memory blow-up.
