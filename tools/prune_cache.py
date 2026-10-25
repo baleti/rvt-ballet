@@ -3,6 +3,7 @@ plus unfinished *.tmp directories older than 1 day. Dry run unless --delete is g
 import os, sys, json, time, shutil, argparse
 ap = argparse.ArgumentParser(); ap.add_argument('--keep', type=int, default=2); ap.add_argument('--delete', action='store_true'); ap.add_argument('--dir', default=os.path.expanduser('~/.cache/rvt-viewer/models'))
 a = ap.parse_args()
+if not os.path.isdir(a.dir): sys.exit('no converted-model cache at %s (nothing to prune; geom-*.pkl caches live one level up in ~/.cache/rvt-viewer)' % a.dir)
 def size(d): return sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(d) for f in fs if os.path.isfile(os.path.join(r, f)))
 groups, drop = {}, []
 for n in os.listdir(a.dir):
