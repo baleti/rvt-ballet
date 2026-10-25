@@ -37,3 +37,7 @@ Method: private map.tsv (rvt-extract-test/private, id -> original path) + tools/
 
 ### hl_soft --grids (2026-10-25)
 tools/hl_soft.py --grids draws meta.json grids as depth-tested lines (opt-in). Snowdon 43 view 600158: F1 0.960 without, 0.954 with (precision 0.955 -> 0.942): Revit's export of that view does not show grids, so the default stays off; use it only for views whose Revit export shows grids (check the V/G Grids category first).
+
+## Timing update 2026-10-25 (branch h2-viewer, cold, RVT_CAPPED=1 RVT_NO_GEOM_CACHE=1, fresh RVT_CORE_CACHE)
+
+After build.py `_sign_material_ids()` (workaround for NEEDS-FROM-READER item 30, unsigned material id kills the Rust mesh stream): studyx-061 total 263.7 s (geometry 118 s, was 984 s), studyx-063 156.8 s (was 1117 s, 5.9M tris), studyx-064 148.4 s (was 1620 s, 5.85M tris). Large files need RVT_CAPPED=1 or RVT_MEM_CAP=16G (cli.py re-execs under a 6 GB cap by default). Source: NEEDS-FROM-READER.md item 30.
