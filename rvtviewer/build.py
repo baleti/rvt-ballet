@@ -1089,6 +1089,18 @@ def _rf():
     """the rvt_fast module (Rust kernels: smooth_part, file_key, ...) when the fast path is on, else None"""
     return sys.modules.get('rvt_fast') if fast_module() is not None else None
 
+def _sign_material_ids():
+    """rvt_elemmesh._material_of can return a negative built-in id (-4000010) as an unsigned 64-bit value; rvt_fast._with_mat stores ids in int64 and raised OverflowError, which killed the whole Rust mesh stream (studyx-061/063/064: Python fallback, 1000-1600 s instead of ~75 s; NEEDS-FROM-READER item 30). Normalise to signed here until rvt-core does."""
+    try:
+        import rvt_elemmesh as EM
+        if getattr(EM._material_of, '_signed', False): return
+        orig = EM._material_of
+        def _material_of(*a, **k):
+            v = orig(*a, **k)
+            return v - 2 ** 64 if isinstance(v, int) and v >= 2 ** 63 else v
+        _material_of._signed = True; EM._material_of = _material_of
+    except Exception: pass
+
 def fast_module():
     """~/src/rvt-core/python/rvt_viewer_fast (Rust fast paths: element table in ~1 s, streamed meshes, progress file) or None (RVT_NOFAST=1, missing extension, import error)"""
     if os.environ.get('RVT_NOFAST'): return None
@@ -1096,7 +1108,7 @@ def fast_module():
         sys.path.insert(0, os.path.expanduser('~/src/rvt-core/python')); sys.path.insert(0, reader.READER_DIR)
         import rvt_fast as RF
         if not RF.on(): return None
-        import rvt_viewer_fast as VF; return VF
+        import rvt_viewer_fast as VF; _sign_material_ids(); return VF
     except Exception as ex:
         print('Rust fast path unavailable (%r): using the Python reader' % ex); return None
 
