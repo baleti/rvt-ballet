@@ -111,3 +111,5 @@ Waiting on remote-host: merge h2-viewer (git fetch ssh://user@remote-host~/rvt-v
 Waiting on others: rust _with_mat (item 30), elemmesh.rs O(groups x tris) loop (item 29), reader _walk_strings None guard (item 29), roof gable mesh (item 25).
 Open viewer ideas: grade-beam notches at pile caps (Revit shows steps, we draw cap boxes), stray glyph in the Foundations soft render FIXED (4 FilledRegion detail items drawn in 3D; hl_soft now skips them), V/G filter colours in hl_soft.
 Merge check (remote-host, 2026-10-26): h2-viewer is a fast-forward of master (31 commits); rvtviewer/ differs only in build.py (_sign_material_ids, +14 lines) and reader.py (params guard), so the viewer stamp CHANGES: after merging, re-run rvt-view --prepare on the 3 demo files and smoke before moving demo-ready.
+
+Stop state (2026-10-26): corpus regression sweep of h2-viewer still RUNNING on remote-host (job: tools/sweep.py, out ~/.cache/rvt-viewer/sweep_h2.jsonl, log ~/offload/sweep_h2.log), 70/78 done, all ok, 0 failures so far. When it ends: compare with sweep8 (89/89) via tools/sweep_table.py and log in PROGRESS.md. Restart is safe (finished files are skipped).
