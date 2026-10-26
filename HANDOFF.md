@@ -99,3 +99,8 @@ Open: rvt-core _with_mat fix (item 30), reader guard for m_paramSet (item 29), s
 Merge on remote-host: git fetch ssh://user@remote-host~/rvt-viewer h2-viewer. Changes rvtviewer/build.py (item 30 signed-id workaround) and rvtviewer/reader.py (open without parameters when P.params fails): run rvt-view --prepare on the 3 demo files, smoke x3, node tests, uitests, then move demo-ready. NOT smoke-tested on demo files.
 Verified on remote-host: unit tests (occ-env python); studyx-031 converts via fallback in 322.8 s (2.77M tris, no params); studyx-061/063/064 cold 264/157/148 s.
 Freed 12.2 GB of regenerable geom-*.pkl in ~/.cache/rvt-viewer after the ALERTS disk-full report; remote-host / at 98%. Open: rvt-core _with_mat fix (item 30), reader m_paramSet guard (item 29), studyx-008 594k-tri element, ~/.cache/rvt-core 42G and ~/studyx 48G are candidates for deletion by their owners.
+
+## claude8 STOP (2026-10-26, remote-host, branch h2-viewer)
+Latest commit: tests/test_signmat.py (unit test for build._sign_material_ids). Nothing uncommitted except the two untracked HANDOFF-c3/c7 lastscreen files. master untouched at dd5659b.
+Still open (all outside remote-host): remote-host merge of h2-viewer (git fetch ssh://user@remote-host~/rvt-viewer h2-viewer), rvt-view --prepare x3 on demo files, smoke x3, node tests, then move demo-ready; rvt-core _with_mat fix (item 30); reader m_paramSet guard (item 29); Snowdon 55 Revit export from c8-writer.
+remote-host disk was 99% (5.4 GB free after deleting my own offload caches); ~/scratch-famtest (6.2 GB studyx copies) is deletable.
