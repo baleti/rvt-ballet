@@ -333,3 +333,4 @@ hlsweep2 finished: edge angle 20/30/45 and min edge 0..0.03 all give mean F1 0.9
 2026-10-25 keepalive (remote-host): port-in-use traceback already fixed (aefd586, server.py). Queue blocked on remote-host merge/--prepare/smoke and rvt-core item 30; no change made.
 2026-10-26 claude8 (new account, remote-host): read handoffs; branch h2-viewer clean; python unit tests geom/surfaces/pipeline/plugins/signmat pass on remote-host (glb/vcache need pytest, node tests need node: neither on remote-host, run on remote-host). No viewer code change; demo-ready tags untouched. Item 30 workaround (h2-viewer) awaits remote-host merge + --prepare of the 3 demo files + smoke.
 2026-10-26 claude8: studyx-031 converts now (757 s cold, functest ok); studyx sweep is 41/41. NEEDS item 29 updated.
+2026-10-26 claude8: hl_score_fast drop_datums/crop fix: Snowdon Foundations F1 0.274 -> 0.893, mean 7 views 0.854 -> 0.945 (docs/QA-SWEEP.md).
