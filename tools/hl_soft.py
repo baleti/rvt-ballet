@@ -42,7 +42,7 @@ if a.vg:
         if int(k) in idx: alpha[idx[int(k)]] = v[3]; lw[idx[int(k)]] = v[7]
 if a.opaque: alpha[:] = 1.0
 soft = np.array([e[2] in SOFT for e in E])
-_dh = set(meta.get('defaultHidden') or []); hidden |= np.array([e[2] in _dh for e in E])      # categories the viewer hides by default (meta.defaultHidden)
+_dh = set(meta.get('defaultHidden') or []); hidden |= np.array([e[2] in _dh or e[1] == 'FilledRegion' for e in E])      # filled regions are view-specific 2D annotations: never part of a 3D view      # categories the viewer hides by default (meta.defaultHidden)
 
 # ---------------------------------------------------------------- camera (three axes)
 rows = [l.rstrip('\n').split('\t') for l in open(a.cameras) if l[0] != '#']
