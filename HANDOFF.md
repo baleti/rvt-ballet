@@ -104,3 +104,9 @@ Freed 12.2 GB of regenerable geom-*.pkl in ~/.cache/rvt-viewer after the ALERTS 
 Latest commit: tests/test_signmat.py (unit test for build._sign_material_ids). Nothing uncommitted except the two untracked HANDOFF-c3/c7 lastscreen files. master untouched at dd5659b.
 Still open (all outside remote-host): remote-host merge of h2-viewer (git fetch ssh://user@remote-host~/rvt-viewer h2-viewer), rvt-view --prepare x3 on demo files, smoke x3, node tests, then move demo-ready; rvt-core _with_mat fix (item 30); reader m_paramSet guard (item 29); Snowdon 55 Revit export from c8-writer.
 remote-host disk was 99% (5.4 GB free after deleting my own offload caches); ~/scratch-famtest (6.2 GB studyx copies) is deletable.
+
+## claude8 handoff (2026-10-26, remote-host, branch h2-viewer = 236873c)
+Done since 19d4727: studyx-031 converts (757 s cold, 41/41 studyx, NEEDS item 29), DEMO.md real-world notes, hl_score/hl_score_fast datum guard + ink crop (Snowdon Foundations 0.274 -> 0.893, mean 0.945). No rvtviewer/web/bin change: demo caches and demo-ready tags untouched.
+Waiting on remote-host: merge h2-viewer (git fetch ssh://user@remote-host~/rvt-viewer h2-viewer), then --prepare of the 3 demo files only if rvtviewer/*.py differs from the stamp (item 30 workaround _sign_material_ids is in build.py), 3-file smoke, move demo-ready.
+Waiting on others: rust _with_mat (item 30), elemmesh.rs O(groups x tris) loop (item 29), reader _walk_strings None guard (item 29), roof gable mesh (item 25).
+Open viewer ideas: grade-beam notches at pile caps (Revit shows steps, we draw cap boxes), stray tiny glyph near the centre of the Foundations soft render, V/G filter colours in hl_soft.
