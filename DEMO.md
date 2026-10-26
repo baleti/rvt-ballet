@@ -147,3 +147,9 @@ It converts and caches each model, pre-renders all sheets and views, and prints 
 | rfa-2026 | racbasicsamplefamily-2026.rfa | 0.4 | 1.8 | 1992 | 1717 | 100% | ok | 2 (0) | ok | ok 1/7 | **PASS** |
 
 <!-- /RESULTS -->
+
+## Real-world files (studyx sweep, 2026-10-25, remote-host)
+41 real project files converted: 40 ok, 1 failing (studyx-031, reader item 29 in NEEDS-FROM-READER.md). Source: docs/QA-SWEEP.md, NEEDS-FROM-READER.md items 29/30.
+* First open of a large file is slow; a second open is fast. studyx-008 (66 MB): 1147 s cold, 27 s warm. After the material-id workaround (item 30), studyx-061/063/064 take 264 / 157 / 148 s cold (were 1029 / 1117 / 1620 s).
+* 8 files need more than 7 GB of memory (convert ok with a 16 GB cap: RVT_MEM_CAP=16G).
+* Do not demo a real-world file cold: run `rvt-view FILE --prepare` beforehand. The three demo models above are prepared.
