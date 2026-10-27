@@ -3,7 +3,7 @@ import os, sys, tempfile, asyncio, json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
-from rvtviewer import server
+from rvtballet import server
 
 def test_dummy_plugin():
     d = tempfile.mkdtemp(); open(os.path.join(d, 'dummyplug.py'), 'w').write(

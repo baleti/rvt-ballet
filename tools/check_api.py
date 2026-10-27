@@ -5,7 +5,7 @@ import sys, os, collections
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))); sys.path.insert(0, os.path.expanduser('~/rvt-research'))
 import numpy as np
 import rvt_geometry as GG
-from rvtviewer import reader, build
+from rvtballet import reader, build
 f = sys.argv[1]; ctx = build.Ctx(reader.cached_load(f)); idx = GG.file_geometry_index(f); rows = collections.defaultdict(lambda: collections.Counter())
 for e, r in ctx.recs.items():
     if e not in idx: continue

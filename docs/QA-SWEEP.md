@@ -1,6 +1,6 @@
 # View/sheet fidelity QA sweep (c8-viewer, started 2026-10-25)
 
-Request (orchestrator, user): confirm that rvt-viewer and rvt-sheets render views and sheets like real Revit, without artifacts: (a) Autodesk corpus vs Revit exports, (b) a stratified sample of ~60 office models (corpus, local only) vs the Revit PDF sets next to them; rank artifact classes by frequency, fix the top ones, re-measure.
+Request (orchestrator, user): confirm that rvt-ballet and rvt-sheets render views and sheets like real Revit, without artifacts: (a) Autodesk corpus vs Revit exports, (b) a stratified sample of ~60 office models (corpus, local only) vs the Revit PDF sets next to them; rank artifact classes by frequency, fix the top ones, re-measure.
 
 ## (a) Corpus, current numbers (aggregate, no renders committed)
 Source: ~/src/rvt-qa out43 (rst/Commercial/Residential, 104 views) and out44 (Snowdon Structural/Facades, 124 views), qaall26 on dev 450d26f; finding classes counted per view (a view counts once per class).
@@ -34,3 +34,14 @@ Method: private map.tsv (rvt-extract-test/private, id -> original path) + tools/
 1. Finish the PDF scan, pick the models with a sheet-set PDF, run sheet-level qa-view / pdfvec on host1/host2.
 2. Regenerate the Snowdon 3D side-by-sides fresh (hl_soft_all on host2) and review all 38 views by eye; log classes with ids here.
 3. Fix top viewer-side classes: hl_soft/viewer level+grid lines in 3D, V/G filter colours (yellow fills, column colours), pile markers.
+
+### hl_soft --grids (2026-10-25)
+tools/hl_soft.py --grids draws meta.json grids as depth-tested lines (opt-in). Snowdon 43 view 600158: F1 0.960 without, 0.954 with (precision 0.955 -> 0.942): Revit's export of that view does not show grids, so the default stays off; use it only for views whose Revit export shows grids (check the V/G Grids category first).
+
+## Timing update 2026-10-25 (branch h2-viewer, cold, RVT_CAPPED=1 RVT_NO_GEOM_CACHE=1, fresh RVT_CORE_CACHE)
+
+After build.py `_sign_material_ids()` (workaround for NEEDS-FROM-READER item 30, unsigned material id kills the Rust mesh stream): corpus-061 total 263.7 s (geometry 118 s, was 984 s), corpus-063 156.8 s (was 1117 s, 5.9M tris), corpus-064 148.4 s (was 1620 s, 5.85M tris). Large files need RVT_CAPPED=1 or RVT_MEM_CAP=16G (cli.py re-execs under a 6 GB cap by default). Source: NEEDS-FROM-READER.md item 30.
+
+### Foundations 783735 scorer fix (2026-10-26)
+Cause of the 0.272: tools/hl_score_fast.py drop_datums treated Revit's whole drawing (one large sparse connected component) as a datum line and removed it (ink 11643 -> 1229 px), so registration had nothing to match. Fix: never drop a component holding >= 40% of the ink; also crop both masks to their ink bounding box before registration. Fresh scores vs the 2026-10-25 renders (scratch script over review-compare/viewer + revit, Snowdon 43): 600158 0.945, Foundations 783735 0.893 (was 0.274), 783844 0.928, 783871 0.912, 783882 1.000, 783925 0.969, 923315 0.968; mean 0.945 over 7 (was 0.854). No renderer change: the earlier visual finding (footprint, piles, caps match) stands. Remaining visible difference: Revit shows stepped notches in the grade beam where pile caps meet it; ours draws the cap boxes on the wall line.
+hl_score.py (slow scorer) got the same drop_datums guard: Foundations 0.272 -> 0.755 there (no ink crop, so lower than hl_score_fast 0.893); prefer hl_score_fast.

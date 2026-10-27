@@ -1,1 +1,5 @@
-"""rvt-viewer: convert .rvt (Revit 2020-2026) to glTF + JSON metadata and view it in a browser, without Revit."""
+"""Deprecated name: rvt-viewer is now rvt-ballet (package rvtballet). Importing rvtviewer gives rvtballet."""
+import sys, warnings
+import rvtballet
+warnings.warn("rvtviewer is renamed rvtballet", DeprecationWarning, stacklevel=2)
+sys.modules[__name__] = rvtballet

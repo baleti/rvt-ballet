@@ -1,7 +1,7 @@
 """Revit oracle (gt_geom) vs viewer for the single-feature rosetta families: per file, the family instance's solid volume / area from Revit's API (Fine detail, summed over its solids)
 against the viewer's converted mesh (bbox IoU + volume ratio from compare.json, mesh area / analytic area from the conversion info). usage: tools/rosetta_dev.py [stem ...]"""
 import sys, os, json, glob, sqlite3, re
-CACHE = os.path.expanduser('~/.cache/rvt-viewer/models'); GT = os.path.expanduser('~/rvt-research/gt_geom')
+CACHE = os.path.expanduser('~/.cache/rvt-ballet/models'); GT = os.path.expanduser('~/rvt-research/gt_geom')
 STEMS = ['2024_fam_revolution_torus_base', '2024_fam_revolution_sphere_base', '2024_fam_revolution_cone_base', '2024_fam_blend_base', '2024_fam_blend_var', '2024_fam_sweep_arc_path_base', '2024_fam_sweep_arc_path_var',
          '2026_fam_blend_base', '2026_fam_sweep_arc_path_base', '2024_fam_extrusion_arc_base', '2024_fam_voidcut_base']
 def main(stems):

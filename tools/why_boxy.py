@@ -1,7 +1,7 @@
 """docs/WHY-BOXY.md: per model, every class that is still box-only / approximate / parametric (not true geometry) with counts and the reason recorded at conversion (ginfo.reason / source).
 usage: tools/why_boxy.py [MODELDIR ...]   (default: newest converted dir of each reference model)"""
 import sys, os, json, glob, sqlite3, collections
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); CACHE = os.path.expanduser('~/.cache/rvt-viewer/models')
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); CACHE = os.path.expanduser('~/.cache/rvt-ballet/models')
 REF = [('residential-2020', '20_Residential_Sample_Project'), ('structural-2024', '43_Snowdon_Towers_Sample_Structural'), ('mep-2020', '23_rme_advanced_sample_project'),
        ('hvac-2024', '42_Snowdon_Towers_Sample_HVAC'), ('facades-2026', '58_Snowdon_Towers_Sample_Facades')]
 EXPLAIN = {

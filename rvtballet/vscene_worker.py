@@ -1,4 +1,4 @@
-"""vscene_worker.py FILE.rvt : view-scene worker (run with the rvt-sheets venv, one process per model; rvtviewer/viewctl.py manages it).
+"""vscene_worker.py FILE.rvt : view-scene worker (run with the rvt-sheets venv, one process per model; rvtballet/viewctl.py manages it).
 Protocol: one JSON request per stdin line, one JSON reply per stdout line.
   {"op": "views"}                                                     -> {"views": [{id, name, kind, scale, template, ...}]}
   {"op": "scene", "view": ID, "scale": N|null, "detail": 1|2|3|null, "template": bool, "filters": bool}  -> scene dict
@@ -93,7 +93,7 @@ class Worker:
 def warm(path, kinds=('plan', 'section', 'drafting', 'legend')):
     """pre-generate the default scene of every drawable view into the cache (run on host1: tools/vc_warm.sh); prints one line per view"""
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from rvtviewer import vcache
+    from rvtballet import vcache
     w = Worker(path); n = 0
     for v in w.views()['views']:
         if v['kind'] not in kinds or not v['drawable']: continue

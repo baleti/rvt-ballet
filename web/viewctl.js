@@ -1,6 +1,6 @@
 // View control: view-dependent drawing content (annotations, datums, text, linework, hatches) of a plan / section view placed in the 3D scene
 // in model space (right orientation, sizes in model feet = paper size x view scale, so they scale with zoom as in Revit), with per-view,
-// per-layer / category / subcategory / element controls, picking, presets. Data: /api/m/{mid}/vc/scene/{vid} (rvtviewer/viewctl.py, CONTROL-API.md).
+// per-layer / category / subcategory / element controls, picking, presets. Data: /api/m/{mid}/vc/scene/{vid} (rvtballet/viewctl.py, CONTROL-API.md).
 import * as THREE from 'three';
 import {catKey, typeKey, primVisible as pv, enrichTypes} from '/vcvis.js';
 

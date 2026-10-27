@@ -22,7 +22,7 @@ def oriented_volume(V, F):
         tot += abs(float((np.einsum('ij,ij->i', Tc[:, 0], np.cross(Tc[:, 1], Tc[:, 2])) * sg).sum() / 6))
     return tot
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0, os.path.expanduser('~/rvt-research')); sys.path.insert(0, ROOT); sys.path.insert(0, os.path.join(ROOT, 'tools'))      # tools/ first: ~/rvt-research has another compare_gt
-import compare_gt as C; from rvtviewer import reader, build
+import compare_gt as C; from rvtballet import reader, build
 src = sys.argv[1]; ids = [int(x) for x in sys.argv[2:]]
 raw = reader.cached_load(src); ctx = build.Ctx(raw); ctx.src = src; els = build.build_table(ctx)
 ctx.raw_key = '%s|%s|%s|%s' % (os.path.abspath(src), os.path.getmtime(src), os.path.getsize(src), reader.reader_stamp())
@@ -50,7 +50,7 @@ for i, el in enumerate(els):
 
     import rvt_elemmesh as EM
     try:
-        from rvtviewer import build as B
+        from rvtballet import build as B
         import rvt_geometry as GGm
         dd = B._doc(GGm, src); m = EM.element_mesh(dd, int(el['id']))
         T2 = np.array([p for t in m['tris'] for p in t]).reshape(-1, 3); F2 = np.arange(len(T2)).reshape(-1, 3)

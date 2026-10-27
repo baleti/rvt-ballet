@@ -8,7 +8,7 @@ Header button **Annotations** (or the `annotations` link on a plan/section row i
 * **Also show**: other plan/section views drawn faintly at their own height (stacked levels).
 * **Visibility** tree, four modes: category (with subcategories) / layer / type (Revit class) / family type ("family : type", names taken from the scene or the model element table) / part (leaders, witness lines, arrows...) / element. Per category: checkbox, colour, line weight x, text size x, line pattern.
 * **Picking**: hover tooltip; click highlights, shows category / class / id / stored fields, hides element / category / type, and opens the element in the inspector (full parameters) when it exists in the model.
-* **Presets**: name + save / load / delete (stored in `~/.config/rvt-viewer/vctl-presets.json`, localStorage fallback); settings are also remembered per view; export JSON.
+* **Presets**: name + save / load / delete (stored in `~/.config/rvt-ballet/vctl-presets.json`, localStorage fallback); settings are also remembered per view; export JSON.
 * Scenes come from the sheets server (`/sheets/api/{mid}/view/{id}.json`); big files should be warmed on host1 with `tools/vc_warm.sh FILE` then `h1run pull` of the printed cache dir, otherwise the first open decodes the model.
 ## Scripting
 `window.vctl`: `toggle()`, `openView(id, preset?)`, `set({textSize, annoScale, layers, cats: {catId: {vis, color, wscale, tscale, dash}}, elems: {eid: {vis, color}}, parts, classes, crop, onTop, ...})`, `state()`, `pick(clientX, clientY)`.

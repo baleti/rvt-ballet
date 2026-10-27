@@ -1,9 +1,9 @@
 """per-class acceptance metrics for one .rvt (ACCEPTANCE.md): fidelity buckets (true / parametric-unproven / approximate / box-only) and accuracy against Revit's own numbers
-(gt4 Volume, header bbox, gt_geom oracle when present).  Writes ~/.cache/rvt-viewer/accept/<year>_<stem>.json.   usage: tools/accept_eval.py FILE.rvt   (run under tools/capped.sh)"""
+(gt4 Volume, header bbox, gt_geom oracle when present).  Writes ~/.cache/rvt-ballet/accept/<year>_<stem>.json.   usage: tools/accept_eval.py FILE.rvt   (run under tools/capped.sh)"""
 import sys, os, json, re, glob, collections
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
-from rvtviewer import reader, build, cli
+from rvtballet import reader, build, cli
 
 OUT = os.path.join(reader.CACHE_DIR, 'accept')
 

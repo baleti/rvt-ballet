@@ -1,10 +1,10 @@
 """demo hardening sweep: convert EVERY corpus file (2017-2026, .rvt + .rte) exactly like `rvt-view` does, one at a time, each in its own subprocess with a timeout;
-one JSON line per file in ~/.cache/rvt-viewer/sweep.jsonl (status ok / fail / timeout / killed, seconds, stage timings, elements, triangles, fidelity buckets, error tail).
+one JSON line per file in ~/.cache/rvt-ballet/sweep.jsonl (status ok / fail / timeout / killed, seconds, stage timings, elements, triangles, fidelity buckets, error tail).
 usage: tools/sweep.py [FILES...]   (default: all of ~/rvt-research/corpus; files already in the jsonl are skipped, RVT_SWEEP_REDO=1 redoes them)
-host1: h1run run vsweep --env occ --dir ~/src/rvt-viewer -- python tools/sweep.py   then   h1run pull .cache/rvt-viewer/sweep.jsonl ; tools/sweep_table.py"""
+host1: h1run run vsweep --env occ --dir ~/src/rvt-ballet -- python tools/sweep.py   then   h1run pull .cache/rvt-ballet/sweep.jsonl ; tools/sweep_table.py"""
 import sys, os, json, time, glob, subprocess, shutil
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT = os.path.expanduser(os.environ.get('RVT_SWEEP_OUT', '~/.cache/rvt-viewer/sweep.jsonl')); WORK = os.path.expanduser('~/.cache/rvt-viewer/sweep-work')
+OUT = os.path.expanduser(os.environ.get('RVT_SWEEP_OUT', '~/.cache/rvt-ballet/sweep.jsonl')); WORK = os.path.expanduser('~/.cache/rvt-ballet/sweep-work')
 TIMEOUT = int(os.environ.get('RVT_SWEEP_TIMEOUT', '1200'))
 
 def main(files):
@@ -24,7 +24,7 @@ def main(files):
         env = dict(os.environ, RVT_CAPPED='1')                       # the job's own slice/scope is the memory cap
         try:
             cap = ['systemd-run', '--user', '--scope', '-q', '--slice=' + os.environ['RVT_SWEEP_SLICE'], '-p', 'MemoryMax=' + os.environ.get('RVT_SWEEP_MEM', '6G'), '-p', 'MemorySwapMax=0'] if os.environ.get('RVT_SWEEP_SLICE') and shutil.which('systemd-run') else []
-            p = subprocess.run(cap + [sys.executable, '-c', 'import sys; sys.path.insert(0,%r); from rvtviewer.cli import main; main(sys.argv[1:])' % ROOT, 'convert', f, out],
+            p = subprocess.run(cap + [sys.executable, '-c', 'import sys; sys.path.insert(0,%r); from rvtballet.cli import main; main(sys.argv[1:])' % ROOT, 'convert', f, out],
                                capture_output=True, text=True, timeout=TIMEOUT, env=env)
             rec['status'] = 'ok' if p.returncode == 0 and os.path.exists(os.path.join(out, 'summary.json')) else ('killed' if p.returncode in (-9, 137) or (cap and p.returncode != 0 and not (p.stderr or '').strip()) else 'fail')
             rec['rc'] = p.returncode

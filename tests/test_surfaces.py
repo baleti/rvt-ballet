@@ -2,7 +2,7 @@
 import os, sys, math
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from rvtviewer import occsurf
+from rvtballet import occsurf
 
 X, Y = [1, 0, 0], [0, 1, 0]
 

@@ -4,7 +4,7 @@ sys.path.insert(0, os.path.dirname(__file__)); import cdp
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 async def main(d, port):
     out = os.path.join(ROOT, 'screenshots', 'materials'); os.makedirs(out, exist_ok=True); ok = True
-    srv = subprocess.Popen([os.path.join(ROOT, 'rvt-viewer'), 'serve', d, '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    srv = subprocess.Popen([os.path.join(ROOT, 'rvt-ballet'), 'serve', d, '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     cdp.wait_http('http://127.0.0.1:%d/api/models' % port); b = cdp.Browser(size=(1400, 900)); await b.start()
     try:
         await b.goto('http://127.0.0.1:%d/' % port); await b.wait('window.__loaded===true', 120); await asyncio.sleep(0.5)

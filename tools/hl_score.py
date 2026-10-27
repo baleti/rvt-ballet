@@ -27,10 +27,10 @@ R, O = load(sys.argv[1]), load(sys.argv[2])
 def drop_datums(m):
     """remove long sparse chains (dashed level / grid lines, which our overlay-free render does not draw): connected components of the 9 px dilated mask that span over 35% of the image but fill under 3% of their box"""
     import scipy.ndimage as nd
-    lab, n = nd.label(dil(m, 9)); keep = m.copy(); dens = nd.uniform_filter(m.astype(np.float32), 41)      # a dashed chain never has a dense window, a drawing does
+    lab, n = nd.label(dil(m, 9)); keep = m.copy(); tot = max(int(m.sum()), 1); dens = nd.uniform_filter(m.astype(np.float32), 41)      # a dashed chain never has a dense window, a drawing does
     for i, sl in enumerate(nd.find_objects(lab), 1):
         h = sl[0].stop - sl[0].start; w = sl[1].stop - sl[1].start; cnt = (m[sl] & (lab[sl] == i)).sum()
-        if max(h, w) > 0.35 * max(m.shape) and cnt < 0.03 * h * w and dens[sl][lab[sl] == i].max() < 0.10: keep[sl][lab[sl] == i] = False
+        if cnt < 0.4 * tot and max(h, w) > 0.35 * max(m.shape) and cnt < 0.03 * h * w and dens[sl][lab[sl] == i].max() < 0.10: keep[sl][lab[sl] == i] = False
     return keep
 R = drop_datums(R)
 cor, s, dx, dy = best(R, O)

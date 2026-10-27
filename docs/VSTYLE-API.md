@@ -15,5 +15,5 @@ Current look = `realistic`.
 
 ## c3-vctl side (this branch)
 * Header select `#vsSel` ("Style: Hidden line") next to the nav select, mirrored in the View control panel.
-* Stored state: localStorage `vstyle:default` (user default, initial 'hiddenline'), per view `vstyle:{mid}:{viewId|model}` = {id, opts}; opening a view applies its stored style, else the default; changing the style while a view is open saves it for that view (autosave). Presets (server file `~/.config/rvt-viewer/vctl-presets.json`) carry `style: {id, opts}` next to the annotation state; `?vs=hiddenline` in the URL overrides the default for the session.
+* Stored state: localStorage `vstyle:default` (user default, initial 'hiddenline'), per view `vstyle:{mid}:{viewId|model}` = {id, opts}; opening a view applies its stored style, else the default; changing the style while a view is open saves it for that view (autosave). Presets (server file `~/.config/rvt-ballet/vctl-presets.json`) carry `style: {id, opts}` next to the annotation state; `?vs=hiddenline` in the URL overrides the default for the session.
 * Without window.vstyle the UI still stores/restores the choice and fires nothing else.

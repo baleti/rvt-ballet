@@ -14,7 +14,15 @@ def load(path):
     im = im.resize((int(im.width * H / im.height), H), Image.Resampling.BILINEAR)
     mask = np.asarray(im) < 170
     mask[-50:, -300:] = False
-    return mask
+    return crop_ink(mask)
+
+
+def crop_ink(mask, margin=12):
+    # empty margins differ between renderers (a far stray element widens our frame): register the drawn area only
+    ys, xs = np.nonzero(mask)
+    if len(ys) == 0:
+        return mask
+    return mask[max(0, ys.min() - margin):ys.max() + margin + 1, max(0, xs.min() - margin):xs.max() + margin + 1]
 
 
 def resize(mask, scale):
@@ -48,11 +56,12 @@ def drop_datums(mask):
     labels, _ = nd.label(dil(mask, 9))
     keep = mask.copy()
     density = nd.uniform_filter(mask.astype(np.float32), 41)
+    total = max(int(mask.sum()), 1)
     for i, sl in enumerate(nd.find_objects(labels), 1):
         h, w = (s.stop - s.start for s in sl)
         component = labels[sl] == i
         count = (mask[sl] & component).sum()
-        if (max(h, w) > .35 * max(mask.shape) and count < .03 * h * w
+        if (count < .4 * total and max(h, w) > .35 * max(mask.shape) and count < .03 * h * w      # a component that IS the drawing (Foundations 783735) is never a datum
                 and density[sl][component].max() < .10):
             keep[sl][component] = False
     return keep

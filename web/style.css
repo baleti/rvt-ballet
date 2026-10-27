@@ -1,5 +1,3 @@
-:root{--bg:#14171c;--panel:#1b1f26;--panel2:#222831;--line:#2e3540;--fg:#d8dee9;--dim:#8a93a2;--acc:#ffb020;--acc2:#4aa3ff}
-@media (prefers-color-scheme: light){:root{--bg:#e9ecf1;--panel:#f7f8fa;--panel2:#eceff3;--line:#cfd5de;--fg:#1d232c;--dim:#67707e;--acc:#d97b00;--acc2:#0b6fd6}}
 *{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:13px/1.35 system-ui,sans-serif;overflow:hidden}
 #top{display:flex;gap:6px;align-items:center;padding:6px 8px;background:var(--panel);border-bottom:1px solid var(--line);height:42px}
 #brand{font-weight:700;letter-spacing:.3px;margin-right:6px}.sp{flex:1}
@@ -74,3 +72,5 @@ body.hlstyle .lbl.room{background:none;color:#444}
 @font-face{font-family:"Liberation Sans";font-weight:400;font-style:italic;src:local("Liberation Sans Italic"),url(/fonts/LiberationSans-Italic.ttf)}
 @font-face{font-family:"Liberation Sans";font-weight:700;font-style:italic;src:local("Liberation Sans Bold Italic"),url(/fonts/LiberationSans-BoldItalic.ttf)}
 body.hlstyle .lbl.lvl::before{content:'';display:inline-block;width:9px;height:9px;margin-right:4px;vertical-align:-1px;border:1.5px solid #111;border-radius:50%;background:linear-gradient(90deg,#111 50%,#fff 50%)}      /* level head symbol */
+
+#cmdbar{position:absolute;left:8px;bottom:34px;width:min(620px,calc(100% - 16px));box-sizing:border-box;height:30px;border:1px solid var(--line);border-radius:8px;z-index:4;font-size:12px;opacity:.94}#cmdbar:focus-within{opacity:1;border-color:var(--acc)}#cmdOut{color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%}

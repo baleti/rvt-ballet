@@ -2,7 +2,7 @@
 import os, sys, json, sqlite3, time
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from rvtviewer import glb, geom, build
+from rvtballet import glb, geom, build
 N = int(sys.argv[2]) if len(sys.argv) > 2 else 150000
 out = sys.argv[1]; os.makedirs(out, exist_ok=True)
 rng = np.random.default_rng(1)

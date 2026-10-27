@@ -3,7 +3,7 @@ usage: tools/regress.py [--rebuild]    output: screenshots/regress/<name>.png, p
 import asyncio, sys, os, json, subprocess, shutil, time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0, ROOT); sys.path.insert(0, os.path.join(ROOT, 'tools'))
 import cdp
-from rvtviewer import cli
+from rvtballet import cli
 C = os.path.expanduser('~/rvt-research/corpus')
 SET = [('residential-2020', '2020/20_Residential_Sample_Project'), ('structural-2024', '2024/43_Snowdon_Towers_Sample_Structural'), ('mep-2020', '2020/23_rme_advanced_sample_project'),
        ('hvac-2024', '2024/42_Snowdon_Towers_Sample_HVAC'), ('facades-2026', '2026/58_Snowdon_Towers_Sample_Facades')]
@@ -17,7 +17,7 @@ def pixdiff(a, b):
     return 100.0 * sum(1 for v in d.getdata() if v) / (A.size[0] * A.size[1])
 
 async def shoot(d, port, out):
-    srv = subprocess.Popen([os.path.join(ROOT, 'rvt-viewer'), 'serve', d, '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    srv = subprocess.Popen([os.path.join(ROOT, 'rvt-ballet'), 'serve', d, '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     cdp.wait_http('http://127.0.0.1:%d/api/models' % port); b = cdp.Browser(size=(1500, 950)); await b.start()
     try:
         await b.goto('http://127.0.0.1:%d/' % port); await b.wait('window.__loaded===true', 120); await asyncio.sleep(0.5)

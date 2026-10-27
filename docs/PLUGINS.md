@@ -1,6 +1,6 @@
 # Viewer plug-in interface (for rvt-sheets and other modules)
 
-The 3D viewer (`rvtviewer/server.py`) mounts plug-ins as aiohttp **sub-applications** next to its own API. A plug-in never edits viewer files.
+The 3D viewer (`rvtballet/server.py`) mounts plug-ins as aiohttp **sub-applications** next to its own API. A plug-in never edits viewer files.
 
 ## 1. Registering
 A plug-in is a Python module exposing
@@ -9,11 +9,11 @@ A plug-in is a Python module exposing
 NAME = 'sheets'; TITLE = 'Sheets'; MOUNT = '/sheets/'       # optional
 def make_app(ctx) -> aiohttp.web.Application: ...          # required
 ```
-Loaded from (first match wins): env `RVT_PLUGINS=rvtsheets.server,...`; `~/.config/rvt-viewer/plugins.json`
+Loaded from (first match wins): env `RVT_PLUGINS=rvtsheets.server,...`; `~/.config/rvt-ballet/plugins.json`
 `{"plugins": [{"module": "rvtsheets.server", "path": "~/src/rvt-sheets", "mount": "/sheets/", "title": "Sheets"}]}`; or, with neither present, `rvtsheets.server` from `~/src/rvt-sheets` when that directory exists.
 A plug-in that fails to import is skipped with a message on the server console; the viewer keeps running. `GET /api/plugins` lists the mounted ones `[{name, title, mount}]`.
 
-## 2. What `make_app(ctx)` receives (`rvtviewer.server.PluginContext`)
+## 2. What `make_app(ctx)` receives (`rvtballet.server.PluginContext`)
 `ctx` is callable: `ctx(mid) -> absolute path of the source .rvt` (the `model_dir_resolver` of HOOKS.md). Attributes:
 | call | returns |
 |---|---|
@@ -23,7 +23,7 @@ A plug-in that fails to import is skipped with a message on the server console; 
 | `ctx.meta(mid)` | parsed meta.json: levels, grids, rooms, **views**, **sheets** (`{id, number, name, views[], issued, drawnBy}`), phases, `elements` rows `[id, class, category, name, type, level, fid, isType, family, phase]` |
 | `ctx.sqlite(mid)` | sqlite3 connection (row_factory Row): `el(i,id,cls,cat,name,type,family,level,uid,ifc,fid,bb,iou,type_i)`, `prm(i,k,v)`, `ginfo(i,info json)` |
 | `ctx.element_index(mid, element_id)` | viewer element index `i` of a Revit element id |
-| `ctx.reader` | `rvtviewer.reader`: `reader._import()` puts `~/rvt-research` on sys.path (then `rvt_geometry`, `rvt_elemmesh`, `rvt_materials`, ... are importable), `reader.cached_load(path)` (decoded records), `reader.reader_stamp()` (cache version of the reader) |
+| `ctx.reader` | `rvtballet.reader`: `reader._import()` puts `~/rvt-research` on sys.path (then `rvt_geometry`, `rvt_elemmesh`, `rvt_materials`, ... are importable), `reader.cached_load(path)` (decoded records), `reader.reader_stamp()` (cache version of the reader) |
 Plug-ins read the .rvt through the reader themselves (their own cache); the viewer's converted data is only metadata and 3D batches.
 
 ## 3. HTTP API the plug-in page can use (same origin)

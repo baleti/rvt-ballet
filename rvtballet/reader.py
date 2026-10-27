@@ -4,7 +4,7 @@ Override the reader location with RVT_READER_DIR."""
 import os, sys, pickle, hashlib, time
 
 READER_DIR = os.environ.get('RVT_READER_DIR', os.path.expanduser('~/rvt-research'))
-CACHE_DIR = os.environ.get('RVT_VIEWER_CACHE', os.path.expanduser('~/.cache/rvt-viewer'))
+CACHE_DIR = os.environ.get('RVT_BALLET_CACHE', os.path.expanduser('~/.cache/rvt-ballet'))
 
 def _import():
     if READER_DIR not in sys.path: sys.path.insert(0, READER_DIR)
@@ -46,7 +46,9 @@ def load(path, log=print):
         x = rvt_xcache.get_x(path)                 # reader's own shared extraction cache (also used by rvt_params)
     except ImportError:
         x = E.extract(path, want_all=True)
-    par = P.params(path)
+    try: par = P.params(path)
+    except Exception as ex:                        # reader bug on odd files (NEEDS-FROM-READER item 29, corpus-031): open without parameters rather than not at all
+        log('WARNING: parameter extraction failed (%r): opening without element parameters' % ex); par = {}
     stop.set()
     names = x['sch'].c if 'sch' in x else S.load(path)[1]
     log('reader: %d records, %d headers, %d param sets in %.1fs' % (len(x['recs']), len(x['eh']), len(par), time.time() - t))

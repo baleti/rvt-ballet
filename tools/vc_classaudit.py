@@ -1,7 +1,7 @@
-"""tools/vc_classaudit.py: element class counts over the cached view-control scenes (~/.cache/rvt-viewer/vscene), no browser needed."""
+"""tools/vc_classaudit.py: element class counts over the cached view-control scenes (~/.cache/rvt-ballet/vscene), no browser needed."""
 import os, json, glob, collections
 c = collections.Counter(); n = 0
-for p in glob.glob(os.path.expanduser('~/.cache/rvt-viewer/vscene/**/*.json'), recursive=True):
+for p in glob.glob(os.path.expanduser('~/.cache/rvt-ballet/vscene/**/*.json'), recursive=True):
     try: d = json.load(open(p))
     except Exception: continue
     if not isinstance(d, dict) or 'elements' not in d: continue

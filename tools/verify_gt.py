@@ -3,7 +3,7 @@ usage: verify_gt.py FILE.rvt GT.tsv   -> volume / area / length agreement per cl
 import sys, os, collections, json
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from rvtviewer import reader, build
+from rvtballet import reader, build
 
 def mesh_volume(m):
     v = m.v; f = m.f

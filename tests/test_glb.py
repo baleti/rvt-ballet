@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from rvtviewer.glb import _lin, to_yup_m, write_glb
+from rvtballet.glb import _lin, to_yup_m, write_glb
 
 
 def _batch(**overrides):

@@ -1,8 +1,8 @@
 """sweep.jsonl -> results table inside DEMO.md (between the RESULTS markers): per corpus file geometry / materials / views / sheets / functional pass-fail.
-usage: tools/demo_table.py [sweep.jsonl]   (pull it from host1 first: h1run pull .cache/rvt-viewer/sweep.jsonl)"""
+usage: tools/demo_table.py [sweep.jsonl]   (pull it from host1 first: h1run pull .cache/rvt-ballet/sweep.jsonl)"""
 import json, os, sys, collections, time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-src = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/.cache/rvt-viewer/sweep.jsonl')
+src = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/.cache/rvt-ballet/sweep.jsonl')
 last = collections.OrderedDict()
 for l in open(src):
     r = json.loads(l); last[r['src']] = r

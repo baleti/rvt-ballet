@@ -1,5 +1,5 @@
 import asyncio, sys, os, json, subprocess, urllib.request
-sys.path.insert(0, os.path.expanduser('~/src/rvt-viewer-hl/tools')); import cdp
+sys.path.insert(0, os.path.expanduser('~/src/rvt-ballet-hl/tools')); import cdp
 async def main():
     f = os.path.expanduser('~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt'); out = sys.argv[1]; port = 9653
     srv = subprocess.Popen([os.environ['RVT_VIEW'], f, '--no-browser', '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)

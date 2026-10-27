@@ -1,7 +1,7 @@
 """convert a set of corpus files, print a coverage/agreement table (markdown)"""
 import sys, os, json, glob
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from rvtviewer import cli
+from rvtballet import cli
 C = os.path.expanduser('~/rvt-research/corpus')
 files = sys.argv[1:] or ['2020/18_rst_basic_sample_project', '2020/20_Residential_Sample_Project', '2020/21_rst_advanced_sample_project', '2020/23_rme_advanced_sample_project',
                          '2024/42_Snowdon_Towers_Sample_HVAC', '2024/43_Snowdon_Towers_Sample_Structural', '2026/54_Snowdon_Towers_Sample_HVAC', '2026/55_Snowdon_Towers_Sample_Structural',

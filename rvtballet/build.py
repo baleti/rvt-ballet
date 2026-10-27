@@ -1089,6 +1089,18 @@ def _rf():
     """the rvt_fast module (Rust kernels: smooth_part, file_key, ...) when the fast path is on, else None"""
     return sys.modules.get('rvt_fast') if fast_module() is not None else None
 
+def _sign_material_ids():
+    """rvt_elemmesh._material_of can return a negative built-in id (-4000010) as an unsigned 64-bit value; rvt_fast._with_mat stores ids in int64 and raised OverflowError, which killed the whole Rust mesh stream (corpus-061/063/064: Python fallback, 1000-1600 s instead of ~75 s; NEEDS-FROM-READER item 30). Normalise to signed here until rvt-core does."""
+    try:
+        import rvt_elemmesh as EM
+        if getattr(EM._material_of, '_signed', False): return
+        orig = EM._material_of
+        def _material_of(*a, **k):
+            v = orig(*a, **k)
+            return v - 2 ** 64 if isinstance(v, int) and v >= 2 ** 63 else v
+        _material_of._signed = True; EM._material_of = _material_of
+    except Exception: pass
+
 def fast_module():
     """~/src/rvt-core/python/rvt_viewer_fast (Rust fast paths: element table in ~1 s, streamed meshes, progress file) or None (RVT_NOFAST=1, missing extension, import error)"""
     if os.environ.get('RVT_NOFAST'): return None
@@ -1096,7 +1108,7 @@ def fast_module():
         sys.path.insert(0, os.path.expanduser('~/src/rvt-core/python')); sys.path.insert(0, reader.READER_DIR)
         import rvt_fast as RF
         if not RF.on(): return None
-        import rvt_viewer_fast as VF; return VF
+        import rvt_viewer_fast as VF; _sign_material_ids(); return VF
     except Exception as ex:
         print('Rust fast path unavailable (%r): using the Python reader' % ex); return None
 
@@ -1325,7 +1337,7 @@ class Progress:
         self.dir = outdir; self.log = log; self.t0 = time.time(); self.times = {}; self.ts = time.time(); self.stage = None; self.size_mb = size_mb; self.src = src
         self.extra = {}; self.last = ('', 0.0, ''); self._hb = None
     def eta_total(self):
-        """rough total seconds from earlier conversions (seconds per MB, ~/.cache/rvt-viewer/timing.json)"""
+        """rough total seconds from earlier conversions (seconds per MB, ~/.cache/rvt-ballet/timing.json)"""
         try: rate = json.load(open(os.path.join(reader.CACHE_DIR, 'timing.json'))).get('s_per_mb')
         except Exception: rate = None
         return round(self.size_mb * rate) if (rate and self.size_mb) else None
@@ -1516,7 +1528,7 @@ def convert(path, outdir, log=print, workers=None):
         if 'raw cache hit' in m: cold[0] = False; prog.extra['raw_cache_hit'] = True
     prog.set('reading', 0.0, 'decoding %s with the reader' % os.path.basename(path)); prog.start_heartbeat()
     def _preimport():                                   # heavy first-time imports (OpenCascade ~2 s, scipy, matplotlib) overlap the Rust reader (c2-rust NEEDS 19); joined before any fork
-        for mod in ('rvtviewer.occ', 'scipy.spatial', 'scipy.optimize', 'matplotlib.path'):
+        for mod in ('rvtballet.occ', 'scipy.spatial', 'scipy.optimize', 'matplotlib.path'):
             try: __import__(mod)
             except Exception: pass
     import threading; pre = threading.Thread(target=_preimport, daemon=True)          # started after the quick preview: the first picture must not wait for the GIL
@@ -1560,7 +1572,7 @@ def convert(path, outdir, log=print, workers=None):
         el['level'] = lvl_by_id.get(lv)
     views, sheets = datums.views_sheets(ctx); rooms = datums.rooms(ctx, lvl_by_id); grids = build_grids(ctx)
     try:      # per-view display options (visual style, background sky/ground colours, silhouettes), reader rvt_viewdisp: the viewer opens a stored view in its own style
-        if os.environ.get('RVT_VIEWDISP_IN_CONVERT'):      # off by default: the reader pass costs a second extraction on cold files; rvtviewer/viewdisp.py fills it in after the model is usable
+        if os.environ.get('RVT_VIEWDISP_IN_CONVERT'):      # off by default: the reader pass costs a second extraction on cold files; rvtballet/viewdisp.py fills it in after the model is usable
             import rvt_viewdisp
             vd = rvt_viewdisp.view_display(path); VS = {1: 'wireframe', 2: 'hiddenline', 7: 'consistent', 3: 'shaded', 4: 'shaded', 5: 'shaded', 6: 'shaded'}
             for v_ in views:

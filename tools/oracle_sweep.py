@@ -1,9 +1,9 @@
 """viewer mesh vs Revit oracle over every file that has a gt_geom export (rosettas, scenes, corpus): convert (as rvt-view does) + compare_gt, one file at a time, resumable.
-usage: tools/oracle_sweep.py run [stem ...]   -> ~/.cache/rvt-viewer/oracle_sweep.jsonl (one row per compared element: file, class, fidelity, iou, volume ratio, area ratio)
+usage: tools/oracle_sweep.py run [stem ...]   -> ~/.cache/rvt-ballet/oracle_sweep.jsonl (one row per compared element: file, class, fidelity, iou, volume ratio, area ratio)
        tools/oracle_sweep.py table            -> docs/ORACLE-SWEEP.md (per class: n, fidelity buckets, median IoU, volume within 2 % / 10 %)   (run on host1 via h1run, ~1 s of CPU per small file, minutes for big)"""
 import sys, os, json, glob, shutil, collections
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0, ROOT); sys.path.insert(0, os.path.join(ROOT, 'tools'))
-H = os.path.expanduser('~'); GT = H + '/rvt-research/gt_geom'; OUT = H + '/.cache/rvt-viewer/oracle_sweep.jsonl'; WORK = H + '/.cache/rvt-viewer/oracle-work'
+H = os.path.expanduser('~'); GT = H + '/rvt-research/gt_geom'; OUT = H + '/.cache/rvt-ballet/oracle_sweep.jsonl'; WORK = H + '/.cache/rvt-ballet/oracle-work'
 MAXMB = float(os.environ.get('RVT_ORACLE_MAXMB', '60'))
 def find(stem):
     base = stem[:-4] if stem.endswith('.tsv') else stem
@@ -29,7 +29,7 @@ def run(stems):
 
 def one(t):
     import compare_gt
-    from rvtviewer import build
+    from rvtballet import build
     base = t[:-4]; src = find(t); out = os.path.join(WORK, base); shutil.rmtree(out, ignore_errors=True); os.makedirs(WORK, exist_ok=True)
     if True:
         try:

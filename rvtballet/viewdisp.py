@@ -17,7 +17,7 @@ def kick(mdir, src):
     out = os.path.join(mdir, 'viewdisp.json')
     if mdir in _started or os.path.exists(out) or not src or not os.path.exists(src) or os.environ.get('RVT_NO_VIEWDISP'): return
     _started.add(mdir)
-    subprocess.Popen(['nice', '-n', '15', sys.executable, '-c', 'import sys; sys.path.insert(0, %r); from rvtviewer import viewdisp; viewdisp.compute(%r, %r)' % (os.path.dirname(os.path.dirname(os.path.abspath(__file__))), src, out)],
+    subprocess.Popen(['nice', '-n', '15', sys.executable, '-c', 'import sys; sys.path.insert(0, %r); from rvtballet import viewdisp; viewdisp.compute(%r, %r)' % (os.path.dirname(os.path.dirname(os.path.abspath(__file__))), src, out)],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 _merged = {}
 def merged_meta(fn, mdir):

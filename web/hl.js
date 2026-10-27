@@ -188,7 +188,7 @@ H.applyLines = function () {
 };
 H.setCat = function (cat, o) { H.cat[cat] = o; H.applyOverrides(); };
 
-// Revit draws a level in 3D as dashed lines along its datum plane envelope (rvtviewer/datums3d_worker.py): only the two edges at the corner farthest from the eye are shown (an L)
+// Revit draws a level in 3D as dashed lines along its datum plane envelope (rvtballet/datums3d_worker.py): only the two edges at the corner farthest from the eye are shown (an L)
 H.datums = null;
 async function loadDatums() { H.datums = null; try { const r = await fetch(`/api/m/${S.mid}/datums3d`); if (r.ok) H.datums = await r.json(); } catch (e) {} if (H.ovl) { H.lvlL = null; buildLevelL(); } }
 function buildLevelL() {
@@ -232,7 +232,7 @@ function restyleOverlays(on) {
   document.body.classList.toggle('hlstyle', on); if (S.openView && window.__elevGrids) window.__elevGrids(S.openView);
 }
 
-// resolved view graphics (view template + filters + category overrides + transparency) from the server for the open view (rvtviewer/vg3d.py)
+// resolved view graphics (view template + filters + category overrides + transparency) from the server for the open view (rvtballet/vg3d.py)
 H.el = null; H.viewId = null; let viewHidden = new Set();
 H.loadView = async function (v) {
   const vid = v && v.id; if (vid === H.viewId) return; H.viewId = vid;
