@@ -1189,3 +1189,47 @@ $('#bCmp').onclick = async () => {
 // view control (annotations panel, overlay of view-dependent elements): web/viewctl.js
 window.__dirty = () => { dirty = true; }; window.__world = world; window.__overlay = overlay; window.__caps = capGroup;
 (async () => { for (let k = 0; k < 4; k++) { try { await import('/viewctl.js' + (k ? '?r=' + k : '')); return; } catch (e) { console.warn('viewctl load attempt ' + k, e); await new Promise(r => setTimeout(r, 600)); } } })();      // retried: a dropped first fetch must not lose the panel
+
+// ---- command line (ballet-ui .b-cmd): ':' or '/' focuses it. FIT (Z ZE), SELECT //category c //class k //name n //type t //level l (picker DSL surface syntax: ! negates, * ? wildcards),
+// ISOLATE (I), HIDE (H) the selection, SHOWALL (SA), FIND text (F), OPEN path (O), HELP (?). Aliases: ~/.config/rvt-ballet/aliases.pgp.
+{
+  let ALIAS = {z: 'fit', ze: 'fit', f: 'find', sel: 'select', i: 'isolate', h: 'hide', sa: 'showall', o: 'open', '?': 'help'}; const hist = []; let hi = 0;
+  fetch('/api/aliases').then(r => r.json()).then(a => { ALIAS = a; }).catch(() => {});
+  const say = (t, err) => { const o = $('#cmdOut'); o.textContent = t; o.style.color = err ? 'var(--b-error)' : ''; };
+  const rx = p => new RegExp('^' + p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 'i');
+  const KEYS = {category: 2, class: 1, name: 3, type: 4, level: 5, id: 0};
+  async function run(line) {
+    line = line.trim(); if (!line) return; if (!S.meta) return say('no model loaded', true);
+    let [c, ...rest] = line.split(/\s+/); c = c.toLowerCase(); let a = rest.join(' ');
+    if (ALIAS[c]) { const x = ALIAS[c].split(' '); c = x[0]; a = (x.slice(1).join(' ') + ' ' + a).trim(); }
+    switch (c) {
+      case 'fit': fitAll(); say('fit'); break;
+      case 'select': {
+        const terms = [...a.matchAll(/\/\/(\w+)\s+([^\/]*?)(?=\s*\/\/|\s*$)/g)].map(m => ({k: m[1].toLowerCase(), neg: m[2].startsWith('!'), re: rx(m[2].replace(/^!/, '').trim())}));
+        if (!terms.length) return say('SELECT //category c //class k //name n //type t //level l   (! negates, * ?)', true);
+        const bad = terms.find(t => !(t.k in KEYS)); if (bad) return say('SELECT: unknown key //' + bad.k + ' (' + Object.keys(KEYS).join(', ') + ')', true);
+        const ids = []; S.meta.elements.forEach((el, i) => { if (terms.every(t => t.re.test(String(el[KEYS[t.k]] ?? '')) !== t.neg)) ids.push(i); });
+        setSelection(ids); say(ids.length + ' element' + (ids.length === 1 ? '' : 's') + ' selected'); break; }
+      case 'isolate': if (S.isolate) { setIsolate(null); say('isolate off'); } else if (S.sel.size) { setIsolate(new Set(S.sel)); say('isolated ' + S.sel.size); } else say('select something first (SELECT ...)', true); break;
+      case 'hide': if (!S.sel.size) return say('select something first (SELECT ...)', true); { const n = S.sel.size; S.sel.forEach(i => S.hidden[i] = 1); S.sel.clear(); refreshState(); showInspector(); renderIfTree(); say('hid ' + n); } break;
+      case 'showall': $('#bShowAll').click(); say('all shown'); break;
+      case 'find': $('#q').value = a; await runSearch(); say(S.hits.length + ' hits for ' + a); break;
+      case 'open': {
+        if (!a) return say('OPEN <path to a .rvt>', true);
+        const j = await (await fetch('/api/open', {method: 'POST', body: JSON.stringify({path: a.replace(/^["']|["']$/g, '')})})).json();
+        if (!j.ok) return say(j.error || 'could not open', true); await switchModel(j.id, j.name); say('opened'); break; }
+      case 'help': say('FIT, SELECT //category c //class k //name n //type t //level l, ISOLATE, HIDE, SHOWALL, FIND text, OPEN path'); break;
+      default: say('unknown command: ' + c + ' (HELP lists them)', true);
+    }
+  }
+  const inp = $('#cmdIn');
+  inp.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { const v = inp.value; hist.push(v); hi = hist.length; inp.value = ''; run(v).catch(x => say(String(x), true)); }
+    else if (e.key === 'Escape') { inp.value = ''; inp.blur(); }
+    else if (e.key === 'ArrowUp' && hist.length) { hi = Math.max(0, hi - 1); inp.value = hist[hi]; e.preventDefault(); }
+    else if (e.key === 'ArrowDown') { hi = Math.min(hist.length, hi + 1); inp.value = hist[hi] || ''; e.preventDefault(); }
+  });
+  document.addEventListener('keydown', e => { if ((e.key === ':' || e.key === '/') && !/input|select|textarea/i.test(document.activeElement.tagName) && !e.ctrlKey) { e.preventDefault(); inp.focus(); } });
+  window.__rbCmd = run;      // test hook
+}

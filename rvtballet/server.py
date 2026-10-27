@@ -175,6 +175,10 @@ def make_app(models):
     async def browse(req):
         from . import filebrowse
         return web.json_response(filebrowse.browse(req.query.get('path', '')))
+    async def alias_list(req):
+        from . import aliases
+        return web.json_response(aliases.load())
+    app.router.add_get('/api/aliases', alias_list)
     app.router.add_get('/api/browse', browse)
     app.router.add_get('/api/library', library); app.router.add_post('/api/open', open_path); app.router.add_post('/api/load', load_id)
     app.router.add_get('/api/reader', reader_info)
