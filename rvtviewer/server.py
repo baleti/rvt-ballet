@@ -172,6 +172,10 @@ def make_app(models):
         if not os.path.exists(os.path.join(d, 'meta.json')): return web.json_response({'ok': False})
         if n not in models.m: models.add(n, d, n.rsplit('-', 1)[0])
         return web.json_response({'ok': True, 'id': n})
+    async def browse(req):
+        from . import filebrowse
+        return web.json_response(filebrowse.browse(req.query.get('path', '')))
+    app.router.add_get('/api/browse', browse)
     app.router.add_get('/api/library', library); app.router.add_post('/api/open', open_path); app.router.add_post('/api/load', load_id)
     app.router.add_get('/api/reader', reader_info)
     app.router.add_post('/api/m/{mid}/reconvert', reconvert)
