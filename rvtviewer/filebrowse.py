@@ -12,8 +12,10 @@ def roots():
         for ln in open('/proc/mounts'):
             f = ln.split()
             mp = f[1].replace('\\040', ' ')
-            if (f[2] in REAL_FS or f[2].startswith('fuse.')) and mp != '/' and not mp.startswith(('/boot', '/var', '/usr', '/etc', '/proc', '/sys', '/dev', '/run/user', '/snap')) and mp not in out:
-                out.append(mp)
+            if not (f[2] in REAL_FS or f[2].startswith('fuse.')) or mp == '/' or mp.startswith(('/boot', '/var', '/usr', '/etc', '/proc', '/sys', '/dev', '/run/user', '/snap')): continue
+            if any(x in ('.snapshots', 'swapvol') for x in mp.split('/')) or out[0].startswith(mp.rstrip('/') + '/'): continue   # snapshots, swap, a parent of $HOME
+            if any(mp == r or mp.startswith(r.rstrip('/') + '/') for r in out): continue                                          # nested mounts are reachable by browsing
+            out.append(mp)
     except OSError:
         pass
     return out

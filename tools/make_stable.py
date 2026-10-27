@@ -75,7 +75,7 @@ def main():
     for name in ('rvt-viewer', 'rvt-sheets'):
         v = SRC[name] + '/.venv'
         if os.path.isdir(v): os.symlink(v, DEST + '/' + name + '/.venv')
-    print('rewritten files', rewrite(DEST + '/rvt-viewer') + rewrite(DEST + '/rvt-sheets') + rewrite(DEST + '/rvt-research'))
+    print('rewritten files', rewrite(DEST + '/rvt-viewer') + rewrite(DEST + '/rvt-sheets') + rewrite(DEST + '/rvt-research') + rewrite(DEST + '/rvt-core'))
     open(DEST + '/SNAPSHOT.txt', 'w').write('snapshot %s\n' % subprocess.run(['date', '-Is'], capture_output=True, text=True).stdout.strip() + ''.join(
         '%s %s\n' % (k, subprocess.run(['git', '-C', v, 'rev-parse', '--short', 'HEAD'], capture_output=True, text=True).stdout.strip() or '-') for k, v in SRC.items()))
     print(open(DEST + '/SNAPSHOT.txt').read())
