@@ -1,0 +1,13 @@
+/* ballet-ui: design tokens and small components shared by dwg-ballet and rvt-ballet (own design, Material You tonal palette of the desktop theme).
+   Tokens follow ~/.local/state/quickshell/scheme.json (gen-theme.py); tools/gen_ballet_ui.py regenerates the :root block from it. Dark is the default; light follows the OS.
+   Legacy aliases (--panel, --panel2, --acc, --acc2, --dim, --card, --mut) keep the older page CSS working. No ribbon: a top bar, panels, a command line, a status bar. */
+:root{--b-bg:#201a1c;--b-surface:#2a2326;--b-surface2:#362e31;--b-line:#514347;--b-fg:#ebe0e1;--b-fg2:#9e8c90;--b-accent:#ffb0ca;--b-on-accent:#5d1134;--b-accent2:#c8cd59;--b-error:#ffb4ab;--b-canvas:#000;--b-radius:8px;--b-font:system-ui,'Inter','Segoe UI',sans-serif;--b-mono:ui-monospace,'JetBrains Mono',monospace;
+ --bg:var(--b-bg);--panel:var(--b-surface);--panel2:var(--b-surface2);--line:var(--b-line);--fg:var(--b-fg);--dim:var(--b-fg2);--acc:var(--b-accent);--acc2:var(--b-accent2);--on-acc:var(--b-on-accent);--card:var(--b-surface);--mut:var(--b-fg2)}
+@media (prefers-color-scheme:light){:root{--b-bg:#fff8f8;--b-surface:#f6eef0;--b-surface2:#ebe0e2;--b-line:#d5c2c6;--b-fg:#201a1c;--b-fg2:#6f5c61;--b-accent:#8f3a5e;--b-on-accent:#fff;--b-accent2:#5b6100;--b-error:#ba1a1a}}
+.b-top,.b-status{display:flex;align-items:center;gap:10px;background:var(--b-surface);color:var(--b-fg);border-color:var(--b-line);border-style:solid;border-width:0}
+.b-top{border-bottom-width:1px;padding:0 10px;min-height:32px}.b-status{border-top-width:1px;padding:0 10px;min-height:22px;font-size:11px;color:var(--b-fg2)}
+.b-btn{background:var(--b-surface2);color:var(--b-fg);border:1px solid var(--b-line);border-radius:6px;padding:3px 9px;font:inherit;cursor:pointer}.b-btn:hover{border-color:var(--b-accent)}
+.b-btn.on,.b-btn.pri{background:var(--b-accent);border-color:var(--b-accent);color:var(--b-on-accent)}
+.b-input{background:var(--b-bg);color:var(--b-fg);border:1px solid var(--b-line);border-radius:6px;padding:4px 8px;font:inherit}.b-input:focus{outline:1px solid var(--b-accent)}
+.b-card{background:var(--b-surface);border:1px solid var(--b-line);border-radius:var(--b-radius);padding:14px}
+.b-cmd{display:flex;align-items:center;gap:8px;background:var(--b-surface);border-top:1px solid var(--b-line);padding:4px 10px;font-family:var(--b-mono)}.b-cmd input{flex:1;background:none;border:0;color:var(--b-fg);font:inherit;outline:none}.b-cmd .prompt{color:var(--b-accent)}

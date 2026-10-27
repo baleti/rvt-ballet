@@ -23,8 +23,8 @@ const canvas = $('#gl');
 const renderer = new THREE.WebGLRenderer({canvas, antialias: true, preserveDrawingBuffer: true, stencil: true});
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 const scene = new THREE.Scene();
-const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
-scene.background = new THREE.Color(isDark ? 0x1a1e25 : 0xdfe4ea);
+const isDark = new URLSearchParams(location.search).get('light') !== '1';      // black 3D canvas by default (ballet-ui)
+scene.background = new THREE.Color(isDark ? 0x000000 : 0xdfe4ea);
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
 camera.position.set(30, 25, 30);
 const controls = new OrbitControls(camera, canvas);
