@@ -1337,7 +1337,7 @@ class Progress:
         self.dir = outdir; self.log = log; self.t0 = time.time(); self.times = {}; self.ts = time.time(); self.stage = None; self.size_mb = size_mb; self.src = src
         self.extra = {}; self.last = ('', 0.0, ''); self._hb = None
     def eta_total(self):
-        """rough total seconds from earlier conversions (seconds per MB, ~/.cache/rvt-viewer/timing.json)"""
+        """rough total seconds from earlier conversions (seconds per MB, ~/.cache/rvt-ballet/timing.json)"""
         try: rate = json.load(open(os.path.join(reader.CACHE_DIR, 'timing.json'))).get('s_per_mb')
         except Exception: rate = None
         return round(self.size_mb * rate) if (rate and self.size_mb) else None
@@ -1528,7 +1528,7 @@ def convert(path, outdir, log=print, workers=None):
         if 'raw cache hit' in m: cold[0] = False; prog.extra['raw_cache_hit'] = True
     prog.set('reading', 0.0, 'decoding %s with the reader' % os.path.basename(path)); prog.start_heartbeat()
     def _preimport():                                   # heavy first-time imports (OpenCascade ~2 s, scipy, matplotlib) overlap the Rust reader (c2-rust NEEDS 19); joined before any fork
-        for mod in ('rvtviewer.occ', 'scipy.spatial', 'scipy.optimize', 'matplotlib.path'):
+        for mod in ('rvtballet.occ', 'scipy.spatial', 'scipy.optimize', 'matplotlib.path'):
             try: __import__(mod)
             except Exception: pass
     import threading; pre = threading.Thread(target=_preimport, daemon=True)          # started after the quick preview: the first picture must not wait for the GIL
@@ -1572,7 +1572,7 @@ def convert(path, outdir, log=print, workers=None):
         el['level'] = lvl_by_id.get(lv)
     views, sheets = datums.views_sheets(ctx); rooms = datums.rooms(ctx, lvl_by_id); grids = build_grids(ctx)
     try:      # per-view display options (visual style, background sky/ground colours, silhouettes), reader rvt_viewdisp: the viewer opens a stored view in its own style
-        if os.environ.get('RVT_VIEWDISP_IN_CONVERT'):      # off by default: the reader pass costs a second extraction on cold files; rvtviewer/viewdisp.py fills it in after the model is usable
+        if os.environ.get('RVT_VIEWDISP_IN_CONVERT'):      # off by default: the reader pass costs a second extraction on cold files; rvtballet/viewdisp.py fills it in after the model is usable
             import rvt_viewdisp
             vd = rvt_viewdisp.view_display(path); VS = {1: 'wireframe', 2: 'hiddenline', 7: 'consistent', 3: 'shaded', 4: 'shaded', 5: 'shaded', 6: 'shaded'}
             for v_ in views:

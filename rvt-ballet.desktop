@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=RVT Viewer
+Name=RVT Ballet
 Comment=Open Revit .rvt files without Revit
-Exec=~/src/rvt-viewer/rvt-viewer open %f
+Exec=~/src/rvt-ballet/rvt-ballet open %f
 MimeType=application/x-revit;
 Terminal=false
 Categories=Graphics;Viewer;

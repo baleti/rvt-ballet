@@ -1,6 +1,6 @@
 #!/bin/sh
 # second pass for files that did not fit the first budget: ONE at a time, 3 GB cap (budget 2.7 GB RSS), only while MemAvailable >= 5 GB. Files that still exceed it are recorded in accept/SKIPPED.txt (not retried).
-D="$(dirname "$(readlink -f "$0")")/.."; OUT="$HOME/.cache/rvt-viewer/accept"; mkdir -p "$OUT"
+D="$(dirname "$(readlink -f "$0")")/.."; OUT="$HOME/.cache/rvt-ballet/accept"; mkdir -p "$OUT"
 for f in $HOME/rvt-research/corpus/202[0-6]/*.rvt; do
   y=$(basename "$(dirname "$f")"); s=$(basename "$f" .rvt)
   [ -f "$OUT/${y}_${s}.json" ] && continue

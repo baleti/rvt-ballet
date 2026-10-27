@@ -4,7 +4,7 @@ import asyncio, sys, os, subprocess, json
 sys.path.insert(0, os.path.dirname(__file__)); import cdp
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 async def main(md, port, outp):
-    srv = subprocess.Popen([sys.executable, '-c', 'import sys; sys.path.insert(0,%r); from rvtviewer.cli import main; main(sys.argv[1:])' % ROOT, 'serve', md, '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    srv = subprocess.Popen([sys.executable, '-c', 'import sys; sys.path.insert(0,%r); from rvtballet.cli import main; main(sys.argv[1:])' % ROOT, 'serve', md, '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     cdp.wait_http('http://127.0.0.1:%d/api/models' % port, 60); b = cdp.Browser(size=(1300, 800)); await b.start(); ok = True
     def check(name, cond, info=''):
         nonlocal ok; ok &= bool(cond); print('PASS' if cond else 'FAIL', name, info)

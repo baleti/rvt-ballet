@@ -2,7 +2,7 @@
 import os, sys, tempfile, time, json
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from rvtviewer import build, geom, glb, reader, brep
+from rvtballet import build, geom, glb, reader, brep
 
 def _els(n):
     return [{'id': 100 + i, 'cls': 'FamilyInstance', 'cat': 'Doors', 'name': 'x', 'type': 't', 'family': 'f', 'level': None, 'isType': False, 'uid': None, 'ifc': None, 'fid': 'none', 'bb': (np.zeros(3), np.ones(3)), 'i': i, 'phase': -1} for i in range(n)]
@@ -53,7 +53,7 @@ def test_reader_stamp_changes_when_reader_files_change():
     finally: reader.READER_DIR = old
 
 def test_model_dir_key_depends_on_stamps():
-    from rvtviewer import cli
+    from rvtballet import cli
     f = os.path.join(tempfile.mkdtemp(), 'm.rvt'); open(f, 'wb').write(b'x'); a = cli.model_dir(f)
     old = reader.reader_stamp; reader.reader_stamp = lambda: 'zzzz'
     try: b = cli.model_dir(f)

@@ -1,4 +1,4 @@
-"""end-to-end demo check of `rvt-viewer open FILE [--sheets]`: banner while parsing, 3D loads, Sheets button opens the embedded sheets page (iframe), Model button returns; timings.
+"""end-to-end demo check of `rvt-ballet open FILE [--sheets]`: banner while parsing, 3D loads, Sheets button opens the embedded sheets page (iframe), Model button returns; timings.
 usage: tools/uitest10.py FILE.rvt [--sheets] [--port N]    (headless Chromium; screenshots in screenshots/demo/)"""
 import asyncio, sys, os, subprocess, json, time
 sys.path.insert(0, os.path.dirname(__file__)); import cdp

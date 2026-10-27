@@ -1,6 +1,6 @@
-"""~/.cache/rvt-viewer/sweep.jsonl -> docs/SWEEP.md (per file: status, size, seconds, elements, fidelity, sheets/views, failure reason)"""
+"""~/.cache/rvt-ballet/sweep.jsonl -> docs/SWEEP.md (per file: status, size, seconds, elements, fidelity, sheets/views, failure reason)"""
 import json, os, sys, collections
-R = [json.loads(l) for l in open(os.path.expanduser(sys.argv[1] if len(sys.argv) > 1 else '~/.cache/rvt-viewer/sweep.jsonl'))]
+R = [json.loads(l) for l in open(os.path.expanduser(sys.argv[1] if len(sys.argv) > 1 else '~/.cache/rvt-ballet/sweep.jsonl'))]
 last = collections.OrderedDict()
 for r in R: last[r['src']] = r
 R = sorted(last.values(), key=lambda r: (r['year'], r['file']))

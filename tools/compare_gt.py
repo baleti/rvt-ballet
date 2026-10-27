@@ -2,11 +2,11 @@
 Oracle format (any *.tsv in GTDIR, optionally one model per file; rows may be mixed with E/P rows):
     G <elementId> <minx> <miny> <minz> <maxx> <maxy> <maxz> <volume> [area]          (feet, Revit internal units)
 and optionally GTDIR/<elementId>.obj (or GTDIR/<model stem>/<elementId>.obj): oracle mesh in feet, used for the Hausdorff estimate.
-usage: tools/compare_gt.py MODELDIR GTDIR   (MODELDIR = converted model directory, e.g. ~/.cache/rvt-viewer/models/<name>)"""
+usage: tools/compare_gt.py MODELDIR GTDIR   (MODELDIR = converted model directory, e.g. ~/.cache/rvt-ballet/models/<name>)"""
 import sys, os, json, glob, pickle
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from rvtviewer import reader, build
+from rvtballet import reader, build
 
 def oriented_volume(V, F):
     """weld vertices, make the winding consistent per connected component (BFS over edges shared by exactly 2 triangles, flipping faces whose shared edge runs the same direction), then the volume of each component as |signed sum|"""

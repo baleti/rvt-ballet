@@ -1,8 +1,8 @@
-"""aggregate ~/.cache/rvt-viewer/accept/*.json into the per-class, per-year table defined by ACCEPTANCE.md (markdown on stdout; also written to docs/ACCEPTANCE-STATUS.md).
+"""aggregate ~/.cache/rvt-ballet/accept/*.json into the per-class, per-year table defined by ACCEPTANCE.md (markdown on stdout; also written to docs/ACCEPTANCE-STATUS.md).
 Columns per class and year: elements, true geometry %, parametric-unproven %, approximate %, box-only %, bbox IoU>=0.95 %, volume within 2 % (of elements that have a Revit volume in gt4).
 DONE flag = true >= 95 % and box <= 2 % and IoU-ok >= 95 % and (volume-ok >= 95 % where measurable)."""
 import os, sys, json, glob, collections
-OUT = os.path.expanduser('~/.cache/rvt-viewer/accept')
+OUT = os.path.expanduser('~/.cache/rvt-ballet/accept')
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CORE = ['SWall', 'Floor', 'Ceiling', 'ProfileRoof', 'FootPrintRoof', 'FamilyInstance', 'StairsRun', 'StairsElement', 'BaseRailing', 'RbsDuctCurve', 'RbsPipeCurve', 'RbsConduitCurve', 'CableTray',
         'CurtainGridLine', 'RoomElem', 'SiteSurface', 'WallSweep', 'ContFooting', 'Mass']

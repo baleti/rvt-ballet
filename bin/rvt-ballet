@@ -1,0 +1,3 @@
+#!/bin/sh
+# rvt-ballet launcher (same as rvt-view): /full/path/FILE.rvt [--sheets] [--workspace N] [--no-browser] [--hide Cat1,Cat2]
+exec "$(dirname "$(readlink -f "$0")")/../rvt-ballet" open "$@"

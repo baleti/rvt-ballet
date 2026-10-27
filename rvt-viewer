@@ -1,4 +1,3 @@
 #!/bin/sh
-# rvt-viewer open FILE.rvt | convert FILE.rvt [OUT] | serve
-D="$(dirname "$(readlink -f "$0")")"
-exec "$D/.venv/bin/python" -c "import sys; sys.path.insert(0,'$D'); from rvtviewer.cli import main; main()" "$@"
+# deprecated alias of rvt-ballet (kept for one release)
+exec "$(dirname "$(readlink -f "$0")")/rvt-ballet" "$@"

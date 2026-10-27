@@ -1,7 +1,7 @@
 #!/bin/sh
 # files that do not fit the 3 GB budget in one process (listed in accept/SKIPPED.txt): evaluate in TWO halves, one process at a time, each under 3 GB:
 #   analytic classes (walls, floors, roofs, MEP curves ...) with the viewer context, then everything else through the reader geometry API only.
-D="$(dirname "$(readlink -f "$0")")/.."; OUT="$HOME/.cache/rvt-viewer/accept"
+D="$(dirname "$(readlink -f "$0")")/.."; OUT="$HOME/.cache/rvt-ballet/accept"
 while read n; do
   y=${n%%_*}; s=${n#*_}; f=$HOME/rvt-research/corpus/$y/$s.rvt; [ -f "$f" ] || continue
   for mode in analytic mesh; do

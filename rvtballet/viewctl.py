@@ -4,7 +4,7 @@ per category / element. The drawing code is rvt-sheets (run in its own venv, one
   GET /api/m/{mid}/vc/views                      -> views of the file
   GET /api/m/{mid}/vc/scene/{vid}?scale=&detail=&template=0|1&filters=0|1   -> scene (see vscene_worker.py)
   GET /api/m/{mid}/vc/element/{eid}              -> raw stored fields of one element
-  GET|PUT /api/vc/presets                        -> saved control presets (~/.config/rvt-viewer/vctl-presets.json)"""
+  GET|PUT /api/vc/presets                        -> saved control presets (~/.config/rvt-ballet/vctl-presets.json)"""
 import os, sys, json, hashlib, asyncio, subprocess, threading, time
 from aiohttp import web
 from . import vcache
@@ -12,7 +12,7 @@ from . import vcache
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHEETS_PY = os.environ.get('RVT_SHEETS_PY', os.path.expanduser('~/src/rvt-sheets/.venv/bin/python'))
 CACHE = vcache.CACHE
-PRESETS = os.path.expanduser('~/.config/rvt-viewer/vctl-presets.json')
+PRESETS = os.path.expanduser('~/.config/rvt-ballet/vctl-presets.json')
 IDLE = 600
 
 

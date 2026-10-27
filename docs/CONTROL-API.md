@@ -5,11 +5,11 @@ rvt-sheets, delivered to the viewer as JSON primitives with stable element ids a
 (`web/viewctl.js`) where every layer / category / subcategory / element can be toggled, recoloured, re-weighted, resized and picked.
 
 ## What exists today (viewer side, in this repo)
-* `rvtviewer/vscene_worker.py`: one process per .rvt (rvt-sheets venv). Calls `ViewDrawer.draw(view_id)` and returns `{view, prims, elements, options, stats}`.
+* `rvtballet/vscene_worker.py`: one process per .rvt (rvt-sheets venv). Calls `ViewDrawer.draw(view_id)` and returns `{view, prims, elements, options, stats}`.
   Re-render options: `scale` (annotation scale 1:N, exact: sizes and pen widths are regenerated), `detail` (1/2/3), `template` (false = ignore the view template),
   `filters` (false = ignore view filters). Nothing in rvt-sheets is modified.
-* `rvtviewer/viewctl.py`: HTTP: `GET /api/m/{mid}/vc/views`, `GET /api/m/{mid}/vc/scene/{vid}?scale=&detail=&template=0&filters=0`, `GET /api/m/{mid}/vc/element/{eid}`,
-  `GET|PUT /api/vc/presets`. Results cached in `~/.cache/rvt-viewer/vscene/`.
+* `rvtballet/viewctl.py`: HTTP: `GET /api/m/{mid}/vc/views`, `GET /api/m/{mid}/vc/scene/{vid}?scale=&detail=&template=0&filters=0`, `GET /api/m/{mid}/vc/element/{eid}`,
+  `GET|PUT /api/vc/presets`. Results cached in `~/.cache/rvt-ballet/vscene/`.
 * Scene = `view` (frame: origin/right/up/dir in world feet, scale, range, crop_uv), `prims` (rvt-sheets primitives in view coordinates, model feet, annotation sizes already
   multiplied by the view scale), `elements` ({eid: {cls, cat, catName, parent, parentName}}).
 
@@ -40,5 +40,5 @@ annotation, annotation_fill, text, datum), `style` {w (paper mm), rgb, dash (pap
 * [x] per layer / category / subcategory / class (type) / element visibility; colour override; line weight multiplier; text size x, font, colour; crop on/off; on-top / lift / opacity
 * [x] annotation scale (re-render), detail level, view template on/off, filters on/off
 * [x] picking (hover tooltip, click: highlight, raw stored fields, hide element/category/type, open the model element in the inspector when it exists)
-* [x] presets (server file `~/.config/rvt-viewer/vctl-presets.json`, localStorage fallback), per-view state restored from localStorage, JSON export
+* [x] presets (server file `~/.config/rvt-ballet/vctl-presets.json`, localStorage fallback), per-view state restored from localStorage, JSON export
 * [ ] more in `PROGRESS.md`

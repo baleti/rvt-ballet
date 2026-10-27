@@ -1,10 +1,10 @@
-"""cross-check the viewer's B-rep tessellation (rvtviewer.brep) against the reader's rvt_mesh.tessellate_geometry: triangle counts and signed volume per Geometry body.
+"""cross-check the viewer's B-rep tessellation (rvtballet.brep) against the reader's rvt_mesh.tessellate_geometry: triangle counts and signed volume per Geometry body.
 usage: tools/check_mesh.py FILE.rvt"""
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))); sys.path.insert(0, os.path.expanduser('~/rvt-research'))
 import numpy as np
 import rvt_mesh as RM
-from rvtviewer import reader, build, brep
+from rvtballet import reader, build, brep
 ctx = build.Ctx(reader.cached_load(sys.argv[1])); n = ok = 0
 for e, r in ctx.recs.items():
     if r['class'].startswith(('DBView', 'Analytical')): continue

@@ -1,6 +1,6 @@
 # View/sheet fidelity QA sweep (c8-viewer, started 2026-10-25)
 
-Request (orchestrator, user): confirm that rvt-viewer and rvt-sheets render views and sheets like real Revit, without artifacts: (a) Autodesk corpus vs Revit exports, (b) a stratified sample of ~60 office models (studyx, local only) vs the Revit PDF sets next to them; rank artifact classes by frequency, fix the top ones, re-measure.
+Request (orchestrator, user): confirm that rvt-ballet and rvt-sheets render views and sheets like real Revit, without artifacts: (a) Autodesk corpus vs Revit exports, (b) a stratified sample of ~60 office models (studyx, local only) vs the Revit PDF sets next to them; rank artifact classes by frequency, fix the top ones, re-measure.
 
 ## (a) Corpus, current numbers (aggregate, no renders committed)
 Source: ~/src/rvt-qa out43 (rst/Commercial/Residential, 104 views) and out44 (Snowdon Structural/Facades, 124 views), qaall26 on dev 450d26f; finding classes counted per view (a view counts once per class).

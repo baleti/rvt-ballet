@@ -3,13 +3,13 @@ usage: tools/timings.py   -> screenshots/timings.json + a markdown table on stdo
 import sys, os, json, time, asyncio, subprocess, hashlib, glob
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0, ROOT); sys.path.insert(0, os.path.join(ROOT, 'tools'))
 import cdp
-from rvtviewer import build, reader
+from rvtballet import build, reader
 C = os.path.expanduser('~/rvt-research/corpus')
 SET0 = [('residential-2020', '2020/20_Residential_Sample_Project'), ('facades-2026', '2026/58_Snowdon_Towers_Sample_Facades'), ('hvac-2024', '2024/42_Snowdon_Towers_Sample_HVAC'),
        ('structural-2024', '2024/43_Snowdon_Towers_Sample_Structural'), ('mep-2020', '2020/23_rme_advanced_sample_project')]
 SET = [x for x in SET0 if (not os.environ.get('ONLY') or x[0] in os.environ['ONLY'].split(','))]
 async def page_load(d, port):
-    srv = subprocess.Popen([os.path.join(ROOT, 'rvt-viewer'), 'serve', d, '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    srv = subprocess.Popen([os.path.join(ROOT, 'rvt-ballet'), 'serve', d, '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     cdp.wait_http('http://127.0.0.1:%d/api/models' % port); b = cdp.Browser(size=(1400, 900)); await b.start()
     try:
         t = time.time(); await b.goto('http://127.0.0.1:%d/' % port); await b.wait('window.__loaded===true', 180); dt = time.time() - t
@@ -23,7 +23,7 @@ def main():
         rawf = os.path.join(reader.CACHE_DIR, 'raw-' + key + '.pkl')
         if os.path.exists(rawf): os.remove(rawf)
         t = time.time(); import shutil; shutil.rmtree(out, ignore_errors=True)
-        r = subprocess.run([os.path.join(ROOT, 'rvt-viewer'), 'convert', p, out], env=dict(os.environ, RVT_NO_GEOM_CACHE='1', RVT_MEM_CAP=os.environ.get('RVT_MEM_CAP', '8G')), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)   # own process (and memory cap) per model
+        r = subprocess.run([os.path.join(ROOT, 'rvt-ballet'), 'convert', p, out], env=dict(os.environ, RVT_NO_GEOM_CACHE='1', RVT_MEM_CAP=os.environ.get('RVT_MEM_CAP', '8G')), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)   # own process (and memory cap) per model
         if r.returncode != 0 or not os.path.exists(out + '/meta.json'): rows.append('| %s | conversion failed (exit %d) |' % (name, r.returncode)); print(rows[-1], flush=True); continue
         m = json.load(open(out + '/meta.json')); tot = time.time() - t; T = m['timings']; port += 1
         dt, st = asyncio.run(page_load(out, port)); subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'cleanup_browsers.py')], stdout=subprocess.DEVNULL)

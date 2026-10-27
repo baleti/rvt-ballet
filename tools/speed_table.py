@@ -1,7 +1,7 @@
 """sweep jsonl -> docs/SPEED.md: per file time to the first usable view (reader + tables + preview: element table, levels, grids, bboxes, preview mesh) and total conversion, sorted by size.
 usage: tools/speed_table.py [sweep.jsonl]"""
 import json, os, sys
-src = os.path.expanduser(sys.argv[1] if len(sys.argv) > 1 else '~/.cache/rvt-viewer/sweep4.jsonl')
+src = os.path.expanduser(sys.argv[1] if len(sys.argv) > 1 else '~/.cache/rvt-ballet/sweep4.jsonl')
 R = {}
 for l in open(src):
     r = json.loads(l)

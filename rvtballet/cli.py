@@ -1,4 +1,4 @@
-"""rvt-viewer open FILE.rvt | convert FILE.rvt OUTDIR | serve [DIRS...]"""
+"""rvt-ballet open FILE.rvt | convert FILE.rvt OUTDIR | serve [DIRS...]"""
 import urllib.parse, os, sys, argparse, hashlib, json, subprocess, shutil, time
 from . import reader
 
@@ -67,7 +67,7 @@ def hypr_env():
 def open_browser(url, workspace=None, headless=False):
     prof = os.path.join(reader.CACHE_DIR, 'chromium-profile')
     cmd = ['chromium', '--app=' + url, '--user-data-dir=' + prof, '--enable-unsafe-webgpu', '--ignore-gpu-blocklist', '--no-first-run', '--window-size=1500,950']
-    if os.environ.get('RVT_VIEWER_CDP'): cmd.append('--remote-debugging-port=' + os.environ['RVT_VIEWER_CDP'])
+    if os.environ.get('RVT_BALLET_CDP'): cmd.append('--remote-debugging-port=' + os.environ['RVT_BALLET_CDP'])
     if workspace:
         import shlex
         code = 'hl.dispatch(hl.dsp.exec_cmd(%s))' % json.dumps('[workspace %s silent] %s' % (workspace, ' '.join(shlex.quote(c) for c in cmd)))
@@ -95,7 +95,7 @@ def prepare(files):
         if done: print('[model] %s: already cached (%s)' % (os.path.basename(f), d)); line['model'] = 'cached'
         else:
             print('[model] converting %s (progress: see the banner when opened; this runs the capped converter) ...' % os.path.basename(f), flush=True)
-            r = subprocess.run([os.path.join(here, 'rvt-viewer'), 'convert', f, d], env=dict(os.environ, RVT_MAT_PY_MB=os.environ.get('RVT_MAT_PY_MB', '60')))      # offline prep: per-face materials (Python meshes) up to 60 MB
+            r = subprocess.run([os.path.join(here, 'rvt-ballet'), 'convert', f, d], env=dict(os.environ, RVT_MAT_PY_MB=os.environ.get('RVT_MAT_PY_MB', '60')))      # offline prep: per-face materials (Python meshes) up to 60 MB
             if r.returncode != 0: print('[model] conversion FAILED (exit %d)' % r.returncode); line['model'] = 'FAILED'; summary.append(line); continue
             line['model'] = 'converted in %.0f s' % (time.time() - t)
         sm = {}
@@ -123,7 +123,7 @@ def prepare(files):
         if l.get('model') != 'FAILED': print('\nREADY: %s %s --sheets' % (os.path.join(here, 'bin', 'rvt-view'), l['file']))
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog='rvt-viewer'); sub = ap.add_subparsers(dest='cmd', required=True)
+    ap = argparse.ArgumentParser(prog='rvt-ballet'); sub = ap.add_subparsers(dest='cmd', required=True)
     o = sub.add_parser('open'); o.add_argument('files', nargs='+'); o.add_argument('--port', type=int, default=0); o.add_argument('--no-browser', action='store_true'); o.add_argument('--workspace'); o.add_argument('--rebuild', action='store_true'); o.add_argument('--sheets', action='store_true', help='open directly on the sheets page'); o.add_argument('--hide', default='', help='comma list of categories hidden at start, e.g. Planting,Entourage (URL ?hide=...)'); o.add_argument('--prepare', action='store_true', help='demo prep: convert + cache the model(s), warm the sheets cache, print the exact demo command, do not serve')
     c = sub.add_parser('convert'); c.add_argument('file'); c.add_argument('out', nargs='?')
     s = sub.add_parser('serve'); s.add_argument('dirs', nargs='*'); s.add_argument('--port', type=int, default=0)
@@ -142,7 +142,7 @@ def main(argv=None):
             # every conversion runs under a memory cap + nice (the reader can balloon on big files)
             env = dict(os.environ, RVT_CAPPED='1')
             os.execvpe('systemd-run', ['systemd-run', '--user', '--scope', '-q', '-p', 'MemoryMax=' + os.environ.get('RVT_MEM_CAP', '6G'), '-p', 'MemorySwapMax=0', 'nice', '-n', '10', sys.executable, '-c',
-                       "import sys; sys.path.insert(0,%r); from rvtviewer.cli import main; main(sys.argv[1:])" % os.path.dirname(os.path.dirname(os.path.abspath(__file__)))] + (list(argv) if argv is not None else sys.argv[1:]), env)
+                       "import sys; sys.path.insert(0,%r); from rvtballet.cli import main; main(sys.argv[1:])" % os.path.dirname(os.path.dirname(os.path.abspath(__file__)))] + (list(argv) if argv is not None else sys.argv[1:]), env)
         from . import build
         out = a.out or model_dir(a.file)
         try: build.convert(a.file, out)
@@ -161,7 +161,7 @@ def main(argv=None):
         shutil.rmtree(tmp, ignore_errors=True); os.makedirs(tmp)
         models.add(mid, tmp, os.path.basename(f), building=True); models.m[mid]['src'] = f
         def job():
-            p = subprocess.Popen([sys.executable, '-c', "import sys; sys.path.insert(0,%r); from rvtviewer.cli import main; main(['convert', %r, %r])" % (os.path.dirname(os.path.dirname(os.path.abspath(__file__))), f, tmp)], stdout=sys.stdout, stderr=sys.stderr)
+            p = subprocess.Popen([sys.executable, '-c', "import sys; sys.path.insert(0,%r); from rvtballet.cli import main; main(['convert', %r, %r])" % (os.path.dirname(os.path.dirname(os.path.abspath(__file__))), f, tmp)], stdout=sys.stdout, stderr=sys.stderr)
             if p.wait() == 0 and os.path.exists(os.path.join(tmp, 'meta.json')):
                 shutil.rmtree(d, ignore_errors=True); os.rename(tmp, d); models.m[mid]['dir'] = d; models.m[mid]['building'] = False; models.m[mid]['db'] = None
             else:

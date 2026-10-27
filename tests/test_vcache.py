@@ -6,7 +6,7 @@ import sys
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from rvtviewer import vcache
+from rvtballet import vcache
 
 
 @pytest.fixture(autouse=True)

@@ -4,7 +4,7 @@ Override the reader location with RVT_READER_DIR."""
 import os, sys, pickle, hashlib, time
 
 READER_DIR = os.environ.get('RVT_READER_DIR', os.path.expanduser('~/rvt-research'))
-CACHE_DIR = os.environ.get('RVT_VIEWER_CACHE', os.path.expanduser('~/.cache/rvt-viewer'))
+CACHE_DIR = os.environ.get('RVT_BALLET_CACHE', os.path.expanduser('~/.cache/rvt-ballet'))
 
 def _import():
     if READER_DIR not in sys.path: sys.path.insert(0, READER_DIR)

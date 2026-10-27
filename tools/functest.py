@@ -9,7 +9,7 @@ def get(url, timeout=30):
 
 def main(md, port=8960):
     md = os.path.abspath(md); mid = os.path.basename(md.rstrip('/')); C = {}; base = 'http://127.0.0.1:%d' % port
-    srv = subprocess.Popen([sys.executable, '-c', 'import sys; sys.path.insert(0,%r); from rvtviewer.cli import main; main(sys.argv[1:])' % ROOT, 'serve', md, '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    srv = subprocess.Popen([sys.executable, '-c', 'import sys; sys.path.insert(0,%r); from rvtballet.cli import main; main(sys.argv[1:])' % ROOT, 'serve', md, '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     def chk(name, fn):
         t = time.time()
         try: v = fn(); C[name] = {'ok': bool(v[0]), 'info': v[1], 's': round(time.time() - t, 1)}

@@ -3,11 +3,11 @@
 Everything runs offline, no Revit, no Autodesk SDK. Prepare once before the interview, then every open is instant.
 
 ## Before (5-10 minutes, any time earlier the same day)
-    ~/src/rvt-viewer/bin/rvt-view --prepare ~/rvt-research/corpus/2020/20_Residential_Sample_Project.rvt ~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt ~/rvt-research/corpus/2026/58_Snowdon_Towers_Sample_Facades.rvt
+    ~/src/rvt-ballet/bin/rvt-view --prepare ~/rvt-research/corpus/2020/20_Residential_Sample_Project.rvt ~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt ~/rvt-research/corpus/2026/58_Snowdon_Towers_Sample_Facades.rvt
 It converts and caches each model, pre-renders all sheets and views, and prints `READY: <command>` per file. If a peer changes the reader afterwards, the prepared model still opens instantly (a small "newer reader available" chip appears bottom right; ignore it or hide it with x).
 
 ## 1. The house (2020 Residential, 10 MB): materials and real geometry
-    ~/src/rvt-viewer/bin/rvt-view ~/rvt-research/corpus/2020/20_Residential_Sample_Project.rvt --hide Planting,Entourage
+    ~/src/rvt-ballet/bin/rvt-view ~/rvt-research/corpus/2020/20_Residential_Sample_Project.rvt --hide Planting,Entourage
 * **Visual style**: models open in Revit's **Hidden line** style (white faces, black edges, faint hidden lines; header box `Style`). For the textured house switch the Style box to **Realistic** (or open `?style=realistic`); Shaded, Consistent colors and Wireframe are in the same box.
 * In Hidden line, model surface patterns (shingle courses, lap siding, brick bond) are drawn as hatch lines like Revit's; plan / section / elevation views open in a parallel (orthographic-looking) projection, e.g. Views tab, `South` elevation of the Residential house. (Models converted before 2026-10-18 need `--prepare` again to carry the pattern data.)
 * Section views in Hidden line fill cut faces with each material's cut pattern (concrete stipple, wall layer hatch) and draw an earth hatch under the terrain line, at the view's own scale (try `building section` of the Residential house). Patterns are skipped on models above 800k triangles and limited to 6 distinct patterns; the earth pattern is the reader's dash grid, not Revit's basket weave.
@@ -23,13 +23,13 @@ It converts and caches each model, pre-renders all sheets and views, and prints 
 * **Shadows** (or key L) toggles sun shadows; the sun follows the view so shadows always fall visibly beside objects.
 
 ## 2. The building (2024 Snowdon Towers Structural, 28 MB): scale and structure
-    ~/src/rvt-viewer/bin/rvt-view ~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt --sheets
+    ~/src/rvt-ballet/bin/rvt-view ~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt --sheets
 * Opens directly on the **Sheets** page: 12 sheets, 104 views drawn from the file (plans, sections, elevations with annotations). Click a viewport to open that view; click an element in a drawing to select it in 3D.
 * **Model (3D)**: levels and grids labelled; Levels tab isolates a floor; search "W12" or "Concrete" (parameter values are searchable).
 * **Coverage** tab: honest numbers per class (true geometry / rebuilt / box only) and why.
 
 ## 3. Curved facade (2026 Snowdon Towers Facades, 53 MB): newest format version
-    ~/src/rvt-viewer/bin/rvt-view ~/rvt-research/corpus/2026/58_Snowdon_Towers_Sample_Facades.rvt
+    ~/src/rvt-ballet/bin/rvt-view ~/rvt-research/corpus/2026/58_Snowdon_Towers_Sample_Facades.rvt
 * Revit 2026 file; curtain walls, mullions and curved panels from cones, revolutions, ruled and Hermite surfaces decoded from the file.
 * Zoom to the street front: running and soldier-course brick, granite, quartz, stained wood frames and copper come from Revit's Advanced (Prism) appearances, textured at their real-world size.
 

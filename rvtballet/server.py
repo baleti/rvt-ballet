@@ -42,18 +42,18 @@ class PluginContext:
         r = self.models.db(mid).execute('select i from el where id=?', (int(element_id),)).fetchone(); return None if r is None else r[0]
     @property
     def reader(self):
-        """rvtviewer.reader: _import() puts ~/rvt-research on sys.path (rvt_geometry, rvt_elemmesh, rvt_materials, ...), cached_load(path), reader_stamp()"""
+        """rvtballet.reader: _import() puts ~/rvt-research on sys.path (rvt_geometry, rvt_elemmesh, rvt_materials, ...), cached_load(path), reader_stamp()"""
         from . import reader; return reader
 
 
 def load_plugins(app, models):
     """mount viewer plug-ins as aiohttp sub-apps. A plug-in is a python module with make_app(ctx) -> aiohttp.web.Application and optional NAME / TITLE / MOUNT ('/sheets/').
-    Sources: env RVT_PLUGINS (comma list of module names), ~/.config/rvt-viewer/plugins.json ({"plugins": [{"module": "rvtsheets.server", "path": "~/src/rvt-sheets", "mount": "/sheets/", "title": "Sheets"}]}),
+    Sources: env RVT_PLUGINS (comma list of module names), ~/.config/rvt-ballet/plugins.json ({"plugins": [{"module": "rvtsheets.server", "path": "~/src/rvt-sheets", "mount": "/sheets/", "title": "Sheets"}]}),
     and the built-in default rvtsheets.server from ~/src/rvt-sheets when that directory exists."""
     import importlib, sys
     cfg = []
     for n in filter(None, os.environ.get('RVT_PLUGINS', '').split(',')): cfg.append({'module': n.strip()})
-    f = os.path.expanduser('~/.config/rvt-viewer/plugins.json')
+    f = os.path.expanduser('~/.config/rvt-ballet/plugins.json')
     if os.path.exists(f):
         try: cfg += json.load(open(f)).get('plugins', [])
         except Exception as ex: print('plugins.json unreadable:', ex)

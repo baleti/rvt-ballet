@@ -5,9 +5,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CHILD = r'''
 import sys, os, time, json
 sys.path.insert(0, %r); sys.path.insert(0, os.path.expanduser('~/rvt-research'))
-os.environ['RVT_VIEWER_CACHE'] = %r
+os.environ['RVT_BALLET_CACHE'] = %r
 import rvt_xcache; rvt_xcache.D = %r
-from rvtviewer import build
+from rvtballet import build
 t = time.time(); m = build.convert(%r, %r, log=lambda *a: None); print(json.dumps({'total': round(time.time() - t, 1), **m['timings']}))
 '''
 def run(f, vcache, xcache, out):

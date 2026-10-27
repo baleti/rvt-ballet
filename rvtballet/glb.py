@@ -38,7 +38,7 @@ def write_glb(path, batches, extras=None):
                      **({'alphaMode': 'BLEND'} if b['color'][3] < 1 else {}), 'doubleSided': True})
         meshes.append({'name': b['name'], 'primitives': [{'attributes': attrs, 'indices': a_ix, 'material': len(mats) - 1, 'mode': b.get('mode', 4)}], 'extras': {'batch': i}})
         nodes.append({'mesh': len(meshes) - 1, 'name': b['name'], 'extras': {'batch': i}})
-    js = {'asset': {'version': '2.0', 'generator': 'rvt-viewer'}, 'scene': 0, 'scenes': [{'nodes': list(range(len(nodes)))}], 'nodes': nodes,
+    js = {'asset': {'version': '2.0', 'generator': 'rvt-ballet'}, 'scene': 0, 'scenes': [{'nodes': list(range(len(nodes)))}], 'nodes': nodes,
           'meshes': meshes, 'materials': mats, 'accessors': accs, 'bufferViews': views, 'buffers': [{'byteLength': off}]}
     if extras: js['extras'] = extras
     jb = json.dumps(js, separators=(',', ':')).encode(); jb += b' ' * ((-len(jb)) % 4)

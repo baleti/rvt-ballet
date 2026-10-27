@@ -1,7 +1,7 @@
 #!/bin/bash
-# per-class acceptance on remote-host (run through ~/.local/share/offload/h1run, env occ): ONE corpus file at a time, results in ~/.cache/rvt-viewer/accept/ on remote-host (pull with h1run pull .cache/rvt-viewer/accept)
-# usage (remote-host): h1run run accept --env occ --dir ~/src/rvt-viewer -- bash tools/accept_h1.sh [YEAR ...]
-D="$(dirname "$(readlink -f "$0")")/.."; OUT="$HOME/.cache/rvt-viewer/accept"; mkdir -p "$OUT"; PY=python
+# per-class acceptance on remote-host (run through ~/.local/share/offload/h1run, env occ): ONE corpus file at a time, results in ~/.cache/rvt-ballet/accept/ on remote-host (pull with h1run pull .cache/rvt-ballet/accept)
+# usage (remote-host): h1run run accept --env occ --dir ~/src/rvt-ballet -- bash tools/accept_h1.sh [YEAR ...]
+D="$(dirname "$(readlink -f "$0")")/.."; OUT="$HOME/.cache/rvt-ballet/accept"; mkdir -p "$OUT"; PY=python
 YEARS=${@:-2020 2021 2022 2023 2024 2025 2026}
 for y in $YEARS; do for f in $HOME/rvt-research/corpus/$y/*.rvt; do
   s=$(basename "$f" .rvt); [ -f "$OUT/${y}_${s}.json" ] && continue

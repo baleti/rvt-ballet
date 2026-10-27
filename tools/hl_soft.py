@@ -1,5 +1,5 @@
 """software hidden-line renderer (numpy + numba, no browser, runs on remote-host): tools/hl_soft.py MODELDIR CAMERAS.tsv VIEWID OUT.png [--vg VG3D.json] [--size 2400] [--min-edge 0.01]
-Mirrors web/hl.js: glb triangles (three axes, metres), the view's resolved hidden elements / fills / transparency (rvtviewer/vg3d_worker.py JSON), edges = boundary + element change + > 30 deg
+Mirrors web/hl.js: glb triangles (three axes, metres), the view's resolved hidden elements / fills / transparency (rvtballet/vg3d_worker.py JSON), edges = boundary + element change + > 30 deg
 (1 mm vertex weld, needle triangles and edges shorter than min-edge dropped) + silhouettes of smooth edges (faces front / back facing, normals oriented away from the element centre).
 Orthographic camera from the Revit view (eye, target; feet, Z up -> three x, z, -y), framed on the projected model box (tools/hl_score.py registers scale and shift, so framing does not matter).
 Faces occlude (z-buffer); faces of translucent elements do not write depth, lines behind them are drawn faint. Output: grey PNG, black lines on white."""

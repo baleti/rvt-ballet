@@ -6,7 +6,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 async def main(f, port):
     out = os.path.join(ROOT, 'screenshots', 'progress'); os.makedirs(out, exist_ok=True)
     env = dict(os.environ, RVT_NO_GEOM_CACHE='1', RVT_PARTIAL_SECS=os.environ.get('RVT_PARTIAL_SECS', '4'))
-    srv = subprocess.Popen([os.path.join(ROOT, 'rvt-viewer'), 'open', f, '--rebuild', '--no-browser', '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
+    srv = subprocess.Popen([os.path.join(ROOT, 'rvt-ballet'), 'open', f, '--rebuild', '--no-browser', '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
     cdp.wait_http('http://127.0.0.1:%d/api/models' % port, 60); b = cdp.Browser(size=(1400, 900)); await b.start(); t0 = time.time(); ok = True; seen = []; shots = 0
     try:
         await b.goto('http://127.0.0.1:%d/' % port)

@@ -2,7 +2,7 @@
 import asyncio, sys, os, subprocess, json
 sys.path.insert(0, os.path.dirname(__file__)); import cdp
 async def main(d, port):
-    srv = subprocess.Popen([os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'rvt-viewer'), 'serve', d, '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    srv = subprocess.Popen([os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'rvt-ballet'), 'serve', d, '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     cdp.wait_http('http://127.0.0.1:%d/api/models' % port); b = cdp.Browser(size=(1300, 800)); await b.start(); ok = True
     st = "JSON.stringify([...__camera.position.toArray(),...__controls.target.toArray()].map(x=>+x.toFixed(3)))"
     try:

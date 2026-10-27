@@ -3,7 +3,7 @@ usage: tools/uitest13.py MODELDIR PORT OUT"""
 import asyncio, sys, os, subprocess, json
 sys.path.insert(0, os.path.dirname(__file__)); import cdp
 async def main(model_dir, port, out):
-    srv = subprocess.Popen([os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'rvt-viewer'), 'serve', model_dir, '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    srv = subprocess.Popen([os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'rvt-ballet'), 'serve', model_dir, '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     cdp.wait_http('http://127.0.0.1:%d/api/models' % port); b = cdp.Browser(size=(1280, 720)); await b.start(); ok = True
     def chk(name, cond):
         nonlocal ok; ok &= bool(cond); print(('PASS ' if cond else 'FAIL ') + name)

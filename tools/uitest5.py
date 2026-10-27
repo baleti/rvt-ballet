@@ -2,7 +2,7 @@
 import asyncio, sys, os, subprocess, time, json
 sys.path.insert(0, os.path.dirname(__file__)); import cdp
 async def main(port, out):
-    srv = subprocess.Popen([os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'rvt-viewer'), 'serve', '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    srv = subprocess.Popen([os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'rvt-ballet'), 'serve', '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     cdp.wait_http('http://127.0.0.1:%d/api/models' % port); b = cdp.Browser(size=(1400, 850)); await b.start()
     try:
         await b.goto('http://127.0.0.1:%d/' % port); await b.wait('window.__loaded===true', 90)

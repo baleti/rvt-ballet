@@ -3,7 +3,7 @@ key = md5(file name, file size, rvt-sheets code (contents of rvtsheets/*.py), wo
 import os, json, hashlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CACHE = os.path.expanduser('~/.cache/rvt-viewer/vscene')
+CACHE = os.path.expanduser('~/.cache/rvt-ballet/vscene')
 SHEETS = os.path.expanduser(os.environ.get('RVTSHEETS', '~/src/rvt-sheets'))
 _stamp = None
 

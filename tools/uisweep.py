@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.dirname(__file__)); import cdp
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 async def one(md, port):
     mid = os.path.basename(md.rstrip('/')); out = os.path.join(ROOT, 'screenshots', 'uisweep'); os.makedirs(out, exist_ok=True); R = {'model': mid}
-    srv = subprocess.Popen([sys.executable, '-c', 'import sys; sys.path.insert(0,%r); from rvtviewer.cli import main; main(sys.argv[1:])' % ROOT, 'serve', md, '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    srv = subprocess.Popen([sys.executable, '-c', 'import sys; sys.path.insert(0,%r); from rvtballet.cli import main; main(sys.argv[1:])' % ROOT, 'serve', md, '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     cdp.wait_http('http://127.0.0.1:%d/api/models' % port, 60); b = cdp.Browser(size=(1280, 800)); await b.start()
     try:
         t = time.time(); await b.goto('http://127.0.0.1:%d/#%s' % (port, mid)); await b.wait('window.__loaded===true', 400); R['load_s'] = round(time.time() - t, 1)

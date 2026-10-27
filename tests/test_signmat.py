@@ -6,7 +6,7 @@ def test_sign():
     EM = types.ModuleType('rvt_elemmesh'); vals = iter([2 ** 64 - 4000010, 5, None, -3])
     EM._material_of = lambda *a, **k: next(vals)
     sys.modules['rvt_elemmesh'] = EM
-    from rvtviewer import build
+    from rvtballet import build
     build._sign_material_ids(); build._sign_material_ids()
     f = EM._material_of
     assert [f(), f(), f(), f()] == [-4000010, 5, None, -3]

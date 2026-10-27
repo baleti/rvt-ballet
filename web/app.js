@@ -972,7 +972,7 @@ setInterval(async () => {
     if (S.staleDismissed === S.mid) return;
     b.hidden = false; b.innerHTML = `<span title="the reader or converter changed after this model was converted; the model shown is complete">newer reader available</span> <button id="reconv">Update model</button> <button id="staleX" title="hide">&times;</button>`;
     $('#staleX').onclick = () => { S.staleDismissed = S.mid; b.hidden = true; };
-    $('#reconv').onclick = async () => { b.hidden = true; const j = await (await fetch(`/api/m/${S.mid}/reconvert`, {method: 'POST'})).json(); if (j.ok) { window.__loaded = false; const sel = $('#modelSel'); if (![...sel.options].some(o => o.value === j.id)) sel.add(new Option(S.meta.file, j.id)); sel.value = j.id; await loadModel(j.id); } else b.innerHTML = 'No source file known for this model: reopen the .rvt with rvt-viewer open.'; };
+    $('#reconv').onclick = async () => { b.hidden = true; const j = await (await fetch(`/api/m/${S.mid}/reconvert`, {method: 'POST'})).json(); if (j.ok) { window.__loaded = false; const sel = $('#modelSel'); if (![...sel.options].some(o => o.value === j.id)) sel.add(new Option(S.meta.file, j.id)); sel.value = j.id; await loadModel(j.id); } else b.innerHTML = 'No source file known for this model: reopen the .rvt with rvt-ballet open.'; };
   } catch (e) {}
 }, 20000);
 

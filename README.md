@@ -1,23 +1,23 @@
-# rvt-viewer
+# rvt-ballet
 
 Open a native Revit file (.rvt, 2020-2026) in a browser **without Revit**: orbit/pan/zoom, pick elements, inspector with stored parameters,
 model tree by category/level, search, visibility, section, measure. Pure Python backend (uses the sibling `~/rvt-research` reader), Three.js front-end, fully offline.
 
 ## Demo (one command, any .rvt / .rte)
-    ~/src/rvt-viewer/bin/rvt-view /full/path/FILE.rvt            # convert/load with the progressive "STILL PARSING" banner; app window on your CURRENT workspace, with focus
-    ~/src/rvt-viewer/bin/rvt-view /full/path/FILE.rvt --sheets   # same, opening directly on the Sheets page
-    ~/src/rvt-viewer/bin/rvt-view --prepare /full/path/A.rvt [B.rvt ...]   # demo prep: convert + cache, warm the sheets cache (rvt-sheets warm), print 'READY: <exact demo command>' and what is cached
-    ~/src/rvt-viewer/bin/rvt-view /full/path/FILE.rvt --hide Planting,Entourage   # start with categories hidden (URL ?hide=A,B)
-    alias rvt=~/src/rvt-viewer/bin/rvt-view                      # optional; ./rvt-viewer open FILE.rvt is the same command (agents: --workspace N --no-browser --port P)
+    ~/src/rvt-ballet/bin/rvt-view /full/path/FILE.rvt            # convert/load with the progressive "STILL PARSING" banner; app window on your CURRENT workspace, with focus
+    ~/src/rvt-ballet/bin/rvt-view /full/path/FILE.rvt --sheets   # same, opening directly on the Sheets page
+    ~/src/rvt-ballet/bin/rvt-view --prepare /full/path/A.rvt [B.rvt ...]   # demo prep: convert + cache, warm the sheets cache (rvt-sheets warm), print 'READY: <exact demo command>' and what is cached
+    ~/src/rvt-ballet/bin/rvt-view /full/path/FILE.rvt --hide Planting,Entourage   # start with categories hidden (URL ?hide=A,B)
+    alias rvt=~/src/rvt-ballet/bin/rvt-view                      # optional; ./rvt-ballet open FILE.rvt is the same command (agents: --workspace N --no-browser --port P)
 The toolbar has a **Sheets** button (and `drawing` links in the Views tab): it embeds the rvt-sheets page (sheet list, sheet render with viewports, click a viewport to open that view, pan/zoom) full size over the 3D view; **Model (3D)** goes back. Files without sheets say so ("This file has no sheets (N views only)"); if the optional modules are missing (`pip install shapely numba` in .venv) the button reads "Sheets (unavailable)" with the reason instead of crashing. Clicking an element in a drawing selects and frames it in 3D. `--prepare` converts and caches the model and calls `rvt-sheets warm FILE` when that command exists (until then it prints that the sheets are not pre-warmed; they render on first open). A small `model cached - sheets cached` badge next to the model selector shows what came from the caches. Plug-in interface: docs/PLUGINS.md.
 Verified end to end (tools/uitest10.py, headless; time to a usable first picture / complete model / sheets page ready): 2020 Residential (10 MB): 7.9 s / 27.9 s (Python path, before the Rust fast path) / 2 s, 4 sheets 41 views; 2024 Snowdon Structural (28 MB): 6.5 s / 57 s cold, 8.5 s / 15.5 s warm geometry / sheets page 5 s (its own progress card first), 12 sheets 104 views; 2026 Construction template (.rte): 2.4 s / 4.0 s, no sheets (39 views). With the Rust fast path the quick element table (levels + one box per element) appears within ~1-3 s of opening.
 
 ## Run
-    ./rvt-viewer open FILE.rvt            # convert (cached), serve on a free local port, open an app-mode Chromium window
-    ./rvt-viewer open FILE.rvt --no-browser --port 8800
-    ./rvt-viewer open FILE.rvt --workspace 178   # Hyprland: open silently on workspace 178
-    ./rvt-viewer convert FILE.rvt OUTDIR  # only write model.glb / meta.json / model.sqlite
-    ./rvt-viewer serve [DIR...]           # serve already converted models (default: all in ~/.cache/rvt-viewer/models)
+    ./rvt-ballet open FILE.rvt            # convert (cached), serve on a free local port, open an app-mode Chromium window
+    ./rvt-ballet open FILE.rvt --no-browser --port 8800
+    ./rvt-ballet open FILE.rvt --workspace 178   # Hyprland: open silently on workspace 178
+    ./rvt-ballet convert FILE.rvt OUTDIR  # only write model.glb / meta.json / model.sqlite
+    ./rvt-ballet serve [DIR...]           # serve already converted models (default: all in ~/.cache/rvt-ballet/models)
 Needs the venv: `python -m venv --system-site-packages .venv && .venv/bin/pip install cadquery-ocp mapbox-earcut` (aiohttp, numpy, scipy from the system).
 First conversion of a big file takes minutes (the reader decodes every record); re-opening is seconds (raw + converted caches).
 
@@ -26,7 +26,7 @@ First conversion of a big file takes minutes (the reader decodes every record); 
 * Parameter reproduction vs Revit: 96.2% exact over 8.98 M values in 60 files (docs/PARAMETERS.md), shown in the inspector Parameters heading.
 * Inspector line "reader accuracy for <class>" from the corpus acceptance table (web/fidclass.json, docs/FIDELITY-FINAL.md for 2020-2026, docs/FIDELITY-2017-2019.md for the older files); full corpus table with timings (DEMO.md, docs/SWEEP.md, docs/SPEED.md); viewer mesh vs Revit per class (docs/ORACLE-SWEEP.md, tools/oracle_sweep.py).
 * Revit navigation: Shift+middle-drag orbit, middle-drag pan, wheel zoom at cursor (tools/uitest12.py).
-* Plan / section / elevation views open in a parallel-projection look (2 degree telephoto, same framing) and sections are clipped at their stored view depth (Viewer bounded space far bound -> `views[].depth`, rvtviewer/datums.py). Hidden line draws model surface patterns (target 1, feet) as hatch lines; `materials.json` carries each material's surface / cut pattern (name, colour, grids).
+* Plan / section / elevation views open in a parallel-projection look (2 degree telephoto, same framing) and sections are clipped at their stored view depth (Viewer bounded space far bound -> `views[].depth`, rvtballet/datums.py). Hidden line draws model surface patterns (target 1, feet) as hatch lines; `materials.json` carries each material's surface / cut pattern (name, colour, grids).
 * Visual styles (header box `Style`, Revit's Visual Style menu): **Hidden line** (default: white faces, black feature and silhouette edges, faint hidden lines, view graphics / transparency / halftone from the file), Shaded, Consistent colors, Realistic (textures, shadows), Wireframe. A stored view opens in its own style (`views[].display` from the reader); `?style=realistic` or `?vs=` sets the session default. Details: web/hl.js, docs/VSTYLE-API.md.
 * Views: the stored view direction points from the target to the eye (Revit's ViewDirection), so 3D views, sections and elevations look along its negative; the cut plane keeps what lies beyond it.
 * tools/shot3d.py renders any view or Revit camera headless (`--style auto --edges --vg ID --sky --spec spec.json` for sheet 3D viewports); tools/review_shots.py makes the Revit/ours review pairs.
@@ -45,12 +45,12 @@ First conversion of a big file takes minutes (the reader decodes every record); 
 * Fit frames the visible elements; share links with `hc=` refresh the tree.
 
 ## Architecture
-    .rvt --(rvt-research reader, rvtviewer/reader.py)--> records, headers, parameters
-         --(rvtviewer/build.py + geom.py + brep.py + datums.py)--> element table, meshes per class, levels/grids/rooms/views
+    .rvt --(rvt-research reader, rvtballet/reader.py)--> records, headers, parameters
+         --(rvtballet/build.py + geom.py + brep.py + datums.py)--> element table, meshes per class, levels/grids/rooms/views
          --> model.glb   merged mesh per category (Y-up metres), per-vertex float `_EIDX` = element index, no normals (flat shading in shader)
              meta.json   columnar element table, batches (category, colour), levels, grids, rooms, views, sheets, coverage, default-hidden categories
              model.sqlite  elements + parameters (lazy inspector, parameter-value search)
-    aiohttp server (rvtviewer/server.py) <--> web/app.js (Three.js r170 vendored in web/vendor, no network needed)
+    aiohttp server (rvtballet/server.py) <--> web/app.js (Three.js r170 vendored in web/vendor, no network needed)
 Viewer details: a DataTexture holds per-element state (hidden / selected / hover / ghost / fidelity); a patched material discards/colours fragments from it,
 so show/hide/isolate/highlight on 100k elements is one texture upload. Picking renders `_EIDX` and depth to a 1x1 target (exact, O(1) per click).
 
