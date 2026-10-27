@@ -982,10 +982,24 @@ async function openPicker() {
   const lib = await (await fetch('/api/library')).json();
   const f = x => (x * 100).toFixed(0) + '%';
   el.innerHTML = `<div class="pk"><div style="display:flex;justify-content:space-between"><h3>Models</h3><button id="pkClose">close</button></div>
-  <div style="display:flex;gap:6px;margin-bottom:8px"><input id="pkPath" type="text" placeholder="open another file: /path/to/model.rvt" style="flex:1"><button id="pkOpen">Open</button></div><div id="pkErr" class="dim"></div>
+  <div style="display:flex;gap:6px;margin-bottom:8px"><input id="pkPath" type="text" placeholder="open another file: /path/to/model.rvt" style="flex:1"><button id="pkOpen">Open</button><button id="pkBrowse">Open .rvt file...</button></div><div id="pkErr" class="dim"></div><div id="pkBrowser" style="display:none;margin-bottom:8px"><div id="pkCrumbs" class="dim" style="margin-bottom:4px;word-break:break-all"></div><div id="pkList" style="max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:5px"></div></div>
   <table class="cov"><tr><th>model</th><th>MB</th><th>elements</th><th title="decoded saved-graphics mesh / B-rep plus parametric rebuilds whose extents match the stored box; NOT a claim of Revit accuracy (see ACCEPTANCE-STATUS.md for the accurate share per class)">true + matched</th><th>approx</th><th>box</th><th>converted</th><th></th></tr>` +
   lib.map(m => `<tr class="covrow" data-id="${esc(m.id)}"><td>${esc(m.file)}${m.id === S.mid ? ' <b>(open)</b>' : ''}</td><td>${m.size ? (m.size / 1e6).toFixed(0) : ''}</td><td>${m.elements}</td><td>${f(m.exact)}</td><td>${f(m.approx)}</td><td>${f(m.box)}</td><td>${m.built ? new Date(m.built * 1000).toLocaleString() : ''}</td><td>${m.stale ? '<span class="fid f-bbox" title="reader/converter changed since">stale</span>' : ''}</td></tr>`).join('') + '</table></div>';
   $('#pkClose').onclick = () => el.hidden = true;
+  const pkOpenPath = async p => { const j = await (await fetch('/api/open', {method: 'POST', body: JSON.stringify({path: p})})).json(); if (!j.ok) { $('#pkErr').textContent = j.error || 'could not open'; return; } el.hidden = true; await switchModel(j.id, j.name); };
+  const pkBrowse = async p => {
+    const j = await (await fetch('/api/browse?path=' + encodeURIComponent(p || ''))).json(), L = $('#pkList'); $('#pkBrowser').style.display = '';
+    if (j.error) { $('#pkErr').textContent = j.error; return; }
+    $('#pkErr').textContent = ''; L.innerHTML = ''; $('#pkCrumbs').textContent = j.path || 'choose a location';
+    const row = (t, fn) => { const d = document.createElement('div'); d.style.cssText = 'padding:3px 8px;cursor:pointer'; d.textContent = t; d.onmouseenter = () => d.style.background = 'var(--panel2)'; d.onmouseleave = () => d.style.background = ''; d.onclick = fn; L.append(d); };
+    if (!j.path) { for (const r of j.roots) row(r, () => pkBrowse(r)); return; }
+    row('..', () => pkBrowse(j.parent || ''));
+    const base = j.path.replace(/\/$/, '');
+    for (const d of j.dirs) row(d + '/', () => pkBrowse(base + '/' + d));
+    for (const f of j.files) row(f.name + '   ' + (f.size / 1e6).toFixed(1) + ' MB', () => pkOpenPath(base + '/' + f.name));
+    if (!j.dirs.length && !j.files.length) row('(no folders or .rvt files)', () => {});
+  };
+  $('#pkBrowse').onclick = async () => { const rs = await (await fetch('/api/browse?path=')).json(); pkBrowse(rs.roots[0]); };
   $('#pkOpen').onclick = async () => { const j = await (await fetch('/api/open', {method: 'POST', body: JSON.stringify({path: $('#pkPath').value.trim()})})).json(); if (!j.ok) { $('#pkErr').textContent = j.error || 'could not open'; return; } el.hidden = true; await switchModel(j.id, j.name); };
   el.querySelectorAll('.covrow').forEach(tr => tr.onclick = async () => { const j = await (await fetch('/api/load', {method: 'POST', body: JSON.stringify({id: tr.dataset.id})})).json(); if (j.ok) { el.hidden = true; await switchModel(j.id); } });
 }
