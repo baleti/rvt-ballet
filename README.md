@@ -1,5 +1,7 @@
 # rvt-ballet
 
+> Note: dwg-ballet / rvt-ballet are standalone apps; they are separate from the in-app add-ins autocad-ballet and revit-ballet.
+
 Open a native Revit file (.rvt, 2020-2026) in a browser **without Revit**: orbit/pan/zoom, pick elements, inspector with stored parameters,
 model tree by category/level, search, visibility, section, measure. Pure Python backend (uses the sibling `~/rvt-research` reader), Three.js front-end, fully offline.
 
