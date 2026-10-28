@@ -1,5 +1,5 @@
 """Server-side file browser for the library page (Open .rvt file...): only $HOME and mounted file systems are visible, only .rvt files are listed (directories to navigate)."""
-import os
+import os, sys
 
 REAL_FS = {'ext2', 'ext3', 'ext4', 'btrfs', 'xfs', 'f2fs', 'vfat', 'exfat', 'ntfs', 'ntfs3', 'fuseblk', 'nfs', 'nfs4', 'cifs', 'smb3', 'zfs', 'overlay'}
 EXT = ".rvt"
@@ -8,6 +8,11 @@ EXT = ".rvt"
 def roots():
     """allowed top directories: $HOME plus the mount points of real file systems (not '/', not system dirs)"""
     out = [os.path.realpath(os.path.expanduser('~'))]
+    if sys.platform == 'win32':
+        import string
+        return out + [d for d in (c + ':\\' for c in string.ascii_uppercase) if os.path.isdir(d) and not out[0].upper().startswith(d.upper())]
+    if sys.platform == 'darwin':
+        return out + [os.path.join('/Volumes', v) for v in sorted(os.listdir('/Volumes')) if os.path.isdir(os.path.join('/Volumes', v)) and not os.path.islink(os.path.join('/Volumes', v))] if os.path.isdir('/Volumes') else out
     try:
         for ln in open('/proc/mounts'):
             f = ln.split()
@@ -23,7 +28,10 @@ def roots():
 
 def allowed(p):
     p = os.path.realpath(p)
-    return any(p == r or p.startswith(r.rstrip('/') + '/') for r in roots())
+    def inside(r):
+        try: return os.path.commonpath([os.path.normcase(p), os.path.normcase(r)]) == os.path.normcase(r)
+        except ValueError: return False                  # different drives
+    return any(inside(r) for r in roots())
 
 
 def browse(path):

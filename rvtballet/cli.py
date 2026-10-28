@@ -1,6 +1,6 @@
 """rvt-ballet open FILE.rvt | convert FILE.rvt OUTDIR | serve [DIRS...]"""
 import urllib.parse, os, sys, argparse, hashlib, json, subprocess, shutil, time
-from . import reader
+from . import reader, plat
 
 def model_dir(path):
     key = hashlib.md5(('%s|%s|%s|%s' % (os.path.abspath(path), os.path.getmtime(path), os.path.getsize(path), reader.reader_stamp() + reader.viewer_stamp())).encode()).hexdigest()[:12]
@@ -66,13 +66,14 @@ def hypr_env():
 
 def open_browser(url, workspace=None, headless=False):
     prof = os.path.join(reader.CACHE_DIR, 'chromium-profile')
-    cmd = ['chromium', '--app=' + url, '--user-data-dir=' + prof, '--enable-unsafe-webgpu', '--ignore-gpu-blocklist', '--no-first-run', '--window-size=1500,950']
-    if os.environ.get('RVT_BALLET_CDP'): cmd.append('--remote-debugging-port=' + os.environ['RVT_BALLET_CDP'])
-    if workspace:
+    extra = ['--enable-unsafe-webgpu', '--ignore-gpu-blocklist']
+    if os.environ.get('RVT_BALLET_CDP'): extra.append('--remote-debugging-port=' + os.environ['RVT_BALLET_CDP'])
+    if workspace and sys.platform.startswith('linux') and shutil.which('hyprctl'):       # Hyprland placement only where it exists
         import shlex
+        cmd = plat.browser.app_command(url, prof, extra=extra) or ['chromium', '--app=' + url, '--user-data-dir=' + prof] + extra
         code = 'hl.dispatch(hl.dsp.exec_cmd(%s))' % json.dumps('[workspace %s silent] %s' % (workspace, ' '.join(shlex.quote(c) for c in cmd)))
         subprocess.run(['hyprctl', 'eval', code], env=hypr_env())
-    else: subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else: plat.browser.open_app(url, prof, extra=extra)
 
 def stale_mark(d):
     try:
@@ -138,11 +139,12 @@ def main(argv=None):
             a.files = [f for f in a.files if f not in {b[0] for b in bad}]
     if a.cmd == 'open' and a.prepare: return prepare(a.files)
     if a.cmd == 'convert':
-        if not os.environ.get('RVT_CAPPED') and not os.environ.get('RVT_NO_CAP') and shutil.which('systemd-run'):
-            # every conversion runs under a memory cap + nice (the reader can balloon on big files)
+        if not os.environ.get('RVT_CAPPED') and not os.environ.get('RVT_NO_CAP'):
+            # every conversion runs under a memory cap + low priority (the reader can balloon on big files); Job Object on Windows, systemd-run on Linux
             env = dict(os.environ, RVT_CAPPED='1')
-            os.execvpe('systemd-run', ['systemd-run', '--user', '--scope', '-q', '-p', 'MemoryMax=' + os.environ.get('RVT_MEM_CAP', '6G'), '-p', 'MemorySwapMax=0', 'nice', '-n', '10', sys.executable, '-c',
-                       "import sys; sys.path.insert(0,%r); from rvtballet.cli import main; main(sys.argv[1:])" % os.path.dirname(os.path.dirname(os.path.abspath(__file__)))] + (list(argv) if argv is not None else sys.argv[1:]), env)
+            gb = float(os.environ.get('RVT_MEM_CAP', '6G').rstrip('GgMm') or 6) / (1024 if os.environ.get('RVT_MEM_CAP', '6G')[-1:] in 'Mm' else 1)
+            p = plat.proc.popen_capped([sys.executable, '-c', "import sys; sys.path.insert(0,%r); from rvtballet.cli import main; main(sys.argv[1:])" % os.path.dirname(os.path.dirname(os.path.abspath(__file__)))] + (list(argv) if argv is not None else sys.argv[1:]), mem_gb=gb, env=env)
+            sys.exit(p.wait())
         from . import build
         out = a.out or model_dir(a.file)
         try: build.convert(a.file, out)
