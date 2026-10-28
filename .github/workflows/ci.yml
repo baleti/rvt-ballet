@@ -1,0 +1,23 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install aiohttp numpy scipy olefile pillow shapely mapbox-earcut matplotlib fonttools pytest
+      # synthetic geometry unit tests only (no Autodesk samples in CI); the app must at least import on every OS
+      - run: python -m pytest -q tests/test_geom.py
+      - run: python -c "import rvtballet.plat, rvtballet.filebrowse, rvtballet.cli; print('imports ok')"
+  installer-windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "installer build needs the reader and sheets checkouts (private); built locally via packaging/build_windows_rvt.ps1"
