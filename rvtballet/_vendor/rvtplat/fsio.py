@@ -9,7 +9,7 @@ Windows specifics handled here:
   * OneDrive/Dropbox placeholders: the destination is replaced, never opened for in-place update.
 Data is flushed and fsync'ed before the rename, and the directory is fsync'ed on POSIX, so a crash or
 power loss leaves either the old or the new file, never a torn one."""
-import os, sys, time, stat, tempfile, errno
+import os, random, sys, time, stat, tempfile, errno
 
 _WIN = sys.platform == 'win32'
 # Windows sharing/permission errors that mean "somebody else has it open right now"
@@ -35,8 +35,8 @@ def _busy(e):
     return (w in _WIN_BUSY) or (e.errno in (errno.EACCES, errno.EBUSY, errno.EPERM) and _WIN)
 
 
-def replace_retry(src, dst, tries=12, delay=0.02, max_delay=0.5, clear_readonly=False, _sleep=time.sleep):
-    """os.replace with backoff on Windows-style sharing violations (about 3 s total at the defaults)"""
+def replace_retry(src, dst, tries=30, delay=0.02, max_delay=0.5, clear_readonly=False, _sleep=time.sleep):
+    """os.replace with jittered backoff on Windows-style sharing violations (about 12 s total at the defaults; 12 tries / 3 s was exhausted by 8 concurrent writers on a slow Windows VM)"""
     src, dst = long_path(src), long_path(dst)
     d = delay
     for i in range(tries):
@@ -51,7 +51,7 @@ def replace_retry(src, dst, tries=12, delay=0.02, max_delay=0.5, clear_readonly=
                     os.chmod(dst, os.stat(dst).st_mode | stat.S_IWRITE)
                 except OSError:
                     pass
-            _sleep(d)
+            _sleep(d * (0.5 + random.random()))
             d = min(d * 2, max_delay)
 
 
