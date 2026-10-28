@@ -16,6 +16,9 @@ if (-not (Test-Path $py)) {
   & "$py\python.exe" (Join-Path $dist 'get-pip.py') --no-warn-script-location
 }
 & "$py\python.exe" -m pip install --no-warn-script-location -r (Join-Path $dist 'requirements.txt')
+# optional native fast path: put rvt_core-*.whl (CI or VM build) into dist\wheels and it is installed too
+$wh = Join-Path $dist 'wheels'
+if (Test-Path $wh) { & "$py\python.exe" -m pip install --no-warn-script-location --no-deps (Get-ChildItem $wh -Filter *.whl).FullName }
 $iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
 if (-not $iscc) { $iscc = "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" }
 & $iscc "$PSScriptRoot\rvt-ballet.iss"
