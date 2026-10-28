@@ -7,10 +7,10 @@ per category / element. The drawing code is rvt-sheets (run in its own venv, one
   GET|PUT /api/vc/presets                        -> saved control presets (~/.config/rvt-ballet/vctl-presets.json)"""
 import os, sys, json, hashlib, asyncio, subprocess, threading, time
 from aiohttp import web
-from . import vcache
+from . import vcache, plat
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SHEETS_PY = os.environ.get('RVT_SHEETS_PY', os.path.expanduser('~/src/rvt-sheets/.venv/bin/python'))
+SHEETS_PY = plat.sheets_py()
 CACHE = vcache.CACHE
 PRESETS = os.path.expanduser('~/.config/rvt-ballet/vctl-presets.json')
 IDLE = 600
@@ -22,7 +22,7 @@ class Proc:
         self.path = path; self.p = None; self.lock = threading.Lock(); self.last = time.time(); self.key = None
 
     def _start(self):
-        cmd = ['systemd-run', '--user', '--scope', '-q', '-p', 'MemoryMax=4G', '-p', 'MemorySwapMax=0', 'nice', '-n', '10', SHEETS_PY, os.path.join(HERE, 'vscene_worker.py'), self.path]
+        cmd = plat.proc.capped_argv([SHEETS_PY, os.path.join(HERE, 'vscene_worker.py'), self.path], mem_gb=4)
         self.p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
         r = json.loads(self.p.stdout.readline()); self.key = r.get('key')
 

@@ -1,10 +1,10 @@
 """GET /api/m/{mid}/vg3d/{vid} -> resolved graphics of a view for the 3D hidden-line style (see vg3d_worker.py). Cached per source file + view; computed by a one-shot rvt-sheets process."""
 import os, sys, json, hashlib, asyncio, subprocess
 from aiohttp import web
-from . import vcache
+from . import vcache, plat
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SHEETS_PY = os.environ.get('RVT_SHEETS_PY', os.path.expanduser('~/src/rvt-sheets/.venv/bin/python'))
+SHEETS_PY = plat.sheets_py()
 VER = 2 + 1
 
 
@@ -21,7 +21,7 @@ def register(app, ctx):
             lk = locks.setdefault(key, asyncio.Lock())
             async with lk:
                 if not os.path.exists(fn):
-                    cmd = ['systemd-run', '--user', '--scope', '-q', '-p', 'MemoryMax=4G', '-p', 'MemorySwapMax=0', 'nice', '-n', '10', SHEETS_PY, os.path.join(HERE, 'vg3d_worker.py'), src, vid]
+                    cmd = plat.proc.capped_argv([SHEETS_PY, os.path.join(HERE, 'vg3d_worker.py'), src, vid], mem_gb=4)
                     p = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
                     out, err = await p.communicate()
                     if p.returncode != 0: return web.json_response({'error': err.decode()[-400:]}, status=500)
@@ -37,7 +37,7 @@ def register(app, ctx):
             lk = locks.setdefault(key, asyncio.Lock())
             async with lk:
                 if not os.path.exists(fn):
-                    cmd = ['systemd-run', '--user', '--scope', '-q', '-p', 'MemoryMax=4G', '-p', 'MemorySwapMax=0', 'nice', '-n', '10', SHEETS_PY, os.path.join(HERE, 'datums3d_worker.py'), src]
+                    cmd = plat.proc.capped_argv([SHEETS_PY, os.path.join(HERE, 'datums3d_worker.py'), src], mem_gb=4)
                     p = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
                     out, err = await p.communicate()
                     if p.returncode != 0: return web.json_response({'error': err.decode()[-400:]}, status=500)
