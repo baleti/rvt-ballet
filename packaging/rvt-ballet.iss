@@ -17,6 +17,8 @@ UninstallDisplayName={#AppName}
 [Files]
 Source: "..\dist\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs createallsubdirs
 Source: "..\dist\python\*"; DestDir: "{app}\python"; Flags: recursesubdirs createallsubdirs
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
 [Icons]
 Name: "{userprograms}\{#AppName}"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m rvtballet serve"; WorkingDir: "{app}\app"
 [Registry]
