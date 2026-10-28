@@ -4,7 +4,7 @@ Override the reader location with RVT_READER_DIR."""
 import os, sys, pickle, hashlib, time
 from . import plat
 
-READER_DIR = os.environ.get('RVT_READER_DIR', os.path.expanduser('~/rvt-research'))
+READER_DIR = os.environ.get('RVT_READER_DIR') or plat.paths.reader_dir(os.path.dirname(os.path.abspath(__file__))) or os.path.expanduser('~/rvt-research')
 CACHE_DIR = os.environ.get('RVT_BALLET_CACHE', plat.dirs.cache_dir('rvt-ballet'))
 
 def _import():

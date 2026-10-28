@@ -1,7 +1,7 @@
 """rvt -> cache: model.glb (batched by category, per-vertex element index), meta.json (tree, levels, grids, ...), model.sqlite (elements + parameters)."""
 import os, sys, json, time, math, sqlite3, hashlib, colorsys, collections
 import numpy as np
-from . import reader, geom, glb
+from . import reader, geom, glb, plat
 from .geom import Mesh
 
 FID_ORDER = ['solid', 'mesh', 'matched', 'param', 'approx', 'bbox', 'line', 'void', 'none']      # honesty ladder shown in the UI
@@ -816,6 +816,7 @@ _GUARD_GB = [2.5]
 
 def _guarded(fn, *a, extra_gb=None):
     """call fn with the address space capped at (current + extra_gb): a runaway reader decode of one element raises MemoryError (-> None) instead of getting the whole process OOM-killed"""
+    if not sys.platform.startswith('linux'): return fn(*a)                  # RLIMIT_AS guard is Linux only; other systems rely on the process cap (Job Object)
     import resource
     extra_gb = _GUARD_GB[0] if extra_gb is None else extra_gb
     cur = int(open('/proc/self/statm').read().split()[0]) * resource.getpagesize(); old = resource.getrlimit(resource.RLIMIT_AS)
@@ -852,7 +853,8 @@ def topology_check(a, P):
         import rvt_mesh as RM
         import signal
         def _to(sig, frm): raise TimeoutError()
-        old = signal.signal(signal.SIGALRM, _to); signal.setitimer(signal.ITIMER_REAL, 3.0)
+        _alarm = hasattr(signal, 'SIGALRM')                          # no SIGALRM on Windows: the 3 s time box is skipped there
+        if _alarm: old = signal.signal(signal.SIGALRM, _to); signal.setitimer(signal.ITIMER_REAL, 3.0)
         VF = fast_module(); rv = getattr(VF, 'refined_volume', None) if VF is not None else None          # Rust drop-in (same result to 1e-9, ~50x faster) when available
         try:
             try: v_, closed, area_ref = (rv or RM.refined_volume)(a['tris_raw'], a['meta_raw'], fid=a.get('fid'))[:3]
@@ -862,7 +864,8 @@ def topology_check(a, P):
                 _note_rust_issue('refined_volume', ex_)
                 try: v_, closed, area_ref = RM.refined_volume(a['tris_raw'], a['meta_raw'], fid=a.get('fid'))[:3]
                 except Exception as ex2_: _dump_refined_fail(a, ex2_); raise
-        finally: signal.setitimer(signal.ITIMER_REAL, 0); signal.signal(signal.SIGALRM, old)
+        finally:
+            if _alarm: signal.setitimer(signal.ITIMER_REAL, 0); signal.signal(signal.SIGALRM, old)
         T = P.reshape(-1, 3, 3); area = float(np.linalg.norm(np.cross(T[:, 1] - T[:, 0], T[:, 2] - T[:, 0]), axis=1).sum() / 2)
         return ((0.6 <= area / area_ref <= 1.5) if area_ref > 1e-9 else True), area, float(area_ref)      # tolerance is wide on purpose: the analytic area omits some caps (duct fittings read 1.1-1.3 with correct meshes); the torus reads 1.6, facade members up to 3.3
     except Exception: return None
@@ -1123,10 +1126,11 @@ def _prefetch_chunk(ids):
 def _mesh_workers():
     """forked mesh workers: <= 6, bounded by the cgroup memory limit minus what the parent already holds (each worker grows by up to ~1 GB on big files)"""
     n = max(1, min(6, (os.cpu_count() or 2) - 1))
+    import multiprocessing as mp
+    if 'fork' not in mp.get_all_start_methods(): return 1     # workers share the decoded model by fork (not on Windows): sequential there
     try:
-        cg = open('/proc/self/cgroup').read().strip().split('::')[-1]; lim = open('/sys/fs/cgroup%s/memory.max' % cg).read().strip()
-        rss = int(open('/proc/self/statm').read().split()[1]) * 4096 / 2 ** 30
-        if lim != 'max': n = max(1, min(n, int((int(lim) / 2 ** 30 - rss - 0.7) / 1.0)))
+        lim = plat.mem.cgroup_limit_bytes()
+        if lim: n = max(1, min(n, int((lim / 2 ** 30 - plat.mem.rss_bytes() / 2 ** 30 - 0.7) / 1.0)))
     except Exception: pass
     return int(os.environ.get('RVT_WORKERS', n))
 
@@ -1178,8 +1182,8 @@ def prefetch_reader_meshes(ctx, els, prog=None, on_partial=None):
     else:
         import multiprocessing as mp
         try:                                                  # per-worker address-space allowance so that nw workers together stay inside the memory cap
-            cg = open('/proc/self/cgroup').read().strip().split('::')[-1]; lim = open('/sys/fs/cgroup%s/memory.max' % cg).read().strip()
-            if lim != 'max': _GUARD_GB[0] = max(0.6, min(2.5, (int(lim) / 2 ** 30 - int(open('/proc/self/statm').read().split()[1]) * 4096 / 2 ** 30 - 0.7) / nw * 0.8))
+            lim = plat.mem.cgroup_limit_bytes()
+            if lim: _GUARD_GB[0] = max(0.6, min(2.5, (lim / 2 ** 30 - plat.mem.rss_bytes() / 2 ** 30 - 0.7) / nw * 0.8))
         except Exception: pass
         _PF['ctx'] = ctx; chunk = 12; parts = [todo[k:k + chunk] for k in range(0, total, chunk)]
         with mp.get_context('fork').Pool(nw) as pool:
@@ -1326,6 +1330,7 @@ def _rss_note():
     """' (rss X.X GB, peak Y.Y GB)' of this process when RVT_LOG_RSS is set"""
     if not os.environ.get('RVT_LOG_RSS'): return ''
     try:
+        if not sys.platform.startswith('linux'): return ' (rss %.2f GB)' % (plat.mem.rss_bytes() / 2 ** 30)
         st = dict(l.split(':', 1) for l in open('/proc/self/status') if l.startswith(('VmRSS', 'VmHWM')))
         return ' (rss %.2f GB, peak %.2f GB)' % (int(st['VmRSS'].split()[0]) / 2 ** 20, int(st['VmHWM'].split()[0]) / 2 ** 20)
     except Exception: return ''
@@ -1361,13 +1366,13 @@ class Progress:
             import glob
             try:                                       # only this input's progress file (rvt_fast.file_key), not a glob of the whole directory every second
                 RF = _rf(); k = RF.file_key(self.src) if RF is not None and hasattr(RF, 'file_key') else None
-                f = os.path.expanduser('~/.cache/rvt-progress/%s.json' % k) if k else None
+                f = os.path.join(plat.dirs.cache_dir('rvt-progress'), '%s.json' % k) if k else None
                 if f and os.path.exists(f) and time.time() - os.path.getmtime(f) <= 600:
                     d = json.load(open(f))
                     if os.path.abspath(str(d.get('file') or d.get('path') or d.get('input') or '')) == os.path.abspath(self.src): return d
                 if f: return None
             except Exception: pass
-            for f in glob.glob(os.path.expanduser('~/.cache/rvt-progress/*.json')):
+            for f in glob.glob(os.path.join(plat.dirs.cache_dir('rvt-progress'), '*.json')):
                 if time.time() - os.path.getmtime(f) > 600: continue
                 d = json.load(open(f))
                 if os.path.abspath(str(d.get('file') or d.get('path') or d.get('input') or '')) == os.path.abspath(self.src): return d

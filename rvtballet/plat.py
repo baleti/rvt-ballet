@@ -16,3 +16,7 @@ def sheets_py():
             p = os.path.join(sd, ".venv", *rel)
             if os.path.isfile(p): return p
     return sys.executable
+
+
+# sibling projects (Rust fast path, sheets renderer) importable wherever they are installed; no-op when already on sys.path
+paths.add_to_path(paths.core_py_dir(os.path.dirname(os.path.abspath(__file__))), paths.sheets_dir(os.path.dirname(os.path.abspath(__file__))))
