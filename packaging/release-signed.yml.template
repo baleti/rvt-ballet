@@ -1,0 +1,36 @@
+# TEMPLATE, inactive until SignPath Foundation approves the application (see project memory project_signpath_application).
+# To enable: copy to .github/workflows/release.yml, set repository variable SIGNPATH_ORG_ID and secret SIGNPATH_API_TOKEN,
+# create project "rvt-ballet" (or "rvt-ballet") with artifact configuration "installer" (an exe) and signing policy "release-signing" (manual approval).
+name: release
+on:
+  push:
+    tags: ['v*']
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      artifact-id: ${{ steps.up.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: choco install innosetup -y --no-progress
+      - run: powershell -ExecutionPolicy Bypass -File packaging/build_windows_rvt.ps1
+      - id: up
+        uses: actions/upload-artifact@v4
+        with: {name: installer-unsigned, path: dist/*-setup-*.exe}
+  sign:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORG_ID }}
+          project-slug: rvt-ballet
+          signing-policy-slug: release-signing
+          github-artifact-id: ${{ needs.build.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+      - uses: actions/upload-artifact@v4
+        with: {name: installer-signed, path: signed/*.exe}
