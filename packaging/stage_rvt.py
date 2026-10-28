@@ -46,6 +46,7 @@ def main():
         if not b.startswith(SKIP_JSON) and os.path.getsize(f) < 20 * 2 ** 20 and not b.startswith(('PARAM_', 'HANDOFF', 'FID_')): shutil.copy2(f, app)
     if core:
         for f in glob.glob(os.path.join(core, '*.py')) + glob.glob(os.path.join(core, '*.pyd')) + glob.glob(os.path.join(core, '*.so')): shutil.copy2(f, app)
+    shutil.copy2(os.path.join(ROOT, 'packaging', 'requirements-rvt.txt'), os.path.join(a.out, 'requirements.txt'))
     n = sum(len(fs) for _, _, fs in os.walk(app)); sz = sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(app) for f in fs)
     print('staged %d files, %.1f MB into %s' % (n, sz / 2 ** 20, app))
 

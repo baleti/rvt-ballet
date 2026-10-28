@@ -1,0 +1,13 @@
+aiohttp
+numpy
+scipy
+olefile
+pillow
+shapely
+mapbox-earcut
+matplotlib
+fonttools
+numba
+cadquery-ocp
+pypdf
+# optional Rust fast path: pip install rvt_core (wheel from the rvt-core CI); the pure-Python reader is the fallback
