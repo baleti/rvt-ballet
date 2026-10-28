@@ -20,3 +20,6 @@ def sheets_py():
 
 # sibling projects (Rust fast path, sheets renderer) importable wherever they are installed; no-op when already on sys.path
 paths.add_to_path(paths.core_py_dir(os.path.dirname(os.path.abspath(__file__))), paths.sheets_dir(os.path.dirname(os.path.abspath(__file__))))
+
+if not sys.platform.startswith("linux"):       # native cache location for the Rust fast path (rvt_fast.py hardcodes ~/.cache otherwise)
+    os.environ.setdefault("RVT_CORE_CACHE", dirs.cache_dir("rvt-core"))
