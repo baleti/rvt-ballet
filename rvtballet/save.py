@@ -19,7 +19,7 @@ def _import():
 class SaveSessions:
     """one savegate Doc per model id, opened lazily from the source .rvt (fingerprint taken at first use = load time)"""
     def __init__(self, cfg=None):
-        self.docs = {}; self.ed = {}; self._cfg = cfg
+        self.docs = {}; self.ed = {}; self.busy = set(); self._cfg = cfg
     @property
     def cfg(self):
         """Config(allow_overwrite from env RVTBALLET_ALLOW_OVERWRITE=1; the oracle gate stays on)"""

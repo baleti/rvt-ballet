@@ -151,7 +151,10 @@ def make_app(models):
         if not saves.available: return web.json_response({'ok': False, 'code': 'unavailable', 'error': 'savegate is not installed'}, status=501)
         try:
             if need_dest: savemod.check_dest(dest, src)
-            return web.json_response(await asyncio.get_event_loop().run_in_executor(None, lambda: fn(saves, mid, src, body)))
+            if mid in saves.busy: return web.json_response({'ok': False, 'code': 'locked', 'error': 'another save of this model is in progress'}, status=423)
+            saves.busy.add(mid)
+            try: return web.json_response(await asyncio.get_event_loop().run_in_executor(None, lambda: fn(saves, mid, src, body)))
+            finally: saves.busy.discard(mid)
         except Exception as e:
             st, code = savemod.error_status(e)
             return web.json_response({'ok': False, 'code': code, 'error': str(e), 'report': getattr(e, 'report', None)}, status=st)
@@ -187,6 +190,7 @@ def make_app(models):
     app.router.add_get('/api/m/{mid}/backups', backups); app.router.add_post('/api/m/{mid}/restore', restore); app.router.add_get('/api/recover', recover)
     async def edit_add(req):
         mid, d = mdir(req); src = PluginContext(models).source_path(mid)
+        if mid in saves.busy: return web.json_response({'ok': False, 'code': 'locked', 'error': 'a save of this model is in progress'}, status=423)
         try: body = await req.json()
         except Exception: raise web.HTTPBadRequest(text='JSON edit op required')
         if not saves.available or not src: return web.json_response({'ok': False, 'code': 'unavailable', 'error': 'saving is not available'}, status=501)
@@ -195,6 +199,7 @@ def make_app(models):
             st, code = savemod.error_status(e); return web.json_response({'ok': False, 'code': code, 'error': str(e)}, status=st)
     async def edit_undo(req):
         mid, d = mdir(req)
+        if mid in saves.busy: return web.json_response({'ok': False, 'code': 'locked', 'error': 'a save of this model is in progress'}, status=423)
         try: op = saves.edits(mid).undo()
         except Exception as e:
             st, code = savemod.error_status(e); return web.json_response({'ok': False, 'code': code, 'error': str(e)}, status=st)
