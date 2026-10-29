@@ -9,7 +9,7 @@ Windows specifics handled here:
   * OneDrive/Dropbox placeholders: the destination is replaced, never opened for in-place update.
 Data is flushed and fsync'ed before the rename, and the directory is fsync'ed on POSIX, so a crash or
 power loss leaves either the old or the new file, never a torn one."""
-import os, random, sys, time, stat, tempfile, errno
+import os, sys, random, time, stat, tempfile, errno
 
 _WIN = sys.platform == 'win32'
 # Windows sharing/permission errors that mean "somebody else has it open right now"
@@ -55,13 +55,26 @@ def replace_retry(src, dst, tries=30, delay=0.02, max_delay=0.5, clear_readonly=
             d = min(d * 2, max_delay)
 
 
+def full_fsync(fd):
+    """fsync that really reaches the disk: on macOS os.fsync only hands the data to the drive, whose cache can still lose it on power
+    failure; F_FULLFSYNC asks the drive to flush. Falls back to os.fsync where it is unavailable (network file systems refuse it)."""
+    if sys.platform == 'darwin':
+        try:
+            import fcntl
+            fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
+            return
+        except (ImportError, AttributeError, OSError):
+            pass
+    os.fsync(fd)
+
+
 def _fsync_dir(path):
     if _WIN:
         return
     try:
         fd = os.open(path or '.', os.O_RDONLY)
         try:
-            os.fsync(fd)
+            full_fsync(fd)
         finally:
             os.close(fd)
     except OSError:
@@ -85,7 +98,7 @@ def atomic_write(path, data, mode=None, encoding='utf-8', newline=None, clear_re
             f.write(data)
             f.flush()
             if fsync:
-                os.fsync(f.fileno())
+                full_fsync(f.fileno())
         if mode is not None:
             os.chmod(tmp, mode)
         elif os.path.exists(long_path(path)):
@@ -124,7 +137,7 @@ def atomic_write_stream(path, writer, clear_readonly=False, fsync=True):
             writer(f)
             f.flush()
             if fsync:
-                os.fsync(f.fileno())
+                full_fsync(f.fileno())
         replace_retry(tmp, path, clear_readonly=clear_readonly)
     except BaseException:
         try:
