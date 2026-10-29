@@ -9,7 +9,7 @@ export function describeResult(j) {
 export function describeError(j, status) {
   const code = (j && j.code) || 'error';
   const head = { conflict: 'The file changed on disk since it was loaded.', gate_closed: 'Overwrite is not enabled for this Revit version (oracle test matrix not green). Use SAVE AS.',
-    overwrite_disabled: 'Overwrite is disabled in the configuration. Use SAVE AS.', exists: 'The destination already exists.', bad_dest: 'The destination path is not usable.', output_unreadable: 'The edited file could not be read back, so it was not saved. The original is untouched.', locked: 'Another process is saving this file.',
+    overwrite_disabled: 'Overwrite is disabled in the configuration. Use SAVE AS.', exists: 'The destination already exists.', bad_dest: 'The destination path is not usable.', too_big: 'Not enough memory to save this file safely.', output_unreadable: 'The edited file could not be read back, so it was not saved. The original is untouched.', locked: 'Another process is saving this file.',
     verify_failed: 'Verification failed: the output differs from the source outside the declared edit. Nothing was written; the original is untouched.',
     unsupported_version: 'This Revit version cannot be saved.', disk_error: 'Disk error: nothing was written.', unavailable: 'Saving is not available (savegate missing).', no_source: 'The source file of this model is not available.' }[code] || `Save failed (HTTP ${status}).`;
   const lines = [head];

@@ -32,6 +32,19 @@ def _cached_adapter():
     return CachedRvtAdapter
 
 
+class TooBig(Exception):
+    """not enough memory budget to hold source + output + snapshots (measured ~8x the file size)"""
+
+
+def check_memory(path):
+    from ._vendor.rvtplat import mem
+    factor = float(os.environ.get('RVTBALLET_SAVE_MEM_FACTOR', '9'))
+    need = os.path.getsize(path) * factor; budget = mem.limit_gb(0.7) * 2 ** 30 - mem.rss_bytes()
+    if need > budget:
+        raise TooBig('saving this %.0f MB file needs about %.1f GB of memory but only %.1f GB is available to the viewer (raise RVTPLAT_MEM_GB or close other programs)'
+                     % (os.path.getsize(path) / 2 ** 20, need / 2 ** 30, max(budget, 0) / 2 ** 30))
+
+
 class SaveSessions:
     """one savegate Doc per model id, opened lazily from the source .rvt (fingerprint taken at first use = load time)"""
     def __init__(self, cfg=None):
@@ -49,6 +62,7 @@ class SaveSessions:
         if sg is None: raise RuntimeError('savegate is not installed')
         d = self.docs.get(mid)
         if d is None or d.path != os.path.abspath(src):
+            check_memory(src)
             from savegate import rvt_elements
             d = sg.open_doc(src, _cached_adapter()(elements_fn=rvt_elements.elements), cfg=self.cfg)      # element-level verify
             if d.version == '?':          # an explicit adapter skips pick_adapter's refusal of non-Revit bytes
@@ -88,7 +102,7 @@ def error_status(exc):
     n = type(exc).__name__
     return {'Conflict': (409, 'conflict'), 'GateClosed': (409, 'gate_closed'), 'OverwriteDisabled': (409, 'overwrite_disabled'),
             'Exists': (409, 'exists'), 'Locked': (423, 'locked'), 'VerifyFailed': (422, 'verify_failed'),
-            'EditError': (400, 'edit_error'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
+            'EditError': (400, 'edit_error'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
 
 
 def result_json(r):
