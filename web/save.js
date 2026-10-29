@@ -17,6 +17,7 @@ export function describeError(j, status) {
   const d = j && j.report && j.report.unexpected; if (Array.isArray(d) && d.length) lines.push(`${j.report.n_unexpected} differences, first: ` + d.slice(0, 5).map(x => x.join(' ')).join('; '));
   return lines;
 }
+export function describeBackup(b) { return `#${b.n}  ${b.mtime}  ${b.size} bytes  ${b.name}`; }
 export function actions(info) {   // which buttons are enabled and why not
   const a = { saveas: { on: !!(info && info.open), why: info && info.open ? '' : (info && info.error) || 'saving unavailable for this model' } };
   a.save = { on: !!(info && info.open && info.allow_overwrite && info.gate_open), why: '' };
@@ -27,13 +28,13 @@ export function actions(info) {   // which buttons are enabled and why not
 export function initSave($, getMid) {
   const top = document.getElementById('top'); const sp = top.querySelector('.sp');
   const mk = (id, txt) => { const b = document.createElement('button'); b.id = id; b.textContent = txt; b.disabled = true; top.insertBefore(b, sp.nextSibling); return b; };
-  const bOver = mk('bSaveOver', 'Save'), bAs = mk('bSaveAs', 'Save as');
+  const bBk = mk('bBackups', 'Backups'), bOver = mk('bSaveOver', 'Save'), bAs = mk('bSaveAs', 'Save as');
   const panel = document.createElement('div'); panel.id = 'savepanel'; panel.hidden = true; document.body.appendChild(panel);
   const show = (lines, bad, extra) => { panel.replaceChildren(); panel.className = bad ? 'bad' : 'ok'; lines.forEach(l => { const d = document.createElement('div'); d.textContent = l; panel.appendChild(d); }); if (extra) panel.appendChild(extra); const x = document.createElement('button'); x.textContent = 'close'; x.onclick = () => { panel.hidden = true; }; panel.appendChild(x); panel.hidden = false; };
   const post = async (path, body) => { const r = await fetch(`/api/m/${getMid()}/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); let j = null; try { j = await r.json(); } catch (e) {} return [r, j]; };
   async function refresh() {
     const mid = getMid(); if (!mid) return; let info = null; try { info = await (await fetch(`/api/m/${mid}/saveinfo`)).json(); } catch (e) {}
-    const a = actions(info); bAs.disabled = !a.saveas.on; bAs.title = a.saveas.on ? 'Save a copy under a new name (never touches the original)' : a.saveas.why;
+    const a = actions(info); bBk.disabled = !a.saveas.on; bAs.disabled = !a.saveas.on; bAs.title = a.saveas.on ? 'Save a copy under a new name (never touches the original)' : a.saveas.why;
     bOver.disabled = !a.save.on; bOver.title = a.save.on ? 'Overwrite the source file (a backup is kept)' : a.save.why;
   }
   async function doSave(path, body, force) {
@@ -46,6 +47,15 @@ export function initSave($, getMid) {
     }
     show(describeError(j, r.status), true);
   }
+  bBk.onclick = async () => {
+    const bl = await (await fetch(`/api/m/${getMid()}/backups`)).json(); const box = document.createElement('div');
+    if (!bl.length) { show(['No backups exist for this file yet (one is made before every overwrite).'], false); return; }
+    bl.forEach(b => { const r = document.createElement('div'); r.textContent = describeBackup(b) + ' '; const x = document.createElement('button'); x.textContent = 'Restore';
+      x.onclick = async () => { if (!confirm(`Restore backup #${b.n} over the current file? The current file is backed up first.`)) return;
+        const [rr, j] = await post('restore', { n: b.n, confirm: true }); show(rr.ok && j && j.ok ? [`Restored backup #${b.n}: ${j.size} bytes, sha256 ${j.sha256}...`, 'Reload the page to see the restored content.'] : describeError(j, rr.status), !(rr.ok && j && j.ok)); refresh(); };
+      r.appendChild(x); box.appendChild(r); });
+    show(['Backups (newest first):'], false, box);
+  };
   bAs.onclick = async () => { const dest = prompt('Save as (full path of the new .rvt):'); if (dest) doSave('saveas', { dest }); };
   bOver.onclick = () => { if (confirm('Overwrite the source file? A backup of the original is kept.')) doSave('save', {}); };
   return { refresh };
