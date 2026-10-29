@@ -16,6 +16,22 @@ def _import():
                 pass
     return None
 
+def _cached_adapter():
+    """RvtAdapter whose snapshot() is memoised by content hash (last 3 buffers): the source dump (~14 s on a 5.6k-element file) is taken once per loaded
+    file instead of at every save; the output of a save is cached too, so after SAVE (overwrite) the new loaded bytes cost nothing."""
+    import hashlib
+    from savegate.adapters import RvtAdapter
+    class CachedRvtAdapter(RvtAdapter):
+        def __init__(self, *a, **k): super().__init__(*a, **k); self._memo = []
+        def snapshot(self, buf):
+            key = hashlib.sha256(buf).digest()
+            for k, snap, keys in self._memo:
+                if k == key: self._keys = set(keys); return dict(snap)
+            snap = super().snapshot(buf); self._memo = ([(key, dict(snap), set(self._keys))] + self._memo)[:3]
+            return snap
+    return CachedRvtAdapter
+
+
 class SaveSessions:
     """one savegate Doc per model id, opened lazily from the source .rvt (fingerprint taken at first use = load time)"""
     def __init__(self, cfg=None):
@@ -33,9 +49,8 @@ class SaveSessions:
         if sg is None: raise RuntimeError('savegate is not installed')
         d = self.docs.get(mid)
         if d is None or d.path != os.path.abspath(src):
-            from savegate.adapters import RvtAdapter
             from savegate import rvt_elements
-            d = sg.open_doc(src, RvtAdapter(elements_fn=rvt_elements.elements), cfg=self.cfg)      # element-level verify
+            d = sg.open_doc(src, _cached_adapter()(elements_fn=rvt_elements.elements), cfg=self.cfg)      # element-level verify
             if d.version == '?':          # an explicit adapter skips pick_adapter's refusal of non-Revit bytes
                 d.close(); raise sg.UnsupportedVersion('%s is not a Revit file (unknown format, nothing can be saved)' % os.path.basename(src))
             self.docs[mid] = d
