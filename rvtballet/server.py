@@ -153,7 +153,7 @@ def make_app(models):
             return web.json_response(await asyncio.get_event_loop().run_in_executor(None, lambda: fn(saves, mid, src, body)))
         except Exception as e:
             st, code = savemod.error_status(e)
-            return web.json_response({'ok': False, 'code': code, 'error': str(e)}, status=st)
+            return web.json_response({'ok': False, 'code': code, 'error': str(e), 'report': getattr(e, 'report', None)}, status=st)
     async def save_as(req):
         return await save_common(req, lambda ss, mid, src, b: savemod.save_as(ss, mid, src, b['dest'], bool(b.get('overwrite'))), True)
     async def save_over(req):

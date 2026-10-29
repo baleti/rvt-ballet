@@ -74,3 +74,6 @@ body.hlstyle .lbl.room{background:none;color:#444}
 body.hlstyle .lbl.lvl::before{content:'';display:inline-block;width:9px;height:9px;margin-right:4px;vertical-align:-1px;border:1.5px solid #111;border-radius:50%;background:linear-gradient(90deg,#111 50%,#fff 50%)}      /* level head symbol */
 
 #cmdbar{position:absolute;left:8px;bottom:34px;width:min(620px,calc(100% - 16px));box-sizing:border-box;height:30px;border:1px solid var(--line);border-radius:8px;z-index:4;font-size:12px;opacity:.94}#cmdbar:focus-within{opacity:1;border-color:var(--acc)}#cmdOut{color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%}
+
+#savepanel{position:fixed;right:12px;top:48px;z-index:50;max-width:520px;padding:10px 12px;border-radius:6px;background:var(--panel,#222);color:var(--fg,#eee);border:2px solid #4a4;font:12px/1.5 monospace;word-break:break-all}
+#savepanel.bad{border-color:#d44}#savepanel button{margin:6px 6px 0 0}

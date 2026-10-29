@@ -7,6 +7,7 @@ import {soilQuads} from '/soilquads.js';
 import {buildCutGroups as buildCutGroups0, scaleGrid, viewScaleN, MAX_GRIDS} from '/cutpattern.js';
 import {patternTexture, paletteTexture, imageTextures, CLASSES as TEXCLASSES} from '/materials.js';
 import {cutSegments as cutSegs} from '/cutsegs.js';
+import {initSave} from '/save.js';
 import {elevGridLines, drawsGridsAsVertical} from '/elevgrids.js';
 
 const $ = s => document.querySelector(s);
@@ -304,6 +305,7 @@ async function loadModel(mid, opts = {}) {
     await sleep(700);
   }
   $('#progress').hidden = true;
+  if (!window.__save) window.__save = initSave($, () => S.mid); window.__save.refresh();
   S.meta = meta; S.noCap = new Set(meta.openBodies || []); const keepSel = opts.keepCamera ? [...S.sel] : [];
   const E = S.meta.elements; S.N = E.length; S.hidden = new Uint8Array(S.N); S.sel = new Set(keepSel); S.isolate = null;
   S.byCat = new Map();
