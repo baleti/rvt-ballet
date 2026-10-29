@@ -35,6 +35,18 @@ Notes: ~/demo-state/PLAN-viewers-editors.md does NOT exist on this host (checked
 29. Security hardening of the save API: dest must be absolute, no NUL, no device files, refuse system dirs, JSON size limit; edit value limits already enforced. Test path traversal / symlink dest (symlink to the source must not overwrite it).
 30. Windows/macOS: long path prefix, read-only attribute, open handle (file locked by Revit) -> Locked message; simulate with a held lock file on Linux, document untested OS parts in docs/INSTALL.
 
+## Added 2026-10-29 (second batch)
+31. Seeded fuzz at scale: run tools/save_fuzz.py seeds 2..20 (12 chains each, ~5 min per seed) on spare hosts; aggregate failure classes; every class filed. Target: 0 HTTP 500, 0 source changes, verify-failure classes enumerated.
+32. Fuzz on FamilySymbol/PropertySet only vs MaterialElem only: which element classes produce undeclared changes (el 30913 MaterialElem, el 291976 FamSymSurrogate); table class -> dependents count; input for the writer's dependents rule.
+33. Version matrix on REAL files of other years: identity SAVE AS refusal text for 2017-2023, 2025 corpus headers (no content leaves the host); count per year; confirms no unsupported year can reach the writer.
+34. Overwrite end-to-end with gate evidence: build a gate file for rvt 2024 from write-lab PASS rows (never from this account's opinion), run SAVE with allow_overwrite on a copy, backup + restore round trip via the UI endpoints; Revit open of the overwritten file.
+35. Edit ops delete/clone: wire them behind the same manifest only after the writer provides dependents; refuse otherwise (already refused). Test list ready: delete an isolated MaterialElem, delete an element with dependents -> 422.
+36. Savegate cache request: ask c8-savegate for a Doc-level snapshot cache + a progress callback for verify (DWG benefits too); our memo is the stopgap.
+37. Reader vs writer cross-check: after every edited save, reconvert the output (tests/test_save_reload.py) for 10 random isolated edits; assert exactly the declared parameter rows differ.
+38. Save API docs: docs/SAVE.md (endpoints, error codes, env switches RVTBALLET_ALLOW_OVERWRITE / SAVEGATE_*, what is verified vs untested), linked from README.
+39. Packaging: make sure the installer ships rvtballet/save.py/edit.py and documents that saving needs savegate + write-lab (optional extra); test import-optional path with savegate absent (no tracebacks, buttons disabled).
+40. Browser-level check of conflict + restore: Playwright clicks Save! on a file modified behind the viewer, Overwrite anyway with confirm, then restore from backups endpoint; assert byte-level outcomes.
+
 Status log (append below):
 1. DONE 2026-10-29: rvtballet/save.py SaveSessions + tests/test_save.py (not yet wired to server)
 2. DONE 2026-10-29: POST /api/m/{mid}/saveas (identity save; edits come with item 8); tests/test_save_api.py: source sha unchanged, output sha equal, exists->409, overwrite->backup, bad body 400, unknown mid 404, no leftover temp/lock. NOTE rvtballet/*.py changed => demo models need --prepare before demo-ready moves.
