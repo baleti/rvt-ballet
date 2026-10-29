@@ -22,11 +22,12 @@ def _cached_adapter():
     import hashlib
     from savegate.adapters import RvtAdapter
     class CachedRvtAdapter(RvtAdapter):
-        def __init__(self, *a, **k): super().__init__(*a, **k); self._memo = []
+        def __init__(self, *a, **k): super().__init__(*a, **k); self._memo = []; self.report = lambda stage: None
         def snapshot(self, buf):
             key = hashlib.sha256(buf).digest()
             for k, snap, keys in self._memo:
                 if k == key: self._keys = set(keys); return dict(snap)
+            self.report('reading %d MB (element dump for verification)' % (len(buf) >> 20))
             snap = super().snapshot(buf); self._memo = ([(key, dict(snap), set(self._keys))] + self._memo)[:3]
             return snap
     return CachedRvtAdapter
@@ -48,7 +49,7 @@ def check_memory(path):
 class SaveSessions:
     """one savegate Doc per model id, opened lazily from the source .rvt (fingerprint taken at first use = load time)"""
     def __init__(self, cfg=None):
-        self.docs = {}; self.ed = {}; self.busy = set(); self._cfg = cfg
+        self.docs = {}; self.ed = {}; self.busy = set(); self.progress = {}; self._cfg = cfg
     @property
     def cfg(self):
         """Config(allow_overwrite from env RVTBALLET_ALLOW_OVERWRITE=1; the oracle gate stays on)"""
@@ -110,6 +111,11 @@ def result_json(r):
             'elapsed': round(r.elapsed, 3), 'verify': r.report}
 
 
+def _stage(ss, mid, text):
+    import time
+    p = ss.progress.setdefault(mid, {'t0': time.time()}); p['stage'] = text; p['t'] = time.time()
+
+
 def _pending(ss, mid, d, new_bytes, manifest):
     """bytes + manifest of the recorded edits replayed on the loaded bytes (explicit new_bytes win)"""
     if new_bytes is not None: return new_bytes, manifest or {}
@@ -120,13 +126,15 @@ def _pending(ss, mid, d, new_bytes, manifest):
 
 def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     """SAVE AS: never touches the source. new_bytes defaults to the loaded bytes (identity save)."""
-    d = ss.doc(mid, src); new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest)
+    ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t)
+    new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _stage(ss, mid, 'verifying and writing')
     return result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite))
 
 
 def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     """SAVE! : overwrite the source (needs allow_overwrite + open gate; Conflict if the file changed since load unless force)"""
-    d = ss.doc(mid, src); new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest)
+    ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t)
+    new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _stage(ss, mid, 'verifying and writing')
     r = result_json(_guard(_import().save, d, new_bytes, manifest, force=force))
     ss.edits(mid).ops.clear()                      # the edits are in the file now
     return r

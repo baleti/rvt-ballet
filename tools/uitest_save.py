@@ -13,7 +13,7 @@ async def main(model_dir, port, out):
         nonlocal ok; ok &= bool(cond); print(('PASS ' if cond else 'FAIL ') + name)
     async def wait_panel(t=90):
         for _ in range(t * 2):
-            if await b.ev("!document.getElementById('savepanel').hidden"): return
+            if await b.ev("!document.getElementById('savepanel').hidden && !document.getElementById('savepanel').innerText.startsWith('Saving')"): return
             await asyncio.sleep(.5)
     panel = lambda: b.ev("document.getElementById('savepanel').hidden ? '' : document.getElementById('savepanel').innerText")
     try:

@@ -12,17 +12,21 @@ async def main(model_dir, port, work):
     cdp.wait_http('http://127.0.0.1:%d/api/models' % port); b = cdp.Browser(size=(1500, 900)); await b.start(); ok = True
     def chk(name, cond):
         nonlocal ok; ok &= bool(cond); print(('PASS ' if cond else 'FAIL ') + name)
+    async def settle(t=60):
+        for _ in range(t * 2):
+            if await b.ev("!document.getElementById('savepanel').hidden && !document.getElementById('savepanel').innerText.startsWith('Saving')"): return
+            await asyncio.sleep(.5)
     panel = lambda: b.ev("document.getElementById('savepanel').hidden ? '' : document.getElementById('savepanel').innerText")
     try:
         await b.goto('http://127.0.0.1:%d/' % port); await b.wait('window.__loaded===true', 90); await asyncio.sleep(2)
         chk('Save enabled (allow_overwrite + gate)', await b.ev("!document.getElementById('bSaveOver').disabled"))
-        await b.ev("window.confirm = () => true; document.getElementById('bSaveOver').click(); 0"); await asyncio.sleep(14)
+        await b.ev("window.confirm = () => true; document.getElementById('bSaveOver').click(); 0"); await settle()
         t = await panel(); print(t.replace('\n', ' | ')[:300]); chk('plain Save succeeds with a backup line', 'Saved: ' in t and 'backup of the previous file' in t and sha(src) == h0)
         with open(src, 'ab') as f: f.write(b'\0' * 4096)          # someone else touches the file
         h_mod = sha(src)
-        await b.ev("document.getElementById('bSaveOver').click(); 0"); await asyncio.sleep(4); t = await panel()
+        await b.ev("document.getElementById('savepanel').hidden = true; document.getElementById('bSaveOver').click(); 0"); await asyncio.sleep(.5); await settle(); t = await panel()
         chk('conflict panel with Reload / Overwrite anyway, file not touched', 'changed on disk' in t and await b.ev("[...document.querySelectorAll('#savepanel button')].map(x=>x.textContent).join().includes('Overwrite anyway')") and sha(src) == h_mod)
-        await b.ev("[...document.querySelectorAll('#savepanel button')].find(x => x.textContent === 'Overwrite anyway').click(); 0"); await asyncio.sleep(14); t = await panel()
+        await b.ev("[...document.querySelectorAll('#savepanel button')].find(x => x.textContent === 'Overwrite anyway').click(); 0"); await asyncio.sleep(.5); await settle(); t = await panel()
         chk('Overwrite anyway writes the loaded bytes', 'Saved: ' in t and sha(src) == h0)
         bl = json.loads(await b.ev("fetch('/api/m/'+S.mid+'/backups').then(r=>r.text())")); chk('backups listed (%d): newest = the externally modified file, next = the original' % len(bl), len(bl) >= 2 and sha(bl[0]['path']) == h_mod and sha(bl[1]['path']) == h0)
         with open(src, 'ab') as f: f.write(b'garbage')

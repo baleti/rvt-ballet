@@ -40,7 +40,8 @@ export function initSave($, getMid) {
     bOver.disabled = !a.save.on; bOver.title = a.save.on ? 'Overwrite the source file (a backup is kept)' : a.save.why;
   }
   async function doSave(path, body, force) {
-    const [r, j] = await post(path, body);
+    let live = true; const poll = async () => { while (live) { try { const p = await (await fetch(`/api/m/${getMid()}/saveprogress`)).json(); if (live && p.busy && p.stage) show([`Saving... ${p.stage} (${p.elapsed} s)`], false); } catch (e) {} await new Promise(r => setTimeout(r, 700)); } };
+    poll(); let r, j; try { [r, j] = await post(path, body); } finally { live = false; }
     if (r.ok && j && j.ok) { show(describeResult(j), false); return; }
     if (j && j.code === 'conflict' && !force) {
       const b = document.createElement('button'); b.textContent = 'Overwrite anyway'; b.onclick = () => { if (confirm('Overwrite the changed file with the loaded version? A backup is kept.')) doSave(path, { ...body, force: true, confirm: true }, true); };

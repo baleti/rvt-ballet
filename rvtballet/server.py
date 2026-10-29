@@ -220,6 +220,11 @@ def make_app(models):
     async def edit_list(req):
         mid, d = mdir(req); e = saves.edits(mid); return web.json_response({'ops': e.ops, 'manifest': e.manifest()})
     app.router.add_post('/api/m/{mid}/edit', edit_add); app.router.add_post('/api/m/{mid}/edit/undo', edit_undo); app.router.add_get('/api/m/{mid}/edits', edit_list)
+    async def save_progress(req):
+        import time
+        mid, d = mdir(req); p = saves.progress.get(mid); busy = mid in saves.busy
+        return web.json_response({'busy': busy, 'stage': p['stage'] if p and busy else None, 'elapsed': round(time.time() - p['t0'], 1) if p and busy else 0})
+    app.router.add_get('/api/m/{mid}/saveprogress', save_progress)
     app.router.add_post('/api/m/{mid}/save', save_over)
     app.router.add_post('/api/m/{mid}/saveas', save_as)
     app.router.add_get('/', index)
