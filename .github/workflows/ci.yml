@@ -15,6 +15,10 @@ jobs:
       # synthetic geometry unit tests only (no Autodesk samples in CI); the app must at least import on every OS
       - run: python -m pytest -q tests/test_geom.py
       - run: python -c "import rvtballet.plat, rvtballet.filebrowse, rvtballet.cli; print('imports ok')"
+      # save path without savegate / write-lab (not available in CI): modules import, saves degrade to 'unavailable' (501), no tracebacks
+      - run: python -c "import rvtballet.save, rvtballet.edit; print('save imports ok')"
+      - run: python tests/test_save.py
+      - run: python tests/test_save_nosavegate.py
   installer-windows:
     needs: test
     runs-on: windows-latest
