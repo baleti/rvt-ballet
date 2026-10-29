@@ -103,7 +103,7 @@ def error_status(exc):
     n = type(exc).__name__
     return {'Conflict': (409, 'conflict'), 'GateClosed': (409, 'gate_closed'), 'OverwriteDisabled': (409, 'overwrite_disabled'),
             'Exists': (409, 'exists'), 'Locked': (423, 'locked'), 'VerifyFailed': (422, 'verify_failed'),
-            'EditError': (400, 'edit_error'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
+            'EditError': (400, 'edit_error'), 'LayoutChanged': (409, 'layout_changed'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
 
 
 def result_json(r):
@@ -128,13 +128,19 @@ def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     """SAVE AS: never touches the source. new_bytes defaults to the loaded bytes (identity save)."""
     ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t)
     new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _stage(ss, mid, 'verifying and writing')
-    return result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite))
+    r = result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite))
+    lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
+    if lc: r['warnings'] = ['page layout of %s changed (%s -> %s, %+d bytes): this layout is NOT confirmed to open in Revit; verify the copy in Revit before relying on it' % (k, la, lb, dz) for k, la, lb, dz in lc]
+    return r
 
 
 def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     """SAVE! : overwrite the source (needs allow_overwrite + open gate; Conflict if the file changed since load unless force)"""
     ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t)
     new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _stage(ss, mid, 'verifying and writing')
+    lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
+    if lc and os.environ.get('RVTBALLET_ALLOW_LAYOUT_CHANGE') != '1':
+        raise LayoutChanged('overwrite refused: the page layout of %s would change (%s -> %s, %+d bytes) and this is not confirmed to open in Revit. Use SAVE AS and check the copy (override: RVTBALLET_ALLOW_LAYOUT_CHANGE=1).' % (lc[0][0], lc[0][1], lc[0][2], lc[0][3]))
     r = result_json(_guard(_import().save, d, new_bytes, manifest, force=force))
     ss.edits(mid).ops.clear()                      # the edits are in the file now
     return r
@@ -188,3 +194,24 @@ def check_dest(dest, src):
     if os.path.lexists(dest) and not os.path.isfile(dest) and not os.path.islink(dest): raise BadDest('destination exists and is not a regular file')
     if os.path.realpath(dest) == os.path.realpath(src): raise BadDest('destination is the source file (use SAVE to overwrite)')
     return dest
+
+
+class LayoutChanged(Exception):
+    """overwrite refused: the page layout of a stream differs from the source (not confirmed to open in Revit)"""
+
+
+def layout_changes(src_bytes, out_bytes):
+    """streams whose page layout (full pages, last-page capacity) or size differs: [(stream, (full, cap_last) src -> out, size delta)]. Needs the write-lab rvtw/cfb; [] when unavailable."""
+    try:
+        from .edit import WL
+        if WL not in sys.path: sys.path.insert(0, WL)
+        import cfb, rvtw
+        a = cfb.CFB(src_bytes).streams(); b = cfb.CFB(out_bytes).streams(); out = []
+        for k in a:
+            if k not in b or a[k].data == b[k].data or not k.startswith('Partitions/'): continue
+            sa, sb = rvtw.Stream(a[k].data), rvtw.Stream(b[k].data)
+            la, lb = (sa.full, getattr(sa, 'cap_last', None)), (sb.full, getattr(sb, 'cap_last', None))
+            if la != lb or len(a[k].data) != len(b[k].data): out.append((k, la, lb, len(b[k].data) - len(a[k].data)))
+        return out
+    except Exception:
+        return []
