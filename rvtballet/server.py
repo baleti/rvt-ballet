@@ -168,6 +168,22 @@ def make_app(models):
             r['gate_open'] = sg.core.gate_open(d_.adapter.name, d_.version, cfg)
         return web.json_response(r)
     app.router.add_get('/api/m/{mid}/saveinfo', save_info)
+    async def backups(req):
+        mid, d = mdir(req); src = PluginContext(models).source_path(mid)
+        if not saves.available or not src: return web.json_response([])
+        return web.json_response(savemod.backups(src))
+    async def restore(req):
+        mid, d = mdir(req); src = PluginContext(models).source_path(mid)
+        try: body = await req.json()
+        except Exception: body = {}
+        if body.get('confirm') is not True: raise web.HTTPBadRequest(text='restore overwrites the file: confirm=true required')
+        if not saves.available or not src: return web.json_response({'ok': False, 'code': 'unavailable', 'error': 'saving is not available'}, status=501)
+        try: return web.json_response(await asyncio.get_event_loop().run_in_executor(None, lambda: savemod.restore_backup(saves, mid, src, int(body.get('n', 0)))))
+        except Exception as e:
+            st, code = savemod.error_status(e); return web.json_response({'ok': False, 'code': code, 'error': str(e)}, status=st)
+    async def recover(req):
+        return web.json_response(savemod.recoverable(saves) if saves.available else [])
+    app.router.add_get('/api/m/{mid}/backups', backups); app.router.add_post('/api/m/{mid}/restore', restore); app.router.add_get('/api/recover', recover)
     app.router.add_post('/api/m/{mid}/save', save_over)
     app.router.add_post('/api/m/{mid}/saveas', save_as)
     app.router.add_get('/', index)

@@ -71,3 +71,29 @@ def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     """SAVE! : overwrite the source (needs allow_overwrite + open gate; Conflict if the file changed since load unless force)"""
     d = ss.doc(mid, src)
     return result_json(_import().save(d, d.buf if new_bytes is None else new_bytes, manifest or {}, force=force))
+
+
+def backups(src):
+    sg = _import()
+    import time
+    return [{'n': i, 'name': n, 'path': p, 'size': sz, 'mtime': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(os.stat(p).st_mtime))}
+            for i, (n, p, sz) in enumerate(sg.list_backups(src))]
+
+
+def restore_backup(ss, mid, src, n=0):
+    """put backup n (0 = newest) back over the source (savegate backs the current file up first); the doc is re-opened so the fingerprint matches"""
+    sg = _import(); ss.close(mid)
+    used = sg.restore(src, n)
+    from savegate.atomic import sha256_file
+    return {'ok': True, 'restored_from': used, 'sha256': sha256_file(src)[:12], 'size': os.path.getsize(src)}
+
+
+def recoverable(ss):
+    """edit journals of sessions that never closed (crash / kill), excluding this server's own live sessions"""
+    sg = _import(); live = {d.journal.path for d in ss.docs.values() if d.journal}
+    out = []
+    for p, ents in sg.recover():
+        if p in live: continue
+        src = next((e.get('source') for e in ents if e.get('kind') == 'open'), None)
+        out.append({'journal': p, 'source': src, 'entries': len(ents), 'last': ents[-1].get('kind'), 'stage': ents[-1].get('stage') or ents[-1].get('kind')})
+    return out
