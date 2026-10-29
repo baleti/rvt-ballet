@@ -138,20 +138,37 @@ def make_app(models):
         return web.json_response([[i, v[:3]] for i, v in out.items()])
     from . import save as savemod
     saves = savemod.SaveSessions(); app['saves'] = saves
-    async def save_as(req):
+    async def save_common(req, fn, need_dest):
         mid, d = mdir(req)
-        try: body = await req.json()
-        except Exception: raise web.HTTPBadRequest(text='JSON body {dest, overwrite} required')
+        try: body = await req.json() if req.can_read_body else {}
+        except Exception: raise web.HTTPBadRequest(text='JSON body required')
+        if not isinstance(body, dict): raise web.HTTPBadRequest(text='JSON object required')
         dest = body.get('dest')
-        if not isinstance(dest, str) or not dest: raise web.HTTPBadRequest(text='dest required')
+        if need_dest and (not isinstance(dest, str) or not dest): raise web.HTTPBadRequest(text='dest required')
+        if body.get('force') and body.get('confirm') is not True: raise web.HTTPBadRequest(text='force needs confirm=true')
         src = PluginContext(models).source_path(mid)
         if not src or not os.path.exists(src): return web.json_response({'ok': False, 'code': 'no_source', 'error': 'source file of this model is not available'}, status=404)
         if not saves.available: return web.json_response({'ok': False, 'code': 'unavailable', 'error': 'savegate is not installed'}, status=501)
         try:
-            return web.json_response(await asyncio.get_event_loop().run_in_executor(None, lambda: savemod.save_as(saves, mid, src, dest, bool(body.get('overwrite')))))
+            return web.json_response(await asyncio.get_event_loop().run_in_executor(None, lambda: fn(saves, mid, src, body)))
         except Exception as e:
             st, code = savemod.error_status(e)
             return web.json_response({'ok': False, 'code': code, 'error': str(e)}, status=st)
+    async def save_as(req):
+        return await save_common(req, lambda ss, mid, src, b: savemod.save_as(ss, mid, src, b['dest'], bool(b.get('overwrite'))), True)
+    async def save_over(req):
+        return await save_common(req, lambda ss, mid, src, b: savemod.save_overwrite(ss, mid, src, force=bool(b.get('force'))), False)
+    async def save_info(req):
+        """opens the savegate doc (fingerprint = load time) and reports save capability; the UI calls it right after load"""
+        mid, d = mdir(req); src = PluginContext(models).source_path(mid)
+        r = await asyncio.get_event_loop().run_in_executor(None, lambda: saves.info(mid, src))
+        cfg = saves.cfg; r['allow_overwrite'] = bool(cfg and cfg.allow_overwrite)
+        if r.get('open') and cfg:
+            from . import save as _s; sg = _s._import(); d_ = saves.docs[mid]
+            r['gate_open'] = sg.core.gate_open(d_.adapter.name, d_.version, cfg)
+        return web.json_response(r)
+    app.router.add_get('/api/m/{mid}/saveinfo', save_info)
+    app.router.add_post('/api/m/{mid}/save', save_over)
     app.router.add_post('/api/m/{mid}/saveas', save_as)
     app.router.add_get('/', index)
     app.router.add_get('/api/models', list_models)

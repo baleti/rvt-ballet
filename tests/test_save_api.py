@@ -2,6 +2,7 @@
 import os, sys, asyncio, tempfile, hashlib, shutil
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 RTE = os.path.expanduser('~/rvt-research/write-lab/scenes/classtests/2024_writer_cols2.rte')
+_T = __import__('tempfile').mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ.setdefault('SAVEGATE_CACHE', _T + '/c')
 from rvtballet import server, save
 
 async def run():

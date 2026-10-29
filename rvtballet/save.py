@@ -19,7 +19,13 @@ def _import():
 class SaveSessions:
     """one savegate Doc per model id, opened lazily from the source .rvt (fingerprint taken at first use = load time)"""
     def __init__(self, cfg=None):
-        self.docs = {}; self.cfg = cfg
+        self.docs = {}; self._cfg = cfg
+    @property
+    def cfg(self):
+        """Config(allow_overwrite from env RVTBALLET_ALLOW_OVERWRITE=1; the oracle gate stays on)"""
+        if self._cfg is not None: return self._cfg
+        sg = _import()
+        return sg.Config(allow_overwrite=os.environ.get('RVTBALLET_ALLOW_OVERWRITE') == '1') if sg else None
     @property
     def available(self): return _import() is not None
     def doc(self, mid, src):
@@ -59,3 +65,9 @@ def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     """SAVE AS: never touches the source. new_bytes defaults to the loaded bytes (identity save)."""
     d = ss.doc(mid, src)
     return result_json(_import().save_as(d, d.buf if new_bytes is None else new_bytes, dest, manifest or {}, overwrite=overwrite))
+
+
+def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
+    """SAVE! : overwrite the source (needs allow_overwrite + open gate; Conflict if the file changed since load unless force)"""
+    d = ss.doc(mid, src)
+    return result_json(_import().save(d, d.buf if new_bytes is None else new_bytes, manifest or {}, force=force))
