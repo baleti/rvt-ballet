@@ -13,15 +13,19 @@ OutputBaseFilename={#AppName}-setup-{#AppVersion}
 Compression=lzma2
 SolidCompression=yes
 ChangesAssociations=yes
+SetupIconFile=rvt-ballet.ico
+UninstallDisplayIcon={app}\rvt-ballet.ico
 UninstallDisplayName={#AppName}
 [Files]
+Source: "rvt-ballet.ico"; DestDir: "{app}"
 Source: "..\dist\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs createallsubdirs
 Source: "..\dist\python\*"; DestDir: "{app}\python"; Flags: recursesubdirs createallsubdirs
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
 [Icons]
-Name: "{userprograms}\{#AppName}"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m rvtballet serve"; WorkingDir: "{app}\app"
+Name: "{userprograms}\{#AppName}"; Filename: "{app}\python\pythonw.exe"; IconFilename: "{app}\rvt-ballet.ico"; Parameters: "-m rvtballet serve"; WorkingDir: "{app}\app"
 [Registry]
+Root: HKCU; Subkey: "Software\Classes\rvt-ballet.rvt\DefaultIcon"; ValueType: string; ValueData: "{app}\rvt-ballet.ico"
 Root: HKCU; Subkey: "Software\Classes\rvt-ballet.rvt"; ValueType: string; ValueData: "Revit model"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\rvt-ballet.rvt\shell\open\command"; ValueType: string; ValueData: """{app}\python\pythonw.exe"" -m rvtballet open ""%1"""
 Root: HKCU; Subkey: "Software\Classes\.rvt\OpenWithProgids"; ValueType: string; ValueName: "rvt-ballet.rvt"; ValueData: ""; Flags: uninsdeletevalue
