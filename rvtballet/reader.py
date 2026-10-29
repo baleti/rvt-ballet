@@ -28,7 +28,7 @@ def viewer_stamp():
     import glob
     h = hashlib.md5(); d = os.path.dirname(os.path.abspath(__file__))
     for f in sorted(glob.glob(os.path.join(d, '*.py'))):
-        if os.path.basename(f) in ('server.py', 'cli.py'): continue
+        if os.path.basename(f) in ('server.py', 'cli.py', 'save.py', 'edit.py'): continue      # save wiring does not affect conversion
         h.update(open(f, 'rb').read())
     return h.hexdigest()[:8]
 
