@@ -36,7 +36,7 @@ async def run():
         await go('missing-folder', os.path.join(_T, 'nope', 'x.rvt'), False)
         dd = os.path.join(_T, 'adir'); os.makedirs(dd); await go('dest-is-dir', dd, False)
         j = await go('same-as-source', src, False)
-        j = await go('same-as-source+overwrite', src, False, overwrite=True); assert j['code'] in ('overwrite_disabled', 'gate_closed'), j
+        j = await go('same-as-source+overwrite', src, False, overwrite=True); assert j['code'] == 'bad_dest', j
         assert not leftovers(_T) and not os.path.exists(src + '.lock')
     print('save paths OK', res)
 
