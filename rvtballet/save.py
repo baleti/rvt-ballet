@@ -19,7 +19,7 @@ def _import():
 class SaveSessions:
     """one savegate Doc per model id, opened lazily from the source .rvt (fingerprint taken at first use = load time)"""
     def __init__(self, cfg=None):
-        self.docs = {}; self._cfg = cfg
+        self.docs = {}; self.ed = {}; self._cfg = cfg
     @property
     def cfg(self):
         """Config(allow_overwrite from env RVTBALLET_ALLOW_OVERWRITE=1; the oracle gate stays on)"""
@@ -33,8 +33,16 @@ class SaveSessions:
         if sg is None: raise RuntimeError('savegate is not installed')
         d = self.docs.get(mid)
         if d is None or d.path != os.path.abspath(src):
-            d = self.docs[mid] = sg.open_doc(src, cfg=self.cfg)
+            from savegate.adapters import RvtAdapter
+            from savegate import rvt_elements
+            d = sg.open_doc(src, RvtAdapter(elements_fn=rvt_elements.elements), cfg=self.cfg)      # element-level verify
+            if d.version == '?':          # an explicit adapter skips pick_adapter's refusal of non-Revit bytes
+                d.close(); raise sg.UnsupportedVersion('%s is not a Revit file (unknown format, nothing can be saved)' % os.path.basename(src))
+            self.docs[mid] = d
         return d
+    def edits(self, mid):
+        from .edit import Edits
+        return self.ed.setdefault(mid, Edits())
     def info(self, mid, src):
         if not src or not os.path.exists(src): return {'available': self.available, 'open': False}
         if not self.available: return {'available': False, 'open': False}
@@ -53,7 +61,7 @@ def error_status(exc):
     n = type(exc).__name__
     return {'Conflict': (409, 'conflict'), 'GateClosed': (409, 'gate_closed'), 'OverwriteDisabled': (409, 'overwrite_disabled'),
             'Exists': (409, 'exists'), 'Locked': (423, 'locked'), 'VerifyFailed': (422, 'verify_failed'),
-            'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
+            'EditError': (400, 'edit_error'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
 
 
 def result_json(r):
@@ -61,16 +69,26 @@ def result_json(r):
             'elapsed': round(r.elapsed, 3), 'verify': r.report}
 
 
+def _pending(ss, mid, d, new_bytes, manifest):
+    """bytes + manifest of the recorded edits replayed on the loaded bytes (explicit new_bytes win)"""
+    if new_bytes is not None: return new_bytes, manifest or {}
+    from .edit import apply
+    e = ss.edits(mid)
+    return apply(d.buf, e.ops), e.manifest()
+
+
 def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     """SAVE AS: never touches the source. new_bytes defaults to the loaded bytes (identity save)."""
-    d = ss.doc(mid, src)
-    return result_json(_import().save_as(d, d.buf if new_bytes is None else new_bytes, dest, manifest or {}, overwrite=overwrite))
+    d = ss.doc(mid, src); new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest)
+    return result_json(_import().save_as(d, new_bytes, dest, manifest, overwrite=overwrite))
 
 
 def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     """SAVE! : overwrite the source (needs allow_overwrite + open gate; Conflict if the file changed since load unless force)"""
-    d = ss.doc(mid, src)
-    return result_json(_import().save(d, d.buf if new_bytes is None else new_bytes, manifest or {}, force=force))
+    d = ss.doc(mid, src); new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest)
+    r = result_json(_import().save(d, new_bytes, manifest, force=force))
+    ss.edits(mid).ops.clear()                      # the edits are in the file now
+    return r
 
 
 def backups(src):
@@ -97,3 +115,11 @@ def recoverable(ss):
         src = next((e.get('source') for e in ents if e.get('kind') == 'open'), None)
         out.append({'journal': p, 'source': src, 'entries': len(ents), 'last': ents[-1].get('kind'), 'stage': ents[-1].get('stage') or ents[-1].get('kind')})
     return out
+
+
+def add_edit(ss, mid, src, op):
+    """record an edit after a trial replay on the loaded bytes (so an op the writer cannot apply is refused now, not at save time)"""
+    from .edit import apply, validate_op
+    d = ss.doc(mid, src); e = ss.edits(mid); op = validate_op(op); apply(d.buf, e.ops + [op])
+    e.ops.append(op)
+    return {'ok': True, 'n': len(e.ops), 'ops': e.ops, 'manifest': e.manifest()}
