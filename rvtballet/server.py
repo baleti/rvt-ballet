@@ -150,6 +150,7 @@ def make_app(models):
         if not src or not os.path.exists(src): return web.json_response({'ok': False, 'code': 'no_source', 'error': 'source file of this model is not available'}, status=404)
         if not saves.available: return web.json_response({'ok': False, 'code': 'unavailable', 'error': 'savegate is not installed'}, status=501)
         try:
+            if need_dest: savemod.check_dest(dest, src)
             return web.json_response(await asyncio.get_event_loop().run_in_executor(None, lambda: fn(saves, mid, src, body)))
         except Exception as e:
             st, code = savemod.error_status(e)

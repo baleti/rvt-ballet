@@ -61,7 +61,7 @@ def error_status(exc):
     n = type(exc).__name__
     return {'Conflict': (409, 'conflict'), 'GateClosed': (409, 'gate_closed'), 'OverwriteDisabled': (409, 'overwrite_disabled'),
             'Exists': (409, 'exists'), 'Locked': (423, 'locked'), 'VerifyFailed': (422, 'verify_failed'),
-            'EditError': (400, 'edit_error'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
+            'EditError': (400, 'edit_error'), 'BadDest': (400, 'bad_dest'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
 
 
 def result_json(r):
@@ -123,3 +123,19 @@ def add_edit(ss, mid, src, op):
     d = ss.doc(mid, src); e = ss.edits(mid); op = validate_op(op); apply(d.buf, e.ops + [op])
     e.ops.append(op)
     return {'ok': True, 'n': len(e.ops), 'ops': e.ops, 'manifest': e.manifest()}
+
+
+class BadDest(Exception): pass
+
+
+def check_dest(dest, src):
+    """SAVE AS destination sanity, before anything is read or verified. Raises BadDest."""
+    if not isinstance(dest, str) or not dest.strip(): raise BadDest('destination path required')
+    if '\0' in dest or len(dest) > 4096: raise BadDest('destination path is invalid (NUL or too long)')
+    if not os.path.isabs(dest): raise BadDest('destination must be an absolute path')
+    if os.path.basename(dest) in ('', '.', '..') or dest.endswith(('/', os.sep)): raise BadDest('destination must name a file')
+    d = os.path.dirname(dest)
+    if not os.path.isdir(d): raise BadDest('destination folder does not exist: %s' % d)
+    if os.path.lexists(dest) and not os.path.isfile(dest) and not os.path.islink(dest): raise BadDest('destination exists and is not a regular file')
+    if os.path.realpath(dest) == os.path.realpath(src): raise BadDest('destination is the source file (use SAVE to overwrite)')
+    return dest
