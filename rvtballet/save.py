@@ -71,12 +71,24 @@ class SaveSessions:
             if d: d.close()
 
 
+class OutputUnreadable(Exception):
+    """the reader crashed while re-reading the produced bytes: the output is not trustworthy, nothing was written"""
+
+
+def _guard(fn, *a, **k):
+    sg = _import()
+    try: return fn(*a, **k)
+    except (sg.SaveError, OSError): raise
+    except Exception as e:
+        raise OutputUnreadable('the edited file could not be read back (%s: %s); nothing was written' % (type(e).__name__, e)) from e
+
+
 def error_status(exc):
     """savegate exception -> (http status, machine code)"""
     n = type(exc).__name__
     return {'Conflict': (409, 'conflict'), 'GateClosed': (409, 'gate_closed'), 'OverwriteDisabled': (409, 'overwrite_disabled'),
             'Exists': (409, 'exists'), 'Locked': (423, 'locked'), 'VerifyFailed': (422, 'verify_failed'),
-            'EditError': (400, 'edit_error'), 'BadDest': (400, 'bad_dest'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
+            'EditError': (400, 'edit_error'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
 
 
 def result_json(r):
@@ -95,13 +107,13 @@ def _pending(ss, mid, d, new_bytes, manifest):
 def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     """SAVE AS: never touches the source. new_bytes defaults to the loaded bytes (identity save)."""
     d = ss.doc(mid, src); new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest)
-    return result_json(_import().save_as(d, new_bytes, dest, manifest, overwrite=overwrite))
+    return result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite))
 
 
 def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     """SAVE! : overwrite the source (needs allow_overwrite + open gate; Conflict if the file changed since load unless force)"""
     d = ss.doc(mid, src); new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest)
-    r = result_json(_import().save(d, new_bytes, manifest, force=force))
+    r = result_json(_guard(_import().save, d, new_bytes, manifest, force=force))
     ss.edits(mid).ops.clear()                      # the edits are in the file now
     return r
 

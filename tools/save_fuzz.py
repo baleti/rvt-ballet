@@ -24,7 +24,7 @@ async def main(src, md, n, seed, out):
             d = os.path.join(_T, 'o%d.rvt' % k); r = await c.post('/api/m/m/saveas', json={'dest': d}); j = await r.json(); stat['save_%d_%s' % (r.status, j.get('code', 'ok'))] += 1
             assert sha(src) == h0, 'SOURCE CHANGED'
             if r.status == 200: assert j['verify']['n_unexpected'] == 0; os.remove(d)
-            else: fails.append({'chain': k, 'status': r.status, 'code': j.get('code'), 'error': str(j.get('error'))[:200]}); assert r.status != 500 and not os.path.exists(d)
+            else: fails.append({'chain': k, 'status': r.status, 'code': j.get('code'), 'error': str(j.get('error'))[:200], 'ops': (await (await c.get('/api/m/m/edits')).json())['ops'], 'output_exists': os.path.exists(d)}); print('NON200', fails[-1], flush=True); assert r.status != 500 and not os.path.exists(d)
             print(k, r.status, j.get('code', 'ok'), flush=True)
     res = {'chains': n, 'seconds': round(time.time() - t0), 'stats': dict(stat), 'failures': fails}; json.dump(res, open(out, 'w'), indent=1); print(json.dumps({k: v for k, v in res.items() if k != 'failures'}), len(fails), 'non-200 saves')
 asyncio.run(main(sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), sys.argv[5]))
