@@ -23,6 +23,18 @@ Notes: ~/demo-state/PLAN-viewers-editors.md does NOT exist on this host (checked
 19. CI: savegate-backed tests unskipped using generated synthetic stubs, no corpus.
 20. Sync to remote-host after each commit batch; publish scan-only counts into PROGRESS.md.
 
+## Added 2026-10-29 (queue was down to 5)
+21. Size drift: ask/verify with the writer why each tiny edit grows the file by 36-64 KB (NEEDS-FROM-WRITER); test = edit chain stays within one page of generation 0, or documented as expected + Revit opens generation 8.
+22. Revit VM open (audit on) of the edited chain outputs gen 1, 4, 8 and of 5 fuzz outputs through the write-lab harness; table OPEN/OPENFAIL/REPAIRED.
+23. Dependents rule: when verify reports undeclared 'changed' elements after an edit, show the edited element and the dependents in the UI result panel, and add a 'declare dependents' retry only if the writer confirms the dependents are the derived-value kind (never auto-accept). Test with the Level rename (31 dependents).
+24. Edit UI: inspector parameter field editable for string parameters (Mark/Comments style) -> POST /edit, pending-edits badge (n edits, undo button), Save as shows the manifest. CDP test with real clicks.
+25. Progress for long verify: SAVE shows 'verifying n/N objects' (element-level verify is ~25-35 s per 5.6k elements) via a progress endpoint; test the endpoint moves monotonically.
+26. Verify speed: profile rvt_elements.elements (geometry + params + records) per element; propose caching the source snapshot (computed once at load, reused by every SAVE AS) to halve save time. Request to savegate via NEEDS file, measure.
+27. Concurrency: two SAVE AS requests for the same model at once, and SAVE during SAVE AS: second gets 423/409, nothing corrupt (asyncio + executor). Test.
+28. Server restart persistence: pending edits survive a viewer restart (journal replay via recoverable()) or are clearly dropped with a message; decide and test.
+29. Security hardening of the save API: dest must be absolute, no NUL, no device files, refuse system dirs, JSON size limit; edit value limits already enforced. Test path traversal / symlink dest (symlink to the source must not overwrite it).
+30. Windows/macOS: long path prefix, read-only attribute, open handle (file locked by Revit) -> Locked message; simulate with a held lock file on Linux, document untested OS parts in docs/INSTALL.
+
 Status log (append below):
 1. DONE 2026-10-29: rvtballet/save.py SaveSessions + tests/test_save.py (not yet wired to server)
 2. DONE 2026-10-29: POST /api/m/{mid}/saveas (identity save; edits come with item 8); tests/test_save_api.py: source sha unchanged, output sha equal, exists->409, overwrite->backup, bad body 400, unknown mid 404, no leftover temp/lock. NOTE rvtballet/*.py changed => demo models need --prepare before demo-ready moves.
