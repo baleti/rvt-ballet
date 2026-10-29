@@ -25,3 +25,4 @@ Notes: ~/demo-state/PLAN-viewers-editors.md does NOT exist on this host (checked
 
 Status log (append below):
 1. DONE 2026-10-29: rvtballet/save.py SaveSessions + tests/test_save.py (not yet wired to server)
+2. DONE 2026-10-29: POST /api/m/{mid}/saveas (identity save; edits come with item 8); tests/test_save_api.py: source sha unchanged, output sha equal, exists->409, overwrite->backup, bad body 400, unknown mid 404, no leftover temp/lock. NOTE rvtballet/*.py changed => demo models need --prepare before demo-ready moves.

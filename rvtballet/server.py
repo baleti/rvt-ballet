@@ -136,6 +136,23 @@ def make_app(models):
         out = {}
         for r in rows: out.setdefault(r['i'], []).append([r['k'], r['v']])
         return web.json_response([[i, v[:3]] for i, v in out.items()])
+    from . import save as savemod
+    saves = savemod.SaveSessions(); app['saves'] = saves
+    async def save_as(req):
+        mid, d = mdir(req)
+        try: body = await req.json()
+        except Exception: raise web.HTTPBadRequest(text='JSON body {dest, overwrite} required')
+        dest = body.get('dest')
+        if not isinstance(dest, str) or not dest: raise web.HTTPBadRequest(text='dest required')
+        src = PluginContext(models).source_path(mid)
+        if not src or not os.path.exists(src): return web.json_response({'ok': False, 'code': 'no_source', 'error': 'source file of this model is not available'}, status=404)
+        if not saves.available: return web.json_response({'ok': False, 'code': 'unavailable', 'error': 'savegate is not installed'}, status=501)
+        try:
+            return web.json_response(await asyncio.get_event_loop().run_in_executor(None, lambda: savemod.save_as(saves, mid, src, dest, bool(body.get('overwrite')))))
+        except Exception as e:
+            st, code = savemod.error_status(e)
+            return web.json_response({'ok': False, 'code': code, 'error': str(e)}, status=st)
+    app.router.add_post('/api/m/{mid}/saveas', save_as)
     app.router.add_get('/', index)
     app.router.add_get('/api/models', list_models)
     app.router.add_get('/m/{mid}/meta.json', meta)

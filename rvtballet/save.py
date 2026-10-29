@@ -40,3 +40,22 @@ class SaveSessions:
         for k in ([mid] if mid else list(self.docs)):
             d = self.docs.pop(k, None)
             if d: d.close()
+
+
+def error_status(exc):
+    """savegate exception -> (http status, machine code)"""
+    n = type(exc).__name__
+    return {'Conflict': (409, 'conflict'), 'GateClosed': (409, 'gate_closed'), 'OverwriteDisabled': (409, 'overwrite_disabled'),
+            'Exists': (409, 'exists'), 'Locked': (423, 'locked'), 'VerifyFailed': (422, 'verify_failed'),
+            'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
+
+
+def result_json(r):
+    return {'ok': True, 'dest': r.dest, 'size': r.size, 'sha256': r.sha256[:12], 'backup': r.backup, 'version': r.version,
+            'elapsed': round(r.elapsed, 3), 'verify': r.report}
+
+
+def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
+    """SAVE AS: never touches the source. new_bytes defaults to the loaded bytes (identity save)."""
+    d = ss.doc(mid, src)
+    return result_json(_import().save_as(d, d.buf if new_bytes is None else new_bytes, dest, manifest or {}, overwrite=overwrite))
