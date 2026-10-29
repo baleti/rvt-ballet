@@ -157,7 +157,19 @@ def make_app(models):
             finally: saves.busy.discard(mid)
         except Exception as e:
             st, code = savemod.error_status(e)
-            return web.json_response({'ok': False, 'code': code, 'error': str(e), 'report': getattr(e, 'report', None)}, status=st)
+            rep = getattr(e, 'report', None)
+            return web.json_response({'ok': False, 'code': code, 'error': str(e), 'report': rep, 'changed_detail': changed_detail(mid, rep), 'edits': saves.edits(mid).ops}, status=st)
+    def changed_detail(mid, rep):
+        """verify_failed: class / name of the elements that changed outside the declaration (first 12), from the converted model tables"""
+        out = []
+        try:
+            db = models.db(mid)
+            for kind, k in ((rep or {}).get('unexpected') or [])[:12]:
+                if str(k).startswith('el:'):
+                    r = db.execute('select cls,name from el where id=?', (int(k[3:]),)).fetchone()
+                    out.append({'kind': kind, 'id': int(k[3:]), 'cls': r['cls'] if r else None, 'name': r['name'] if r else None})
+        except Exception: pass
+        return out
     async def save_as(req):
         return await save_common(req, lambda ss, mid, src, b: savemod.save_as(ss, mid, src, b['dest'], bool(b.get('overwrite'))), True)
     async def save_over(req):

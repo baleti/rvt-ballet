@@ -15,6 +15,8 @@ export function describeError(j, status) {
   const lines = [head];
   if (j && j.error && !head.includes(j.error)) lines.push(j.error);
   const d = j && j.report && j.report.unexpected; if (Array.isArray(d) && d.length) lines.push(`${j.report.n_unexpected} differences, first: ` + d.slice(0, 5).map(x => x.join(' ')).join('; '));
+  const cd = j && j.changed_detail; if (Array.isArray(cd) && cd.length) lines.push('changed outside the declared edit: ' + cd.slice(0, 6).map(x => `${x.cls || '?'} ${x.id}${x.name ? ' "' + x.name + '"' : ''}`).join(', '));
+  const ed = j && j.edits; if (Array.isArray(ed) && ed.length) lines.push('pending edits: ' + ed.map(o => `${o.field} of element ${o.eid}`).join('; '));
   return lines;
 }
 export function describeBackup(b) { return `#${b.n}  ${b.mtime}  ${b.size} bytes  ${b.name}`; }
