@@ -14,6 +14,7 @@ async def save(src, scen, eid):
     if inplace: os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'
     md = _T + '/m'; os.makedirs(md); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models))) as c:
+        import aiohttp; c.session._timeout = aiohttp.ClientTimeout(total=None)      # the test client's default 300 s total timeout is a harness artifact on big files
         await c.get('/api/m/m/saveinfo')
         body = {'none': None, 'move': {'op': 'move', 'eid': eid, 'dx': 2.0}, 'param': {'op': 'set_string', 'eid': eid, 'param': 'Comments', 'value': 'rvtsave'}, 'delete': {'op': 'delete', 'eid': eid}}[op]
         if body:
