@@ -37,13 +37,28 @@ class TooBig(Exception):
     """not enough memory budget to hold source + output + snapshots (measured ~8x the file size)"""
 
 
+def element_rows(path):
+    """decompressed Global/ElemTable bytes / 28 = rough element count (cheap: one stream); None when the write-lab modules are unavailable or the file cannot be parsed"""
+    try:
+        from .edit import WL
+        if WL not in sys.path: sys.path.insert(0, WL)
+        import cfb, rvtw
+        with open(path, 'rb') as f: P = bytes(rvtw.Stream(cfb.CFB(f.read()).streams()['Global/ElemTable'].data).payload)
+        return sum(r for (_, _, r) in rvtw.members(P, P.find(rvtw.GZ))) // 28
+    except Exception:
+        return None
+
+
 def check_memory(path):
+    """refuse BEFORE opening when the element-level verify would not fit: need = max(9 x file size, KB-per-row x element rows). Measured on real 2024 projects: a 24 MB file with ~26k rows used ~4.5 GB+
+    (~170 KB/row) while a padded 305 MB container with 5.6k rows used 2.4 GB: memory follows element count / geometry, not file size. 200 KB/row is deliberately conservative (refusing is safe, running out of memory is not)."""
     from ._vendor.rvtplat import mem
-    factor = float(os.environ.get('RVTBALLET_SAVE_MEM_FACTOR', '9'))
-    need = os.path.getsize(path) * factor; budget = mem.limit_gb(0.7) * 2 ** 30 - mem.rss_bytes()
+    size = os.path.getsize(path); need = size * float(os.environ.get('RVTBALLET_SAVE_MEM_FACTOR', '9')); rows = element_rows(path)
+    if rows: need = max(need, rows * float(os.environ.get('RVTBALLET_SAVE_MEM_PER_ROW_KB', '200')) * 1024)
+    budget = mem.limit_gb(0.7) * 2 ** 30 - mem.rss_bytes()
     if need > budget:
-        raise TooBig('saving this %.0f MB file needs about %.1f GB of memory but only %.1f GB is available to the viewer (raise RVTPLAT_MEM_GB or close other programs)'
-                     % (os.path.getsize(path) / 2 ** 20, need / 2 ** 30, max(budget, 0) / 2 ** 30))
+        raise TooBig('saving this %.0f MB file (about %s elements) needs roughly %.1f GB of memory but only %.1f GB is available to the viewer (raise RVTPLAT_MEM_GB or close other programs)'
+                     % (size / 2 ** 20, '%d' % rows if rows else '?', need / 2 ** 30, max(budget, 0) / 2 ** 30))
 
 
 class SaveSessions:
