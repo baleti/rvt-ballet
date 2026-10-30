@@ -4,6 +4,8 @@ The manifest handed to savegate declares exactly the edited elements ('el:<id>' 
 import os, sys, tempfile
 
 WL = os.path.expanduser(os.environ.get('RVTBALLET_WRITELAB', '~/rvt-research/write-lab'))
+EL = os.path.expanduser(os.environ.get('RVTBALLET_EDITLAB', '~/rvt-research/edit-lab'))      # rvtedit.Edit (rvtedit2): same ops plus numeric params, dependents, delete, move
+BACKEND = lambda: os.environ.get('RVTBALLET_EDIT_BACKEND', 'wledit')
 DEFAULT_FIELD = 'ParamValueAString.m_value'
 FIELDS = ('ParamValueAString.m_value', 'DatumPlane.m_text', 'DBView.m_viewName', 'SymbolInfo.m_name')   # string fields validated in write-lab (e3/e4)
 
@@ -33,19 +35,12 @@ class Edits:
 
 
 def apply(buf, ops):
-    """replay ops on bytes -> new bytes (the source bytes are never modified)"""
+    """replay ops on bytes -> new bytes (the source bytes are never modified). Backend: env RVTBALLET_EDIT_BACKEND = wledit (default) | rvtedit"""
     if not ops: return buf
-    if WL not in sys.path: sys.path.insert(0, WL)
-    import wledit
     d = tempfile.mkdtemp(prefix='rvtballet-edit-'); a = os.path.join(d, 'in.rvt'); b = os.path.join(d, 'out.rvt')
     try:
         with open(a, 'wb') as f: f.write(buf)
-        ed = wledit.Editor(a)
-        for o in ops:
-            try: ed.set_string(o['eid'], o['field'], o['value'], match=o['match'])
-            except (IndexError, KeyError, StopIteration, struct_error()) as e:
-                raise EditError('element %d has no %s to edit (%s)' % (o['eid'], o['field'], type(e).__name__))
-        ed.save(b)
+        (_apply_rvtedit if BACKEND() == 'rvtedit' else _apply_wledit)(a, b, ops)
         with open(b, 'rb') as f: return f.read()
     finally:
         for p in (a, b):
@@ -53,6 +48,32 @@ def apply(buf, ops):
             except OSError: pass
         try: os.rmdir(d)
         except OSError: pass
+
+
+def _apply_wledit(a, b, ops):
+    if WL not in sys.path: sys.path.insert(0, WL)
+    import wledit
+    ed = wledit.Editor(a)
+    for o in ops:
+        try: ed.set_string(o['eid'], o['field'], o['value'], match=o['match'])
+        except (IndexError, KeyError, StopIteration, struct_error()) as e:
+            raise EditError('element %d has no %s to edit (%s)' % (o['eid'], o['field'], type(e).__name__))
+    ed.save(b)
+
+
+def _apply_rvtedit(a, b, ops):
+    for p in (EL, WL, os.path.expanduser('~/rvt-research')):
+        if p not in sys.path: sys.path.insert(0, p)
+    os.environ.setdefault('RVT_GEOM', '1')
+    import rvtedit
+    ed = rvtedit.Edit(a)
+    for o in ops:
+        try:
+            if o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'] if o['match'] is not None else None, o['value'])
+            else: ed._str_edit(o['eid'], o['field'], o['value'], o['match'])
+        except (IndexError, KeyError, StopIteration, struct_error()) as e:
+            raise EditError('element %d has no %s to edit (%s)' % (o['eid'], o['field'], type(e).__name__))
+    ed.save(b)
 
 
 def struct_error():

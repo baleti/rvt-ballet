@@ -19,6 +19,8 @@ Writable Revit years: those in `savegate.adapters.RVT_WRITABLE` (2024, 2026 toda
 
 Error codes (JSON `{ok:false, code, error, report?}`): `bad_dest` 400, `edit_error` 400, `conflict` 409 (file changed since load), `gate_closed` / `overwrite_disabled` / `exists` 409, `locked` 423 (another save running or lock held), `verify_failed` 422, `output_unreadable` 422, `layout_changed` 409 (overwrite refused when a partition stream's page layout would change: SAVE AS warns instead; override RVTBALLET_ALLOW_LAYOUT_CHANGE=1), `too_big` 507, `bad_dest` 400 (output differs outside the declared edit; nothing written; `report.unexpected` lists the first keys), `unsupported_version` 415, `disk_error` 507, `unavailable` 501.
 
+Edit backend: `RVTBALLET_EDIT_BACKEND=wledit` (default, write-lab `Editor`) or `rvtedit` (edit-lab `rvtedit.Edit`, same string edit; path `RVTBALLET_EDITLAB`). One string edit gives byte-identical output on both; with two edits the bytes differ (parameter values read back identical, one element's record hash differs: open question for rvtedit2). Numeric parameters, delete, move and rotate exist only in rvtedit and are not wired yet.
+
 ## Guarantees checked by tests (`tests/run_save.sh`, ~2 min)
 Source never changes on SAVE AS; atomic write with backup; element-level verify of every output (declared edits only); crash at each step and ENOSPC leave source/target consistent; concurrent saves refused; hostile destinations refused before any work.
 
