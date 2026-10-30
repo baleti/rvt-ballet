@@ -210,6 +210,25 @@ class SaveSessions:
             if d: d.close()
 
 
+class Workshared(Exception):
+    """in-place save of a workshared (central/local) model: the file carries worksets and a central link the writer does not maintain"""
+
+
+def worksharing_state(buf):
+    """BasicFileInfo 'Worksharing:' value ('Not enabled', 'Central', 'Local', ...) or None when it cannot be read"""
+    import re, sys
+    lib = os.environ.get('SAVEGATE_RVT_LIB') or os.path.expanduser('~/rvt-research/write-lab')
+    if lib not in sys.path: sys.path.insert(0, lib)
+    try:
+        import cfb
+        d = cfb.CFB(buf).streams()['BasicFileInfo'].data
+    except Exception: return None
+    for off in (0, 1):                     # the UTF-16 text starts at an odd offset in some years
+        m = re.search(r'Worksharing:\s([^\r\n]*)', d[off:].decode('utf-16le', 'ignore'))
+        if m: return m.group(1).strip()
+    return None
+
+
 class OutputUnreadable(Exception):
     """the reader crashed while re-reading the produced bytes: the output is not trustworthy, nothing was written"""
 
@@ -227,7 +246,7 @@ def error_status(exc):
     n = type(exc).__name__
     return {'Conflict': (409, 'conflict'), 'GateClosed': (409, 'gate_closed'), 'OverwriteDisabled': (409, 'overwrite_disabled'),
             'Exists': (409, 'exists'), 'SaveError': (409, 'refused'), 'Locked': (423, 'locked'), 'VerifyFailed': (422, 'verify_failed'),
-            'EditError': (400, 'edit_error'), 'LightVerifyFailed': (422, 'verify_failed'), 'LayoutChanged': (409, 'layout_changed'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'CloudPlaceholder': (409, 'cloud_placeholder'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
+            'EditError': (400, 'edit_error'), 'LightVerifyFailed': (422, 'verify_failed'), 'LayoutChanged': (409, 'layout_changed'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'Workshared': (409, 'workshared'), 'CloudPlaceholder': (409, 'cloud_placeholder'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
 
 
 _UNTOUCHED = ("untouched", "not touched", "unchanged", "nothing was written", "nothing written", "not changed", "nothing was replaced", "not written")
@@ -285,7 +304,8 @@ def _readback(src_buf, nb, ops):
     numbers: changed), no other parameter of the element may change (except reader aliases carrying the new value) and the parameter count must not shrink. Severity-1 found by c3x-rvtmatrix: an emoji value left the
     element with 13 of 26 parameters and the gate said OK. A reader failure here refuses the save (nothing written)."""
     tg = [o for o in ops if o.get('op') in ('set_string', 'set_num') and o.get('param')]; mv = [o for o in ops if o.get('op') == 'move']
-    if not tg and not mv: return
+    fl = [o for o in ops if o.get('op') == 'set_string' and not o.get('param')]   # field (name) edits: not visible as a parameter, so only presence and untouched parameters are checked
+    if not tg and not mv and not fl: return
     g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
     sg = _import()
     try: a, b = _read_params(src_buf), _read_params(nb)
@@ -294,6 +314,9 @@ def _readback(src_buf, nb, ops):
     for o in mv:      # a move changes placement only: the element must still be there with exactly its parameters
         if o['eid'] not in b: bad.append('moved element %d missing in the output' % o['eid'])
         elif g(a.get(o['eid'])) != g(b.get(o['eid'])): bad.append('moved element %d: parameters changed' % o['eid'])
+    for o in fl:
+        if o['eid'] not in b: bad.append('field-edited element %d missing in the output' % o['eid'])
+        elif g(a.get(o['eid'])) != g(b.get(o['eid'])): bad.append('field-edited element %d: parameters changed' % o['eid'])
     for o in tg:
         x, y = g(a.get(o['eid'])), g(b.get(o['eid'])); n = o['param']
         if o['eid'] not in b: bad.append('element %d missing in the output' % o['eid']); continue
@@ -342,6 +365,9 @@ def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     """SAVE! : overwrite the source (needs allow_overwrite + open gate; Conflict if the file changed since load unless force)"""
     _cloud_gate(src); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t)
     check_memory(src, d.buf)
+    ws = worksharing_state(d.buf)
+    if ws != 'Not enabled' and os.environ.get('RVTBALLET_ALLOW_WORKSHARED') != '1':
+        raise Workshared('overwrite refused: the model is %s (Worksharing: %s); worksets and the central link are not maintained by the writer. Use SAVE AS and check the copy in Revit; the file was not touched.' % ('workshared' if ws else 'of unknown worksharing state', ws or 'unreadable'))
     new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _stage(ss, mid, 'verifying and writing')
     lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
     if lc is None and os.environ.get('RVTBALLET_ALLOW_LAYOUT_CHANGE') != '1': raise LayoutChanged('overwrite refused: the page-layout check could not run, so the output is not known to keep the source layout. Use SAVE AS (override: RVTBALLET_ALLOW_LAYOUT_CHANGE=1).')
