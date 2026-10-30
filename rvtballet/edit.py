@@ -24,8 +24,14 @@ def _pid_for(name):
 
 
 def validate_op(op):
-    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete'): raise EditError('unsupported edit op (supported: set_string, set_num, delete)')
+    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move)')
     if not isinstance(op.get('eid'), int) or isinstance(op.get('eid'), bool): raise EditError('eid (element id) must be an integer')
+    if op['op'] == 'move':
+        if BACKEND() != 'rvtedit': raise EditError('move needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
+        d = [op.get(k, 0.0) for k in ('dx', 'dy', 'dz')]
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or abs(v) > 1e6 for v in d): raise EditError('dx, dy, dz must be finite numbers (Revit internal units = feet), |v| <= 1e6')
+        if not any(d): raise EditError('move by zero')
+        return {'op': 'move', 'eid': op['eid'], 'dx': float(d[0]), 'dy': float(d[1]), 'dz': float(d[2])}
     if op['op'] == 'delete':
         if os.environ.get('RVTBALLET_ENABLE_DELETE') != '1': raise EditError('delete is disabled (opt-in: RVTBALLET_ENABLE_DELETE=1; no Revit evidence for it yet)')
         if BACKEND() != 'rvtedit': raise EditError('delete needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
@@ -115,6 +121,7 @@ def _apply_rvtedit(a, b, ops):
     for o in ops:
         try:
             if o['op'] == 'delete': deleted += _delete(ed, o['eid'])
+            elif o['op'] == 'move': ed.move(o['eid'], o['dx'], o['dy'], o['dz'])
             elif o['op'] == 'set_num': ed.set_num(o['eid'], _resolve_pid(ed, o), o['value'], o['kind'])
             elif o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'] if o['match'] is not None else None, o['value'])
             else: ed._str_edit(o['eid'], o['field'], o['value'], o['match'])
