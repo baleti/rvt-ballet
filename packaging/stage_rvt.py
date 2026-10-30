@@ -9,11 +9,11 @@ IGN = shutil.ignore_patterns('__pycache__', '*.pyc', 'tests', '.venv')
 SKIP_JSON = ('agg_', 'survey', 'train_', 'gt_', 'cmp', 'ana_')
 
 
-def _closure(reader):
+def _closure(reader, seeds=None):
     """reader modules reachable from the rvt*.py entry points through import statements (fmt_parser, ifcguid, ... are not named rvt_*)"""
     import re
     loc = {f[:-3] for f in os.listdir(reader) if f.endswith('.py')}
-    todo = [f[:-3] for f in os.listdir(reader) if f.startswith('rvt') and f.endswith('.py')] + ['learn_enum']; seen = set()
+    todo = list(seeds) if seeds else [f[:-3] for f in os.listdir(reader) if f.startswith('rvt') and f.endswith('.py')] + ['learn_enum']; seen = set()
     while todo:
         m = todo.pop()
         if m in seen or m not in loc: continue
@@ -25,7 +25,7 @@ def _closure(reader):
 
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument('out'); ap.add_argument('--reader'); ap.add_argument('--sheets'); ap.add_argument('--core')
+    ap = argparse.ArgumentParser(); ap.add_argument('out'); ap.add_argument('--reader'); ap.add_argument('--sheets'); ap.add_argument('--core'); ap.add_argument('--savegate'); ap.add_argument('--writelab')
     a = ap.parse_args()
     from rvtballet import plat
     here = os.path.join(ROOT, 'rvtballet')
@@ -46,6 +46,15 @@ def main():
         if not b.startswith(SKIP_JSON) and os.path.getsize(f) < 20 * 2 ** 20 and not b.startswith(('PARAM_', 'HANDOFF', 'FID_')): shutil.copy2(f, app)
     if core:
         for f in glob.glob(os.path.join(core, '*.py')) + glob.glob(os.path.join(core, '*.pyd')) + glob.glob(os.path.join(core, '*.so')): shutil.copy2(f, app)
+    # SAVE support: savegate (library) + the write-lab modules the editor/verifier import (found through RVT env defaults set in rvtballet/__init__.py when app/writelab exists)
+    sg = a.savegate or os.environ.get('SAVEGATE_DIR') or os.path.expanduser('~/src/savegate')
+    wl = a.writelab or os.environ.get('RVTBALLET_WRITELAB') or os.path.join(reader, 'write-lab')
+    if os.path.isdir(os.path.join(sg, 'savegate')): shutil.copytree(os.path.join(sg, 'savegate'), os.path.join(app, 'savegate'), ignore=IGN)
+    else: print('WARNING: savegate not found (%s): the staged app cannot SAVE' % sg)
+    if os.path.isdir(wl):
+        wd = os.path.join(app, 'writelab'); os.makedirs(wd)
+        for m in _closure(wl, seeds=['cfb', 'rvtw', 'wledit', 'wlrec', 'wlpart', 'ecc']): shutil.copy2(os.path.join(wl, m + '.py'), wd)
+    else: print('WARNING: write-lab not found (%s): the staged app cannot SAVE' % wl)
     shutil.copy2(os.path.join(ROOT, 'packaging', 'requirements-rvt.txt'), os.path.join(a.out, 'requirements.txt'))
     n = sum(len(fs) for _, _, fs in os.walk(app)); sz = sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(app) for f in fs)
     print('staged %d files, %.1f MB into %s' % (n, sz / 2 ** 20, app))
