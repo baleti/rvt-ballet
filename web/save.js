@@ -30,6 +30,7 @@ export function actions(info) {   // which buttons are enabled and why not
   return a;
 }
 
+export const LIMITED_WARNING = 'Limited verification: the copy is checked for structure only (all untouched parts identical, only a few blocks of the edited part changed). It is NOT checked element by element, so it cannot prove that only your edit changed, and Revit has not been asked to open it. Open the copy in Revit before relying on it. Continue?';
 export function initSave($, getMid) {
   const top = document.getElementById('top'); const sp = top.querySelector('.sp');
   const mk = (id, txt) => { const b = document.createElement('button'); b.id = id; b.textContent = txt; b.disabled = true; top.insertBefore(b, sp.nextSibling); return b; };
@@ -54,6 +55,12 @@ export function initSave($, getMid) {
       const b = document.createElement('button'); b.textContent = 'Overwrite anyway'; b.onclick = () => { if (confirm('Overwrite the changed file with the loaded version? A backup is kept.')) doSave(path, { ...body, force: true, confirm: true }, true); };
       const rl = document.createElement('button'); rl.textContent = 'Reload'; rl.onclick = () => location.reload(); const w = document.createElement('span'); w.append(b, rl);
       show(describeError(j, r.status), true, w); return;
+    }
+    if (j && j.code === 'too_big' && path === 'saveas' && body.dest) {      // too large for the element-level verify: offer the clearly labelled weaker option, never silently
+      const b = document.createElement('button'); b.textContent = 'Save with limited verification';
+      b.title = 'Structure-only check: untouched streams identical, only the edited part changed. It cannot prove that only the declared element changed.';
+      b.onclick = () => { if (confirm(LIMITED_WARNING)) doSave('saveas', { ...body, light_verify: true, confirm: true }, true); };
+      const w = document.createElement('span'); w.append(b); show(describeError(j, r.status), true, w); return;
     }
     show(describeError(j, r.status), true);
   }
