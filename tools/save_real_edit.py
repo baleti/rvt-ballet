@@ -16,13 +16,13 @@ async def one(c, models, k, src):
     eid = cand[0]; md = os.path.join(_T, 'm%d' % k); os.makedirs(md); mid = 'f%d' % k; models.m[mid] = {'dir': md, 'name': 'f', 'src': src}
     info = await (await c.get('/api/m/%s/saveinfo' % mid)).json()
     if not info.get('open'): row['result'] = 'NOT_OPEN ' + str(info.get('error'))[:80]; return row
-    r = await c.post('/api/m/%s/edit' % mid, json={'op': 'set_string', 'eid': eid, 'param': 'Comments', 'value': 'edited by h2-viewer test'}); j = await r.json()
+    r = await c.post('/api/m/%s/edit' % mid, json={'op': 'set_string', 'eid': eid, 'param': 'Comments', 'value': os.environ.get('RVT_EDIT_VALUE', 'edited by h2-viewer test')}); j = await r.json()
     if r.status != 200: row['result'] = 'EDIT_REFUSED %s' % j.get('error', '')[:100]; return row
     out = os.path.join(_T, 'o%d.rvt' % k); r = await c.post('/api/m/%s/saveas' % mid, json={'dest': out}); j = await r.json()
     if r.status != 200: row['result'] = 'SAVE_%d %s' % (r.status, j.get('code')); row['detail'] = str(j.get('error'))[:160]; row['n_unexpected'] = (j.get('report') or {}).get('n_unexpected'); return row
     row['verify_diffs'] = j['verify']['n_unexpected']; row['warnings'] = bool(j.get('warnings'))
     b = g(rvt_params.params(out).get(eid)); a = g(pr.get(eid)); changed = {x for x in set(a) | set(b) if a.get(x) != b.get(x)}
-    row['only_comments_changed'] = changed == {'Comments'} and b.get('Comments') == 'edited by h2-viewer test'
+    row['only_comments_changed'] = changed == {'Comments'} and b.get('Comments') == os.environ.get('RVT_EDIT_VALUE', 'edited by h2-viewer test')
     row['seconds'] = round(time.time() - t0, 1); row['result'] = 'OK' if row['only_comments_changed'] and row['verify_diffs'] == 0 else 'MISMATCH'
     kd = os.environ.get('KEEP_DIR')
     if kd: import shutil; os.makedirs(kd, exist_ok=True); shutil.copy(out, os.path.join(kd, 'real%d_edited.rvt' % k))      # local only, for the Revit harness
