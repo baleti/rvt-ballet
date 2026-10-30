@@ -29,11 +29,12 @@ try:
     from savegate.adapters import RvtAdapter
     from savegate import rvt_elements
     ad = RvtAdapter(elements_fn=rvt_elements.elements); buf = open(a, 'rb').read(); snap = ad.snapshot(buf)
-    pickle.dump(('ok', (snap, list(ad._keys))), open(o, 'wb'))
+    res = ('ok', (snap, list(ad._keys)))
 except MemoryError:
-    pickle.dump(('MemoryError', ''), open(o, 'wb'))
+    res = ('MemoryError', '')
 except Exception as e:
-    pickle.dump((type(e).__name__, str(e)[:300]), open(o, 'wb'))
+    res = (type(e).__name__, str(e)[:300])
+pickle.dump(res, open(o + '.tmp', 'wb')); os.replace(o + '.tmp', o)      # atomic: a worker killed mid-write leaves no half result
 '''
 
 
@@ -98,11 +99,15 @@ def _cached_adapter():
                 with open(a, 'wb') as f: f.write(buf)
                 r = subprocess.run([sys.executable, '-c', _WORKER, a, o, str(int(lim)), os.path.expanduser(os.environ.get('SAVEGATE_RVT_LIB') or '~/rvt-research/write-lab'), os.path.dirname(os.path.dirname(os.path.abspath(__file__)))], capture_output=True, text=True)
                 if os.path.exists(o):
-                    kind, payload = pickle.load(open(o, 'rb'))
+                    try: kind, payload = pickle.load(open(o, 'rb'))
+                    except Exception as e: raise RuntimeError('verification worker left an unreadable result (%s, exit %s)' % (type(e).__name__, r.returncode))
                     if kind == 'ok': self._keys = set(payload[1]); return payload[0]
                     if kind == 'MemoryError': raise TooBig('the element dump needs more than the %.1f GB allowed for it (RVTBALLET_SNAPSHOT_MEM_GB / RVTPLAT_MEM_GB): this model is too large to verify on this machine, nothing was written' % (lim / 2 ** 30))
                     raise RuntimeError('%s: %s' % (kind, payload))
-                raise TooBig('the verification worker ran out of memory under its %.1f GB limit (it was stopped, exit %s): this model is too large to verify on this machine, nothing was written' % (lim / 2 ** 30, r.returncode))
+                err = (r.stderr or '').lower()
+                if r.returncode in (-6, -9) or 'memory' in err or 'alloc' in err:      # abort / SIGKILL under the address-space limit, or an allocator message
+                    raise TooBig('the verification worker ran out of memory under its %.1f GB limit (it was stopped, exit %s): this model is too large to verify on this machine, nothing was written' % (lim / 2 ** 30, r.returncode))
+                raise RuntimeError('verification worker failed (exit %s%s): the model could not be read back, nothing was written' % (r.returncode, ('; ' + (r.stderr or '').strip().splitlines()[-1][:100]) if (r.stderr or '').strip() else ''))      # a crash is NOT reported as too_big: the UI must not invite skipping the full verify for it
             finally:
                 import shutil; shutil.rmtree(d, ignore_errors=True)
 
@@ -125,23 +130,25 @@ class TooBig(Exception):
     """not enough memory budget to hold source + output + snapshots (measured ~8x the file size)"""
 
 
-def element_rows(path):
-    """decompressed Global/ElemTable bytes / 28 = rough element count (cheap: one stream); None when the write-lab modules are unavailable or the file cannot be parsed"""
+def element_rows(src):
+    """decompressed Global/ElemTable bytes / 28 = rough element count (cheap: one stream). `src` is the file's bytes (already loaded by the save session) or a path; None when the write-lab modules are unavailable or the file cannot be parsed"""
     try:
         from .edit import WL
         if WL not in sys.path: sys.path.insert(0, WL)
         import cfb, rvtw
-        with open(path, 'rb') as f: P = bytes(rvtw.Stream(cfb.CFB(f.read()).streams()['Global/ElemTable'].data).payload)
+        if not isinstance(src, (bytes, bytearray)):
+            with open(src, 'rb') as f: src = f.read()
+        P = bytes(rvtw.Stream(cfb.CFB(bytes(src)).streams()['Global/ElemTable'].data).payload)
         return sum(r for (_, _, r) in rvtw.members(P, P.find(rvtw.GZ))) // 28
     except Exception:
         return None
 
 
-def check_memory(path):
+def check_memory(path, buf=None):
     """refuse BEFORE opening when the element-level verify would not fit: need = max(9 x file size, KB-per-row x element rows). Measured on real 2024 projects: a 24 MB file with ~26k rows used ~4.5 GB+
     (~170 KB/row) while a padded 305 MB container with 5.6k rows used 2.4 GB: memory follows element count / geometry, not file size. 200 KB/row is deliberately conservative (refusing is safe, running out of memory is not)."""
     from ._vendor.rvtplat import mem
-    size = os.path.getsize(path); need = size * float(os.environ.get('RVTBALLET_SAVE_MEM_FACTOR', '9')); rows = element_rows(path)
+    size = os.path.getsize(path); need = size * float(os.environ.get('RVTBALLET_SAVE_MEM_FACTOR', '9')); rows = element_rows(buf) if buf is not None else None      # rows come from the bytes the session already holds: no second read of the file
     if rows: need = max(need, rows * float(os.environ.get('RVTBALLET_SAVE_MEM_PER_ROW_KB', '200')) * 1024)
     budget = mem.limit_gb(0.7) * 2 ** 30 - mem.rss_bytes()
     if need > budget:
@@ -168,7 +175,7 @@ class SaveSessions:
         if sg is None: raise RuntimeError('savegate is not installed')
         d = self.docs.get(mid)
         if d is None or d.path != os.path.abspath(src):
-            if precheck: check_memory(src)
+            pass      # the memory estimate is enforced when a non-limited save starts (save_as / save_overwrite), not at open
             if d is not None: d.close(); self.docs.pop(mid, None)       # replaced: do not leak its journal
             from savegate import rvt_elements
             d = sg.open_doc(src, _cached_adapter()(elements_fn=rvt_elements.elements), cfg=self.cfg)      # element-level verify
@@ -208,8 +215,18 @@ def error_status(exc):
     """savegate exception -> (http status, machine code)"""
     n = type(exc).__name__
     return {'Conflict': (409, 'conflict'), 'GateClosed': (409, 'gate_closed'), 'OverwriteDisabled': (409, 'overwrite_disabled'),
-            'Exists': (409, 'exists'), 'Locked': (423, 'locked'), 'VerifyFailed': (422, 'verify_failed'),
+            'Exists': (409, 'exists'), 'SaveError': (409, 'refused'), 'Locked': (423, 'locked'), 'VerifyFailed': (422, 'verify_failed'),
             'EditError': (400, 'edit_error'), 'LightVerifyFailed': (422, 'verify_failed'), 'LayoutChanged': (409, 'layout_changed'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'CloudPlaceholder': (409, 'cloud_placeholder'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
+
+
+_UNTOUCHED = ("untouched", "not touched", "unchanged", "nothing was written", "nothing written", "not changed", "nothing was replaced", "not written")
+
+
+def user_message(exc, status=None):
+    """refusal text for the user: the error plus a plain statement that no file was changed (unless it already says so). Not for 5xx after the write started."""
+    m = str(exc).rstrip(". ")
+    if any(w in m.lower() for w in _UNTOUCHED): return m
+    return m + ("; the model file was not touched" if (status or 0) < 500 or type(exc).__name__ == "DiskError" else "")
 
 
 def result_json(r):
@@ -241,6 +258,7 @@ def _cloud_gate(*paths):
 def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     """SAVE AS: never touches the source. new_bytes defaults to the loaded bytes (identity save)."""
     _cloud_gate(src, dest); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t)
+    check_memory(src, d.buf)      # TooBig (507) before any work; the UI then offers the labelled limited verification
     new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _stage(ss, mid, 'verifying and writing')
     r = result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite))
     lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
@@ -257,13 +275,16 @@ def save_as_light(ss, mid, src, dest, overwrite=False):
     _stage(ss, mid, 'limited verification (structure only)'); rep = light_verify(d.buf, new_bytes, max(1, n))
     _stage(ss, mid, 'writing'); r = result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite, verify=False))
     r['verify'] = rep; r['limited_verification'] = True
-    r['warnings'] = ['LIMITED verification only (no element-level comparison): the output is structurally consistent with the source (all untouched streams identical, only %d gzip member(s) of the edited partition changed) but it is NOT confirmed that only the declared elements changed or that Revit accepts it. Open the copy in Revit before relying on it.' % rep['changed_members']]
+    lc = layout_changes(d.buf, new_bytes)
+    lw = ['the page-layout check could not run: this output is NOT confirmed to keep the layout of the source'] if lc is None else ['page layout of %s changed (%s -> %s, %+d bytes): NOT confirmed to open in Revit' % (k, la, lb, dz) for k, la, lb, dz in (lc or [])]
+    r['warnings'] = lw + ['LIMITED verification only (no element-level comparison): the output is structurally consistent with the source (all untouched streams identical, only %d gzip member(s) of the edited partition changed) but it is NOT confirmed that only the declared elements changed or that Revit accepts it. Open the copy in Revit before relying on it.' % rep['changed_members']]
     return r
 
 
 def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     """SAVE! : overwrite the source (needs allow_overwrite + open gate; Conflict if the file changed since load unless force)"""
     _cloud_gate(src); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t)
+    check_memory(src, d.buf)
     new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _stage(ss, mid, 'verifying and writing')
     lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
     if lc is None and os.environ.get('RVTBALLET_ALLOW_LAYOUT_CHANGE') != '1': raise LayoutChanged('overwrite refused: the page-layout check could not run, so the output is not known to keep the source layout. Use SAVE AS (override: RVTBALLET_ALLOW_LAYOUT_CHANGE=1).')

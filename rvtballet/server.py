@@ -160,7 +160,7 @@ def make_app(models):
         except Exception as e:
             st, code = savemod.error_status(e)
             rep = getattr(e, 'report', None)
-            return web.json_response({'ok': False, 'code': code, 'error': str(e), 'report': rep, 'changed_detail': changed_detail(mid, rep), 'edits': saves.edits(mid).ops}, status=st)
+            return web.json_response({'ok': False, 'code': code, 'error': savemod.user_message(e, st), 'report': rep, 'changed_detail': changed_detail(mid, rep), 'edits': saves.edits(mid).ops}, status=st)
     def changed_detail(mid, rep):
         """verify_failed: class / name of the elements that changed outside the declaration (first 12), from the converted model tables"""
         out = []
@@ -201,7 +201,7 @@ def make_app(models):
         if not saves.available or not src: return web.json_response({'ok': False, 'code': 'unavailable', 'error': 'saving is not available'}, status=501)
         try: return web.json_response(await asyncio.get_event_loop().run_in_executor(None, lambda: savemod.restore_backup(saves, mid, src, int(body.get('n', 0)))))
         except Exception as e:
-            st, code = savemod.error_status(e); return web.json_response({'ok': False, 'code': code, 'error': str(e)}, status=st)
+            st, code = savemod.error_status(e); return web.json_response({'ok': False, 'code': code, 'error': savemod.user_message(e, st)}, status=st)
     async def recover(req):
         return web.json_response(savemod.recoverable(saves) if saves.available else [])
     app.router.add_get('/api/m/{mid}/backups', backups); app.router.add_post('/api/m/{mid}/restore', restore); app.router.add_get('/api/recover', recover)
@@ -214,14 +214,14 @@ def make_app(models):
         saves.busy.add(mid)      # a save or another edit cannot start while this op is trial-replayed
         try: return web.json_response(await asyncio.get_event_loop().run_in_executor(None, lambda: savemod.add_edit(saves, mid, src, body)))
         except Exception as e:
-            st, code = savemod.error_status(e); return web.json_response({'ok': False, 'code': code, 'error': str(e)}, status=st)
+            st, code = savemod.error_status(e); return web.json_response({'ok': False, 'code': code, 'error': savemod.user_message(e, st)}, status=st)
         finally: saves.busy.discard(mid)
     async def edit_undo(req):
         mid, d = mdir(req)
         if mid in saves.busy: return web.json_response({'ok': False, 'code': 'locked', 'error': 'a save of this model is in progress'}, status=423)
         try: op = saves.edits(mid).undo()
         except Exception as e:
-            st, code = savemod.error_status(e); return web.json_response({'ok': False, 'code': code, 'error': str(e)}, status=st)
+            st, code = savemod.error_status(e); return web.json_response({'ok': False, 'code': code, 'error': savemod.user_message(e, st)}, status=st)
         return web.json_response({'ok': True, 'undone': op, 'n': len(saves.edits(mid).ops)})
     async def edit_list(req):
         mid, d = mdir(req); e = saves.edits(mid); return web.json_response({'ops': e.ops, 'manifest': e.manifest()})

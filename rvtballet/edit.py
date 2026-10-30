@@ -17,10 +17,19 @@ def _pid_for(name):
     """parameter id for a built-in parameter name via the reader's PNAMES table; ambiguous or unknown names raise"""
     rr = os.path.expanduser('~/rvt-research')
     if rr not in sys.path: sys.path.insert(0, rr)
-    import rvt_params
+    try: import rvt_params
+    except ImportError as e: raise EditError('editing by parameter name needs the reader (rvt_params from ~/rvt-research): %s' % e)
     ids = [int(k) for k, v in rvt_params.PNAMES.items() if v == name]
     if not ids: raise EditError('unknown parameter name %r (not in the reader\'s built-in table)' % name)
     return ids          # several categories can share a name: the one stored on the element is chosen when the op is applied
+
+
+def _param_spec(op):
+    """(pid, candidate pids) of a parameter addressed by id or by NAME (resolved against the element when the op is applied)"""
+    pid = op.get('pid')
+    if pid is None: return None, _pid_for(op.get('param') or '')
+    if not isinstance(pid, int) or isinstance(pid, bool): raise EditError('pid must be an integer')
+    return pid, None
 
 
 def validate_op(op):
@@ -42,17 +51,13 @@ def validate_op(op):
         v = op.get('value')
         if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or abs(v) > 1e15: raise EditError('value must be a finite number')
         if kind == 'Int' and (not isinstance(v, int) or abs(v) >= 2 ** 31): raise EditError('Int value must be a 32-bit integer')
-        pid = op.get('pid'); cands = None
-        if pid is None: cands = _pid_for(op.get('param') or '')
-        elif not isinstance(pid, int) or isinstance(pid, bool): raise EditError('pid must be an integer')
+        pid, cands = _param_spec(op)
         if BACKEND() != 'rvtedit': raise EditError('set_num needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
         return {'op': 'set_num', 'eid': op['eid'], 'pid': pid, 'pids': cands, 'param': op.get('param'), 'value': float(v) if kind == 'Double' else int(v), 'kind': kind}
     if not isinstance(op.get('value'), str): raise EditError('value must be a string')
     if op.get('param') is not None or op.get('pid') is not None:       # address the parameter by NAME/ID instead of by old text (several string parameters can hold the same text)
         if BACKEND() != 'rvtedit': raise EditError('editing a parameter by name or id needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
-        pid = op.get('pid'); cands = None
-        if pid is None: cands = _pid_for(op.get('param') or '')
-        elif not isinstance(pid, int) or isinstance(pid, bool): raise EditError('pid must be an integer')
+        pid, cands = _param_spec(op)
         if '\0' in op['value'] or len(op['value']) > 4096: raise EditError('value must not contain NUL and must be at most 4096 characters')
         return {'op': 'set_string', 'eid': op['eid'], 'field': 'ParamValueAString.m_value', 'value': op['value'], 'match': None, 'pid': pid, 'pids': cands, 'param': op.get('param'), 'kind': 'AString'}
     if '\0' in op['value'] or len(op['value']) > 4096: raise EditError('value must not contain NUL and must be at most 4096 characters')
@@ -70,8 +75,9 @@ class Edits:
         if not self.ops: raise EditError('nothing to undo')
         return self.ops.pop()
     def manifest(self, deleted=None):
-        m = {'modified': sorted({'el:%d' % o['eid'] for o in self.ops if o['op'] != 'delete'})}
-        if deleted: m['deleted'] = sorted('el:%d' % i for i in deleted)
+        gone = {'el:%d' % i for i in (deleted or [])}
+        m = {'modified': sorted({'el:%d' % o['eid'] for o in self.ops if o['op'] != 'delete'} - gone)}
+        if gone: m['deleted'] = sorted(gone)
         return m
 
 
@@ -87,11 +93,7 @@ def apply_full(buf, ops):
         deleted = (_apply_rvtedit if BACKEND() == 'rvtedit' else _apply_wledit)(a, b, ops) or []
         with open(b, 'rb') as f: return f.read(), deleted
     finally:
-        for p in (a, b):
-            try: os.remove(p)
-            except OSError: pass
-        try: os.rmdir(d)
-        except OSError: pass
+        import shutil; shutil.rmtree(d, ignore_errors=True)      # everything in it, including intermediate pass files of a failed multi-partition run
 
 
 def _apply_wledit(a, b, ops):
@@ -120,34 +122,41 @@ def _resolve_pid(ed, o):
 
 
 def _apply_rvtedit(a, b, ops):
-    """rvtedit works on ONE partition per save (env PART): in multi-partition files the ops are grouped by the partition each element lives in and applied as sequential passes (pass n reads the output of pass n-1), exactly as rvtedit's own command line does"""
+    """rvtedit works on ONE partition per save (env PART): in multi-partition files the ops are grouped by the partition each element lives in and applied as sequential passes (pass n reads the output of pass n-1), as rvtedit's own
+    command line does. Order WITHIN a partition is the recorded order; across partitions it follows the grouping, so a delete is not allowed to share a save with edits in other partitions (its cascade could touch them)."""
     for p in (EL, WL, os.path.expanduser('~/rvt-research')):
         if p not in sys.path: sys.path.insert(0, p)
     os.environ.setdefault('RVT_GEOM', '1')
-    import rvtedit, shutil
-    saved_part = os.environ.get('PART')
+    try: import rvtedit, cfb
+    except ImportError as e: raise EditError('the rvtedit backend is not available (%s); install/point RVTBALLET_EDITLAB and RVTBALLET_WRITELAB' % e)
+    saved_part = os.environ.get('PART'); tmps = []
     try:
-        os.environ.pop('PART', None); probe = rvtedit.Edit(a); multi = len(probe.g.e.m.parts) > 1; groups = {}
-        for o in ops:
-            pn = None
-            if multi:
+        os.environ.pop('PART', None); groups = {}
+        try:
+            with open(a, 'rb') as f: n_parts = sum(1 for k in cfb.CFB(f.read()).streams() if k.startswith('Partitions/'))      # cheap: no model decode for single-partition files
+        except Exception: n_parts = 1      # not parseable here: let the editor report the real problem
+        if n_parts > 1:
+            probe = rvtedit.Edit(a)
+            for o in ops:
                 try: pn = (getattr(probe, 'latest_partition', lambda e: None)(o['eid']) or probe.g.e.trace(o['eid'])[0])
                 except Exception: pn = None
-            groups.setdefault(pn, []).append(o)
-        del probe
-        deleted = []; cur = a; tmps = []
+                groups.setdefault(pn, []).append(o)
+            del probe
+            if len(groups) > 1 and any(o['op'] == 'delete' for o in ops): raise EditError('a delete cannot be saved together with edits in other partitions of this file (the order across partitions is not preserved): save the delete separately')
+        else: groups[None] = list(ops)
+        deleted = []; cur = a
         for n, (pn, grp) in enumerate(groups.items()):
             last = n == len(groups) - 1; out = b if last else os.path.join(os.path.dirname(b), 'pass%d.rvt' % n)
             if pn: os.environ['PART'] = str(pn)
             else: os.environ.pop('PART', None)
-            deleted += _rvtedit_pass(cur, out, grp)
             if not last: tmps.append(out)
+            deleted += _rvtedit_pass(cur, out, grp)
             cur = out
+        return deleted
+    finally:
         for t in tmps:
             try: os.remove(t)
             except OSError: pass
-        return deleted
-    finally:
         if saved_part is None: os.environ.pop('PART', None)
         else: os.environ['PART'] = saved_part
 
@@ -161,7 +170,7 @@ def _rvtedit_pass(a, b, ops):
             elif o['op'] == 'move': ed.move(o['eid'], o['dx'], o['dy'], o['dz'])
             elif o['op'] == 'set_num': _set_num_by_pid(ed, o)
             elif o['op'] == 'set_string' and o.get('kind') == 'AString': _set_string_by_pid(ed, o)
-            elif o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'] if o['match'] is not None else None, o['value'])
+            elif o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'], o['value'])
             else: ed._str_edit(o['eid'], o['field'], o['value'], o['match'])
         except (IndexError, KeyError, StopIteration, AssertionError, struct_error()) as e:
             raise EditError('element %d: %s could not be applied (%s)' % (o['eid'], o.get('field') or o['op'] + (' parameter %s' % o['pid'] if o.get('pid') is not None else ''), type(e).__name__))

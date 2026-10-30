@@ -35,6 +35,7 @@ def light_verify(src_bytes, out_bytes, n_ops=1, max_members_per_op=4):
             sa, sb = rvtw.Stream(a[k].data), rvtw.Stream(b[k].data); pa, pb = bytes(sa.payload), bytes(sb.payload)
             ma = rvtw.members(pa, pa.find(rvtw.GZ)); mb = rvtw.members(pb, pb.find(rvtw.GZ))
         except Exception as e: raise LightVerifyFailed('%s does not parse as a paged gzip stream (%s: %s)' % (k, type(e).__name__, e))
+        if not ma or not mb: raise LightVerifyFailed('%s: no gzip members found (source %d, output %d)' % (k, len(ma), len(mb)), {'stream': k})
         if len(ma) != len(mb): raise LightVerifyFailed('%s: member count %d -> %d' % (k, len(ma), len(mb)), {'stream': k})
         changed = 0
         for (p1, e1, _), (p2, e2, _) in zip(ma, mb):
@@ -42,7 +43,8 @@ def light_verify(src_bytes, out_bytes, n_ops=1, max_members_per_op=4):
             if ra != rb: changed += 1
         if changed > max_members_per_op * max(1, n_ops): raise LightVerifyFailed('%s: %d members changed (allowed %d for %d edit(s))' % (k, changed, max_members_per_op * max(1, n_ops), n_ops), {'stream': k, 'changed_members': changed})
         # bytes outside the members: identical up to trailing zero padding
-        ta = pa[max(e for _, e, _ in ma):]; tb = pb[max(e for _, e, _ in mb):]
+        try: ta = pa[max(e for _, e, _ in ma):]; tb = pb[max(e for _, e, _ in mb):]
+        except ValueError: raise LightVerifyFailed('%s: member layout could not be read' % k, {'stream': k})
         if ta.rstrip(b'\0') != tb.rstrip(b'\0'): raise LightVerifyFailed('%s: data outside the gzip members changed' % k, {'stream': k})
         report['changed_members'] += changed
     report['note'] = 'LIMITED verification: structure and member footprint only, no element-level comparison'

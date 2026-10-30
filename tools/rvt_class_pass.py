@@ -20,7 +20,7 @@ NOEDIT = {'Name', 'Family and Type', 'Type', 'Type Id', 'Family'}
 async def post(c, mid, op):
     r = await c.post('/api/m/%s/edit' % mid, json=op); j = await r.json(); return r.status, j
 async def one_class(c, models, k, src, cls, pr, ix):
-    row = {'class': cls}; ids = [e for e, v in ix.items() if str(v) == cls and e in pr]; row['elements'] = len(ids)
+    row = {'class': cls}; ids = [e for e, v in ix.items() if str(v) == cls and e in pr]; row['class_elements'] = len(ids)
     if not ids: row['result'] = 'ABSENT'; return row
     mid = 'c%d' % k; md = os.path.join(_T, 'm%d' % k); os.makedirs(md); work = os.path.join(_T, 'w%d.rvt' % k); shutil.copy(src, work); h0 = sha(work)
     models.m[mid] = {'dir': md, 'name': 'f', 'src': work}
