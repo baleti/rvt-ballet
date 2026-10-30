@@ -54,7 +54,7 @@ async def one_class(c, models, k, src, cls, pr, ix):
     for o in applied:
         a, b = g(pr.get(o['eid'])), g(po.get(o['eid'])); ch = {x for x in set(a) | set(b) if a.get(x) != b.get(x)}
         if o['op'] != 'move' and not (o['param'] in ch): bad.append('target_unchanged:%s' % o['op'])
-        if o['op'] != 'move' and ch - {o['param']}: bad.append('side_effect:%s:%d' % (o['op'], len(ch - {o['param']})))
+        if o['op'] != 'move' and [x for x in ch - {o['param']} if b.get(x) != b.get(o['param'])]: bad.append('side_effect:%s:%d' % (o['op'], len(ch - {o['param']})))      # aliases of the same stored value (e.g. Number / Room Number|String) carry the new value and are not side effects
     others = [e for e in pr if e not in used and g(pr[e]) != g(po.get(e))]; row['other_elements_param_changed'] = len(others)
     if others: bad.append('others_changed')
     row.update({k2: v for k2, v in U.report(work, out).items() if not k2.startswith('_')})
