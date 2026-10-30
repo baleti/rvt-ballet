@@ -129,7 +129,7 @@ def _apply_rvtedit(a, b, ops):
         try:
             if o['op'] == 'delete': deleted += _delete(ed, o['eid'])
             elif o['op'] == 'move': ed.move(o['eid'], o['dx'], o['dy'], o['dz'])
-            elif o['op'] == 'set_num': ed.set_num(o['eid'], _resolve_pid(ed, o), o['value'], o['kind'])
+            elif o['op'] == 'set_num': _set_num_by_pid(ed, o)
             elif o['op'] == 'set_string' and o.get('kind') == 'AString': _set_string_by_pid(ed, o)
             elif o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'] if o['match'] is not None else None, o['value'])
             else: ed._str_edit(o['eid'], o['field'], o['value'], o['match'])
@@ -142,6 +142,28 @@ def _apply_rvtedit(a, b, ops):
     return deleted
 
 
+def _value_entry(log, kind, id_entry):
+    """the value entry that belongs to a parameter-id entry, by exact byte contiguity. Layout (measured on 2024 records): String and Int values come directly AFTER their id, Double values directly BEFORE it
+    (a value can also be contiguous with the NEXT parameter's id, so the order of the two checks matters per kind)"""
+    vname = 'ParamValue%s.m_value' % kind
+    after = next((x for x in log if x[1] == vname and x[2] == id_entry[3]), None); before = next((x for x in log if x[1] == vname and x[3] == id_entry[2]), None)
+    return (before or after) if kind == 'Double' else (after or before)
+
+
+def _set_num_by_pid(ed, o):
+    """overwrite the stored Double/Int value of ONE parameter (exact entry, not rvtedit.set_num's 'previous value within 8 entries', which edits the neighbouring Int for every Int but the first)"""
+    import struct
+    pid = _resolve_pid(ed, o); want = 'EID(%d)' % (pid & ((1 << 64) - 1)); log = ed.g.e.trace(o['eid'])[3]
+    for l in log:
+        if l[1] == 'ParamValue%s.m_paramId' % o['kind'] and l[4] == want:
+            vn = _value_entry(log, o['kind'], l)
+            if vn is None: break
+            nb = struct.pack('<d' if o['kind'] == 'Double' else '<i', o['value'])
+            if len(nb) != vn[3] - vn[2]: raise AssertionError('value size mismatch')
+            ed._rec_edit(o['eid'], [(vn[2], vn[3] - vn[2], nb)]); return
+    raise KeyError('param %d (%s) not stored on %d' % (pid, o['kind'], o['eid']))
+
+
 def _set_string_by_pid(ed, o):
     """overwrite the string value that belongs to ONE parameter id (exact log entry), not 'the first value with this text'"""
     import struct
@@ -149,7 +171,7 @@ def _set_string_by_pid(ed, o):
     for k, l in enumerate(log):
         if l[1] == 'ParamValueAString.m_paramId' and l[4] == want:
             # the value entry is the one whose bytes are CONTIGUOUS with this id entry (directly after, else directly before): never 'the nearest value' (that picked the neighbouring parameter)
-            vn = next((x for x in log if x[1] == 'ParamValueAString.m_value' and x[2] == l[3]), None) or next((x for x in log if x[1] == 'ParamValueAString.m_value' and x[3] == l[2]), None)
+            vn = _value_entry(log, 'AString', l)
             if vn is None: break
             nb = struct.pack('<I', len(o['value'])) + o['value'].encode('utf-16le'); ed._rec_edit(o['eid'], [(vn[2], vn[3] - vn[2], nb)]); return
     raise KeyError('string parameter %d not stored on %d' % (pid, o['eid']))
