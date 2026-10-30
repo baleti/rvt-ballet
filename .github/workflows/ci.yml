@@ -25,3 +25,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: echo "installer build needs the reader and sheets checkouts (private); built locally via packaging/build_windows_rvt.ps1"
+  macos-package-smoke:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: droplet compiles, Info.plist merges, ad-hoc signature verifies (no app code needed)
+        run: |
+          set -e
+          sh -n packaging/macos/build_macos.sh
+          osacompile -o /tmp/t.app packaging/macos/launcher.applescript
+          python3 - /tmp/t.app/Contents/Info.plist packaging/macos/Info.plist <<'P'
+          import plistlib, sys
+          d = plistlib.load(open(sys.argv[1], 'rb')); s = plistlib.load(open(sys.argv[2], 'rb'))
+          for k in ('CFBundleDocumentTypes', 'UTImportedTypeDeclarations', 'CFBundleIdentifier'): d[k] = s[k]
+          plistlib.dump(d, open(sys.argv[1], 'wb'))
+          P
+          codesign --force --deep -s - /tmp/t.app
+          codesign --verify --deep --strict /tmp/t.app && echo signature ok
