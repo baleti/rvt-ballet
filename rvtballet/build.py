@@ -415,7 +415,8 @@ def void_geometry(ctx, e, r):
 
 def wall_openings(ctx, e, org, x0, n, y0, d):
     """cutter boxes for the doors/windows hosted by wall e: the instance's stored bounding box projected into the wall frame (full wall thickness)"""
-    from . import occ
+    try: from . import occ
+    except ImportError: return []                 # no OpenCascade wheel on this platform (e.g. Windows ARM64): walls are built without openings
     out = []
     for h in ctx.hosted.get(e, []):
         bb = ctx.bbox(h); body = False
