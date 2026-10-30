@@ -26,8 +26,9 @@ def pick(path):
     sys.path[:0] = [os.path.expanduser('~/src/savegate'), os.path.expanduser('~/rvt-research')]
     from savegate import rvt_elements as R
     d = R.elements(open(path, 'rb').read())
+    import json
     for e, v in d.items():
-        if str(v).startswith('FamilyInstance|') and '"bbox"' not in v and ', null, ' not in v[:200] and e > 1000: return e
+        if v.startswith('FamilyInstance|') and e > 1000 and json.loads(v.split('|')[1])[2]: return e
     return 0
 def main(src, year, scen, eid=0):
     work = _T + '/src' + os.path.splitext(src)[1]; shutil.copy(src, work); h0 = sha(work)
