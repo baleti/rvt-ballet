@@ -16,6 +16,17 @@ raw = open(files[0], 'rb').read(); open(files[0], 'wb').write(raw[:-5] + b'xxxxx
 s3, k3, t3 = snap(); assert s3 == s1 and k3 == k1
 assert save._disk_get(__import__('hashlib').sha256(buf).digest()) is not None
 open(files[0], 'wb').write(b'junk'); s4, _, _ = snap(); assert s4 == s1
-save._reader_stamp = lambda: 'other'; assert save._disk_get(__import__('hashlib').sha256(buf).digest()) is None     # reader changed -> miss
+_REAL_STAMP = save._reader_stamp; save._reader_stamp = lambda: 'other'; assert save._disk_get(__import__('hashlib').sha256(buf).digest()) is None     # reader changed -> miss
 os.environ['RVTBALLET_SNAPSHOT_CACHE'] = '0'; assert save._disk_get(b'x' * 32) is None
 print('cold %.2fs warm %.2fs' % (t1, t2)); print('OK')
+
+def _stamp_covers_savegate():
+    """c7x-rvtmatrix: the dump code lives in savegate (rvt_elements, adapters); touching it must change the reader stamp or a stale dump would weaken verification"""
+    from rvtballet import save
+    p = os.path.expanduser('~/src/savegate/savegate/rvt_elements.py')
+    if not os.path.exists(p): print('skip stamp check'); return
+    a = _REAL_STAMP(); st = os.stat(p); os.utime(p, ns=(st.st_atime_ns, st.st_mtime_ns + 1000))
+    try: b = _REAL_STAMP()
+    finally: os.utime(p, ns=(st.st_atime_ns, st.st_mtime_ns))
+    assert a != b, 'reader stamp ignores savegate/rvt_elements.py'; print('stamp covers savegate: OK')
+_stamp_covers_savegate()

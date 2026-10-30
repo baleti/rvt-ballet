@@ -48,7 +48,7 @@ def _reader_stamp():
     """changes whenever the reader / write-lab code that produces the dump changes (a stale dump would weaken verification)"""
     import hashlib
     h = hashlib.sha256()
-    for root in (os.path.expanduser(os.environ.get('SAVEGATE_RVT_LIB') or '~/rvt-research/write-lab'), os.path.expanduser('~/rvt-research'), os.path.dirname(os.path.abspath(__file__))):
+    for root in (os.path.expanduser(os.environ.get('SAVEGATE_RVT_LIB') or '~/rvt-research/write-lab'), os.path.expanduser('~/rvt-research'), os.path.dirname(os.path.abspath(__file__)), os.path.expanduser('~/src/savegate/savegate'), os.path.expanduser('~/rvt-research/edit-lab')):
         try:
             for n in sorted(os.listdir(root)):
                 if n.endswith('.py'): st = os.stat(os.path.join(root, n)); h.update(('%s:%d:%d;' % (n, st.st_size, st.st_mtime_ns)).encode())
