@@ -16,19 +16,55 @@ def _import():
                 pass
     return None
 
+_WORKER = r'''
+import sys, os, pickle, resource
+a, o, lim, wl, here = sys.argv[1:6]
+resource.setrlimit(resource.RLIMIT_AS, (int(lim), int(lim)))
+sys.path[:0] = [here, wl, os.path.expanduser('~/src/savegate'), os.path.expanduser('~/rvt-research')]
+try:
+    from savegate.adapters import RvtAdapter
+    from savegate import rvt_elements
+    ad = RvtAdapter(elements_fn=rvt_elements.elements); buf = open(a, 'rb').read(); snap = ad.snapshot(buf)
+    pickle.dump(('ok', (snap, list(ad._keys))), open(o, 'wb'))
+except MemoryError:
+    pickle.dump(('MemoryError', ''), open(o, 'wb'))
+except Exception as e:
+    pickle.dump((type(e).__name__, str(e)[:300]), open(o, 'wb'))
+'''
+
+
 def _cached_adapter():
     """RvtAdapter whose snapshot() is memoised by content hash (last 3 buffers): the source dump (~14 s on a 5.6k-element file) is taken once per loaded
     file instead of at every save; the output of a save is cached too, so after SAVE (overwrite) the new loaded bytes cost nothing."""
     import hashlib
     from savegate.adapters import RvtAdapter
     class CachedRvtAdapter(RvtAdapter):
+        def _snapshot_in_worker(self, buf):
+            """the element dump (the memory hog: GBs on real projects) runs in a child process under RLIMIT_AS: a model that does not fit kills the WORKER, the save is refused cleanly (TooBig) and the viewer / host are never at risk.
+            Reader errors inside the worker come back as RuntimeError('<Type>: msg') (-> 'output_unreadable' as before)."""
+            import subprocess, tempfile, pickle
+            from ._vendor.rvtplat import mem
+            lim = os.environ.get('RVTBALLET_SNAPSHOT_MEM_GB'); lim = float(lim) * 2 ** 30 if lim else max(mem.limit_gb(0.7) * 2 ** 30 - mem.rss_bytes(), 2 * 2 ** 30)
+            d = tempfile.mkdtemp(prefix='rvtballet-snap-'); a = os.path.join(d, 'in.rvt'); o = os.path.join(d, 'out.pkl')
+            try:
+                with open(a, 'wb') as f: f.write(buf)
+                r = subprocess.run([sys.executable, '-c', _WORKER, a, o, str(int(lim)), os.path.expanduser(os.environ.get('SAVEGATE_RVT_LIB') or '~/rvt-research/write-lab'), os.path.dirname(os.path.dirname(os.path.abspath(__file__)))], capture_output=True, text=True)
+                if os.path.exists(o):
+                    kind, payload = pickle.load(open(o, 'rb'))
+                    if kind == 'ok': self._keys = set(payload[1]); return payload[0]
+                    if kind == 'MemoryError': raise TooBig('the element dump needs more than the %.1f GB allowed for it (RVTBALLET_SNAPSHOT_MEM_GB / RVTPLAT_MEM_GB): this model is too large to verify on this machine, nothing was written' % (lim / 2 ** 30))
+                    raise RuntimeError('%s: %s' % (kind, payload))
+                raise TooBig('the verification worker died under its %.1f GB memory limit (exit %s%s): this model is too large to verify on this machine, nothing was written' % (lim / 2 ** 30, r.returncode, ('; ' + r.stderr.strip().splitlines()[-1][:120]) if r.stderr.strip() else ''))
+            finally:
+                import shutil; shutil.rmtree(d, ignore_errors=True)
+
         def __init__(self, *a, **k): super().__init__(*a, **k); self._memo = []; self.report = lambda stage: None
         def snapshot(self, buf):
             key = hashlib.sha256(buf).digest()
             for k, snap, keys in self._memo:
                 if k == key: self._keys = set(keys); return dict(snap)
             self.report('reading %d MB (element dump for verification)' % (len(buf) >> 20))
-            snap = super().snapshot(buf); self._memo = ([(key, dict(snap), set(self._keys))] + self._memo)[:3]
+            snap = (self._snapshot_in_worker(buf) if os.environ.get('RVTBALLET_SNAPSHOT_WORKER', '1') != '0' else super().snapshot(buf)); self._memo = ([(key, dict(snap), set(self._keys))] + self._memo)[:3]
             return snap
     return CachedRvtAdapter
 
@@ -111,7 +147,7 @@ class OutputUnreadable(Exception):
 def _guard(fn, *a, **k):
     sg = _import()
     try: return fn(*a, **k)
-    except (sg.SaveError, OSError): raise
+    except (sg.SaveError, OSError, TooBig): raise
     except Exception as e:
         raise OutputUnreadable('the edited file could not be read back (%s: %s); nothing was written' % (type(e).__name__, e)) from e
 

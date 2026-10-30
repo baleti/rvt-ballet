@@ -25,6 +25,8 @@ Edit backend: `RVTBALLET_EDIT_BACKEND=wledit` (default, write-lab `Editor`) or `
 
 Inspector editing: with the server started as `RVTBALLET_EDIT_BACKEND=rvtedit` the inspector shows a pencil on string-valued parameter rows (never on numbers, UniqueId, names); an edit is recorded as a pending edit (header button `Undo edit (n pending)`), and nothing is written until Save as / Save. saveinfo reports `name_edit`.
 
+Verification worker: the element dump of the verify runs in a CHILD process under a hard address-space limit (`RVTBALLET_SNAPSHOT_MEM_GB`, default = the viewer's remaining budget, min 2 GB; `RVTBALLET_SNAPSHOT_WORKER=0` runs it in-process). A model that does not fit kills the worker and the save is refused with `too_big` (HTTP 507, nothing written); reader errors inside the worker still give `output_unreadable`. This is the real protection against running the machine out of memory; the pre-check below is only an early, cheap estimate.
+
 Memory guard: the save session is refused up front (`too_big`, HTTP 507, `saveinfo.open=false`) when the estimated need exceeds the viewer's budget (`RVTPLAT_MEM_GB` or 70% of RAM). Estimate = max(9 x file size, 200 KB x element rows); element rows come from the decompressed `Global/ElemTable` size / 28. Basis: real 2024 projects used ~170 KB/row (24 MB file, ~26k rows, 4.5+ GB) and the largest tried so far kept growing past 8.6 GB; the factors are conservative and tunable (`RVTBALLET_SAVE_MEM_FACTOR`, `RVTBALLET_SAVE_MEM_PER_ROW_KB`). A save on a real project takes minutes (12 s - 13 min for 7.6 - 24 MB files).
 
 ## Guarantees checked by tests (`tests/run_save.sh`, ~2 min)
