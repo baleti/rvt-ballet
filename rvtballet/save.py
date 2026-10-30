@@ -284,13 +284,16 @@ def _readback(src_buf, nb, ops):
     """the gate declares an edited element 'modified', so ANY change inside it passes verify. Read the edited elements back from the produced bytes: the edited parameter must hold the requested value (strings: exactly;
     numbers: changed), no other parameter of the element may change (except reader aliases carrying the new value) and the parameter count must not shrink. Severity-1 found by c3x-rvtmatrix: an emoji value left the
     element with 13 of 26 parameters and the gate said OK. A reader failure here refuses the save (nothing written)."""
-    tg = [o for o in ops if o.get('op') in ('set_string', 'set_num') and o.get('param')]
-    if not tg: return
+    tg = [o for o in ops if o.get('op') in ('set_string', 'set_num') and o.get('param')]; mv = [o for o in ops if o.get('op') == 'move']
+    if not tg and not mv: return
     g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
     sg = _import()
     try: a, b = _read_params(src_buf), _read_params(nb)
     except Exception as e: raise OutputUnreadable('the edited parameters could not be read back (%s: %s); nothing was written' % (type(e).__name__, e)) from e
     bad = []
+    for o in mv:      # a move changes placement only: the element must still be there with exactly its parameters
+        if o['eid'] not in b: bad.append('moved element %d missing in the output' % o['eid'])
+        elif g(a.get(o['eid'])) != g(b.get(o['eid'])): bad.append('moved element %d: parameters changed' % o['eid'])
     for o in tg:
         x, y = g(a.get(o['eid'])), g(b.get(o['eid'])); n = o['param']
         if o['eid'] not in b: bad.append('element %d missing in the output' % o['eid']); continue
