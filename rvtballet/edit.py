@@ -40,7 +40,7 @@ def _check_text(v):
 
 
 def validate_op(op):
-    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move)')
+    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
     if not isinstance(op.get('eid'), int) or isinstance(op.get('eid'), bool): raise EditError('eid (element id) must be an integer')
     if op['op'] == 'move':
         if BACKEND() != 'rvtedit': raise EditError('move needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
@@ -48,6 +48,12 @@ def validate_op(op):
         if any(isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or abs(v) > 5e4 for v in d): raise EditError('dx, dy, dz must be finite numbers (Revit internal units = feet), |v| <= 50000 (Revit keeps geometry within about 20 miles = 105600 ft of the origin)')
         if not any(d): raise EditError('move by zero')
         return {'op': 'move', 'eid': op['eid'], 'dx': float(d[0]), 'dy': float(d[1]), 'dz': float(d[2])}
+    if op['op'] == 'rotate':
+        if BACKEND() != 'rvtedit': raise EditError('rotate needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
+        d = op.get('deg')
+        if isinstance(d, bool) or not isinstance(d, (int, float)) or d != d or abs(d) > 360: raise EditError('deg must be a finite number of degrees, |deg| <= 360')
+        if d % 360 == 0: raise EditError('rotate by a multiple of 360 degrees changes nothing')
+        return {'op': 'rotate', 'eid': op['eid'], 'deg': float(d)}
     if op['op'] == 'delete':
         if os.environ.get('RVTBALLET_ENABLE_DELETE') != '1': raise EditError('delete is disabled (opt-in: RVTBALLET_ENABLE_DELETE=1; no Revit evidence for it yet)')
         if BACKEND() != 'rvtedit': raise EditError('delete needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
@@ -182,6 +188,7 @@ def _rvtedit_pass(a, b, ops):
         try:
             if o['op'] == 'delete': deleted += _delete(ed, o['eid'])
             elif o['op'] == 'move': ed.move(o['eid'], o['dx'], o['dy'], o['dz'])
+            elif o['op'] == 'rotate': ed.rotate(o['eid'], o['deg'])
             elif o['op'] == 'set_num': _set_num_by_pid(ed, o)
             elif o['op'] == 'set_string' and o.get('kind') == 'AString': _set_string_by_pid(ed, o)
             elif o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'], o['value'])

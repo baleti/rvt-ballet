@@ -356,7 +356,7 @@ def _readback(src_buf, nb, ops):
     """the gate declares an edited element 'modified', so ANY change inside it passes verify. Read the edited elements back from the produced bytes: the edited parameter must hold the requested value (strings: exactly;
     numbers: changed), no other parameter of the element may change (except reader aliases carrying the new value) and the parameter count must not shrink. Severity-1 found by c3x-rvtmatrix: an emoji value left the
     element with 13 of 26 parameters and the gate said OK. A reader failure here refuses the save (nothing written)."""
-    tg = [o for o in ops if o.get('op') in ('set_string', 'set_num') and o.get('param')]; mv = [o for o in ops if o.get('op') == 'move']
+    tg = [o for o in ops if o.get('op') in ('set_string', 'set_num') and o.get('param')]; mv = [o for o in ops if o.get('op') in ('move', 'rotate')]
     fl = [o for o in ops if o.get('op') == 'set_string' and not o.get('param')]   # field (name) edits: not visible as a parameter, so only presence and untouched parameters are checked
     if not tg and not mv and not fl: return
     g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
