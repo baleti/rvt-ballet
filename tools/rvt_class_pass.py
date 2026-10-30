@@ -45,7 +45,7 @@ async def one_class(c, models, k, src, cls, pr, ix):
                 if not nm: continue
                 op = {'op': 'set_num', 'eid': eid, 'param': nm, 'value': p[nm] + 0.5, 'kind': 'Double'}
             elif kind == 'set_field':
-                f = FIELD.get(cls) or next((v for k3, v in FIELD.items() if cls.startswith(k3)), None); nm = p.get('Name') if isinstance(p.get('Name'), str) else None
+                f = FIELD.get(cls) or next((v for k3, v in FIELD.items() if cls.startswith(k3)), None); nm = next((p[k5] for k5 in ('Name', 'View Name', 'Type Name') if isinstance(p.get(k5), str) and p[k5]), None)
                 if not f or not nm: continue
                 op = {'op': 'set_string', 'eid': eid, 'field': f, 'value': nm + ' c3x', 'match': nm, 'param': None}
             else: op = {'op': 'move', 'eid': eid, 'dx': 1.0, 'dy': 0.0, 'dz': 0.0}
