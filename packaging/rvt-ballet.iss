@@ -31,3 +31,24 @@ Root: HKCU; Subkey: "Software\Classes\rvt-ballet.rvt\shell\open\command"; ValueT
 Root: HKCU; Subkey: "Software\Classes\.rvt\OpenWithProgids"; ValueType: string; ValueName: "rvt-ballet.rvt"; ValueData: ""; Flags: uninsdeletevalue
 [Run]
 Filename: "{app}\python\pythonw.exe"; Parameters: "-m rvtballet serve"; WorkingDir: "{app}\app"; Description: "Start rvt-ballet"; Flags: postinstall nowait skipifsilent unchecked
+
+[Code]
+// The app is a windowless pythonw.exe: Restart Manager cannot ask it to close, so a silent upgrade/uninstall over a running copy failed (exit 5).
+// Stop only processes whose image lives under {app}.
+procedure StopAppProcesses();
+var rc: Integer;
+begin
+  Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "$a=''' + ExpandConstant('{app}') + '''; Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith($a, [StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force; Start-Sleep -Milliseconds 800"', '', SW_HIDE, ewWaitUntilTerminated, rc);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  StopAppProcesses();
+  Result := '';
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  StopAppProcesses();
+  Result := True;
+end;
