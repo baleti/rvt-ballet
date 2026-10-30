@@ -120,9 +120,39 @@ def _resolve_pid(ed, o):
 
 
 def _apply_rvtedit(a, b, ops):
+    """rvtedit works on ONE partition per save (env PART): in multi-partition files the ops are grouped by the partition each element lives in and applied as sequential passes (pass n reads the output of pass n-1), exactly as rvtedit's own command line does"""
     for p in (EL, WL, os.path.expanduser('~/rvt-research')):
         if p not in sys.path: sys.path.insert(0, p)
     os.environ.setdefault('RVT_GEOM', '1')
+    import rvtedit, shutil
+    saved_part = os.environ.get('PART')
+    try:
+        os.environ.pop('PART', None); probe = rvtedit.Edit(a); multi = len(probe.g.e.m.parts) > 1; groups = {}
+        for o in ops:
+            pn = None
+            if multi:
+                try: pn = (getattr(probe, 'latest_partition', lambda e: None)(o['eid']) or probe.g.e.trace(o['eid'])[0])
+                except Exception: pn = None
+            groups.setdefault(pn, []).append(o)
+        del probe
+        deleted = []; cur = a; tmps = []
+        for n, (pn, grp) in enumerate(groups.items()):
+            last = n == len(groups) - 1; out = b if last else os.path.join(os.path.dirname(b), 'pass%d.rvt' % n)
+            if pn: os.environ['PART'] = str(pn)
+            else: os.environ.pop('PART', None)
+            deleted += _rvtedit_pass(cur, out, grp)
+            if not last: tmps.append(out)
+            cur = out
+        for t in tmps:
+            try: os.remove(t)
+            except OSError: pass
+        return deleted
+    finally:
+        if saved_part is None: os.environ.pop('PART', None)
+        else: os.environ['PART'] = saved_part
+
+
+def _rvtedit_pass(a, b, ops):
     import rvtedit
     ed = rvtedit.Edit(a); deleted = []
     for o in ops:

@@ -4,7 +4,8 @@ os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from rvtballet import edit, save
 class FakeEdit:
-    def __init__(self, path): pass
+    def __init__(self, path):
+        self.g = types.SimpleNamespace(e=types.SimpleNamespace(m=types.SimpleNamespace(parts={'Partitions/61': 1}), trace=lambda eid: ('Partitions/61',)))      # single partition: no grouping
     def set_string(self, eid, old, new):
         if eid == 2: raise RuntimeError('element 2 lives in Partitions/9 but this save edits Partitions/61 (multi-partition file: edit one partition per save; env PART)')
     def move(self, eid, dx, dy, dz):
