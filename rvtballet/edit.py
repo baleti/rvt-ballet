@@ -13,9 +13,30 @@ FIELDS = ('ParamValueAString.m_value', 'DatumPlane.m_text', 'DBView.m_viewName',
 class EditError(Exception): pass
 
 
+def _pid_for(name):
+    """parameter id for a built-in parameter name via the reader's PNAMES table; ambiguous or unknown names raise"""
+    rr = os.path.expanduser('~/rvt-research')
+    if rr not in sys.path: sys.path.insert(0, rr)
+    import rvt_params
+    ids = [int(k) for k, v in rvt_params.PNAMES.items() if v == name]
+    if not ids: raise EditError('unknown parameter name %r (not in the reader\'s built-in table)' % name)
+    return ids          # several categories can share a name: the one stored on the element is chosen when the op is applied
+
+
 def validate_op(op):
-    if not isinstance(op, dict) or op.get('op') != 'set_string': raise EditError('unsupported edit op (supported: set_string)')
+    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num'): raise EditError('unsupported edit op (supported: set_string, set_num)')
     if not isinstance(op.get('eid'), int) or isinstance(op.get('eid'), bool): raise EditError('eid (element id) must be an integer')
+    if op['op'] == 'set_num':
+        kind = op.get('kind', 'Double')
+        if kind not in ('Double', 'Int'): raise EditError('kind must be Double or Int')
+        v = op.get('value')
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or abs(v) > 1e15: raise EditError('value must be a finite number')
+        if kind == 'Int' and (not isinstance(v, int) or abs(v) >= 2 ** 31): raise EditError('Int value must be a 32-bit integer')
+        pid = op.get('pid'); cands = None
+        if pid is None: cands = _pid_for(op.get('param') or '')
+        elif not isinstance(pid, int) or isinstance(pid, bool): raise EditError('pid must be an integer')
+        if BACKEND() != 'rvtedit': raise EditError('set_num needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
+        return {'op': 'set_num', 'eid': op['eid'], 'pid': pid, 'pids': cands, 'param': op.get('param'), 'value': float(v) if kind == 'Double' else int(v), 'kind': kind}
     if not isinstance(op.get('value'), str): raise EditError('value must be a string')
     if '\0' in op['value'] or len(op['value']) > 4096: raise EditError('value must not contain NUL and must be at most 4096 characters')
     f = op.get('field') or DEFAULT_FIELD
@@ -55,10 +76,24 @@ def _apply_wledit(a, b, ops):
     import wledit
     ed = wledit.Editor(a)
     for o in ops:
+        if o['op'] != 'set_string': raise EditError('op %s needs the rvtedit backend' % o['op'])
         try: ed.set_string(o['eid'], o['field'], o['value'], match=o['match'])
-        except (IndexError, KeyError, StopIteration, struct_error()) as e:
-            raise EditError('element %d has no %s to edit (%s)' % (o['eid'], o['field'], type(e).__name__))
+        except (IndexError, KeyError, StopIteration, AssertionError, struct_error()) as e:
+            raise EditError('element %d has no %s to edit (%s)' % (o['eid'], o.get('field') or ('parameter %s' % o.get('pid')), type(e).__name__))
     ed.save(b)
+
+
+def _resolve_pid(ed, o):
+    """explicit pid, or the single candidate id for the parameter NAME that is actually stored (as the given kind) on this element"""
+    if o.get('pid') is not None: return o['pid']
+    log = ed.g.e.trace(o['eid'])[3]; stored = set()
+    for l in log:
+        if l[1] == 'ParamValue%s.m_paramId' % o['kind']:
+            try: v = int(str(l[4])[4:-1]); stored.add(v - (1 << 64) if v >= (1 << 63) else v)
+            except ValueError: pass
+    hit = [c for c in o['pids'] if c in stored]
+    if len(hit) != 1: raise EditError('parameter %r: %d candidate ids stored as %s on element %d (need exactly 1; give pid)' % (o.get('param'), len(hit), o['kind'], o['eid']))
+    return hit[0]
 
 
 def _apply_rvtedit(a, b, ops):
@@ -69,7 +104,8 @@ def _apply_rvtedit(a, b, ops):
     ed = rvtedit.Edit(a)
     for o in ops:
         try:
-            if o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'] if o['match'] is not None else None, o['value'])
+            if o['op'] == 'set_num': ed.set_num(o['eid'], _resolve_pid(ed, o), o['value'], o['kind'])
+            elif o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'] if o['match'] is not None else None, o['value'])
             else: ed._str_edit(o['eid'], o['field'], o['value'], o['match'])
         except (IndexError, KeyError, StopIteration, struct_error()) as e:
             raise EditError('element %d has no %s to edit (%s)' % (o['eid'], o['field'], type(e).__name__))

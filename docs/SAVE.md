@@ -10,7 +10,7 @@ Writable Revit years: those in `savegate.adapters.RVT_WRITABLE` (2024, 2026 toda
 | endpoint | purpose |
 |---|---|
 | `GET /api/m/{mid}/saveinfo` | opens the save session (fingerprint = load time): `{available, open, version, size, sha256, allow_overwrite, gate_open, pending_edits}` |
-| `POST /api/m/{mid}/edit` `{op:'set_string', eid, value, field?, match?}` | record an edit (trial-replayed at once); fields: ParamValueAString.m_value, DatumPlane.m_text, DBView.m_viewName, SymbolInfo.m_name |
+| `POST /api/m/{mid}/edit` `{op:'set_string', eid, value, field?, match?}` or (rvtedit backend only) `{op:'set_num', eid, param|pid, value, kind:'Double'|'Int'}` | record an edit (trial-replayed at once); fields: ParamValueAString.m_value, DatumPlane.m_text, DBView.m_viewName, SymbolInfo.m_name |
 | `POST /api/m/{mid}/edit/undo`, `GET /api/m/{mid}/edits` | pop / list pending edits (memory only, dropped on viewer restart) |
 | `POST /api/m/{mid}/saveas` `{dest, overwrite?}` | write a copy; never touches the source; returns dest, size, sha256[:12], backup, verify report |
 | `POST /api/m/{mid}/save` `{force?, confirm?}` | overwrite the source (needs `RVTBALLET_ALLOW_OVERWRITE=1` **and** an open oracle gate); `force` needs `confirm:true` |
@@ -19,7 +19,7 @@ Writable Revit years: those in `savegate.adapters.RVT_WRITABLE` (2024, 2026 toda
 
 Error codes (JSON `{ok:false, code, error, report?}`): `bad_dest` 400, `edit_error` 400, `conflict` 409 (file changed since load), `gate_closed` / `overwrite_disabled` / `exists` 409, `locked` 423 (another save running or lock held), `verify_failed` 422, `output_unreadable` 422, `layout_changed` 409 (overwrite refused when a partition stream's page layout would change: SAVE AS warns instead; override RVTBALLET_ALLOW_LAYOUT_CHANGE=1), `too_big` 507, `bad_dest` 400 (output differs outside the declared edit; nothing written; `report.unexpected` lists the first keys), `unsupported_version` 415, `disk_error` 507, `unavailable` 501.
 
-Edit backend: `RVTBALLET_EDIT_BACKEND=wledit` (default, write-lab `Editor`) or `rvtedit` (edit-lab `rvtedit.Edit`, same string edit; path `RVTBALLET_EDITLAB`). One string edit gives byte-identical output on both; with two edits the bytes differ (parameter values read back identical, one element's record hash differs: open question for rvtedit2). Numeric parameters, delete, move and rotate exist only in rvtedit and are not wired yet.
+Edit backend: `RVTBALLET_EDIT_BACKEND=wledit` (default, write-lab `Editor`) or `rvtedit` (edit-lab `rvtedit.Edit`, same string edit; path `RVTBALLET_EDITLAB`). One string edit gives byte-identical output on both; with two edits the bytes differ (parameter values read back identical, one element's record hash differs: open question for rvtedit2). `set_num` is wired (rvtedit backend only; a parameter NAME is resolved to the single id stored on that element, ambiguous or not-stored names are refused with 400; values are in Revit internal units, e.g. feet for lengths). Delete, move and rotate exist only in rvtedit and are not wired yet.
 
 ## Guarantees checked by tests (`tests/run_save.sh`, ~2 min)
 Source never changes on SAVE AS; atomic write with backup; element-level verify of every output (declared edits only); crash at each step and ENOSPC leave source/target consistent; concurrent saves refused; hostile destinations refused before any work.
