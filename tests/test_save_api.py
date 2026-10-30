@@ -19,7 +19,7 @@ async def run():
         assert hashlib.sha256(open(src, 'rb').read()).hexdigest() == h0
         r = await c.post('/api/m/m1/saveas', json={'dest': dest}); j = await r.json()
         assert r.status == 409 and j['code'] == 'exists', (r.status, j)
-        r = await c.post('/api/m/m1/saveas', json={'dest': dest, 'overwrite': True}); j = await r.json()
+        r = await c.post('/api/m/m1/saveas', json={'dest': dest, 'overwrite': True, 'confirm': True}); j = await r.json()
         assert r.status == 200 and j['backup'], j
         assert (await c.post('/api/m/m1/saveas', data='x')).status == 400
         assert (await c.post('/api/m/nope/saveas', json={'dest': dest})).status == 404

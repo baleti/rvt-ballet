@@ -15,7 +15,7 @@ async def run():
     res = {}
     async with TestClient(TestServer(server.make_app(models))) as c:
         async def go(name, dest, ok, **kw):
-            r = await c.post('/api/m/m/saveas', json=dict(dest=dest, **kw)); j = await r.json(); res[name] = r.status
+            r = await c.post('/api/m/m/saveas', json=dict(dest=dest, confirm=True, **kw)); j = await r.json(); res[name] = r.status
             assert sha(src) == h0, name + ': source changed'
             if ok: assert r.status == 200 and sha(dest) == h0, (name, r.status, j)
             else: assert r.status >= 400 and r.status != 500 or r.status == 507, (name, r.status, j); assert not os.path.exists(dest) or os.path.isdir(dest) or dest == src, name

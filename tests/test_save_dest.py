@@ -17,7 +17,7 @@ async def run():
         res = {}
         for name, dest in cases.items():
             for ow in (False, True):
-                r = await c.post('/api/m/m/saveas', json={'dest': dest, 'overwrite': ow}); j = await r.json(); res[name + ('+ow' if ow else '')] = r.status
+                r = await c.post('/api/m/m/saveas', json={'dest': dest, 'overwrite': ow, 'confirm': True}); j = await r.json(); res[name + ('+ow' if ow else '')] = r.status
                 assert r.status == 400 and j['code'] == 'bad_dest', (name, ow, r.status, j)
                 assert sha(src) == h0 and os.path.islink(link) and os.readlink(link) == src
     print('save dest OK', res)

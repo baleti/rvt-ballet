@@ -146,6 +146,7 @@ def make_app(models):
         dest = body.get('dest')
         if need_dest and (not isinstance(dest, str) or not dest): raise web.HTTPBadRequest(text='dest required')
         if body.get('force') and body.get('confirm') is not True: raise web.HTTPBadRequest(text='force needs confirm=true')
+        if body.get('overwrite') and body.get('confirm') is not True: raise web.HTTPBadRequest(text='overwrite of an existing destination needs confirm=true')
         src = PluginContext(models).source_path(mid)
         if not src or not os.path.exists(src): return web.json_response({'ok': False, 'code': 'no_source', 'error': 'source file of this model is not available'}, status=404)
         if not saves.available: return web.json_response({'ok': False, 'code': 'unavailable', 'error': 'savegate is not installed'}, status=501)
@@ -193,6 +194,7 @@ def make_app(models):
         mid, d = mdir(req); src = PluginContext(models).source_path(mid)
         try: body = await req.json()
         except Exception: body = {}
+        if mid in saves.busy: return web.json_response({'ok': False, 'code': 'locked', 'error': 'a save of this model is in progress'}, status=423)
         if body.get('confirm') is not True: raise web.HTTPBadRequest(text='restore overwrites the file: confirm=true required')
         if not saves.available or not src: return web.json_response({'ok': False, 'code': 'unavailable', 'error': 'saving is not available'}, status=501)
         try: return web.json_response(await asyncio.get_event_loop().run_in_executor(None, lambda: savemod.restore_backup(saves, mid, src, int(body.get('n', 0)))))
@@ -203,13 +205,15 @@ def make_app(models):
     app.router.add_get('/api/m/{mid}/backups', backups); app.router.add_post('/api/m/{mid}/restore', restore); app.router.add_get('/api/recover', recover)
     async def edit_add(req):
         mid, d = mdir(req); src = PluginContext(models).source_path(mid)
-        if mid in saves.busy: return web.json_response({'ok': False, 'code': 'locked', 'error': 'a save of this model is in progress'}, status=423)
         try: body = await req.json()
         except Exception: raise web.HTTPBadRequest(text='JSON edit op required')
         if not saves.available or not src: return web.json_response({'ok': False, 'code': 'unavailable', 'error': 'saving is not available'}, status=501)
+        if mid in saves.busy: return web.json_response({'ok': False, 'code': 'locked', 'error': 'a save of this model is in progress'}, status=423)
+        saves.busy.add(mid)      # a save or another edit cannot start while this op is trial-replayed
         try: return web.json_response(await asyncio.get_event_loop().run_in_executor(None, lambda: savemod.add_edit(saves, mid, src, body)))
         except Exception as e:
             st, code = savemod.error_status(e); return web.json_response({'ok': False, 'code': code, 'error': str(e)}, status=st)
+        finally: saves.busy.discard(mid)
     async def edit_undo(req):
         mid, d = mdir(req)
         if mid in saves.busy: return web.json_response({'ok': False, 'code': 'locked', 'error': 'a save of this model is in progress'}, status=423)

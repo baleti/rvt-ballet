@@ -42,7 +42,7 @@ export function initSave($, getMid) {
   }
   async function doSave(path, body, force) {
     let live = true; const poll = async () => { while (live) { try { const p = await (await fetch(`/api/m/${getMid()}/saveprogress`)).json(); if (live && p.busy && p.stage) show([`Saving... ${p.stage} (${p.elapsed} s)`], false); } catch (e) {} await new Promise(r => setTimeout(r, 700)); } };
-    poll(); let r, j; try { [r, j] = await post(path, body); } finally { live = false; }
+    poll(); let r, j; try { [r, j] = await post(path, body); } catch (e) { live = false; show(['The save request did not complete (' + e + ').', 'Do not assume the file was written: check the file and the Backups list before retrying.'], true); return; } finally { live = false; }
     if (r.ok && j && j.ok) { show(describeResult(j), false); return; }
     if (j && j.code === 'conflict' && !force) {
       const b = document.createElement('button'); b.textContent = 'Overwrite anyway'; b.onclick = () => { if (confirm('Overwrite the changed file with the loaded version? A backup is kept.')) doSave(path, { ...body, force: true, confirm: true }, true); };

@@ -49,7 +49,7 @@ def check_memory(path):
 class SaveSessions:
     """one savegate Doc per model id, opened lazily from the source .rvt (fingerprint taken at first use = load time)"""
     def __init__(self, cfg=None):
-        self.docs = {}; self.ed = {}; self.busy = set(); self.progress = {}; self._cfg = cfg
+        self.docs = {}; self.ed = {}; self.busy = set(); self.progress = {}; self.applied = {}; import threading; self._lk = threading.RLock(); self._cfg = cfg
     @property
     def cfg(self):
         """Config(allow_overwrite from env RVTBALLET_ALLOW_OVERWRITE=1; the oracle gate stays on)"""
@@ -59,11 +59,14 @@ class SaveSessions:
     @property
     def available(self): return _import() is not None
     def doc(self, mid, src):
+        with self._lk: return self._doc(mid, src)
+    def _doc(self, mid, src):
         sg = _import()
         if sg is None: raise RuntimeError('savegate is not installed')
         d = self.docs.get(mid)
         if d is None or d.path != os.path.abspath(src):
             check_memory(src)
+            if d is not None: d.close(); self.docs.pop(mid, None)       # replaced: do not leak its journal
             from savegate import rvt_elements
             d = sg.open_doc(src, _cached_adapter()(elements_fn=rvt_elements.elements), cfg=self.cfg)      # element-level verify
             if d.version == '?':          # an explicit adapter skips pick_adapter's refusal of non-Revit bytes
@@ -120,8 +123,9 @@ def _pending(ss, mid, d, new_bytes, manifest):
     """bytes + manifest of the recorded edits replayed on the loaded bytes (explicit new_bytes win)"""
     if new_bytes is not None: return new_bytes, manifest or {}
     from .edit import apply
-    e = ss.edits(mid)
-    return apply(d.buf, e.ops), e.manifest()
+    e = ss.edits(mid); ops = list(e.ops); ss.applied[mid] = len(ops)
+    from .edit import Edits; m = Edits(); m.ops = ops
+    return apply(d.buf, ops), m.manifest()
 
 
 def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
@@ -130,7 +134,8 @@ def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _stage(ss, mid, 'verifying and writing')
     r = result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite))
     lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
-    if lc: r['warnings'] = ['page layout of %s changed (%s -> %s, %+d bytes): this layout is NOT confirmed to open in Revit; verify the copy in Revit before relying on it' % (k, la, lb, dz) for k, la, lb, dz in lc]
+    if lc is None: r['warnings'] = ['the page-layout check could not run: this output is NOT confirmed to keep the layout of the source']
+    elif lc: r['warnings'] = ['page layout of %s changed (%s -> %s, %+d bytes): this layout is NOT confirmed to open in Revit; verify the copy in Revit before relying on it' % (k, la, lb, dz) for k, la, lb, dz in lc]
     return r
 
 
@@ -139,10 +144,11 @@ def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t)
     new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _stage(ss, mid, 'verifying and writing')
     lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
+    if lc is None and os.environ.get('RVTBALLET_ALLOW_LAYOUT_CHANGE') != '1': raise LayoutChanged('overwrite refused: the page-layout check could not run, so the output is not known to keep the source layout. Use SAVE AS (override: RVTBALLET_ALLOW_LAYOUT_CHANGE=1).')
     if lc and os.environ.get('RVTBALLET_ALLOW_LAYOUT_CHANGE') != '1':
         raise LayoutChanged('overwrite refused: the page layout of %s would change (%s -> %s, %+d bytes) and this is not confirmed to open in Revit. Use SAVE AS and check the copy (override: RVTBALLET_ALLOW_LAYOUT_CHANGE=1).' % (lc[0][0], lc[0][1], lc[0][2], lc[0][3]))
     r = result_json(_guard(_import().save, d, new_bytes, manifest, force=force))
-    ss.edits(mid).ops.clear()                      # the edits are in the file now
+    del ss.edits(mid).ops[:ss.applied.pop(mid, 0)]          # only the ops that were applied are in the file now
     return r
 
 
@@ -155,7 +161,7 @@ def backups(src):
 
 def restore_backup(ss, mid, src, n=0):
     """put backup n (0 = newest) back over the source (savegate backs the current file up first); the doc is re-opened so the fingerprint matches"""
-    sg = _import(); ss.close(mid)
+    sg = _import(); ss.close(mid); ss.edits(mid).ops.clear()      # pending edits were recorded against the old content
     used = sg.restore(src, n)
     from savegate.atomic import sha256_file
     return {'ok': True, 'restored_from': used, 'sha256': sha256_file(src)[:12], 'size': os.path.getsize(src)}
@@ -192,7 +198,10 @@ def check_dest(dest, src):
     d = os.path.dirname(dest)
     if not os.path.isdir(d): raise BadDest('destination folder does not exist: %s' % d)
     if os.path.lexists(dest) and not os.path.isfile(dest) and not os.path.islink(dest): raise BadDest('destination exists and is not a regular file')
-    if os.path.realpath(dest) == os.path.realpath(src): raise BadDest('destination is the source file (use SAVE to overwrite)')
+    same = os.path.normcase(os.path.realpath(dest)) == os.path.normcase(os.path.realpath(src))
+    try: same = same or (os.path.exists(dest) and os.path.samefile(dest, src))      # case-insensitive filesystems, hard links
+    except OSError: pass
+    if same: raise BadDest('destination is the source file (use SAVE to overwrite)')
     return dest
 
 
@@ -201,7 +210,7 @@ class LayoutChanged(Exception):
 
 
 def layout_changes(src_bytes, out_bytes):
-    """streams whose page layout (full pages, last-page capacity) or size differs: [(stream, (full, cap_last) src -> out, size delta)]. Needs the write-lab rvtw/cfb; [] when unavailable."""
+    """streams whose page layout (full pages, last-page capacity) or size differs: [(stream, (full, cap_last) src -> out, size delta)]. Returns None when the check could not run (write-lab modules missing / parse error): callers must treat None as UNKNOWN, never as clean."""
     try:
         from .edit import WL
         if WL not in sys.path: sys.path.insert(0, WL)
@@ -214,4 +223,4 @@ def layout_changes(src_bytes, out_bytes):
             if la != lb or len(a[k].data) != len(b[k].data): out.append((k, la, lb, len(b[k].data) - len(a[k].data)))
         return out
     except Exception:
-        return []
+        return None
