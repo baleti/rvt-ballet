@@ -67,7 +67,8 @@ async def one_class(c, models, k, src, cls, pr, ix):
     if others: bad.append('others_changed')
     row.update({k2: v for k2, v in U.report(work, out).items() if not k2.startswith('_')})
     t0 = time.time(); r = await c.post('/api/m/%s/save' % mid, json={}); j2 = await r.json(); row['save_s'] = round(time.time() - t0, 1)
-    if r.status != 200: bad.append('SAVE!_refused_%d_%s' % (r.status, j2.get('code'))); row['detail'] = str(j2.get('error'))[:200]
+    if r.status == 409 and j2.get('code') == 'layout_changed': row['save_over'] = 'refused_layout_changed'; row['detail'] = str(j2.get('error'))[:120]      # deliberate: re-paged partition not confirmed in Revit; SAVE AS stays the path
+    elif r.status != 200: bad.append('SAVE!_refused_%d_%s' % (r.status, j2.get('code'))); row['detail'] = str(j2.get('error'))[:200]
     else:
         if sha(work) != sha(out): bad.append('save!_bytes_differ_from_saveas')
         bk = j2.get('backup'); row['backup'] = bool(bk)
