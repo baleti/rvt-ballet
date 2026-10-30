@@ -1,0 +1,30 @@
+"""In-place SAVE of an edit on a group member / group instance / design-option element is refused ('group_or_option', file untouched); membership() flags the real
+group members of the Autodesk 2024 HVAC sample (ElementGroup.m_pElemIdsPairSet) and not a plain FamilyInstance; SAVE AS is not affected by the check."""
+import os, sys, asyncio, tempfile, hashlib, shutil, json
+_T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
+os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; json.dump({'rvt': {'2024': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
+HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)
+SRC = os.path.expanduser('~/rvtfix/corpus/2024/42_Snowdon_Towers_Sample_HVAC.rvt')
+from rvtballet import server, save
+sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
+async def run():
+    from aiohttp.test_utils import TestClient, TestServer
+    src = os.path.join(_T, 'src.rvt'); shutil.copy(SRC, src); h0 = sha(src); md = os.path.join(_T, 'm'); os.makedirs(md)
+    m = save.membership(open(src, 'rb').read(), [1365188, 1421734, 1421744])
+    assert m == {1421734: ['group 1421744'], 1421744: ['group 1421744']}, m
+    models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
+    real = save.membership
+    async with TestClient(TestServer(server.make_app(models))) as c:
+        await c.get('/api/m/m/saveinfo')
+        r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': 1365188, 'dx': 2.0}); assert r.status == 200, await r.text()
+        for fake in ({1365188: ['group 1']}, {1365188: ['design option 7']}):
+            save.membership = lambda b, e, f=fake: f
+            r = await c.post('/api/m/m/save', json={}); j = await r.json(); assert r.status == 409 and j.get('code') == 'group_or_option', (r.status, j)
+        def boom(b, e): raise RuntimeError('reader failed')
+        save.membership = boom; r = await c.post('/api/m/m/save', json={}); assert r.status == 409, r.status      # unknown = refuse
+        save.membership = real
+    assert sha(src) == h0, 'refused save changed the file'
+    assert not [f for f in os.listdir(_T) if f.endswith(('.tmp', '.part'))]
+    print('group/design-option in-place refusal OK; membership flags the real members')
+if not os.path.exists(SRC) or not save.SaveSessions().available: print('skip')
+else: asyncio.run(run())

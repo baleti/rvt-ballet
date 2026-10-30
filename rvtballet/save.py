@@ -210,6 +210,55 @@ class SaveSessions:
             if d: d.close()
 
 
+_MEMBER_WORKER = r"""
+import sys, os, re, json
+sys.path[:0] = [os.path.expanduser('~/rvt-research')]
+import rvt_xcache
+x = rvt_xcache.get_x_ro(sys.argv[1]); want = set(json.loads(sys.argv[2]))
+ids = lambda v: [int(m) for m in re.findall(r'\d+', str(v))]
+def find(o, key, res):
+    if isinstance(o, dict):
+        for k, v in o.items():
+            if k == key: res.append(v)
+            else: find(v, key, res)
+    elif isinstance(o, list):
+        for v in o: find(v, key, res)
+members = {}      # element id -> group ids: ElementGroup.m_pElemIdsPairSet lists the members; the group instance is itself flagged
+for (e, c), r in x['recs'].items():
+    if c != 'ElementGroup': continue
+    mm = []; find(r.get('fields'), 'm_pElemIdsPairSet', mm); mem = []
+    for v in mm: find(v, 'm_elementId', mem)
+    for m in mem:
+        for i in ids(m): members.setdefault(i, set()).add(e)
+    members.setdefault(e, set()).add(e)
+out = {}
+for (e, c), r in x['recs'].items():
+    if e not in want: continue
+    d = []; find(r.get('fields'), 'm_designOptionId', d)
+    out.setdefault(str(e), []).append({'cls': c, 'groups': sorted(members.get(e, ())), 'options': [i for v in d for i in ids(v) if i < 2 ** 32]})
+print(json.dumps(out))
+"""
+
+
+def membership(buf, eids):
+    """{eid: [reasons]} for the edited elements: member of a group (m_groupId names an ElementGroup) or of a design option (m_designOptionId is a real id).
+    Raises when the records cannot be read (callers treat that as 'unknown': refuse the in-place save)."""
+    import subprocess, tempfile, json
+    d = tempfile.mkdtemp(prefix='rvtballet-mem-')
+    try:
+        p = os.path.join(d, 'm.rvt')
+        with open(p, 'wb') as f: f.write(buf)
+        r = subprocess.run([sys.executable, '-c', _MEMBER_WORKER, p, json.dumps(sorted(int(e) for e in eids))], capture_output=True, text=True, timeout=1800)
+        if r.returncode: raise RuntimeError('group/design-option check failed: ' + (r.stderr.strip().splitlines() or ['?'])[-1][:150])
+        res = {}
+        for e, recs in json.loads(r.stdout.strip().splitlines()[-1]).items():
+            why = sorted({'group %d' % g for x in recs for g in x['groups']} | {'design option %d' % o for x in recs for o in x['options']})
+            if why: res[int(e)] = why
+        return res
+    finally:
+        import shutil; shutil.rmtree(d, ignore_errors=True)
+
+
 class Workshared(Exception):
     """in-place save of a workshared (central/local) model: the file carries worksets and a central link the writer does not maintain"""
 
@@ -229,6 +278,10 @@ def worksharing_state(buf):
     return None
 
 
+class GroupOrOption(Exception):
+    """in-place save of an edit that touches a group (member or instance) or a design-option element"""
+
+
 class OutputUnreadable(Exception):
     """the reader crashed while re-reading the produced bytes: the output is not trustworthy, nothing was written"""
 
@@ -246,7 +299,7 @@ def error_status(exc):
     n = type(exc).__name__
     return {'Conflict': (409, 'conflict'), 'GateClosed': (409, 'gate_closed'), 'OverwriteDisabled': (409, 'overwrite_disabled'),
             'Exists': (409, 'exists'), 'SaveError': (409, 'refused'), 'Locked': (423, 'locked'), 'VerifyFailed': (422, 'verify_failed'),
-            'EditError': (400, 'edit_error'), 'LightVerifyFailed': (422, 'verify_failed'), 'LayoutChanged': (409, 'layout_changed'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'Workshared': (409, 'workshared'), 'CloudPlaceholder': (409, 'cloud_placeholder'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
+            'EditError': (400, 'edit_error'), 'LightVerifyFailed': (422, 'verify_failed'), 'LayoutChanged': (409, 'layout_changed'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'Workshared': (409, 'workshared'), 'GroupOrOption': (409, 'group_or_option'), 'CloudPlaceholder': (409, 'cloud_placeholder'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
 
 
 _UNTOUCHED = ("untouched", "not touched", "unchanged", "nothing was written", "nothing written", "not changed", "nothing was replaced", "not written")
@@ -368,6 +421,14 @@ def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     ws = worksharing_state(d.buf)
     if not (ws or '').startswith('Not enabled') and os.environ.get('RVTBALLET_ALLOW_WORKSHARED') != '1':
         raise Workshared('overwrite refused: the model is %s (Worksharing: %s); worksets and the central link are not maintained by the writer. Use SAVE AS and check the copy in Revit; the file was not touched.' % ('workshared' if ws else 'of unknown worksharing state', ws or 'unreadable'))
+    ops = list(ss.edits(mid).ops) if new_bytes is None else []
+    if ops and os.environ.get('RVTBALLET_ALLOW_GROUP_EDIT') != '1':
+        _stage(ss, mid, 'checking groups and design options')
+        try: mem = membership(d.buf, {o['eid'] for o in ops})
+        except Exception as e: raise GroupOrOption('overwrite refused: could not check whether the edited elements belong to a group or design option (%s); the file was not touched. Use SAVE AS.' % e)
+        if mem:
+            e0 = sorted(mem)[0]
+            raise GroupOrOption('overwrite refused: element %d is part of a group or design option (%s); edits there are not confirmed to open cleanly in Revit. Use SAVE AS and check the copy; the file was not touched.' % (e0, '; '.join(mem[e0])))
     new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _stage(ss, mid, 'verifying and writing')
     lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
     if lc is None and os.environ.get('RVTBALLET_ALLOW_LAYOUT_CHANGE') != '1': raise LayoutChanged('overwrite refused: the page-layout check could not run, so the output is not known to keep the source layout. Use SAVE AS (override: RVTBALLET_ALLOW_LAYOUT_CHANGE=1).')
