@@ -16,6 +16,7 @@ g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
 DEFAULT = ['SWall', 'Floor', 'Ceiling', 'RoofBase', 'FootPrintRoof', 'ExtrusionRoof', 'FamilyInstance', 'RoomElem', 'RbsDuctCurve', 'RbsPipeCurve', 'RbsWireCurve', 'TextNote', 'LinearDimString', 'IndependentTag', 'Family', 'FamilySymbol',
            'DBViewPlan', 'DBViewSection', 'DBView3d', 'Viewport', 'DBDrawing', 'Level', 'Grid', 'RefPlane', 'MaterialElem', 'BaseRailing']
 KNOWN = set(rvt_params.PNAMES.values())
+FIELD = {'Level': 'DatumPlane.m_text', 'Grid': 'DatumPlane.m_text', 'RefPlane': 'DatumPlane.m_text', 'DBView': 'DBView.m_viewName', 'FamilySymbol': 'SymbolInfo.m_name'}
 NOEDIT = {'Name', 'Family and Type', 'Type', 'Type Id', 'Family'}
 async def post(c, mid, op):
     r = await c.post('/api/m/%s/edit' % mid, json=op); j = await r.json(); return r.status, j
@@ -27,7 +28,7 @@ async def one_class(c, models, k, src, cls, pr, ix):
     info = await (await c.get('/api/m/%s/saveinfo' % mid)).json()
     if not info.get('open'): row['result'] = 'NOT_OPEN ' + str(info.get('error'))[:80]; return row
     applied = []; refused = {}; used = set()
-    for kind in ('set_string', 'set_num', 'move'):
+    for kind in ('set_string', 'set_num', 'move', 'set_field'):
         tried = 0
         for eid in ids:
             if eid in used or tried >= 8: continue
@@ -41,11 +42,15 @@ async def one_class(c, models, k, src, cls, pr, ix):
                 nm = next((n for n, v in p.items() if isinstance(v, float) and '|' not in n and n not in NOEDIT and n in KNOWN), None)
                 if not nm: continue
                 op = {'op': 'set_num', 'eid': eid, 'param': nm, 'value': p[nm] + 0.5, 'kind': 'Double'}
+            elif kind == 'set_field':
+                f = FIELD.get(cls) or next((v for k3, v in FIELD.items() if cls.startswith(k3)), None); nm = p.get('Name') if isinstance(p.get('Name'), str) else None
+                if not f or not nm: continue
+                op = {'op': 'set_string', 'eid': eid, 'field': f, 'value': nm + ' c3x', 'match': nm, 'param': None}
             else: op = {'op': 'move', 'eid': eid, 'dx': 1.0, 'dy': 0.0, 'dz': 0.0}
             tried += 1; st, j = await post(c, mid, op)
             if st == 200: applied.append(op); used.add(eid); break
             refused[kind] = (j.get('error') or j.get('code') or '')[:70]
-    row['applied'] = [o['op'] for o in applied]; row['refused'] = refused
+    row['applied'] = [o['op'] + ('(field)' if o.get('field') and not o.get('param') else '') for o in applied]; row['refused'] = refused
     if not applied: row['result'] = 'NO_EDIT_ACCEPTED'; return row
     out = os.path.join(_T, 'o%d.rvt' % k); t0 = time.time(); r = await c.post('/api/m/%s/saveas' % mid, json={'dest': out}); j = await r.json(); row['saveas_s'] = round(time.time() - t0, 1)
     if r.status != 200: row['result'] = 'SAVEAS_REFUSED_%d %s' % (r.status, j.get('code')); row['detail'] = str(j.get('error'))[:200]; row['n_unexpected'] = (j.get('report') or {}).get('n_unexpected'); return row
@@ -53,8 +58,8 @@ async def one_class(c, models, k, src, cls, pr, ix):
     po = rvt_params.params(out); bad = []
     for o in applied:
         a, b = g(pr.get(o['eid'])), g(po.get(o['eid'])); ch = {x for x in set(a) | set(b) if a.get(x) != b.get(x)}
-        if o['op'] != 'move' and not (o['param'] in ch): bad.append('target_unchanged:%s' % o['op'])
-        if o['op'] != 'move' and [x for x in ch - {o['param']} if b.get(x) != b.get(o['param'])]: bad.append('side_effect:%s:%d' % (o['op'], len(ch - {o['param']})))      # aliases of the same stored value (e.g. Number / Room Number|String) carry the new value and are not side effects
+        if o['op'] != 'move' and o.get('param') and not (o['param'] in ch): bad.append('target_unchanged:%s' % o['op'])
+        if o['op'] != 'move' and o.get('param') and [x for x in ch - {o['param']} if b.get(x) != b.get(o['param'])]: bad.append('side_effect:%s:%d' % (o['op'], len(ch - {o['param']})))      # aliases of the same stored value (e.g. Number / Room Number|String) carry the new value and are not side effects
     others = [e for e in pr if e not in used and g(pr[e]) != g(po.get(e))]; row['other_elements_param_changed'] = len(others)
     if others: bad.append('others_changed')
     row.update({k2: v for k2, v in U.report(work, out).items() if not k2.startswith('_')})
