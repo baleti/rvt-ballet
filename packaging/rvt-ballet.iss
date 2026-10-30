@@ -34,21 +34,28 @@ Filename: "{app}\python\pythonw.exe"; Parameters: "-m rvtballet serve"; WorkingD
 
 [Code]
 // The app is a windowless pythonw.exe: Restart Manager cannot ask it to close, so a silent upgrade/uninstall over a running copy failed (exit 5).
-// Stop only processes whose image lives under {app}.
-procedure StopAppProcesses();
-var rc: Integer;
+// Stop only processes whose image lives under the install folder. Runs in InitializeSetup because the Restart Manager check aborts before PrepareToInstall.
+procedure StopAppProcesses(Dir: String);
+var rc: Integer; Ps: String;
 begin
-  Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "$a=''' + ExpandConstant('{app}') + '''; Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith($a, [StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force; Start-Sleep -Milliseconds 800"', '', SW_HIDE, ewWaitUntilTerminated, rc);
+  Log('stopping processes under ' + Dir);
+  // 32-bit setup on 64-bit Windows would get the 32-bit PowerShell (WOW64), which cannot read the Path of 64-bit processes
+  if IsWin64 then Ps := ExpandConstant('{sysnative}\WindowsPowerShell\v1.0\powershell.exe') else Ps := 'powershell.exe';
+  Exec(Ps, '-NoProfile -ExecutionPolicy Bypass -Command "$a=''' + Dir + '''; $m=Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith($a, [StringComparison]::OrdinalIgnoreCase) }; $m | Stop-Process -Force; Start-Sleep -Milliseconds 800"', '', SW_HIDE, ewWaitUntilTerminated, rc);
+  Log('stop rc=' + IntToStr(rc));
 end;
 
-function PrepareToInstall(var NeedsRestart: Boolean): String;
+function InitializeSetup(): Boolean;
+var Dir: String;
 begin
-  StopAppProcesses();
-  Result := '';
+  if not RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{2B7C4D90-83A1-4F6E-B1D2-5E9A0C7F1D42}_is1', 'Inno Setup: App Path', Dir) then
+    Dir := ExpandConstant('{localappdata}\Programs\rvt-ballet');
+  if DirExists(Dir) then StopAppProcesses(Dir);
+  Result := True;
 end;
 
 function InitializeUninstall(): Boolean;
 begin
-  StopAppProcesses();
+  StopAppProcesses(ExpandConstant('{app}'));
   Result := True;
 end;
