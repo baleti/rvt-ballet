@@ -24,8 +24,12 @@ def _pid_for(name):
 
 
 def validate_op(op):
-    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num'): raise EditError('unsupported edit op (supported: set_string, set_num)')
+    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete'): raise EditError('unsupported edit op (supported: set_string, set_num, delete)')
     if not isinstance(op.get('eid'), int) or isinstance(op.get('eid'), bool): raise EditError('eid (element id) must be an integer')
+    if op['op'] == 'delete':
+        if os.environ.get('RVTBALLET_ENABLE_DELETE') != '1': raise EditError('delete is disabled (opt-in: RVTBALLET_ENABLE_DELETE=1; no Revit evidence for it yet)')
+        if BACKEND() != 'rvtedit': raise EditError('delete needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
+        return {'op': 'delete', 'eid': op['eid']}
     if op['op'] == 'set_num':
         kind = op.get('kind', 'Double')
         if kind not in ('Double', 'Int'): raise EditError('kind must be Double or Int')
@@ -52,17 +56,23 @@ class Edits:
     def undo(self):
         if not self.ops: raise EditError('nothing to undo')
         return self.ops.pop()
-    def manifest(self): return {'modified': sorted({'el:%d' % o['eid'] for o in self.ops})}
+    def manifest(self, deleted=None):
+        m = {'modified': sorted({'el:%d' % o['eid'] for o in self.ops if o['op'] != 'delete'})}
+        if deleted: m['deleted'] = sorted('el:%d' % i for i in deleted)
+        return m
 
 
-def apply(buf, ops):
+def apply(buf, ops): return apply_full(buf, ops)[0]
+
+
+def apply_full(buf, ops):
     """replay ops on bytes -> new bytes (the source bytes are never modified). Backend: env RVTBALLET_EDIT_BACKEND = wledit (default) | rvtedit"""
-    if not ops: return buf
+    if not ops: return buf, []
     d = tempfile.mkdtemp(prefix='rvtballet-edit-'); a = os.path.join(d, 'in.rvt'); b = os.path.join(d, 'out.rvt')
     try:
         with open(a, 'wb') as f: f.write(buf)
-        (_apply_rvtedit if BACKEND() == 'rvtedit' else _apply_wledit)(a, b, ops)
-        with open(b, 'rb') as f: return f.read()
+        deleted = (_apply_rvtedit if BACKEND() == 'rvtedit' else _apply_wledit)(a, b, ops) or []
+        with open(b, 'rb') as f: return f.read(), deleted
     finally:
         for p in (a, b):
             try: os.remove(p)
@@ -101,15 +111,26 @@ def _apply_rvtedit(a, b, ops):
         if p not in sys.path: sys.path.insert(0, p)
     os.environ.setdefault('RVT_GEOM', '1')
     import rvtedit
-    ed = rvtedit.Edit(a)
+    ed = rvtedit.Edit(a); deleted = []
     for o in ops:
         try:
-            if o['op'] == 'set_num': ed.set_num(o['eid'], _resolve_pid(ed, o), o['value'], o['kind'])
+            if o['op'] == 'delete': deleted += _delete(ed, o['eid'])
+            elif o['op'] == 'set_num': ed.set_num(o['eid'], _resolve_pid(ed, o), o['value'], o['kind'])
             elif o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'] if o['match'] is not None else None, o['value'])
             else: ed._str_edit(o['eid'], o['field'], o['value'], o['match'])
         except (IndexError, KeyError, StopIteration, struct_error()) as e:
             raise EditError('element %d has no %s to edit (%s)' % (o['eid'], o['field'], type(e).__name__))
     ed.save(b)
+    return deleted
+
+
+def _delete(ed, eid):
+    """delete with what Revit's Delete removes: class-specific paths of rvtedit (floor / view / sheet), else owned_set; returns every deleted id (they all go in the manifest)"""
+    cls = ed.g.e.trace(eid)[2]['class']
+    if cls == 'Floor': return list(ed.delete_floor(eid))
+    if cls.startswith('DBView') and cls not in ('DBViewType',): return list(ed.delete_view(eid))
+    if cls == 'ViewSheet': return list(ed.delete_sheet(eid) or [eid])
+    ids = ed.owned_set(eid); ed.delete(*ids); return list(ids)
 
 
 def struct_error():

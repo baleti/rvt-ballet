@@ -122,10 +122,10 @@ def _stage(ss, mid, text):
 def _pending(ss, mid, d, new_bytes, manifest):
     """bytes + manifest of the recorded edits replayed on the loaded bytes (explicit new_bytes win)"""
     if new_bytes is not None: return new_bytes, manifest or {}
-    from .edit import apply
+    from .edit import apply_full, Edits
     e = ss.edits(mid); ops = list(e.ops); ss.applied[mid] = len(ops)
-    from .edit import Edits; m = Edits(); m.ops = ops
-    return apply(d.buf, ops), m.manifest()
+    nb, deleted = apply_full(d.buf, ops); m = Edits(); m.ops = ops
+    return nb, m.manifest(deleted)
 
 
 def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
@@ -180,10 +180,10 @@ def recoverable(ss):
 
 def add_edit(ss, mid, src, op):
     """record an edit after a trial replay on the loaded bytes (so an op the writer cannot apply is refused now, not at save time)"""
-    from .edit import apply, validate_op
-    d = ss.doc(mid, src); e = ss.edits(mid); op = validate_op(op); apply(d.buf, e.ops + [op])
+    from .edit import apply_full, validate_op
+    d = ss.doc(mid, src); e = ss.edits(mid); op = validate_op(op); _, deleted = apply_full(d.buf, e.ops + [op])
     e.ops.append(op)
-    return {'ok': True, 'n': len(e.ops), 'ops': e.ops, 'manifest': e.manifest()}
+    return {'ok': True, 'n': len(e.ops), 'ops': e.ops, 'manifest': e.manifest(deleted)}
 
 
 class BadDest(Exception): pass
