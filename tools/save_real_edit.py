@@ -10,7 +10,7 @@ import rvt_params
 g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
 async def one(c, models, k, src):
     row = {'size_mb': round(os.path.getsize(src) / 2 ** 20, 1)}; t0 = time.time()
-    pr = rvt_params.params(src); cand = [e for e, d in pr.items() if g(d).get('Comments') == '' ]
+    pr = rvt_params.params(src); cand = [e for e, d in pr.items() if (bool(g(d).get('Comments')) if os.environ.get('RVT_EDIT_NONEMPTY') else g(d).get('Comments') == '')]      # RVT_EDIT_NONEMPTY: pick an element whose Comments is really stored
     row['candidates'] = len(cand)
     if not cand: row['result'] = 'NO_CANDIDATE'; return row
     eid = cand[0]; md = os.path.join(_T, 'm%d' % k); os.makedirs(md); mid = 'f%d' % k; models.m[mid] = {'dir': md, 'name': 'f', 'src': src}
