@@ -13,7 +13,7 @@ async def run():
     models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
-        for bad in ({'dx': 0, 'dy': 0}, {'dx': float('nan')}, {'dx': 'x'}, {'dx': 1e9}):
+        for bad in ({'dx': 0, 'dy': 0}, {'dx': float('nan')}, {'dx': 'x'}, {'dx': 1e9}, {'dx': 5e5}):
             r = await c.post('/api/m/m/edit', json=dict({'op': 'move', 'eid': T}, **bad), skip_auto_headers=()) if bad.get('dx') == bad.get('dx') else None
             if r is not None: assert r.status == 400, (bad, r.status)
         r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': T, 'dx': 2.0}); j = await r.json(); assert r.status == 200 and j['manifest'] == {'modified': ['el:%d' % T]}, (r.status, j)

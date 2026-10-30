@@ -45,7 +45,7 @@ def validate_op(op):
     if op['op'] == 'move':
         if BACKEND() != 'rvtedit': raise EditError('move needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
         d = [op.get(k, 0.0) for k in ('dx', 'dy', 'dz')]
-        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or abs(v) > 1e6 for v in d): raise EditError('dx, dy, dz must be finite numbers (Revit internal units = feet), |v| <= 1e6')
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or abs(v) > 5e4 for v in d): raise EditError('dx, dy, dz must be finite numbers (Revit internal units = feet), |v| <= 50000 (Revit keeps geometry within about 20 miles = 105600 ft of the origin)')
         if not any(d): raise EditError('move by zero')
         return {'op': 'move', 'eid': op['eid'], 'dx': float(d[0]), 'dy': float(d[1]), 'dz': float(d[2])}
     if op['op'] == 'delete':
