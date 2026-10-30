@@ -37,6 +37,50 @@ except Exception as e:
 '''
 
 
+def _disk_dir():
+    d = os.environ.get('RVTBALLET_SNAPSHOT_CACHE')
+    if d == '0': return None
+    return os.path.expanduser(d or '~/.cache/rvtballet/snapshots')
+
+
+def _reader_stamp():
+    """changes whenever the reader / write-lab code that produces the dump changes (a stale dump would weaken verification)"""
+    import hashlib
+    h = hashlib.sha256()
+    for root in (os.path.expanduser(os.environ.get('SAVEGATE_RVT_LIB') or '~/rvt-research/write-lab'), os.path.expanduser('~/rvt-research'), os.path.dirname(os.path.abspath(__file__))):
+        try:
+            for n in sorted(os.listdir(root)):
+                if n.endswith('.py'): st = os.stat(os.path.join(root, n)); h.update(('%s:%d:%d;' % (n, st.st_size, st.st_mtime_ns)).encode())
+        except OSError: pass
+    return h.hexdigest()[:16]
+
+
+def _disk_get(key):
+    """(snap, keys) cached on disk for this source sha256 and reader stamp, or None; any damage (short file, bad checksum, unpickle error) is a miss, never an error"""
+    import hashlib, pickle
+    d = _disk_dir()
+    if not d: return None
+    f = os.path.join(d, '%s-%s.pkl' % (key.hex(), _reader_stamp()))
+    try:
+        raw = open(f, 'rb').read()
+        if len(raw) < 32 or hashlib.sha256(raw[32:]).digest() != raw[:32]: return None
+        snap, keys = pickle.loads(raw[32:]); return snap, keys
+    except Exception: return None
+
+
+def _disk_put(key, snap, keys, keep=6):
+    import hashlib, pickle
+    d = _disk_dir()
+    if not d: return
+    try:
+        os.makedirs(d, exist_ok=True); body = pickle.dumps((dict(snap), set(keys)), 4); f = os.path.join(d, '%s-%s.pkl' % (key.hex(), _reader_stamp())); t = f + '.%d.tmp' % os.getpid()
+        with open(t, 'wb') as o: o.write(hashlib.sha256(body).digest() + body)
+        os.replace(t, f)
+        old = sorted((os.path.join(d, n) for n in os.listdir(d) if n.endswith('.pkl')), key=os.path.getmtime)
+        for x in old[:-keep]: os.remove(x)
+    except Exception: pass
+
+
 def _cached_adapter():
     """RvtAdapter whose snapshot() is memoised by content hash (last 3 buffers): the source dump (~14 s on a 5.6k-element file) is taken once per loaded
     file instead of at every save; the output of a save is cached too, so after SAVE (overwrite) the new loaded bytes cost nothing."""
@@ -67,8 +111,12 @@ def _cached_adapter():
             key = hashlib.sha256(buf).digest()
             for k, snap, keys in self._memo:
                 if k == key: self._keys = set(keys); return dict(snap)
+            hit = _disk_get(key)
+            if hit is not None:
+                snap, keys = hit; self._keys = set(keys); self._memo = ([(key, dict(snap), set(keys))] + self._memo)[:3]; return dict(snap)
             self.report('reading %d MB (element dump for verification)' % (len(buf) >> 20))
             snap = (self._snapshot_in_worker(buf) if os.environ.get('RVTBALLET_SNAPSHOT_WORKER', '1') != '0' else super().snapshot(buf)); self._memo = ([(key, dict(snap), set(self._keys))] + self._memo)[:3]
+            _disk_put(key, snap, self._keys)
             return snap
     return CachedRvtAdapter
 
