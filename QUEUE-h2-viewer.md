@@ -130,3 +130,4 @@ DOCS 2026-10-30: docs/SAVE.md status and error codes brought in line with the Re
 22. 2026 chain gen1 try1 2026-10-30_01:16:59: no Revit port (guest did not start Revit 2026; no file result); run7 retries up to 3x.
 22. AUDIT-ON 2024 gen1 2026-10-30_01:19:12: ok=False err='no Revit port' attempts=1 (Revit did not start; no file result). The audit pass (run3) has no retry logic: it will need a rerun for any file with 'no Revit port'/hang-crash (to do once it finishes).
 22. run8.sh queued 2026-10-30: waits for run3 (audit-on, 2024) then retries each file whose audit line shows no Revit port / hang-crash up to 3x -> vmq/verdicts8.txt.
+UI 2026-10-30: tools/uitest_save.py now 10 checks (adds: layout warning rendered as 'WARNING:' line in the result panel; layout_changed refusal text) - ALL OK.
