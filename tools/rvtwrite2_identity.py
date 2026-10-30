@@ -6,6 +6,7 @@ year = sys.argv[1]; mx = int(sys.argv[3]) << 20 if len(sys.argv) > 3 else 1 << 6
 spec = importlib.util.spec_from_file_location('o', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rvtsave_oracle.py')); o = importlib.util.module_from_spec(spec); spec.loader.exec_module(o)
 sys.path.insert(0, os.path.expanduser('~/src/savegate')); from savegate import adapters
 adapters.RVT_WRITABLE = adapters.RVT_WRITABLE + (year,)
+if os.environ.get('RVT_MEMBER_MAX'): adapters.RVT_MEMBER_MAX = int(os.environ['RVT_MEMBER_MAX'])
 import json; json.dump({'rvt': {year: 'open'}}, open(o._T + '/gate.json', 'w'))
 for sid, y, s, p in (l.rstrip('\n').split('\t') for l in open(sys.argv[2])):
     if y != year or int(s) > mx: continue
