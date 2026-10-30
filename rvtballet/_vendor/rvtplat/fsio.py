@@ -194,3 +194,33 @@ def is_readonly(path):
         return not os.access(long_path(path), os.W_OK)
     except OSError:
         return False
+
+
+def fingerprint(path, hash_limit=64 << 20):
+    """(size, mtime_ns, sha1) of a file. mtime alone is not enough: FAT/exFAT keeps 2 s, SMB and some
+    sync tools round, and an external edit within the same tick keeps the same mtime. The hash decides
+    whenever size and mtime agree (files above hash_limit hash only head+tail 1 MiB + size)."""
+    import hashlib
+    p = long_path(path)
+    st = os.stat(p)
+    h = hashlib.sha1()
+    with open(p, 'rb') as f:
+        if st.st_size <= hash_limit:
+            for blk in iter(lambda: f.read(1 << 20), b''):
+                h.update(blk)
+        else:
+            h.update(f.read(1 << 20))
+            f.seek(-(1 << 20), 2)
+            h.update(f.read(1 << 20))
+    return (st.st_size, st.st_mtime_ns, h.hexdigest())
+
+
+def changed_since(path, fp):
+    """True when the file differs from fingerprint `fp` (taken earlier). Size or content hash differing
+    is a change even if mtime is equal (coarse timestamps); mtime differing alone is NOT a change when the
+    content hash is equal (touch, copy, sync tool rewrote the stamp)."""
+    try:
+        now = fingerprint(path)
+    except OSError:
+        return True
+    return now[0] != fp[0] or now[2] != fp[2]

@@ -33,11 +33,32 @@ def _win_job(pid_handle_proc, mem_bytes):
     k.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
     if not k.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)):
         raise OSError(ctypes.get_last_error(), 'SetInformationJobObject')
-    h = int(pid_handle_proc._handle)
+    if pid_handle_proc is None:
+        k.GetCurrentProcess.restype = wintypes.HANDLE
+        h = k.GetCurrentProcess()
+    else:
+        h = int(pid_handle_proc._handle)
     k.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
     if not k.AssignProcessToJobObject(job, h):
         raise OSError(ctypes.get_last_error(), 'AssignProcessToJobObject')
     return job                      # keep the handle alive as long as the child should be capped
+
+
+_SELF_JOB = None
+
+
+def adopt_self_kill_on_close():
+    """Windows: put THIS process in a kill-on-close Job Object so every child it ever starts (multiprocessing spawn workers,
+    helper python, browsers it launched) dies when this process ends for any reason, including TerminateProcess.
+    Other OS / failure (already in a job that forbids nesting): returns False and changes nothing."""
+    global _SELF_JOB
+    if sys.platform != 'win32' or _SELF_JOB is not None:
+        return _SELF_JOB is not None
+    try:
+        _SELF_JOB = _win_job(None, 0)
+        return True
+    except Exception:
+        return False
 
 
 def capped_argv(cmd, mem_gb=None, nice=10):
