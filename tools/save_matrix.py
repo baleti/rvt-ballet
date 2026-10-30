@@ -24,8 +24,9 @@ async def one(c, models, k, src):
     return row
 async def main(out, files):
     from aiohttp.test_utils import TestClient, TestServer
+    import aiohttp
     models = server.Models(); rows = []
-    async with TestClient(TestServer(server.make_app(models))) as c:
+    async with TestClient(TestServer(server.make_app(models)), timeout=aiohttp.ClientTimeout(total=None)) as c:
         for k, f in enumerate(files):
             rows.append(await one(c, models, k, f)); print(k, rows[-1].get('result'), rows[-1].get('version'), rows[-1].get('seconds'), flush=True)
     agg = {'files': len(rows), 'ok': sum(r['result'] == 'OK' for r in rows), 'by_version': {}, 'seconds_total': round(sum(r.get('seconds', 0) for r in rows), 1)}
