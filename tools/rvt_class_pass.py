@@ -29,14 +29,16 @@ async def one_class(c, models, k, src, cls, pr, ix):
     if not info.get('open'): row['result'] = 'NOT_OPEN ' + str(info.get('error'))[:80]; return row
     applied = []; refused = {}; used = set()
     for kind in ('set_string', 'set_num', 'move', 'set_field'):
-        tried = 0
+        tried = 0; skip = set()
         for eid in ids:
-            if eid in used or tried >= 8: continue
+            if eid in used or tried >= 40: continue
             p = g(pr[eid])
             if kind == 'set_string':
                 cands = [n for n, v in p.items() if isinstance(v, str) and '|' not in n and n not in NOEDIT and n in KNOWN]
                 if not cands: continue
-                nm = sorted(cands, key=lambda n: p[n] != '')[0]
+                cands = [n for n in sorted(cands, key=lambda n: p[n] != '') if (eid, n) not in skip]
+                if not cands: continue
+                nm = cands[0]
                 op = {'op': 'set_string', 'eid': eid, 'param': nm, 'value': 'c3x edit'}
             elif kind == 'set_num':
                 nm = next((n for n, v in p.items() if isinstance(v, float) and '|' not in n and n not in NOEDIT and n in KNOWN), None)
@@ -50,6 +52,7 @@ async def one_class(c, models, k, src, cls, pr, ix):
             tried += 1; st, j = await post(c, mid, op)
             if st == 200: applied.append(op); used.add(eid); break
             refused[kind] = (j.get('error') or j.get('code') or '')[:70]
+            if kind == 'set_string' and op.get('param'): skip.add((eid, op['param'])); ids.insert(ids.index(eid) + 1, eid) if len(cands) > 1 and sum(1 for k4 in skip if k4[0] == eid) < 6 else None
     row['applied'] = [o['op'] + ('(field)' if o.get('field') and not o.get('param') else '') for o in applied]; row['refused'] = refused
     if not applied: row['result'] = 'NO_EDIT_ACCEPTED'; return row
     out = os.path.join(_T, 'o%d.rvt' % k); t0 = time.time(); r = await c.post('/api/m/%s/saveas' % mid, json={'dest': out}); j = await r.json(); row['saveas_s'] = round(time.time() - t0, 1)
