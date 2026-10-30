@@ -26,5 +26,7 @@ async def main(out, src0, rounds):
                 now = rvt_params.params(src); row['earlier_edits_present'] = all(g(now.get(e)).get('Comments') == v for e, v in done.items())
             row['seconds'] = round(time.time() - t0, 1); rows.append(row); print(row, flush=True)
             if r.status != 200: break
+    kd = os.environ.get('KEEP_DIR')
+    if kd: os.makedirs(kd, exist_ok=True); shutil.copy(src, os.path.join(kd, 'real_chain_final.rvt'))      # local only, for the Revit harness
     json.dump(rows, open(out, 'w')); print('REAL-CHAIN', {'rounds_ok': sum(1 for r in rows if r.get('save_status') == 200), 'rounds': len(rows)})
 asyncio.run(main(sys.argv[1], sys.argv[2], int(sys.argv[3])))
