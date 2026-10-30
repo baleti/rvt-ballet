@@ -1,6 +1,6 @@
 # Saving from rvt-ballet (SAVE AS / SAVE / edits)
 
-Status: offline-verified with the savegate library. Revit evidence so far (shared write-lab harness, Revit 2024, audit OFF, synthetic write-lab scene only): five distinct viewer-produced edited files opened (a unicode edit, a 200-character edit, and generations 1, 4 and 8 of an eight-save chain). Failures seen were guest/transport problems (the unmodified original also failed twice). Revit 2026: one viewer-edited 2026 file also opened (its control opened 2/2). NOT yet done: audit-ON opens, more 2026 edits, real client projects, edit kinds other than string parameters. Overwrite stays disabled by default.
+Status: offline-verified with the savegate library. Revit evidence so far (shared write-lab harness, Revit 2024, audit OFF, synthetic write-lab scene only): all six viewer-produced edited files opened at least once (three single edits incl. unicode and a 200-character value, and generations 1, 4 and 8 of an eight-save chain; several needed retries because of guest failures). Failures seen were guest/transport problems (the unmodified original also failed twice). Revit 2026: one viewer-edited 2026 file also opened (its control opened 2/2). NOT yet done: audit-ON opens, more 2026 edits, real client projects, edit kinds other than string parameters. Overwrite stays disabled by default.
 
 Requires `~/src/savegate` (or an installed `savegate`) and the write-lab (`~/rvt-research/write-lab`, env `RVTBALLET_WRITELAB`). Without them the viewer runs unchanged and every save endpoint answers 501.
 
