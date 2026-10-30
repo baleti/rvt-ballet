@@ -113,14 +113,14 @@ class SaveSessions:
         return sg.Config(allow_overwrite=os.environ.get('RVTBALLET_ALLOW_OVERWRITE') == '1') if sg else None
     @property
     def available(self): return _import() is not None
-    def doc(self, mid, src):
-        with self._lk: return self._doc(mid, src)
-    def _doc(self, mid, src):
+    def doc(self, mid, src, precheck=True):
+        with self._lk: return self._doc(mid, src, precheck)
+    def _doc(self, mid, src, precheck=True):
         sg = _import()
         if sg is None: raise RuntimeError('savegate is not installed')
         d = self.docs.get(mid)
         if d is None or d.path != os.path.abspath(src):
-            check_memory(src)
+            if precheck: check_memory(src)
             if d is not None: d.close(); self.docs.pop(mid, None)       # replaced: do not leak its journal
             from savegate import rvt_elements
             d = sg.open_doc(src, _cached_adapter()(elements_fn=rvt_elements.elements), cfg=self.cfg)      # element-level verify
@@ -161,7 +161,7 @@ def error_status(exc):
     n = type(exc).__name__
     return {'Conflict': (409, 'conflict'), 'GateClosed': (409, 'gate_closed'), 'OverwriteDisabled': (409, 'overwrite_disabled'),
             'Exists': (409, 'exists'), 'Locked': (423, 'locked'), 'VerifyFailed': (422, 'verify_failed'),
-            'EditError': (400, 'edit_error'), 'LayoutChanged': (409, 'layout_changed'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'CloudPlaceholder': (409, 'cloud_placeholder'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
+            'EditError': (400, 'edit_error'), 'LightVerifyFailed': (422, 'verify_failed'), 'LayoutChanged': (409, 'layout_changed'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'CloudPlaceholder': (409, 'cloud_placeholder'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
 
 
 def result_json(r):
@@ -198,6 +198,18 @@ def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
     if lc is None: r['warnings'] = ['the page-layout check could not run: this output is NOT confirmed to keep the layout of the source']
     elif lc: r['warnings'] = ['page layout of %s changed (%s -> %s, %+d bytes): this layout is NOT confirmed to open in Revit; verify the copy in Revit before relying on it' % (k, la, lb, dz) for k, la, lb, dz in lc]
+    return r
+
+
+def save_as_light(ss, mid, src, dest, overwrite=False):
+    """SAVE AS with LIMITED verification (rvtballet.lightverify) for models too large for the element-level verify. Explicit opt-in, SAVE AS only: never used for overwrite."""
+    from .lightverify import light_verify
+    _cloud_gate(src, dest); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src, precheck=False)
+    new_bytes, manifest = _pending(ss, mid, d, None, None); n = len(ss.edits(mid).ops)
+    _stage(ss, mid, 'limited verification (structure only)'); rep = light_verify(d.buf, new_bytes, max(1, n))
+    _stage(ss, mid, 'writing'); r = result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite, verify=False))
+    r['verify'] = rep; r['limited_verification'] = True
+    r['warnings'] = ['LIMITED verification only (no element-level comparison): the output is structurally consistent with the source (all untouched streams identical, only %d gzip member(s) of the edited partition changed) but it is NOT confirmed that only the declared elements changed or that Revit accepts it. Open the copy in Revit before relying on it.' % rep['changed_members']]
     return r
 
 

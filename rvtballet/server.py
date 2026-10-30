@@ -147,6 +147,7 @@ def make_app(models):
         if need_dest and (not isinstance(dest, str) or not dest): raise web.HTTPBadRequest(text='dest required')
         if body.get('force') and body.get('confirm') is not True: raise web.HTTPBadRequest(text='force needs confirm=true')
         if body.get('overwrite') and body.get('confirm') is not True: raise web.HTTPBadRequest(text='overwrite of an existing destination needs confirm=true')
+        if body.get('light_verify') and body.get('confirm') is not True: raise web.HTTPBadRequest(text='limited verification must be confirmed (confirm=true): it is weaker than the element-level verify')
         src = PluginContext(models).source_path(mid)
         if not src or not os.path.exists(src): return web.json_response({'ok': False, 'code': 'no_source', 'error': 'source file of this model is not available'}, status=404)
         if not saves.available: return web.json_response({'ok': False, 'code': 'unavailable', 'error': 'savegate is not installed'}, status=501)
@@ -172,7 +173,7 @@ def make_app(models):
         except Exception: pass
         return out
     async def save_as(req):
-        return await save_common(req, lambda ss, mid, src, b: savemod.save_as(ss, mid, src, b['dest'], bool(b.get('overwrite'))), True)
+        return await save_common(req, lambda ss, mid, src, b: (savemod.save_as_light if b.get('light_verify') else savemod.save_as)(ss, mid, src, b['dest'], bool(b.get('overwrite'))), True)
     async def save_over(req):
         return await save_common(req, lambda ss, mid, src, b: savemod.save_overwrite(ss, mid, src, force=bool(b.get('force'))), False)
     async def save_info(req):
