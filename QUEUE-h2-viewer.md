@@ -134,3 +134,4 @@ UI 2026-10-30: tools/uitest_save.py now 10 checks (adds: layout warning rendered
 22. VERDICT 18 2026-10-30_01:43:23: 2026 chain gen1 try2 = OPEN ok=True err=None (try1 was 'no Revit port'). 2026 viewer-produced files opened so far: single0, chain gen1 (2). gen2, gen3 (layout warning) and the two audit-ON opens are next in vmq26/run7.sh.
 SCOREBOARD 2026-10-30: added section 'rvt-ballet save path / viewer integration' to ~/demo-state/SCOREBOARD.md with aggregate numbers; HANDOFF points to rvtedit2's edit matrix as the base for delete/move.
 22. AUDIT-ON 2024 gen4 2026-10-30_01:48:09: ok=False err=hang/crash attempts=5 (guest; no file result). run8 retries files with this signature after run3 finishes.
+22. VERDICT 19 2026-10-30_01:52:01: 2026 chain gen2 try1 = OPEN ok=True err=None. 2026 viewer-produced files opened: single0, chain gen1, chain gen2 (3). gen3 (layout warning) and the two audit-ON opens next.
