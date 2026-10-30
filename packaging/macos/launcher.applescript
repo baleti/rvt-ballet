@@ -9,7 +9,7 @@ end open
 
 on launch(theFiles)
 	set res to POSIX path of (path to resource "app") & "/.."
-	set py to quoted form of (res & "/venv/bin/python")
+	set py to quoted form of (res & "/python/bin/python3")
 	set sub to " serve"
 	set args to ""
 	if (count of theFiles) > 0 then set sub to " open"
