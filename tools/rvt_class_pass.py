@@ -41,8 +41,9 @@ async def one_class(c, models, k, src, cls, pr, ix):
                 nm = cands[0]
                 op = {'op': 'set_string', 'eid': eid, 'param': nm, 'value': 'c3x edit'}
             elif kind == 'set_num':
-                nm = next((n for n, v in p.items() if isinstance(v, float) and '|' not in n and n not in NOEDIT and n in KNOWN), None)
-                if not nm: continue
+                cands = [n for n, v in p.items() if isinstance(v, float) and '|' not in n and n not in NOEDIT and n in KNOWN and (eid, n) not in skip]
+                if not cands: continue
+                nm = cands[0]
                 op = {'op': 'set_num', 'eid': eid, 'param': nm, 'value': p[nm] + 0.5, 'kind': 'Double'}
             elif kind == 'set_field':
                 f = FIELD.get(cls) or next((v for k3, v in FIELD.items() if cls.startswith(k3)), None); nm = next((p[k5] for k5 in ('Name', 'View Name', 'Type Name') if isinstance(p.get(k5), str) and p[k5]), None)
@@ -52,6 +53,7 @@ async def one_class(c, models, k, src, cls, pr, ix):
             tried += 1; st, j = await post(c, mid, op)
             if st == 200: applied.append(op); used.add(eid); break
             refused[kind] = (j.get('error') or j.get('code') or '')[:70]
+            if kind == 'set_num' and op.get('param'): skip.add((eid, op['param'])); ids.insert(ids.index(eid) + 1, eid) if len(cands) > 1 and sum(1 for k4 in skip if k4[0] == eid) < 8 else None
             if kind == 'set_string' and op.get('param'): skip.add((eid, op['param'])); ids.insert(ids.index(eid) + 1, eid) if len(cands) > 1 and sum(1 for k4 in skip if k4[0] == eid) < 6 else None
     row['applied'] = [o['op'] + ('(field)' if o.get('field') and not o.get('param') else '') for o in applied]; row['refused'] = refused
     if not applied: row['result'] = 'NO_EDIT_ACCEPTED'; return row
