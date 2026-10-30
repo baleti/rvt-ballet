@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleName</key><string>rvt-ballet</string>
+  <key>CFBundleDisplayName</key><string>rvt-ballet</string>
+  <key>CFBundleIdentifier</key><string>org.revitballet.rvt-ballet</string>
+  <key>CFBundleExecutable</key><string>rvt-ballet</string>
+  <key>CFBundleVersion</key><string>0.1.0</string>
+  <key>CFBundleShortVersionString</key><string>0.1.0</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>LSMinimumSystemVersion</key><string>11.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>UTImportedTypeDeclarations</key><array><dict>
+    <key>UTTypeIdentifier</key><string>com.autodesk.rvt</string>
+    <key>UTTypeDescription</key><string>Revit model</string>
+    <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+    <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>rvt</string></array></dict>
+  </dict></array>
+  <key>CFBundleDocumentTypes</key><array><dict>
+    <key>CFBundleTypeName</key><string>Revit model</string>
+    <key>CFBundleTypeRole</key><string>Viewer</string>
+    <key>LSHandlerRank</key><string>Alternate</string>
+    <key>LSItemContentTypes</key><array><string>com.autodesk.rvt</string></array>
+  </dict></array>
+</dict></plist>
