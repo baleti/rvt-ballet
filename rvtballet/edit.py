@@ -125,9 +125,12 @@ def _apply_rvtedit(a, b, ops):
             elif o['op'] == 'set_num': ed.set_num(o['eid'], _resolve_pid(ed, o), o['value'], o['kind'])
             elif o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'] if o['match'] is not None else None, o['value'])
             else: ed._str_edit(o['eid'], o['field'], o['value'], o['match'])
-        except (IndexError, KeyError, StopIteration, struct_error()) as e:
-            raise EditError('element %d has no %s to edit (%s)' % (o['eid'], o['field'], type(e).__name__))
-    ed.save(b)
+        except (IndexError, KeyError, StopIteration, AssertionError, struct_error()) as e:
+            raise EditError('element %d: %s could not be applied (%s)' % (o['eid'], o.get('field') or o['op'] + (' parameter %s' % o['pid'] if o.get('pid') is not None else ''), type(e).__name__))
+        except RuntimeError as e:        # e.g. rvtedit: 'element N lives in Partitions/X but this save edits Partitions/Y' (one partition per save)
+            raise EditError('edit refused by the edit backend: %s' % e)
+    try: ed.save(b)
+    except RuntimeError as e: raise EditError('save refused by the edit backend: %s' % e)
     return deleted
 
 
