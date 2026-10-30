@@ -21,6 +21,8 @@ export function describeError(j, status) {
   return lines;
 }
 export function describeBackup(b) { return `#${b.n}  ${b.mtime}  ${b.size} bytes  ${b.name}`; }
+export const NOT_EDITABLE = /^(UniqueId|IfcGUID|Type IfcGUID|Family|Type Id|Type|Family and Type|Name|Category\|ElementId|Design Option\|String)$/;
+export function paramEditable(name, value) { return typeof value === 'string' && !NOT_EDITABLE.test(name); }
 export function actions(info) {   // which buttons are enabled and why not
   const a = { saveas: { on: !!(info && info.open), why: info && info.open ? '' : (info && info.error) || 'saving unavailable for this model' } };
   a.save = { on: !!(info && info.open && info.allow_overwrite && info.gate_open), why: '' };
@@ -31,6 +33,8 @@ export function actions(info) {   // which buttons are enabled and why not
 export function initSave($, getMid) {
   const top = document.getElementById('top'); const sp = top.querySelector('.sp');
   const mk = (id, txt) => { const b = document.createElement('button'); b.id = id; b.textContent = txt; b.disabled = true; top.insertBefore(b, sp.nextSibling); return b; };
+  const bUndo = mk('bUndoEdit', 'Undo edit'); bUndo.disabled = false; bUndo.hidden = true; bUndo.title = 'Remove the last pending edit (nothing is written until you Save or Save as)';
+  let canNameEdit = false;
   const bBk = mk('bBackups', 'Backups'), bOver = mk('bSaveOver', 'Save'), bAs = mk('bSaveAs', 'Save as');
   const panel = document.createElement('div'); panel.id = 'savepanel'; panel.hidden = true; document.body.appendChild(panel);
   const show = (lines, bad, extra) => { panel.replaceChildren(); panel.className = bad ? 'bad' : 'ok'; lines.forEach(l => { const d = document.createElement('div'); d.textContent = l; panel.appendChild(d); }); if (extra) panel.appendChild(extra); const x = document.createElement('button'); x.textContent = 'close'; x.onclick = () => { panel.hidden = true; }; panel.appendChild(x); panel.hidden = false; };
@@ -38,6 +42,7 @@ export function initSave($, getMid) {
   async function refresh() {
     const mid = getMid(); if (!mid) return; let info = null; try { info = await (await fetch(`/api/m/${mid}/saveinfo`)).json(); } catch (e) {}
     if (mid !== getMid()) return;      // the user switched models while saveinfo ran: do not set the buttons from the old model
+    canNameEdit = !!(info && info.open && info.name_edit); const pe = (info && info.pending_edits) || 0; bUndo.hidden = !pe; bUndo.textContent = `Undo edit (${pe} pending)`;
     const a = actions(info); bBk.disabled = !a.saveas.on; bAs.disabled = !a.saveas.on; bAs.title = a.saveas.on ? 'Save a copy under a new name (never touches the original)' : a.saveas.why;
     bOver.disabled = !a.save.on; bOver.title = a.save.on ? 'Overwrite the source file (a backup is kept)' : a.save.why;
   }
@@ -63,5 +68,19 @@ export function initSave($, getMid) {
   };
   bAs.onclick = async () => { const dest = prompt('Save as (full path of the new .rvt):'); if (dest) doSave('saveas', { dest }); };
   bOver.onclick = () => { if (confirm('Overwrite the source file? A backup of the original is kept.')) doSave('save', {}); };
-  return { refresh };
+  bUndo.onclick = async () => { const r = await fetch(`/api/m/${getMid()}/edit/undo`, { method: 'POST' }); const j = await r.json().catch(() => null); show(r.ok ? [`Removed the last pending edit (${j.n} pending).`] : describeError(j, r.status), !r.ok); refresh(); };
+  // pencil on editable string parameter rows of the inspector; the server resolves the NAME to the one parameter stored on the element and refuses anything else
+  function decorate(eid, table) {
+    if (!canNameEdit || !table) return;
+    table.querySelectorAll('tr').forEach(tr => {
+      const tds = tr.querySelectorAll('td'); if (tds.length < 2) return; const name = tds[0].textContent, cur = tds[1].textContent;
+      if (tr.dataset.t !== 'string' || !paramEditable(name, cur)) return;      // only values that are STRINGS in the file (numbers are shown as text too, and their displayed units must not be edited as text)
+      const b = document.createElement('button'); b.textContent = '\u270e'; b.title = `Edit ${name} (recorded as a pending edit; nothing is written until Save / Save as)`; b.className = 'pedit'; b.style.marginLeft = '6px';
+      b.onclick = async () => { const v = prompt(`New value for "${name}" of element ${eid}:`, cur); if (v === null) return;
+        const [r, j] = await post('edit', { op: 'set_string', eid, param: name, value: v });
+        if (r.ok && j && j.ok) { show([`Pending edit recorded: ${name} of element ${eid} = ${JSON.stringify(v)} (${j.n} pending). Use Save as / Save to write it.`], false); } else show(describeError(j, r.status), true); refresh(); };
+      tds[1].appendChild(b);
+    });
+  }
+  return { refresh, decorate };
 }

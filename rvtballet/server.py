@@ -180,6 +180,7 @@ def make_app(models):
         mid, d = mdir(req); src = PluginContext(models).source_path(mid)
         r = await asyncio.get_event_loop().run_in_executor(None, lambda: saves.info(mid, src))
         cfg = saves.cfg; r['allow_overwrite'] = bool(cfg and cfg.allow_overwrite)
+        from . import edit as _ed; r['name_edit'] = _ed.BACKEND() == 'rvtedit'      # parameter edits by name/id need the rvtedit backend
         r['pending_edits'] = len(saves.edits(mid).ops)      # in memory only: a viewer restart drops them (the file on disk is untouched until a save)
         if r.get('open') and cfg:
             from . import save as _s; sg = _s._import(); d_ = saves.docs[mid]
