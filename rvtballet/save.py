@@ -366,7 +366,7 @@ def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     _cloud_gate(src); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t)
     check_memory(src, d.buf)
     ws = worksharing_state(d.buf)
-    if ws != 'Not enabled' and os.environ.get('RVTBALLET_ALLOW_WORKSHARED') != '1':
+    if not (ws or '').startswith('Not enabled') and os.environ.get('RVTBALLET_ALLOW_WORKSHARED') != '1':
         raise Workshared('overwrite refused: the model is %s (Worksharing: %s); worksets and the central link are not maintained by the writer. Use SAVE AS and check the copy in Revit; the file was not touched.' % ('workshared' if ws else 'of unknown worksharing state', ws or 'unreadable'))
     new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _stage(ss, mid, 'verifying and writing')
     lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
