@@ -16,6 +16,8 @@ if (-not (Test-Path $py)) {
   & "$py\python.exe" (Join-Path $dist 'get-pip.py') --no-warn-script-location
 }
 & "$py\python.exe" -m pip install --no-warn-script-location -r (Join-Path $dist 'requirements.txt')
+# prune: test suites of the dependencies are ~27% of the files (3029 of 11349) and make the per-user install slow under Defender; verified imports of numpy/scipy/numba/shapely/matplotlib/PIL/aiohttp/fontTools/vtk still work
+Get-ChildItem (Join-Path $py 'Lib\site-packages') -Recurse -Directory -Force | Where-Object { $_.Name -eq 'tests' } | Sort-Object { $_.FullName.Length } -Descending | ForEach-Object { Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
 # optional native fast path: put rvt_core-*.whl (CI or VM build) into dist\wheels and it is installed too
 $wh = Join-Path $dist 'wheels'
 if (Test-Path $wh) { & "$py\python.exe" -m pip install --no-warn-script-location --no-deps (Get-ChildItem $wh -Filter *.whl).FullName }
