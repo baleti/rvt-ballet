@@ -14,6 +14,12 @@ Verified on a fresh Windows VM (Python 3.12.10): build, silent install, start pa
 ## macOS (11 or newer) - UNTESTED, no Mac hardware was available
 `sh packaging/macos/build_macos.sh` builds `rvt-ballet.app` (an AppleScript droplet so Finder double click, drag and drop and "Open with" deliver the file) and a dmg. It is not notarized (that needs an Apple developer account): on first start use right click > Open. CI builds it on `macos-latest`; check the workflow log before trusting it.
 
+## Saving (SAVE AS / SAVE / edits): status and limits
+- NOT part of the installers: it needs the private `savegate` library and the write-lab / edit-lab checkouts (`~/src/savegate`, `~/rvt-research/write-lab`, `edit-lab`). Without them the viewer runs unchanged and every save endpoint answers 501 `unavailable`. Overwrite (`SAVE`) is OFF unless `RVTBALLET_ALLOW_OVERWRITE=1` AND an oracle gate is open; editing parameters by name needs `RVTBALLET_EDIT_BACKEND=rvtedit`. Details: `docs/SAVE.md`.
+- Only Revit 2024 and 2026 files can be saved (other years are refused). Tested on Linux only; Windows and macOS are UNTESTED for saving (path handling, file locks and the worker below are the open points).
+- Memory: the verify dumps every element and can need many GB on real projects (a 64 MB project passed 14 GB; 4 of 5 small real 2024 projects were saved identically, taking 12 s to 17 min). The dump runs in a worker process with a memory cap (`RVTBALLET_SNAPSHOT_MEM_GB`); a model that does not fit is refused with `too_big` and nothing is written. The cap uses POSIX `RLIMIT_AS`: on Windows the worker runs WITHOUT a cap (set the budget yourself or expect the machine to swap), on macOS RLIMIT_AS is not reliably enforced.
+- Time: a save of a real project takes minutes; the browser UI polls `/api/m/<id>/saveprogress`. HTTP clients and proxies with a 5-minute timeout will give up before it finishes.
+
 ## Limits
 - The memory cap used on Linux (systemd) is a Job Object on Windows; macOS has only `nice` (no hard cap).
 - Layout/mesh worker pools use `spawn` or run sequentially where `fork` does not exist, so large files convert slower on Windows than on Linux.

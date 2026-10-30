@@ -17,9 +17,13 @@ def _import():
     return None
 
 _WORKER = r'''
-import sys, os, pickle, resource
+import sys, os, pickle
 a, o, lim, wl, here = sys.argv[1:6]
-resource.setrlimit(resource.RLIMIT_AS, (int(lim), int(lim)))
+try:      # POSIX only: on Windows (no 'resource') the worker runs WITHOUT a memory cap (a Job Object would be needed)
+    import resource
+    resource.setrlimit(resource.RLIMIT_AS, (int(lim), int(lim)))
+except Exception:
+    pass
 sys.path[:0] = [here, wl, os.path.expanduser('~/src/savegate'), os.path.expanduser('~/rvt-research')]
 try:
     from savegate.adapters import RvtAdapter
