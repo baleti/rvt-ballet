@@ -15,7 +15,7 @@ async def save(src, scen, eid):
     md = _T + '/m'; os.makedirs(md); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
-        body = {'none': None, 'move': {'op': 'move', 'eid': eid, 'dx': 2.0}, 'param': {'op': 'set_string', 'eid': eid, 'value': 'rvtsave', 'match': ''}, 'delete': {'op': 'delete', 'eid': eid}}[op]
+        body = {'none': None, 'move': {'op': 'move', 'eid': eid, 'dx': 2.0}, 'param': {'op': 'set_string', 'eid': eid, 'param': 'Comments', 'value': 'rvtsave'}, 'delete': {'op': 'delete', 'eid': eid}}[op]
         if body:
             r = await c.post('/api/m/m/edit', json=body)
             if r.status != 200: return None, 'edit refused: %s' % (await r.text())[:150]
