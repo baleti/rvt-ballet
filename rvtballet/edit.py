@@ -48,6 +48,13 @@ def validate_op(op):
         if BACKEND() != 'rvtedit': raise EditError('set_num needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
         return {'op': 'set_num', 'eid': op['eid'], 'pid': pid, 'pids': cands, 'param': op.get('param'), 'value': float(v) if kind == 'Double' else int(v), 'kind': kind}
     if not isinstance(op.get('value'), str): raise EditError('value must be a string')
+    if op.get('param') is not None or op.get('pid') is not None:       # address the parameter by NAME/ID instead of by old text (several string parameters can hold the same text)
+        if BACKEND() != 'rvtedit': raise EditError('editing a parameter by name or id needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
+        pid = op.get('pid'); cands = None
+        if pid is None: cands = _pid_for(op.get('param') or '')
+        elif not isinstance(pid, int) or isinstance(pid, bool): raise EditError('pid must be an integer')
+        if '\0' in op['value'] or len(op['value']) > 4096: raise EditError('value must not contain NUL and must be at most 4096 characters')
+        return {'op': 'set_string', 'eid': op['eid'], 'field': 'ParamValueAString.m_value', 'value': op['value'], 'match': None, 'pid': pid, 'pids': cands, 'param': op.get('param'), 'kind': 'AString'}
     if '\0' in op['value'] or len(op['value']) > 4096: raise EditError('value must not contain NUL and must be at most 4096 characters')
     f = op.get('field') or DEFAULT_FIELD
     if f not in FIELDS: raise EditError('field %r is not writable (writable: %s)' % (f, ', '.join(FIELDS)))
@@ -123,6 +130,7 @@ def _apply_rvtedit(a, b, ops):
             if o['op'] == 'delete': deleted += _delete(ed, o['eid'])
             elif o['op'] == 'move': ed.move(o['eid'], o['dx'], o['dy'], o['dz'])
             elif o['op'] == 'set_num': ed.set_num(o['eid'], _resolve_pid(ed, o), o['value'], o['kind'])
+            elif o['op'] == 'set_string' and o.get('kind') == 'AString': _set_string_by_pid(ed, o)
             elif o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'] if o['match'] is not None else None, o['value'])
             else: ed._str_edit(o['eid'], o['field'], o['value'], o['match'])
         except (IndexError, KeyError, StopIteration, AssertionError, struct_error()) as e:
@@ -132,6 +140,19 @@ def _apply_rvtedit(a, b, ops):
     try: ed.save(b)
     except RuntimeError as e: raise EditError('save refused by the edit backend: %s' % e)
     return deleted
+
+
+def _set_string_by_pid(ed, o):
+    """overwrite the string value that belongs to ONE parameter id (exact log entry), not 'the first value with this text'"""
+    import struct
+    pid = _resolve_pid(ed, o); want = 'EID(%d)' % (pid & ((1 << 64) - 1)); log = ed.g.e.trace(o['eid'])[3]
+    for k, l in enumerate(log):
+        if l[1] == 'ParamValueAString.m_paramId' and l[4] == want:
+            # the value entry is the one whose bytes are CONTIGUOUS with this id entry (directly after, else directly before): never 'the nearest value' (that picked the neighbouring parameter)
+            vn = next((x for x in log if x[1] == 'ParamValueAString.m_value' and x[2] == l[3]), None) or next((x for x in log if x[1] == 'ParamValueAString.m_value' and x[3] == l[2]), None)
+            if vn is None: break
+            nb = struct.pack('<I', len(o['value'])) + o['value'].encode('utf-16le'); ed._rec_edit(o['eid'], [(vn[2], vn[3] - vn[2], nb)]); return
+    raise KeyError('string parameter %d not stored on %d' % (pid, o['eid']))
 
 
 def _delete(ed, eid):
