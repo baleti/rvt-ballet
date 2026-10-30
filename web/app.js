@@ -305,7 +305,7 @@ async function loadModel(mid, opts = {}) {
     await sleep(700);
   }
   $('#progress').hidden = true;
-  if (!window.__save) window.__save = initSave($, () => S.mid); window.__save.refresh();
+  if (!window.__save) window.__save = initSave($, () => S.mid);
   S.meta = meta; S.noCap = new Set(meta.openBodies || []); const keepSel = opts.keepCamera ? [...S.sel] : [];
   const E = S.meta.elements; S.N = E.length; S.hidden = new Uint8Array(S.N); S.sel = new Set(keepSel); S.isolate = null;
   S.byCat = new Map();
@@ -342,6 +342,7 @@ async function loadModel(mid, opts = {}) {
   $('#status').textContent = `${S.N.toLocaleString()} elements, ${tris.toLocaleString()} triangles - ${((performance.now() - t0) / 1000).toFixed(1)}s` + ((S.meta.phase || 'done') === 'done' ? '' : ' (box preview)');
   if (!opts.keepCamera && !S.hashRestored) { S.hashRestored = true; restoreHash(); }
   dirty = true; window.__loaded = true; window.dispatchEvent(new Event('rvt-model-loaded'));
+  if ((S.meta.phase || 'done') === 'done') window.__save.refresh();      // save session (fingerprint) opens after the model has loaded, not during conversion/geometry
   if ((S.meta.phase || 'done') !== 'done') { renderParseBar(); refineLoop(mid, opts.partialRev || 0); }
   else if (!opts.keepCamera && !parseState) showCached(performance.now() - t0);
   else if (opts.keepCamera) { parseState = null; renderParseBar(); showFinished(performance.now() - t0); }

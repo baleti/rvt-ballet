@@ -37,6 +37,7 @@ export function initSave($, getMid) {
   const post = async (path, body) => { const r = await fetch(`/api/m/${getMid()}/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); let j = null; try { j = await r.json(); } catch (e) {} return [r, j]; };
   async function refresh() {
     const mid = getMid(); if (!mid) return; let info = null; try { info = await (await fetch(`/api/m/${mid}/saveinfo`)).json(); } catch (e) {}
+    if (mid !== getMid()) return;      // the user switched models while saveinfo ran: do not set the buttons from the old model
     const a = actions(info); bBk.disabled = !a.saveas.on; bAs.disabled = !a.saveas.on; bAs.title = a.saveas.on ? 'Save a copy under a new name (never touches the original)' : a.saveas.why;
     bOver.disabled = !a.save.on; bOver.title = a.save.on ? 'Overwrite the source file (a backup is kept)' : a.save.why;
   }
