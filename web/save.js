@@ -15,6 +15,7 @@ export function describeError(j, status) {
     unsupported_version: 'This Revit version cannot be saved.', disk_error: 'Disk error: nothing was written.', unavailable: 'Saving is not available (savegate missing).', no_source: 'The source file of this model is not available.' }[code] || `Save failed (HTTP ${status}).`;
   const lines = [head];
   if (j && j.error && !head.includes(j.error)) lines.push(j.error);
+  const na = j && j.report && (j.report.unexpected || []).filter(x => x[0] === 'not_applied'); if (na && na.length) lines.push(`An edit had no effect on ${na.length} element(s) (${na.slice(0, 3).map(x => x[1]).join(', ')}): the file would NOT have been changed as you asked, so nothing was saved.`);
   const d = j && j.report && j.report.unexpected; if (Array.isArray(d) && d.length) lines.push(`${j.report.n_unexpected} differences, first: ` + d.slice(0, 5).map(x => x.join(' ')).join('; '));
   const cd = j && j.changed_detail; if (Array.isArray(cd) && cd.length) lines.push('changed outside the declared edit: ' + cd.slice(0, 6).map(x => `${x.cls || '?'} ${x.id}${x.name ? ' "' + x.name + '"' : ''}`).join(', '));
   const ed = j && j.edits; if (Array.isArray(ed) && ed.length) lines.push('pending edits: ' + ed.map(o => `${o.field} of element ${o.eid}`).join('; '));

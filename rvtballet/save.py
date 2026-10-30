@@ -113,6 +113,17 @@ def _cached_adapter():
 
         def __init__(self, *a, **k): super().__init__(*a, **k); self._memo = []; self.report = lambda stage: None
         def snapshot(self, buf):
+            snap = self._snapshot_core(buf); self._seen = (getattr(self, '_seen', []) + [snap])[-2:]; return snap      # savegate dumps source then output: remember both for extra_checks
+
+        def extra_checks(self, manifest):
+            """a DECLARED edit that left its element unchanged did not happen (savegate only fails on UNDECLARED changes; a declared-but-unchanged element is merely informational there). Found on a real project: two moves in
+            different partitions of one multi-pass save returned 200 although the second element never moved. Refuse instead of reporting success."""
+            seen = getattr(self, '_seen', []); self._seen = []
+            if len(seen) < 2: return []
+            a, b = seen
+            return [('not_applied', k) for k in sorted(manifest.get('modified', ())) if k in a and k in b and a[k] == b[k]]
+
+        def _snapshot_core(self, buf):
             key = hashlib.sha256(buf).digest()
             for k, snap, keys in self._memo:
                 if k == key: self._keys = set(keys); return dict(snap)
@@ -245,7 +256,50 @@ def _pending(ss, mid, d, new_bytes, manifest):
     from .edit import apply_full, Edits
     e = ss.edits(mid); ops = list(e.ops); ss.applied[mid] = len(ops)
     nb, deleted = apply_full(d.buf, ops); m = Edits(); m.ops = ops
+    _readback(d.buf, nb, ops)
     return nb, m.manifest(deleted)
+
+
+_RB_MEMO = []
+
+
+def _read_params(buf):
+    """reader view (rvt_params.params) of the element parameters of these bytes, memoised for the last two buffers"""
+    import hashlib, tempfile, shutil
+    k = hashlib.sha256(buf).digest()
+    for kk, v in _RB_MEMO:
+        if kk == k: return v
+    rr = os.path.expanduser('~/rvt-research')
+    if rr not in sys.path: sys.path.insert(0, rr)
+    import rvt_params
+    d = tempfile.mkdtemp(prefix='rvtballet-rb-')
+    try:
+        f = os.path.join(d, 'x.rvt'); open(f, 'wb').write(buf); v = rvt_params.params(f)
+    finally: shutil.rmtree(d, ignore_errors=True)
+    _RB_MEMO.insert(0, (k, v)); del _RB_MEMO[2:]
+    return v
+
+
+def _readback(src_buf, nb, ops):
+    """the gate declares an edited element 'modified', so ANY change inside it passes verify. Read the edited elements back from the produced bytes: the edited parameter must hold the requested value (strings: exactly;
+    numbers: changed), no other parameter of the element may change (except reader aliases carrying the new value) and the parameter count must not shrink. Severity-1 found by c3x-rvtmatrix: an emoji value left the
+    element with 13 of 26 parameters and the gate said OK. A reader failure here refuses the save (nothing written)."""
+    tg = [o for o in ops if o.get('op') in ('set_string', 'set_num') and o.get('param')]
+    if not tg: return
+    g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
+    sg = _import()
+    try: a, b = _read_params(src_buf), _read_params(nb)
+    except Exception as e: raise OutputUnreadable('the edited parameters could not be read back (%s: %s); nothing was written' % (type(e).__name__, e)) from e
+    bad = []
+    for o in tg:
+        x, y = g(a.get(o['eid'])), g(b.get(o['eid'])); n = o['param']
+        if o['eid'] not in b: bad.append('element %d missing in the output' % o['eid']); continue
+        if len(y) < len(x): bad.append('element %d lost parameters (%d -> %d)' % (o['eid'], len(x), len(y))); continue
+        ch = {k for k in set(x) | set(y) if x.get(k) != y.get(k)}
+        if n not in ch and not (n in x and x[n] == o['value']): bad.append('element %d: parameter %r unchanged by the edit' % (o['eid'], n))
+        if o['op'] == 'set_string' and y.get(n) != o['value']: bad.append('element %d: %r reads back %r, not the requested value' % (o['eid'], n, str(y.get(n))[:30]))
+        if [k for k in ch - {n} if y.get(k) != y.get(n)]: bad.append('element %d: %d other parameter(s) changed' % (o['eid'], len(ch - {n})))
+    if bad: raise sg.VerifyFailed('read-back of the edited element(s) failed: %s' % '; '.join(bad[:3]), {'n_unexpected': len(bad), 'unexpected': bad[:20]})
 
 
 def _cloud_gate(*paths):

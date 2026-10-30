@@ -19,6 +19,7 @@ JS = r"""(async () => {
   t('changed detail', e2.some(x => /FamilyInstance 7 "Door"/.test(x)) && e2.some(x => /DatumPlane.m_text of element 355/.test(x)));
   t('warning shown', m.describeResult({ ok: true, dest: 'x', size: 1, sha256: 'a', version: '2024', warnings: ['layout changed'] }).some(x => x === 'WARNING: layout changed'));
   t('layout_changed text', /not confirmed/.test(m.describeError({ code: 'layout_changed' }, 409)[0]));
+  t('not_applied text', m.describeError({ code: 'verify_failed', report: { n_unexpected: 1, unexpected: [['not_applied', 'el:7']] } }, 422).some(x => /had no effect on 1 element/.test(x)));
   t('backup line', /#2 .*5 bytes/.test(m.describeBackup({ n: 2, mtime: 'x', size: 5, name: 'n' })));
   return JSON.stringify(out); })()"""
 async def main(md, port):

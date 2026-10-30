@@ -19,7 +19,7 @@ async def save(src, scen, eid):
         if body:
             r = await c.post('/api/m/m/edit', json=body)
             if op == 'param':      # first candidate instance that actually stores the string parameter
-                for e in CANDS[:300]:
+                for e in CANDS[:int(os.environ.get("RVTSAVE_NCAND", "25"))]:
                     body['eid'] = e; r = await c.post('/api/m/m/edit', json=body)
                     if r.status == 200: eid = e; break
                 print('param element', body['eid'], file=sys.stderr)
