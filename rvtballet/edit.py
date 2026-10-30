@@ -115,14 +115,21 @@ def _apply_wledit(a, b, ops):
     ed.save(b)
 
 
+def _eid_val(t):
+    """signed id from a trace 'EID(n)' text: 8-byte ids are unsigned 64-bit, the 4-byte layout (Revit 2019-2023 nested) prints unsigned 32-bit; negative parameter ids must compare equal across both"""
+    try: v = int(str(t)[4:-1])
+    except ValueError: return None
+    return v - (1 << 64) if v >= (1 << 63) else v - (1 << 32) if (1 << 31) <= v < (1 << 32) else v
+
+
 def _resolve_pid(ed, o):
     """explicit pid, or the single candidate id for the parameter NAME that is actually stored (as the given kind) on this element"""
     if o.get('pid') is not None: return o['pid']
     log = ed.g.e.trace(o['eid'])[3]; stored = set()
     for l in log:
         if l[1] == 'ParamValue%s.m_paramId' % o['kind']:
-            try: v = int(str(l[4])[4:-1]); stored.add(v - (1 << 64) if v >= (1 << 63) else v)
-            except ValueError: pass
+            v = _eid_val(l[4])
+            if v is not None: stored.add(v)
     hit = [c for c in o['pids'] if c in stored]
     if len(hit) != 1: raise EditError('parameter %r: %d candidate ids stored as %s on element %d (need exactly 1; give pid)' % (o.get('param'), len(hit), o['kind'], o['eid']))
     return hit[0]
@@ -199,9 +206,9 @@ def _value_entry(log, kind, id_entry):
 def _set_num_by_pid(ed, o):
     """overwrite the stored Double/Int value of ONE parameter (exact entry, not rvtedit.set_num's 'previous value within 8 entries', which edits the neighbouring Int for every Int but the first)"""
     import struct
-    pid = _resolve_pid(ed, o); want = 'EID(%d)' % (pid & ((1 << 64) - 1)); log = ed.g.e.trace(o['eid'])[3]
+    pid = _resolve_pid(ed, o); log = ed.g.e.trace(o['eid'])[3]
     for l in log:
-        if l[1] == 'ParamValue%s.m_paramId' % o['kind'] and l[4] == want:
+        if l[1] == 'ParamValue%s.m_paramId' % o['kind'] and _eid_val(l[4]) == pid:
             vn = _value_entry(log, o['kind'], l)
             if vn is None: break
             nb = struct.pack('<d' if o['kind'] == 'Double' else '<i', o['value'])
@@ -213,9 +220,9 @@ def _set_num_by_pid(ed, o):
 def _set_string_by_pid(ed, o):
     """overwrite the string value that belongs to ONE parameter id (exact log entry), not 'the first value with this text'"""
     import struct
-    pid = _resolve_pid(ed, o); want = 'EID(%d)' % (pid & ((1 << 64) - 1)); log = ed.g.e.trace(o['eid'])[3]
+    pid = _resolve_pid(ed, o); log = ed.g.e.trace(o['eid'])[3]
     for k, l in enumerate(log):
-        if l[1] == 'ParamValueAString.m_paramId' and l[4] == want:
+        if l[1] == 'ParamValueAString.m_paramId' and _eid_val(l[4]) == pid:
             # the value entry is the one whose bytes are CONTIGUOUS with this id entry (directly after, else directly before): never 'the nearest value' (that picked the neighbouring parameter)
             vn = _value_entry(log, 'AString', l)
             if vn is None: break
