@@ -134,3 +134,12 @@ Not done: true instancing (placeholders are tiny merged boxes; real symbol geome
 
 ## Provenance / rules
 See PROVENANCE.md (no ODA-derived tables). Test samples are Autodesk files kept local in ~/rvt-research/corpus and never copied here.
+
+## Saving (status 2026-10-30; read before trusting it with a real file)
+- **Save As to a new file is the default.** Overwrite (`SAVE!`) is OFF unless the environment variable `RVTBALLET_ALLOW_OVERWRITE=1` is set; it stays off until the evidence below is complete on a wide set of real project files. Treat it as experimental.
+- **Writable versions:** Revit 2024 and 2026 files only (the two years the writer is tested on). Other years open for viewing but Save refuses and touches nothing.
+- **What is editable:** a limited set of element classes (columns, walls, floors, roofs, doors, stairs, railings, curtain walls, levels, sheets, text, parameters such as Mark) written by the sibling write-lab; everything else is carried over unchanged.
+- **Safeguards:** atomic write via a temp file and rename; element-level re-read and comparison against the source (any undeclared difference aborts the save); source-changed and lock-file checks; checksummed backup before overwrite with restore; refuses files that would not fit the verification memory budget. The "limited verification" Save As path is an explicit opt-in and is never used for overwrite.
+- **How it is verified (synthetic scenes, aggregate numbers):** 36 saved outputs (18 per year, covering the editable classes plus add and delete) open in an offline Revit VM without a repair prompt; 40 chained edits (2024 and 2026) were accepted by the gate and every undeclared change was refused.
+- **Known gaps:** a source with damaged byte runs that still reads can be saved with the damage written back and no warning (no source-damage check yet); verification of geometry is element-level, not a full differential of every mesh; a repeat Save re-decodes the document (about 30 s on a large model); most real-file runs are still pending. Not every Revit feature (worksets, links, families) is covered.
+- No Revit installation is needed to run the viewer or its tests; the open-in-Revit check needs a licensed local copy and is not part of the repository.
