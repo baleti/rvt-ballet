@@ -20,6 +20,8 @@ async def main(src):
         if r.status != 200: row['result'] = 'EDIT_REFUSED'; row['detail'] = (await r.json()).get('error', '')[:100]; print(row); return
         t1 = time.time(); r = await c.post('/api/m/m/saveas', json={'dest': os.path.join(_T, 'o.rvt'), 'light_verify': True, 'confirm': True}); j = await r.json()
         row.update(save_status=r.status, code=j.get('code', 'ok'), save_seconds=round(time.time() - t1, 1), peak_rss_mb=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss >> 10)
+        if r.status == 200 and os.environ.get('KEEP_DIR'):
+            import shutil; os.makedirs(os.environ['KEEP_DIR'], exist_ok=True); shutil.copy(os.path.join(_T, 'o.rvt'), os.path.join(os.environ['KEEP_DIR'], 'big_limited.rvt'))      # local only, for the Revit harness
         if r.status == 200: row.update(changed_members=j['verify']['changed_members'], changed_streams=j['verify']['changed_streams'], limited=j.get('limited_verification'), result='OK')
         else: row['result'] = 'SAVE_%d' % r.status; row['detail'] = str(j.get('error'))[:160]
     print(row)
