@@ -369,7 +369,9 @@ def _readback(src_buf, nb, ops):
         elif g(a.get(o['eid'])) != g(b.get(o['eid'])): bad.append('moved element %d: parameters changed' % o['eid'])
     for o in fl:
         if o['eid'] not in b: bad.append('field-edited element %d missing in the output' % o['eid'])
-        elif g(a.get(o['eid'])) != g(b.get(o['eid'])): bad.append('field-edited element %d: parameters changed' % o['eid'])
+        else:
+            x, y = g(a.get(o['eid'])), g(b.get(o['eid'])); ch = [k for k in set(x) | set(y) if x.get(k) != y.get(k) and y.get(k) != o['value']]   # reader aliases (e.g. Type Name) may carry the new name
+            if ch: bad.append('field-edited element %d: parameters changed (%s)' % (o['eid'], ', '.join('%s: %r -> %r' % (k, str(x.get(k))[:20], str(y.get(k))[:20]) for k in sorted(ch))[:200]))
     for o in tg:
         x, y = g(a.get(o['eid'])), g(b.get(o['eid'])); n = o['param']
         if o['eid'] not in b: bad.append('element %d missing in the output' % o['eid']); continue
