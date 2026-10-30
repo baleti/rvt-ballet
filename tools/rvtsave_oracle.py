@@ -37,6 +37,9 @@ def main(src, year, scen, eid=0):
     untouched = sha(work) == h0
     if out is None:
         print('\t'.join(['c3x-rvtsave', os.path.basename(src)[:8], year, scen, 'refused', 'src_untouched=%s' % untouched, msg])); return
+    if os.environ.get('RVTSAVE_NOVM'):
+        keep = '%s/outs/%s_%s_%s%s' % (W, os.path.basename(src)[:2], year, scen, os.path.splitext(src)[1]); os.makedirs(os.path.dirname(keep), exist_ok=True); shutil.copy(out, keep)
+        print('\t'.join(['c3x-rvtsave', os.path.basename(src)[:8], year, scen, 'saved', 'eid=%s' % eid, 'gate_accepted', 'out=' + keep, 'changed_vs_src=%s' % (sha(out) != h0)])); return
     sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab/campaign')); os.environ['STAGEB'] = '1'
     import stages
     r = stages.api_stage(int(year), out, True, 'rs%s' % _T[-6:])
