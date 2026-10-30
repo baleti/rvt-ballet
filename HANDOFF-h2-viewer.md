@@ -13,7 +13,7 @@ Another session on this account also commits to this branch (disk snapshot cache
 
 ## How to run
 - `tests/run_save.sh` (31 tests, ~7 min, needs `~/src/savegate`, `~/rvt-research/write-lab`; uses a throwaway TMPDIR, snapshot cache off by default there). Browser: `tools/uitest_save.py`, `uitest_save2.py`, `uitest_save3.py`, `jstest_save.py` (headless Chromium; no node here; `tests/js/save.test.mjs` is the unrun node twin).
-- Real-project tools (local files, aggregate output only): `tools/save_matrix.py`, `save_real_edit.py`, `save_real_move.py`, `save_real_overwrite.py`, `save_real_chain.py`, `save_real_cap.py`, `save_real_light.py`, `save_real_equiv.py`, `save_years.py`. Synthetic stress: `save_fuzz.py`, `save_chain.py`, `save_big.py`, `edit_coverage.py`.
+- Real-project tools (local files, aggregate output only; `save_real_fuzz.py` = string chains, `save_real_fuzz2.py` = mixed string/numeric/move chains): `tools/save_matrix.py`, `save_real_edit.py`, `save_real_move.py`, `save_real_overwrite.py`, `save_real_chain.py`, `save_real_cap.py`, `save_real_light.py`, `save_real_equiv.py`, `save_years.py`. Synthetic stress: `save_fuzz.py`, `save_chain.py`, `save_big.py`, `edit_coverage.py`.
 - Revit: only through the write-lab harness (`campaign/stages.api_stage`; my helper scripts lived in the session scratchpad, which is gone: recreate from QUEUE items 22/52/53). The VM lock is shared and unfair: expect long waits.
 
 ## Evidence (honest summary)
@@ -26,6 +26,7 @@ Real projects (71 local files: 13 are 2024, 13 are 2025 = refused, 2026: none; a
 - In Revit 2026 (2024 files are upgraded on open), audit ON: the 7.6 MB project after a string edit, a move and a 3-generation overwrite chain, and the 64 MB project after a LIMITED-verify edit: all ok=True on the first attempt; untouched originals ok too.
 - The harness cannot judge the other three real files (11.6, 24.2, 51.1 MB): its own dump throws "The input curve is not bound" on their UNTOUCHED originals; their edits pass offline and limited-verify outputs of two are kept locally. Asked the oracle owners to guard the dump (~/rvt-research/NEEDS-FROM-ORACLE.md).
 - Limited verification: on the 7.6 MB real file the output is byte-identical to the fully verified save of the same edit; on the 64 MB file it saved in ~7 min (6-8 GB) where the full verify could not finish.
+Real-project fuzz: 20 chains of by-name string edits on the 7.6 MB project: 18 saves all exact, 0 verify refusals; 12 MIXED chains (string/numeric/move): 11 exact and 1 SILENT EDIT DROP (two moves in different partitions of this multi-partition file: the second element did not move, save returned 200, savegate verify cannot see it). The viewer now refuses any save in which a declared element is unchanged (`not_applied`, 422); root cause reported to rvtedit2 (second pass on a pass-1 output). Numeric edits were not exercised on the real file (no stored named Double found).
 Limits of all of this: ONE real file with several edit kinds in Revit plus one big file, 2026 upgrade-open (no 2024 open of a real file), element-list comparison, string/numeric/move only on real files (delete refused, rotate not wired), nothing on Windows/macOS, no client project beyond these.
 
 ## Decisions for the orchestrator / user
