@@ -24,6 +24,8 @@ async def one(c, models, k, src):
     b = g(rvt_params.params(out).get(eid)); a = g(pr.get(eid)); changed = {x for x in set(a) | set(b) if a.get(x) != b.get(x)}
     row['only_comments_changed'] = changed == {'Comments'} and b.get('Comments') == 'edited by h2-viewer test'
     row['seconds'] = round(time.time() - t0, 1); row['result'] = 'OK' if row['only_comments_changed'] and row['verify_diffs'] == 0 else 'MISMATCH'
+    kd = os.environ.get('KEEP_DIR')
+    if kd: import shutil; os.makedirs(kd, exist_ok=True); shutil.copy(out, os.path.join(kd, 'real%d_edited.rvt' % k))      # local only, for the Revit harness
     os.remove(out); return row
 async def main(out, files):
     from aiohttp.test_utils import TestClient, TestServer
