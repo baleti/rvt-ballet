@@ -5,10 +5,18 @@ import os, sys, asyncio, tempfile, hashlib, json, time, shutil
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from rvtballet import server
+def elemtable_raw(path):
+    """decompressed size of Global/ElemTable: cheap proxy of model complexity (element count x ~28 B)"""
+    try:
+        sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab')); import cfb, rvtw
+        P = bytes(rvtw.Stream(cfb.CFB(open(path, 'rb').read()).streams()['Global/ElemTable'].data).payload)
+        return sum(r for (_, _, r) in rvtw.members(P, P.find(rvtw.GZ)))
+    except Exception: return None
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 async def one(c, models, k, src):
     md = os.path.join(_T, 'm%d' % k); os.makedirs(md); mid = 'f%d' % k; models.m[mid] = {'dir': md, 'name': 'f', 'src': src}
-    row = {'size': os.path.getsize(src)}; t0 = time.time()
+    import resource
+    row = {'size': os.path.getsize(src), 'elemtable_raw': elemtable_raw(src)}; t0 = time.time()
     info = await (await c.get('/api/m/%s/saveinfo' % mid)).json(); row['version'] = info.get('version'); row['open'] = info.get('open')
     if not info.get('open'): row['result'] = 'REFUSED'; return row
     d1 = os.path.join(_T, 'g1_%d.rvt' % k); r = await c.post('/api/m/%s/saveas' % mid, json={'dest': d1}); j = await r.json()
@@ -18,7 +26,7 @@ async def one(c, models, k, src):
     i2 = await (await c.get('/api/m/%s/saveinfo' % m2)).json(); d2 = os.path.join(_T, 'g2_%d.rvt' % k)
     j2 = await (await c.post('/api/m/%s/saveas' % m2, json={'dest': d2})).json()
     row['identical_g2'] = bool(j2.get('ok')) and sha(d2) == sha(src); row['version_g1'] = i2.get('version')
-    row['seconds'] = round(time.time() - t0, 1)
+    row['seconds'] = round(time.time() - t0, 1); row['peak_rss_mb_cumulative'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss >> 10
     row['result'] = 'OK' if row['identical_g1'] and row['identical_g2'] and row['verify_diffs'] == 0 and row['version_g1'] == row['version'] else 'MISMATCH'
     for p in (d1, d2): os.remove(p)
     return row
