@@ -77,7 +77,7 @@ async def one_class(c, models, k, src, cls, pr, ix):
             r = await c.post('/api/m/%s/restore' % mid, json={'confirm': True, 'n': 0}); jr = await r.json()
             if r.status != 200 or sha(work) != h0: bad.append('restore_not_original_%d' % r.status)
     kd = os.environ.get('KEEP_DIR')
-    if kd: os.makedirs(kd, exist_ok=True); shutil.copy(out, os.path.join(kd, '%s_%s.rvt' % (os.environ.get('KEEP_TAG', 'f'), cls)))
+    if kd: os.makedirs(kd, exist_ok=True); shutil.copy(out, os.path.join(kd, '%s_%s%s' % (os.environ.get('KEEP_TAG', 'f'), cls, os.path.splitext(src)[1])))
     os.remove(out); row['problems'] = bad; row['result'] = 'OK' if not bad and row['verify_diffs'] == 0 else 'PROBLEM'; return row
 async def main(out, src, classes):
     from aiohttp.test_utils import TestClient, TestServer
