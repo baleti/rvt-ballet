@@ -54,7 +54,7 @@ def _cached_adapter():
                     if kind == 'ok': self._keys = set(payload[1]); return payload[0]
                     if kind == 'MemoryError': raise TooBig('the element dump needs more than the %.1f GB allowed for it (RVTBALLET_SNAPSHOT_MEM_GB / RVTPLAT_MEM_GB): this model is too large to verify on this machine, nothing was written' % (lim / 2 ** 30))
                     raise RuntimeError('%s: %s' % (kind, payload))
-                raise TooBig('the verification worker died under its %.1f GB memory limit (exit %s%s): this model is too large to verify on this machine, nothing was written' % (lim / 2 ** 30, r.returncode, ('; ' + r.stderr.strip().splitlines()[-1][:120]) if r.stderr.strip() else ''))
+                raise TooBig('the verification worker ran out of memory under its %.1f GB limit (it was stopped, exit %s): this model is too large to verify on this machine, nothing was written' % (lim / 2 ** 30, r.returncode))
             finally:
                 import shutil; shutil.rmtree(d, ignore_errors=True)
 
