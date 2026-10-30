@@ -5,7 +5,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-14, macos-15-intel]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -43,3 +43,15 @@ jobs:
           P
           codesign --force --deep -s - /tmp/t.app
           codesign --verify --deep --strict /tmp/t.app && echo signature ok
+  linux-integration:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: per-user .desktop + MIME install and uninstall
+        run: |
+          D=$(mktemp -d); mkdir -p bin; printf '#!/bin/sh\n' > bin/rvt-ballet; chmod +x bin/*
+          XDG_DATA_HOME=$D sh packaging/linux/install.sh
+          test -f $D/applications/*.desktop && test -f $D/mime/packages/*.xml
+          XDG_DATA_HOME=$D sh packaging/linux/install.sh --uninstall
+          test -z "$(ls $D/applications)"
