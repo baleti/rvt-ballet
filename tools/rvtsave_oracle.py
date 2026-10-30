@@ -18,17 +18,24 @@ async def save(src, scen, eid):
         body = {'none': None, 'move': {'op': 'move', 'eid': eid, 'dx': 2.0}, 'param': {'op': 'set_string', 'eid': eid, 'param': 'Comments', 'value': 'rvtsave'}, 'delete': {'op': 'delete', 'eid': eid}}[op]
         if body:
             r = await c.post('/api/m/m/edit', json=body)
+            if op == 'param':      # first candidate instance that actually stores the string parameter
+                for e in CANDS[:300]:
+                    body['eid'] = e; r = await c.post('/api/m/m/edit', json=body)
+                    if r.status == 200: eid = e; break
+                print('param element', body['eid'], file=sys.stderr)
             if r.status != 200: return None, 'edit refused: %s' % (await r.text())[:150]
         if inplace: r = await c.post('/api/m/m/save', json={}); out = src
         else: out = _T + '/out' + os.path.splitext(src)[1]; r = await c.post('/api/m/m/saveas', json={'dest': out})
         j = await r.json(); return (out if r.status == 200 else None), ('ok' if r.status == 200 else 'refused: %s' % str(j.get('error'))[:200])
+CANDS = []
 def pick(path):
     sys.path[:0] = [os.path.expanduser('~/src/savegate'), os.path.expanduser('~/rvt-research')]
     from savegate import rvt_elements as R
     d = R.elements(open(path, 'rb').read())
     import json
     for e, v in d.items():
-        if v.startswith('FamilyInstance|') and e > 1000 and json.loads(v.split('|')[1])[2]: return e
+        if v.startswith('FamilyInstance|') and e > 1000 and json.loads(v.split('|')[1])[2]: CANDS.append(e)
+    if CANDS: return CANDS[0]
     return 0
 def main(src, year, scen, eid=0):
     work = _T + '/src' + os.path.splitext(src)[1]; shutil.copy(src, work); h0 = sha(work)
