@@ -1109,7 +1109,8 @@ def fast_module():
     """~/src/rvt-core/python/rvt_viewer_fast (Rust fast paths: element table in ~1 s, streamed meshes, progress file) or None (RVT_NOFAST=1, missing extension, import error)"""
     if os.environ.get('RVT_NOFAST'): return None
     try:
-        sys.path.insert(0, os.path.expanduser('~/src/rvt-core/python')); sys.path.insert(0, reader.READER_DIR)
+        for _p in (reader.READER_DIR, os.path.expanduser('~/src/rvt-core/python')):
+            if _p not in sys.path: sys.path.insert(0, _p)
         import rvt_fast as RF
         if not RF.on(): return None
         import rvt_viewer_fast as VF; _sign_material_ids(); return VF
