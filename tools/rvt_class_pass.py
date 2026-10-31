@@ -58,7 +58,7 @@ async def one_class(c, models, k, src, cls, pr, ix):
     row['applied'] = [o['op'] + ('(field)' if o.get('field') and not o.get('param') else '') for o in applied]; row['refused'] = refused
     if not applied: row['result'] = 'NO_EDIT_ACCEPTED'; return row
     out = os.path.join(_T, 'o%d.rvt' % k); t0 = time.time(); r = await c.post('/api/m/%s/saveas' % mid, json={'dest': out}); j = await r.json(); row['saveas_s'] = round(time.time() - t0, 1)
-    if r.status != 200: row['result'] = 'SAVEAS_REFUSED_%d %s' % (r.status, j.get('code')); row['detail'] = str(j.get('error'))[:200]; row['n_unexpected'] = (j.get('report') or {}).get('n_unexpected'); row['report_keys'] = sorted((j.get('report') or {}).keys()); row['unexpected_sample'] = str((j.get('report') or {}).get('unexpected') or j.get('unexpected'))[:400]; return row
+    if r.status != 200: row['result'] = 'SAVEAS_REFUSED_%d %s' % (r.status, j.get('code')); row['detail'] = str(j.get('error'))[:200]; row['n_unexpected'] = (j.get('report') or {}).get('n_unexpected'); row['report_keys'] = sorted((j.get('report') or {}).keys()); row['report_raw'] = str(j.get('report'))[:1500]; row['unexpected_sample'] = str((j.get('report') or {}).get('unexpected') or j.get('unexpected'))[:400]; return row
     row['verify_diffs'] = j['verify']['n_unexpected']
     po = rvt_params.params(out); bad = []
     for o in applied:
