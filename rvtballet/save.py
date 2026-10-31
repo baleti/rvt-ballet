@@ -236,8 +236,8 @@ for (e, c), r in x['recs'].items():
 out = {}
 for (e, c), r in x['recs'].items():
     if e not in want: continue
-    d = []; find(r.get('fields'), 'm_designOptionId', d)
-    out.setdefault(str(e), []).append({'cls': c, 'groups': sorted(members.get(e, ())), 'options': [i for v in d for i in ids(v) if i < 2 ** 32 - 1]})
+    d = []; find(r.get('fields'), 'm_designOptionId', d); h = []; find(r.get('fields'), 'm_hostId', h)
+    out.setdefault(str(e), []).append({'cls': c, 'groups': sorted(members.get(e, ())), 'options': [i for v in d for i in ids(v) if i < 2 ** 32 - 1], 'hosts': [i for v in h for i in ids(v) if i < 2 ** 32 - 1]})
 print(json.dumps(out))
 """
 
@@ -255,7 +255,7 @@ def membership(buf, eids):
         if r.returncode: raise RuntimeError('group/design-option check failed: ' + (r.stderr.strip().splitlines() or ['?'])[-1][:150])
         res = {}
         for e, recs in json.loads(r.stdout.strip().splitlines()[-1]).items():
-            why = sorted({'group %d' % g for x in recs for g in x['groups']} | {'design option %d' % o for x in recs for o in x['options']})
+            why = sorted({'group %d' % g for x in recs for g in x['groups']} | {'design option %d' % o for x in recs for o in x['options']} | {'hosted on %d' % h for x in recs for h in x.get('hosts', [])})
             if why: res[int(e)] = why
         return res
     finally:
@@ -438,15 +438,24 @@ def _cloud_gate(*paths):
             raise CloudPlaceholder('the file is an online-only cloud placeholder (OneDrive/Dropbox) that is not downloaded yet; make it available offline first, then retry (nothing written): ' + f)
 
 
+def risky_membership(mem, ops):
+    """keep group / design-option reasons always; 'hosted on N' only for move/rotate ops on that element (a parameter edit of a hosted element does not change where it sits)"""
+    moved = {o['eid'] for o in ops if o.get('op') in ('move', 'rotate')}; out = {}
+    for e, why in mem.items():
+        w = [x for x in why if not x.startswith('hosted on ') or e in moved]
+        if w: out[e] = w
+    return out
+
+
 def group_warning(ss, mid, buf):
     """warning text when a pending edit touches a group member / group instance / design-option element (None otherwise). Revit evidence (rac_advanced 2024, in-place move of one array-group member): the file opens, audits and regenerates cleanly, but that instance no longer matches the other 15 instances of its group type, so the copy is not what the user meant."""
     ops = list(ss.edits(mid).ops)
     if not ops: return None
-    try: mem = membership(buf, {o['eid'] for o in ops})
+    try: mem = risky_membership(membership(buf, {o['eid'] for o in ops}), ops)
     except Exception as e: return 'could not check whether the edited elements belong to a group or design option (%s): verify the copy in Revit' % e
     if not mem: return None
     e0 = sorted(mem)[0]
-    return 'element %d is part of a group or design option (%s): Revit opens such a copy without complaint, but the edited member then differs from the other instances of its group type; check the copy in Revit before relying on it' % (e0, '; '.join(mem[e0]))
+    return 'element %d is part of a group or design option, or is a hosted element being moved (%s): Revit opens such a copy without complaint, but a group member then differs from the other instances of its group type and a moved window/door can end up off its host wall; check the copy in Revit before relying on it' % (e0, '; '.join(mem[e0]))
 
 
 def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
@@ -489,11 +498,11 @@ def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     ops = list(ss.edits(mid).ops) if new_bytes is None else []
     if ops and os.environ.get('RVTBALLET_ALLOW_GROUP_EDIT') != '1':
         _stage(ss, mid, 'checking groups and design options')
-        try: mem = membership(d.buf, {o['eid'] for o in ops})
+        try: mem = risky_membership(membership(d.buf, {o['eid'] for o in ops}), ops)
         except Exception as e: raise GroupOrOption('overwrite refused: could not check whether the edited elements belong to a group or design option (%s); the file was not touched. Use SAVE AS.' % e)
         if mem:
             e0 = sorted(mem)[0]
-            raise GroupOrOption('overwrite refused: element %d is part of a group or design option (%s); edits there are not confirmed to open cleanly in Revit. Use SAVE AS and check the copy; the file was not touched.' % (e0, '; '.join(mem[e0])))
+            raise GroupOrOption('overwrite refused: element %d is part of a group or design option, or is a hosted element being moved (%s); such edits can leave an inconsistent model that Revit still opens. Use SAVE AS and check the copy; the file was not touched.' % (e0, '; '.join(mem[e0])))
     new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _stage(ss, mid, 'verifying and writing')
     lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
     if lc is None and os.environ.get('RVTBALLET_ALLOW_LAYOUT_CHANGE') != '1': raise LayoutChanged('overwrite refused: the page-layout check could not run, so the output is not known to keep the source layout. Use SAVE AS (override: RVTBALLET_ALLOW_LAYOUT_CHANGE=1).')

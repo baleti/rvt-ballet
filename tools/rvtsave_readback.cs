@@ -15,6 +15,23 @@ try {
     var lp = e.Location as LocationPoint; var lc = e.Location as LocationCurve;
     string loc = lp != null ? lp.Point.X.ToString("F6") + " " + lp.Point.Y.ToString("F6") + " " + lp.Point.Z.ToString("F6") : (lc != null ? lc.Curve.GetEndPoint(0).X.ToString("F6") + " " + lc.Curve.GetEndPoint(0).Y.ToString("F6") + " " + lc.Curve.GetEndPoint(0).Z.ToString("F6") : "noloc");
     var mark = e.get_Parameter(BuiltInParameter.ALL_MODEL_MARK);
+    var grp = e.GroupId != ElementId.InvalidElementId ? d.GetElement(e.GroupId) as Group : null;
+    if (grp != null) {
+      var gt = grp.GroupType; var mem = grp.GetMemberIds().ToList(); int idx = mem.FindIndex(x => x.ToString() == s);
+      log.AppendLine("GROUP " + s + " type=" + gt.Name + " members=" + mem.Count + " index=" + idx + " instances=" + gt.Groups.Size);
+      foreach (Group gi in gt.Groups) {
+        var mi = gi.GetMemberIds().ToList(); var gl = gi.Location as LocationPoint; var me = idx >= 0 && idx < mi.Count ? d.GetElement(mi[idx]) : null; var ml = me != null ? me.Location as LocationPoint : null;
+        if (gl != null && ml != null) log.AppendLine("GI " + gi.Id + " rel=" + (ml.Point.X - gl.Point.X).ToString("F6") + " " + (ml.Point.Y - gl.Point.Y).ToString("F6") + " " + (ml.Point.Z - gl.Point.Z).ToString("F6"));
+        else log.AppendLine("GI " + gi.Id + " members=" + mi.Count + " noloc");
+      }
+    }
+    var fi = e as FamilyInstance;
+    if (fi != null && fi.Host != null) {
+      var hl = fi.Host.Location as LocationCurve; var pl = e.Location as LocationPoint; string dist = "n/a"; string width = "";
+      if (hl != null && pl != null) { var c2 = hl.Curve; var pt = new XYZ(pl.Point.X, pl.Point.Y, c2.GetEndPoint(0).Z); var pr = c2.Project(pt); dist = pr != null ? pr.Distance.ToString("F6") : "noproj"; }
+      var w = fi.Host as Wall; if (w != null) width = " wallwidth=" + w.Width.ToString("F6");
+      log.AppendLine("HOST " + s + " host=" + fi.Host.Id + " " + fi.Host.GetType().Name + " dist_to_hostline=" + dist + width + " hostparam=" + (e.get_Parameter(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM) != null ? e.get_Parameter(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM).AsValueString() : "-"));
+    }
     log.AppendLine("RB " + s + " loc=" + loc + " group=" + e.GroupId + " mark=" + (mark != null ? mark.AsString() : "-"));
   }
   try { using (var t = new Transaction(d, "rg")) { t.Start(); d.Regenerate(); log.AppendLine("REGEN ok"); t.RollBack(); } } catch (Exception ex) { log.AppendLine("REGEN " + ex.GetType().Name + " " + ex.Message.Replace("\r", " ").Replace("\n", " ")); }
