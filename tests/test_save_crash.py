@@ -4,7 +4,7 @@ session is listed by save.recoverable with the stage reached, a later normal sav
 import os, sys, tempfile, hashlib, shutil, subprocess, signal, json
 _T = tempfile.mkdtemp(); J = _T + '/j'; C = _T + '/c'
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
-RTE = os.path.expanduser('~/rvt-research/write-lab/scenes/classtests/2024_writer_cols2.rte')
+RTE = os.path.expanduser(os.environ.get('RVTBALLET_CRASH_SRC', '~/rvt-research/write-lab/scenes/classtests/2024_writer_cols2.rte'))      # override: any 2024 .rte/.rvt
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 CHILD = r'''
 import os, sys, signal, json
