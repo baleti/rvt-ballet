@@ -4,6 +4,8 @@ using System.Text;
 var app = UIApp.Application;
 string file = @"__FILE__".Replace("/", "\\"); string[] ids = "__IDS__".Split(',');
 var log = new StringBuilder();
+EventHandler<Autodesk.Revit.DB.Events.FailuresProcessingEventArgs> fh = (s, e) => { foreach (var m in e.GetFailuresAccessor().GetFailureMessages()) log.AppendLine("FAILURE " + m.GetSeverity() + " " + m.GetDescriptionText()); };
+app.FailuresProcessing += fh;
 try {
   var op = new OpenOptions(); op.Audit = true;
   var d = app.OpenDocumentFile(ModelPathUtils.ConvertUserVisiblePathToModelPath(file), op);
@@ -15,6 +17,7 @@ try {
     var mark = e.get_Parameter(BuiltInParameter.ALL_MODEL_MARK);
     log.AppendLine("RB " + s + " loc=" + loc + " group=" + e.GroupId + " mark=" + (mark != null ? mark.AsString() : "-"));
   }
+  try { using (var t = new Transaction(d, "rg")) { t.Start(); d.Regenerate(); log.AppendLine("REGEN ok"); t.RollBack(); } } catch (Exception ex) { log.AppendLine("REGEN " + ex.GetType().Name + " " + ex.Message.Replace("\r", " ").Replace("\n", " ")); }
   d.Close(false);
   log.AppendLine("RESULT ok");
 } catch (Exception ex) { log.AppendLine("RESULT fail " + ex.GetType().Name + " " + ex.Message); }
