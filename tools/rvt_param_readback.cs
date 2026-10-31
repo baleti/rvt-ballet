@@ -14,8 +14,8 @@ try {
     if (parts[1].StartsWith("#")) { var bp = e.get_Parameter((BuiltInParameter)int.Parse(parts[1].Substring(1))); log.AppendLine("RB " + it + (bp == null ? " builtin parameter missing" : " storage=" + bp.StorageType + " value=" + (bp.StorageType == StorageType.Integer ? bp.AsInteger().ToString() : bp.AsValueString()))); continue; }
     var p = e.LookupParameter(parts[1]);
     if (p == null) { log.AppendLine("RB " + it + " parameter missing"); continue; }
-    string v = p.StorageType == StorageType.Double ? p.AsDouble().ToString("R") : p.StorageType == StorageType.Integer ? p.AsInteger().ToString() : p.StorageType == StorageType.String ? p.AsString() : p.AsValueString();
-    log.AppendLine("RB " + it + " storage=" + p.StorageType + " value=" + v + " shown=" + p.AsValueString());
+    string v = p.StorageType == StorageType.Double ? p.AsDouble().ToString("R") : p.StorageType == StorageType.Integer ? p.AsInteger().ToString() : p.StorageType == StorageType.String ? "(string, see utf16)" : p.AsValueString();
+    string sv = p.StorageType == StorageType.String ? (p.AsString() ?? "") : null; string cps = sv != null ? " len=" + sv.Length + " utf16=" + string.Join(",", sv.Select(ch => ((int)ch).ToString("X"))) : ""; log.AppendLine("RB " + it + " storage=" + p.StorageType + " value=" + v + " shown=" + (p.StorageType == StorageType.String ? "-" : p.AsValueString()) + cps);
   }
   d.Close(false);
   log.AppendLine("RESULT ok");
