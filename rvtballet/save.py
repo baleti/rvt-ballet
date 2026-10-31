@@ -441,7 +441,10 @@ def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     if lc is None and os.environ.get('RVTBALLET_ALLOW_LAYOUT_CHANGE') != '1': raise LayoutChanged('overwrite refused: the page-layout check could not run, so the output is not known to keep the source layout. Use SAVE AS (override: RVTBALLET_ALLOW_LAYOUT_CHANGE=1).')
     if lc and os.environ.get('RVTBALLET_ALLOW_LAYOUT_CHANGE') != '1':
         raise LayoutChanged('overwrite refused: the page layout of %s would change (%s -> %s, %+d bytes) and this is not confirmed to open in Revit. Use SAVE AS and check the copy (override: RVTBALLET_ALLOW_LAYOUT_CHANGE=1).' % (lc[0][0], lc[0][1], lc[0][2], lc[0][3]))
+    try: nlink = os.stat(d.path).st_nlink
+    except OSError: nlink = 1
     r = result_json(_guard(_import().save, d, new_bytes, manifest, force=force))
+    if nlink > 1: r.setdefault('warnings', []).append('the file had %d hard links: the save replaced this name only, the other name(s) still hold the OLD content' % nlink)
     del ss.edits(mid).ops[:ss.applied.pop(mid, 0)]          # only the ops that were applied are in the file now
     return r
 
