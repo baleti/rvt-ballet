@@ -4,7 +4,7 @@ SCENARIO: none | move | param | delete | none_inplace | move_inplace.  Output: o
 import os, sys, asyncio, tempfile, shutil, hashlib, json
 W = os.path.expanduser('~/rvtsave-work'); os.makedirs(W, exist_ok=True)
 _T = tempfile.mkdtemp(dir=W); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
-json.dump({'rvt': {'2024': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
+json.dump({'rvt': {'2024': 'open', '2026': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 async def save(src, scen, eid):
