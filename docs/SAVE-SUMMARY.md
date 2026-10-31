@@ -20,5 +20,5 @@ Written for the orchestrator and users. Details: `docs/SAVE.md`; evidence log: `
 - Edits the backend cannot do: Level / Grid move or rename, edits of group members, delete of anything with dependents, rotate / move of elements that live in several partitions (the viewer cannot read its own edit back; Revit does honour the newest copy, one element tested).
 
 ## Limits (not claimed)
-- Two real projects with a handful of edits of each kind; 2024 files were opened as upgrades in Revit 2026, never in a 2024 Revit; no real 2026 or 2025 project; nothing on Windows or macOS; the real oracle gate is closed (overwrite tests used a temporary gate inside the test process); several by-value results are single elements.
+- Two real projects with a handful of edits of each kind; 2024 files were opened as upgrades in Revit 2026, never in a 2024 Revit; one real 2026 project (a 2024 project saved by Revit 2026 in the guest: 24 chains exact, 5 audited in Revit) but no 2025 project; nothing on Windows or macOS; the real oracle gate is closed (overwrite tests used a temporary gate inside the test process); several by-value results are single elements.
 - Memory: the full element verify of a 51 MB project needs between 5 and 8 GB of address space for the worker; bigger projects use the labelled limited verification (24 MB checked by value in Revit).
