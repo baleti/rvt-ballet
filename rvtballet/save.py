@@ -313,8 +313,11 @@ def user_message(exc, status=None):
 
 
 def result_json(r):
-    return {'ok': True, 'dest': r.dest, 'size': r.size, 'sha256': r.sha256[:12], 'backup': r.backup, 'version': r.version,
-            'elapsed': round(r.elapsed, 3), 'verify': r.report}
+    out = {'ok': True, 'dest': r.dest, 'size': r.size, 'sha256': r.sha256[:12], 'backup': r.backup, 'version': r.version,
+           'elapsed': round(r.elapsed, 3), 'verify': r.report}
+    w = [str(x) for x in ((r.report or {}).get('warnings') or [])]      # e.g. 'another program changed the file in the last moment before it was replaced': must reach the user, not stay inside verify
+    if w: out['warnings'] = w
+    return out
 
 
 def _stage(ss, mid, text):
@@ -431,8 +434,8 @@ def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _stage(ss, mid, 'verifying and writing')
     r = result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite))
     lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
-    if lc is None: r['warnings'] = ['the page-layout check could not run: this output is NOT confirmed to keep the layout of the source']
-    elif lc: r['warnings'] = ['page layout of %s changed (%s -> %s, %+d bytes): this layout is NOT confirmed to open in Revit; verify the copy in Revit before relying on it' % (k, la, lb, dz) for k, la, lb, dz in lc]
+    if lc is None: r.setdefault('warnings', []).append('the page-layout check could not run: this output is NOT confirmed to keep the layout of the source')
+    elif lc: r.setdefault('warnings', []).extend('page layout of %s changed (%s -> %s, %+d bytes): this layout is NOT confirmed to open in Revit; verify the copy in Revit before relying on it' % (k, la, lb, dz) for k, la, lb, dz in lc)
     _note_derived(ss, mid, r)
     return r
 
@@ -447,7 +450,7 @@ def save_as_light(ss, mid, src, dest, overwrite=False):
     r['verify'] = rep; r['limited_verification'] = True
     lc = layout_changes(d.buf, new_bytes)
     lw = ['the page-layout check could not run: this output is NOT confirmed to keep the layout of the source'] if lc is None else ['page layout of %s changed (%s -> %s, %+d bytes): NOT confirmed to open in Revit' % (k, la, lb, dz) for k, la, lb, dz in (lc or [])]
-    r['warnings'] = lw + ['LIMITED verification only (no element-level comparison): the output is structurally consistent with the source (all untouched streams identical, only %d gzip member(s) of the edited partition changed) but it is NOT confirmed that only the declared elements changed or that Revit accepts it. Open the copy in Revit before relying on it.' % rep['changed_members']]
+    r['warnings'] = r.get('warnings', []) + lw + ['LIMITED verification only (no element-level comparison): the output is structurally consistent with the source (all untouched streams identical, only %d gzip member(s) of the edited partition changed) but it is NOT confirmed that only the declared elements changed or that Revit accepts it. Open the copy in Revit before relying on it.' % rep['changed_members']]
     return r
 
 
