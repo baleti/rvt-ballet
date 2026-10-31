@@ -1,6 +1,7 @@
 """One by-NAME numeric edit (set_num: Double 'Width Factor' of a TextNoteAttributes element, else the first stored named Double found) on a REAL project through the server API (rvtedit backend), SAVE AS with element-level verify,
 read-back with the reader: the edited parameter must have the new value and no other parameter of that element may change. Aggregate output only. KEEP_DIR keeps the output locally for the Revit harness.
 KIND=Int (env) edits a stored Int parameter instead (new value = NEWVAL env, else old % 3 + 1: valid for enum-like params such as Detail Level; yes/no params need NEWVAL=0|1).
+POOL=1 (env): new value = another value of the same parameter that occurs elsewhere in the project (for enum-like Int parameters).
 usage: tools/save_real_num.py FILE [CLASS]"""
 import os, sys, asyncio, tempfile, time, json, shutil
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
@@ -24,7 +25,9 @@ async def main(src, cls):
         if pick: break
     del ed
     if not pick: print('NO_CANDIDATE'); return
-    eid, nm, v0 = pick; nv = round(v0 + 0.25, 6) if KIND == 'Double' else int(os.environ['NEWVAL']) if os.environ.get('NEWVAL') else int(v0) % 3 + 1; print('picked 1 element of', cls, 'param', nm, 'old', v0, 'new', nv, flush=True)
+    eid, nm, v0 = pick; pool = sorted({d[nm] for d in base.values() if isinstance(d.get(nm), int) and not isinstance(d.get(nm), bool) and d[nm] != v0}) if os.environ.get('POOL') else []      # POOL=1: enum-like parameter, use another value that really occurs on this parameter elsewhere in the project
+    if os.environ.get('POOL') and not pool: print('NO_ALTERNATIVE_VALUE'); return
+    nv = round(v0 + 0.25, 6) if KIND == 'Double' else pool[0] if pool else int(os.environ['NEWVAL']) if os.environ.get('NEWVAL') else int(v0) % 3 + 1; print('picked 1 element of', cls, 'param', nm, 'old', v0, 'new', nv, flush=True)
     from aiohttp.test_utils import TestClient, TestServer
     import aiohttp
     models = server.Models(); md = os.path.join(_T, 'm'); os.makedirs(md); models.m['m'] = {'dir': md, 'name': 'f', 'src': src}
