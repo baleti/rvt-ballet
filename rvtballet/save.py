@@ -438,12 +438,25 @@ def _cloud_gate(*paths):
             raise CloudPlaceholder('the file is an online-only cloud placeholder (OneDrive/Dropbox) that is not downloaded yet; make it available offline first, then retry (nothing written): ' + f)
 
 
+def group_warning(ss, mid, buf):
+    """warning text when a pending edit touches a group member / group instance / design-option element (None otherwise). Revit evidence (rac_advanced 2024, in-place move of one array-group member): the file opens, audits and regenerates cleanly, but that instance no longer matches the other 15 instances of its group type, so the copy is not what the user meant."""
+    ops = list(ss.edits(mid).ops)
+    if not ops: return None
+    try: mem = membership(buf, {o['eid'] for o in ops})
+    except Exception as e: return 'could not check whether the edited elements belong to a group or design option (%s): verify the copy in Revit' % e
+    if not mem: return None
+    e0 = sorted(mem)[0]
+    return 'element %d is part of a group or design option (%s): Revit opens such a copy without complaint, but the edited member then differs from the other instances of its group type; check the copy in Revit before relying on it' % (e0, '; '.join(mem[e0]))
+
+
 def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     """SAVE AS: never touches the source. new_bytes defaults to the loaded bytes (identity save)."""
     _cloud_gate(src, dest); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t)
     check_memory(src, d.buf)      # TooBig (507) before any work; the UI then offers the labelled limited verification
+    gw = group_warning(ss, mid, d.buf) if new_bytes is None else None
     new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _stage(ss, mid, 'verifying and writing')
     r = result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite))
+    if gw: r.setdefault('warnings', []).append(gw)
     lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
     if lc is None: r.setdefault('warnings', []).append('the page-layout check could not run: this output is NOT confirmed to keep the layout of the source')
     elif lc: r.setdefault('warnings', []).extend('page layout of %s changed (%s -> %s, %+d bytes): this layout is NOT confirmed to open in Revit; verify the copy in Revit before relying on it' % (k, la, lb, dz) for k, la, lb, dz in lc)

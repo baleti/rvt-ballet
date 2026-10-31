@@ -24,6 +24,13 @@ async def run():
         def boom(b, e): raise RuntimeError('reader failed')
         save.membership = boom; r = await c.post('/api/m/m/save', json={}); assert r.status == 409, r.status      # unknown = refuse
         save.membership = real
+        out = os.path.join(_T, 'ga.rvt'); r = await c.post('/api/m/m/saveas', json={'dest': out}); j = await r.json()
+        assert r.status == 200 and not any('group' in w for w in j.get('warnings', [])), ('plain instance move must not warn', j.get('warnings'))
+        await c.post('/api/m/m/edit/undo', json={}); r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': 1421734, 'dx': 1.0})
+        assert r.status == 200, ('group member edit refused at the edit stage', r.status)
+        if True:
+            out2 = os.path.join(_T, 'gb.rvt'); r = await c.post('/api/m/m/saveas', json={'dest': out2}); j = await r.json()
+            assert r.status == 200 and any('group' in w for w in j.get('warnings', [])), ('SAVE AS of a group member must warn', j.get('warnings'))
     assert sha(src) == h0, 'refused save changed the file'
     assert not [f for f in os.listdir(_T) if f.endswith(('.tmp', '.part'))]
     print('group/design-option in-place refusal OK; membership flags the real members')
