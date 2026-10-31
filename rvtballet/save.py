@@ -97,7 +97,7 @@ def _cached_adapter():
             d = tempfile.mkdtemp(prefix='rvtballet-snap-'); a = os.path.join(d, 'in.rvt'); o = os.path.join(d, 'out.pkl')
             try:
                 with open(a, 'wb') as f: f.write(buf)
-                r = subprocess.run([sys.executable, '-c', _WORKER, a, o, str(int(lim)), os.path.expanduser(os.environ.get('SAVEGATE_RVT_LIB') or '~/rvt-research/write-lab'), os.path.dirname(os.path.dirname(os.path.abspath(__file__)))], capture_output=True, text=True)
+                r = subprocess.run([sys.executable, '-c', _WORKER, a, o, str(int(lim)), os.path.expanduser(os.environ.get('SAVEGATE_RVT_LIB') or '~/rvt-research/write-lab'), os.path.dirname(os.path.dirname(os.path.abspath(__file__)))], capture_output=True, text=True, timeout=float(os.environ.get('RVTBALLET_SNAPSHOT_TIMEOUT', '7200')))
                 if os.path.exists(o):
                     try: kind, payload = pickle.load(open(o, 'rb'))
                     except Exception as e: raise RuntimeError('verification worker left an unreadable result (%s, exit %s)' % (type(e).__name__, r.returncode))
@@ -108,6 +108,8 @@ def _cached_adapter():
                 if r.returncode in (-6, -9) or 'memory' in err or 'alloc' in err:      # abort / SIGKILL under the address-space limit, or an allocator message
                     raise TooBig('the verification worker ran out of memory under its %.1f GB limit (it was stopped, exit %s): this model is too large to verify on this machine, nothing was written' % (lim / 2 ** 30, r.returncode))
                 raise RuntimeError('verification worker failed (exit %s%s): the model could not be read back, nothing was written' % (r.returncode, ('; ' + (r.stderr or '').strip().splitlines()[-1][:100]) if (r.stderr or '').strip() else ''))      # a crash is NOT reported as too_big: the UI must not invite skipping the full verify for it
+            except subprocess.TimeoutExpired:      # a cap that is too tight for the model makes the dump crawl (seen: 51 MB project at 5 GB, no result after 2 h) instead of failing: stop it, refuse, nothing written
+                raise TooBig('the element dump did not finish within %s s under its %.1f GB limit (RVTBALLET_SNAPSHOT_TIMEOUT / RVTBALLET_SNAPSHOT_MEM_GB): the model could not be verified on this machine, nothing was written' % (os.environ.get('RVTBALLET_SNAPSHOT_TIMEOUT', '7200'), lim / 2 ** 30))
             finally:
                 import shutil; shutil.rmtree(d, ignore_errors=True)
 
