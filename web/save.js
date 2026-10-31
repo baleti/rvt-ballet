@@ -90,6 +90,23 @@ export function initSave($, getMid) {
         if (r.ok && j && j.ok) { show([`Pending edit recorded: ${name} of element ${eid} = ${JSON.stringify(v)} (${j.n} pending). Use Save as / Save to write it.`], false); } else show(describeError(j, r.status), true); refresh(); };
       tds[1].appendChild(b);
     });
+    // placement / removal ops of the whole element: the server validates and refuses (with the reason) whatever the backend / policy does not allow
+    if (table.parentNode && !table.parentNode.querySelector('.opbar')) {
+      const bar = document.createElement('div'); bar.className = 'opbar'; bar.style.margin = '6px 0';
+      const rec = async (body, what) => { const [r, j] = await post('edit', body); if (r.ok && j && j.ok) show([`Pending edit recorded: ${what} of element ${eid} (${j.n} pending). Use Save as / Save to write it.`], false); else show(describeError(j, r.status), true); refresh(); };
+      const mk2 = (label, title, fn) => { const x = document.createElement('button'); x.textContent = label; x.title = title; x.style.marginRight = '6px'; x.onclick = fn; bar.appendChild(x); };
+      mk2('Move\u2026', 'Move this element by dx, dy, dz in feet (recorded as a pending edit)', async () => {
+        const t = prompt(`Move element ${eid} by dx, dy, dz (feet), e.g. 1, 0, 0:`, '1, 0, 0'); if (t === null) return;
+        const v = t.split(',').map(x => Number(x.trim())); if (v.length < 1 || v.length > 3 || v.some(x => !Number.isFinite(x))) { show(['Enter up to three numbers separated by commas.'], true); return; }
+        rec({ op: 'move', eid, dx: v[0] || 0, dy: v[1] || 0, dz: v[2] || 0 }, `move by ${v.join(', ')} ft`); });
+      mk2('Rotate\u2026', 'Rotate this element about its origin by an angle in degrees (recorded as a pending edit)', async () => {
+        const t = prompt(`Rotate element ${eid} by (degrees):`, '30'); if (t === null) return; const d = Number(t.trim());
+        if (!Number.isFinite(d)) { show(['Enter a number of degrees.'], true); return; }
+        rec({ op: 'rotate', eid, deg: d }, `rotate by ${d} degrees`); });
+      mk2('Delete\u2026', 'Delete this element (off by default; the server says why when it refuses)', async () => {
+        if (!confirm(`Delete element ${eid}? This is recorded as a pending edit and written only on Save / Save as.`)) return; rec({ op: 'delete', eid }, 'delete'); });
+      table.parentNode.insertBefore(bar, table.nextSibling);
+    }
   }
   return { refresh, decorate };
 }
