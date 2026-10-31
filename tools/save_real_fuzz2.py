@@ -93,7 +93,7 @@ async def main(src, n, seed, out):
                     exact &= moved == set(moves) | set(rots) and all(abs((b2[e][0][0] - a2[e][0][0]) - 1.0) < 1e-6 for e in moves) and all(a2[e] != b2[e] for e in rots if rots[e] % 90)
                 row['exact'] = bool(exact); stat['exact' if exact else 'MISMATCH'] += 1
                 kd = os.environ.get('KEEP_DIR')
-                if kd and exact and len(sets) + len(nset) + len(moves) + len(rots) + len(dels) >= 2 and stat['kept'] < int(os.environ.get('KEEP_N', '5')):      # local only, for the Revit harness
+                if kd and exact and (dels if os.environ.get('KEEP_ONLY_DELETE') else len(sets) + len(nset) + len(moves) + len(rots) + len(dels) >= 2) and stat['kept'] < int(os.environ.get('KEEP_N', '5')):      # KEEP_ONLY_DELETE: keep chains that contain a delete      # local only, for the Revit harness
                     import shutil; os.makedirs(kd, exist_ok=True); shutil.copy(dest, os.path.join(kd, 'chain%d.rvt' % k)); stat['kept'] += 1
                 os.remove(dest)
             else: row['code'] = j.get('code'); row['n_unexpected'] = (j.get('report') or {}).get('n_unexpected'); row['detail'] = str(j.get('error'))[:100]
