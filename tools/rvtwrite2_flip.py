@@ -4,6 +4,7 @@ import sys, os, random, shutil, importlib.util, asyncio
 sys.path.insert(0, os.path.expanduser('~/src/savegate')); from savegate import adapters
 year, src, n, seed = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
 adapters.RVT_WRITABLE = adapters.RVT_WRITABLE + (year,)
+if os.environ.get('RVT_LEGACY_LAYOUT'): adapters._first_member_record_sizes = lambda s: {16}   # research only: bypass the pre-2024 record-layout refusal
 if os.environ.get('RVT_MEMBER_MAX'): adapters.RVT_MEMBER_MAX = int(os.environ['RVT_MEMBER_MAX'])
 spec = importlib.util.spec_from_file_location('o', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rvtsave_oracle.py')); o = importlib.util.module_from_spec(spec); spec.loader.exec_module(o)
 import json; json.dump({'rvt': {year: 'open'}}, open(o._T + '/gate.json', 'w'))
