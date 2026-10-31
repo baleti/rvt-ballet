@@ -366,7 +366,11 @@ def _readback(src_buf, nb, ops):
     bad = []
     for o in mv:      # a move changes placement only: the element must still be there with exactly its parameters
         if o['eid'] not in b: bad.append('moved element %d missing in the output' % o['eid'])
-        elif g(a.get(o['eid'])) != g(b.get(o['eid'])): bad.append('moved element %d: parameters changed' % o['eid'])
+        else:
+            x, y = g(a.get(o['eid'])), g(b.get(o['eid']))
+            # the column location mark is derived from the position ('D-1' -> 'D-1(610)' = offset from grid D-1): a move legitimately appends the offset (seen on 2017 columns)
+            ch = [k for k in set(x) | set(y) if x.get(k) != y.get(k) and not (k.startswith('Column Location Mark') and isinstance(x.get(k), str) and str(y.get(k)).startswith(x[k]))]
+            if ch: bad.append('moved element %d: parameters changed' % o['eid'])
     for o in fl:
         if o['eid'] not in b: bad.append('field-edited element %d missing in the output' % o['eid'])
         else:
