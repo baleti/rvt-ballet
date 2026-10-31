@@ -158,7 +158,11 @@ def _apply_rvtedit(a, b, ops):
         if n_parts > 1:
             probe = rvtedit.Edit(a)
             for o in ops:
-                try: pn = (getattr(probe, 'latest_partition', lambda e: None)(o['eid']) or probe.g.e.trace(o['eid'])[0])
+                try:
+                    pn = (getattr(probe, 'latest_partition', lambda e: None)(o['eid']) or probe.g.e.trace(o['eid'])[0])
+                    if o['op'] == 'rotate' and pn != probe.g.e.trace(o['eid'])[0]:      # older copy elsewhere: the reader sees the OLD copy, so the rotation could not be verified (QUEUE 59e)
+                        raise EditError('element %d has records in several partitions (the edit would go to the newest copy, which the viewer cannot read back): rotate refused' % o['eid'])
+                except EditError: raise
                 except Exception: pn = None
                 groups.setdefault(pn, []).append(o)
             del probe
