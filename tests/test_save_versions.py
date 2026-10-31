@@ -11,6 +11,9 @@ def stub(year, path):
     c = cfb.CFB(open(RTE, 'rb').read()); e = c.streams()['BasicFileInfo']
     assert '2024'.encode('utf-16le') in e.data
     e.data = e.data.replace('2024'.encode('utf-16le'), str(year).encode('utf-16le'), 1)
+    import re      # the build stamp (YYYYMMDD_HHMM) moves with the year too: savegate refuses a year that is more than 2 years away from its build stamp (relabelled files)
+    t = e.data.decode('utf-16le', 'ignore'); t2 = re.sub(r'(20[12]\d)([01]\d[0-3]\d_\d{4})', lambda m: str(year) + m.group(2), t, count=1)
+    if t2 != t: e.data = t2.encode('utf-16le')
     cfb.write(c, path)
 
 async def run():
