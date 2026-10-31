@@ -186,6 +186,7 @@ def make_app(models):
         if r.get('open') and cfg:
             from . import save as _s; sg = _s._import(); d_ = saves.docs[mid]
             r['gate_open'] = sg.core.gate_open(d_.adapter.name, d_.version, cfg)
+            ws = _s.worksharing_state(d_.buf); r['worksharing'] = ws; r['workshared'] = not (ws or '').startswith('Not enabled') and os.environ.get('RVTBALLET_ALLOW_WORKSHARED') != '1'      # SAVE! is refused for these (SAVE AS stays)
         return web.json_response(r)
     app.router.add_get('/api/m/{mid}/saveinfo', save_info)
     async def backups(req):

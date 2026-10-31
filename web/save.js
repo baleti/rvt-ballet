@@ -27,6 +27,7 @@ export function paramEditable(name, value) { return typeof value === 'string' &&
 export function actions(info) {   // which buttons are enabled and why not
   const a = { saveas: { on: !!(info && info.open), why: info && info.open ? '' : (info && info.error) || 'saving unavailable for this model' } };
   a.save = { on: !!(info && info.open && info.allow_overwrite && info.gate_open), why: '' };
+  if (a.save.on && info.workshared) { a.save.on = false; a.save.why = 'workshared model: overwrite is refused, use Save as'; return a; }
   if (!a.save.on) a.save.why = !info || !info.open ? a.saveas.why : !info.allow_overwrite ? 'overwrite disabled in the configuration' : 'overwrite gate closed for this version';
   return a;
 }

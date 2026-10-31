@@ -15,6 +15,8 @@ async def run():
     models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
+        i = await (await c.get('/api/m/m/saveinfo')).json(); assert i['workshared'] is False and i['worksharing'] == 'Not enabled', i
+        save.worksharing_state = lambda b: 'Central'; i = await (await c.get('/api/m/m/saveinfo')).json(); assert i['workshared'] is True, i; save.worksharing_state = real
         for forced in ('Central', 'Local', None):
             save.worksharing_state = lambda b, f=forced: f
             r = await c.post('/api/m/m/save', json={}); j = await r.json()

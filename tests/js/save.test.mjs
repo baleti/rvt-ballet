@@ -9,6 +9,10 @@ test('describeResult lists dest, hash, backup, verify, warnings', () => {
   assert.match(describeResult({ ok: true, dest: 'x', size: 1, sha256: 'a', version: '2024' })[2], /no backup needed/);
   assert.ok(describeResult({ ok: true, dest: 'x', size: 1, sha256: 'a', version: '2024', warnings: ['layout changed'] }).includes('WARNING: layout changed'));
 });
+test('actions disables Save for a workshared model but keeps Save as', () => {
+  const a = actions({ open: true, allow_overwrite: true, gate_open: true, workshared: true });
+  assert.equal(a.save.on, false); assert.match(a.save.why, /workshared/); assert.equal(a.saveas.on, true);
+});
 test('describeError maps codes and shows the changed elements and pending edits', () => {
   const l = describeError({ code: 'verify_failed', error: 'verify failed: 2', report: { n_unexpected: 2, unexpected: [['changed', 'stream:A'], ['lost', 'stream:B']] } }, 422);
   assert.match(l[0], /original is untouched/); assert.match(l.at(-1), /2 differences, first: changed stream:A; lost stream:B/);
