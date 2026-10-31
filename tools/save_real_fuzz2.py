@@ -72,7 +72,11 @@ async def main(src, n, seed, out):
                     a2, b2 = bbs(_T + '/c_src'), bbs(_T + '/c_o%d' % k); moved = {i for i in a2 if i in b2 and a2[i] != b2[i]}
                     row['extra_boxes_changed'] = len(moved - set(moves) - set(rots)); row['target_boxes_unchanged'] = len((set(moves) | set(rots)) - moved); row['unchanged_rot_degs'] = sorted(rots[e] for e in rots if e not in moved); row['rot_degs'] = sorted(rots.values())
                     exact &= moved == set(moves) | set(rots) and all(abs((b2[e][0][0] - a2[e][0][0]) - 1.0) < 1e-6 for e in moves) and all(a2[e] != b2[e] for e in rots if rots[e] % 90)
-                row['exact'] = bool(exact); stat['exact' if exact else 'MISMATCH'] += 1; os.remove(dest)
+                row['exact'] = bool(exact); stat['exact' if exact else 'MISMATCH'] += 1
+                kd = os.environ.get('KEEP_DIR')
+                if kd and exact and len(sets) + len(nset) + len(moves) + len(rots) >= 2 and stat['kept'] < int(os.environ.get('KEEP_N', '5')):      # local only, for the Revit harness
+                    import shutil; os.makedirs(kd, exist_ok=True); shutil.copy(dest, os.path.join(kd, 'chain%d.rvt' % k)); stat['kept'] += 1
+                os.remove(dest)
             else: row['code'] = j.get('code'); row['n_unexpected'] = (j.get('report') or {}).get('n_unexpected'); row['detail'] = str(j.get('error'))[:100]
             row['seconds'] = round(time.time() - t0, 1); rows.append(row); print(row, flush=True)
     json.dump({'stats': dict(stat), 'rows': rows}, open(out, 'w')); print('REAL-FUZZ2', dict(stat))
