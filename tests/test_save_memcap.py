@@ -1,7 +1,7 @@
 """verification worker under a hard memory cap: with a tiny RVTBALLET_SNAPSHOT_MEM_GB the element dump worker dies / raises MemoryError and SAVE AS is refused cleanly (507 too_big, nothing written, viewer process alive and
 still serving); with the normal limit the same save succeeds and is byte-identical; reader errors in the worker still map to 422 output_unreadable (test_save_unreadable)."""
 import os, sys, asyncio, tempfile, shutil, hashlib
-_T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVT_CORE_CACHE'] = _T + '/cold-cache'      # the reader's on-disk decode cache makes a warm file need far less memory: the cap must be tested cold
+_T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVT_CORE_CACHE'] = _T + '/cold-cache'; os.environ['RVTBALLET_SNAPSHOT_CACHE'] = _T + '/snap'      # the reader's on-disk decode cache makes a warm file need far less memory: the cap must be tested cold
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 RTE = os.path.expanduser('~/rvt-research/write-lab/scenes/classtests/2024_writer_cols2.rte')
 from rvtballet import server, save
