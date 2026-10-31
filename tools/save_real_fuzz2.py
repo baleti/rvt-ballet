@@ -26,6 +26,16 @@ async def main(src, n, seed, out):
                 pid = int(l[4][4:-1]); pid = pid - (1 << 64) if pid >= (1 << 63) else pid; nm = rvt_params.PNAMES.get(str(pid))
                 v = base.get(eid, {}).get(nm) if nm else None
                 if nm and isinstance(v, (int, float)): nums.append((eid, nm, float(v))); break
+    leafs = []
+    if os.environ.get('FUZZ_DELETE'):
+        os.environ['RVTBALLET_ENABLE_DELETE'] = '1'; os.environ['RVTBALLET_DELETE_ANY'] = '1'      # experiments only, inside this test process
+        for eid in [r[0] for r in db.execute("select id from el where cls='FamilyInstance' order by id limit 400")]:
+            if len(leafs) >= 8: break
+            try:
+                pn = ed.g.e.trace(eid)[0]
+                if ed.latest_partition(eid) == pn and ed.cascade(eid) == [eid] and eid in base: leafs.append(eid)
+            except Exception: continue
+    stat['delete_candidates'] = len(leafs)
     del ed; stat['num_candidates'] = len(nums); stat['move_candidates'] = len(movable); stat['string_candidates'] = len(strs)
     from aiohttp.test_utils import TestClient, TestServer
     import aiohttp
@@ -35,34 +45,43 @@ async def main(src, n, seed, out):
         for k in range(n):
             t0 = time.time()
             while (await (await c.get('/api/m/m/edits')).json())['ops']: await c.post('/api/m/m/edit/undo')
-            sets = {}; nset = {}; moves = {}; rots = {}
+            sets = {}; nset = {}; moves = {}; rots = {}; dels = {}
             for _ in range(rnd.randint(1, 3)):
-                kind = rnd.choice(['s', 'n', 'm', 'r'] if os.environ.get('FUZZ_ROTATE') else ['s', 'n', 'm'])
+                kind = rnd.choice((['s', 'n', 'm', 'r'] if os.environ.get('FUZZ_ROTATE') else ['s', 'n', 'm']) + (['d'] if leafs else []))
                 if kind == 's' and strs:
                     e = rnd.choice(strs); v = rnd.choice(['x', 'Ünï ✓', 'a' * 40, 'Mark-9'])
+                    if e in dels: continue
                     r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': e, 'param': 'Comments', 'value': v}); stat['edit_%d' % r.status] += 1
                     if r.status == 200: sets[e] = v
                 elif kind == 'n' and nums:
-                    e, nm, v0 = rnd.choice(nums); nv = round(v0 + rnd.choice([1.0, 2.5, -0.5]), 6)
+                    e, nm, v0 = rnd.choice(nums)
+                    if e in dels: continue
+                    nv = round(v0 + rnd.choice([1.0, 2.5, -0.5]), 6)
                     r = await c.post('/api/m/m/edit', json={'op': 'set_num', 'eid': e, 'param': nm, 'value': nv}); stat['edit_%d' % r.status] += 1
                     if r.status == 200: nset[(e, nm)] = nv
+                elif kind == 'd' and leafs:
+                    e = rnd.choice(leafs)
+                    if e in dels or e in moves or e in rots or e in sets: continue
+                    r = await c.post('/api/m/m/edit', json={'op': 'delete', 'eid': e}); stat['edit_%d' % r.status] += 1
+                    if r.status == 200: dels[e] = 1
+                    else: stat['delete_refused:' + str((await r.json()).get('error', ''))[:70]] += 1
                 elif kind == 'r' and movable:
                     e = rnd.choice(movable)
-                    if e in moves or e in rots: continue
+                    if e in moves or e in rots or e in dels: continue
                     dg = rnd.choice([15, 30, -45, 90]); r = await c.post('/api/m/m/edit', json={'op': 'rotate', 'eid': e, 'deg': dg}); stat['edit_%d' % r.status] += 1
                     if r.status == 200: rots[e] = dg
                 elif kind == 'm' and movable:
                     e = rnd.choice(movable)
-                    if e in moves or e in rots: continue
+                    if e in moves or e in rots or e in dels: continue
                     r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': e, 'dx': 1.0}); stat['edit_%d' % r.status] += 1
                     if r.status == 200: moves[e] = 1.0
-            if not (sets or nset or moves or rots): stat['no_edit'] += 1; continue
+            if not (sets or nset or moves or rots or dels): stat['no_edit'] += 1; continue
             dest = os.path.join(_T, 'o%d.rvt' % k); r = await c.post('/api/m/m/saveas', json={'dest': dest}); j = await r.json(); stat['save_%d_%s' % (r.status, j.get('code', 'ok'))] += 1
-            row = {'chain': k, 'strings': len(sets), 'nums': len(nset), 'moves': len(moves), 'rots': len(rots), 'status': r.status}
+            row = {'chain': k, 'strings': len(sets), 'nums': len(nset), 'moves': len(moves), 'rots': len(rots), 'dels': len(dels), 'status': r.status}
             if r.status == 200:
                 exact = True
-                if sets or nset:
-                    now = rvt_params.params(dest)
+                if sets or nset or dels:
+                    now = rvt_params.params(dest); exact &= all(e not in now for e in dels)
                     for e in set(sets) | {e for e, _ in nset}:
                         a = base[e]; b = g(now.get(e)); ch = {x for x in set(a) | set(b) if a.get(x) != b.get(x)}
                         want = ({'Comments'} if e in sets else set()) | {nm for (ee, nm) in nset if ee == e}
@@ -74,7 +93,7 @@ async def main(src, n, seed, out):
                     exact &= moved == set(moves) | set(rots) and all(abs((b2[e][0][0] - a2[e][0][0]) - 1.0) < 1e-6 for e in moves) and all(a2[e] != b2[e] for e in rots if rots[e] % 90)
                 row['exact'] = bool(exact); stat['exact' if exact else 'MISMATCH'] += 1
                 kd = os.environ.get('KEEP_DIR')
-                if kd and exact and len(sets) + len(nset) + len(moves) + len(rots) >= 2 and stat['kept'] < int(os.environ.get('KEEP_N', '5')):      # local only, for the Revit harness
+                if kd and exact and len(sets) + len(nset) + len(moves) + len(rots) + len(dels) >= 2 and stat['kept'] < int(os.environ.get('KEEP_N', '5')):      # local only, for the Revit harness
                     import shutil; os.makedirs(kd, exist_ok=True); shutil.copy(dest, os.path.join(kd, 'chain%d.rvt' % k)); stat['kept'] += 1
                 os.remove(dest)
             else: row['code'] = j.get('code'); row['n_unexpected'] = (j.get('report') or {}).get('n_unexpected'); row['detail'] = str(j.get('error'))[:100]
