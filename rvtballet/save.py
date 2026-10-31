@@ -170,7 +170,7 @@ def check_memory(path, buf=None):
 class SaveSessions:
     """one savegate Doc per model id, opened lazily from the source .rvt (fingerprint taken at first use = load time)"""
     def __init__(self, cfg=None):
-        self.docs = {}; self.ed = {}; self.busy = set(); self.progress = {}; self.applied = {}; import threading; self._lk = threading.RLock(); self._cfg = cfg
+        self.docs = {}; self.ed = {}; self.busy = set(); self.progress = {}; self.applied = {}; self.derived = {}; import threading; self._lk = threading.RLock(); self._cfg = cfg
     @property
     def cfg(self):
         """Config(allow_overwrite from env RVTBALLET_ALLOW_OVERWRITE=1; the oracle gate stays on)"""
@@ -329,7 +329,37 @@ def _pending(ss, mid, d, new_bytes, manifest):
     e = ss.edits(mid); ops = list(e.ops); ss.applied[mid] = len(ops)
     nb, deleted = apply_full(d.buf, ops); m = Edits(); m.ops = ops
     _readback(d.buf, nb, ops)
-    return nb, m.manifest(deleted)
+    mf = m.manifest(deleted); echoes = derived_echoes(d.buf, nb, ops)
+    if echoes: mf['modified'] = sorted(set(mf['modified']) | {'el:%d' % i for i in echoes}); ss.derived[mid] = len(echoes)
+    else: ss.derived.pop(mid, None)
+    return nb, mf
+
+
+def _note_derived(ss, mid, r):
+    n = ss.derived.pop(mid, 0)
+    if n: r.setdefault('warnings', []).append('%d other element(s) show the edited parameter too (the reader derives it from the edited element, e.g. a view\'s Detail Level on its viewports): they were declared as changed together with the edit' % n)
+
+
+def derived_echoes(src_buf, nb, ops):
+    """ids of UNEDITED elements whose reader view changed only because the reader shows the edited element's parameter on them too (a view's Detail Level on its viewports / elevation arrows, a family's Section Shape on its
+    symbols; QUEUE 64). Strict rule: the element changed in exactly ONE parameter, the edited parameter name, from exactly the edited element's old value to exactly its new value. Anything else stays an undeclared
+    change and is refused by the gate. Numeric / string parameter edits only."""
+    tg = [o for o in ops if o.get('op') in ('set_string', 'set_num') and o.get('param')]
+    if not tg: return []
+    g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
+    try: a, b = _read_params(src_buf), _read_params(nb)
+    except Exception: return []
+    edited = {o['eid'] for o in tg}; out = set()
+    for o in tg:
+        n = o['param']; x, y = g(a.get(o['eid'])), g(b.get(o['eid']))
+        if n not in x or n not in y or x[n] == y[n]: continue
+        old, new = x[n], y[n]
+        for e, d0 in a.items():
+            if e in edited or e not in b: continue
+            p0, p1 = g(d0), g(b[e])
+            if p0 == p1 or p0.get(n) != old or p1.get(n) != new: continue
+            if {k for k in set(p0) | set(p1) if p0.get(k) != p1.get(k)} == {n}: out.add(e)
+    return sorted(out)
 
 
 _RB_MEMO = []
@@ -403,6 +433,7 @@ def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
     if lc is None: r['warnings'] = ['the page-layout check could not run: this output is NOT confirmed to keep the layout of the source']
     elif lc: r['warnings'] = ['page layout of %s changed (%s -> %s, %+d bytes): this layout is NOT confirmed to open in Revit; verify the copy in Revit before relying on it' % (k, la, lb, dz) for k, la, lb, dz in lc]
+    _note_derived(ss, mid, r)
     return r
 
 
@@ -444,6 +475,7 @@ def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     try: nlink = os.stat(d.path).st_nlink
     except OSError: nlink = 1
     r = result_json(_guard(_import().save, d, new_bytes, manifest, force=force))
+    _note_derived(ss, mid, r)
     if nlink > 1: r.setdefault('warnings', []).append('the file had %d hard links: the save replaced this name only, the other name(s) still hold the OLD content' % nlink)
     del ss.edits(mid).ops[:ss.applied.pop(mid, 0)]          # only the ops that were applied are in the file now
     return r
