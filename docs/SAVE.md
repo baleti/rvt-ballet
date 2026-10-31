@@ -40,3 +40,12 @@ Revit opening outputs beyond the four files above (audit-on, 2026, real projects
 
 ## Evidence by value in Revit (2026-10-31)
 Opening and auditing an output proves it is a valid file, not that the edit did what was asked. With the Revit API readback tools (`tools/rvtsave_readback.py` location/group/mark, `tools/rvt_rotation_readback.py` rotation, `tools/rvt_param_readback.py` parameter values; Revit 2026 guest, audit ON, 2024 real projects opened as upgrades) these edits were read back BY VALUE on real projects: move +1 ft (exactly +1, also on the element that lives in two partitions: Revit honours the newest copy), rotate 30 deg (30.0000), Double Width Factor 1 -> 1.25, wall Base Extension Distance 0 -> 0.25 ft (Revit shows 76 mm; neighbouring wall parameters unchanged), Int Section Shape 0 -> 8, Int Coarse Scale Fill Color 0 -> 8421504, string Comments to a non-ASCII value (UTF-16 DC,6E,EF,20,2713 exact, 2 chains), view Detail Level 1 -> 2 (the echoed viewport/viewer also reads 2), Family Section Shape 0 -> 8 (its symbol too), Floor Structural 1 -> 0, three leaf deletes (id present before, missing after; one at a real location), fuzz-chain moves (3/3, control unchanged). NOT visible in Revit: LeaderStyle Heavy End Pen Weight (stored int 1 -> 2, Revit shows 6 before and after: the file is audit-clean, the edit is a no-op for Revit). Limits: 2 real projects, one edit of each kind, nothing on 2025/2026 real files, no Windows/macOS.
+
+## Cost of a full-verify SAVE AS (identity, no edit; measured 2026-10-31, Linux, shared 62 GB machine)
+| project | cold (no snapshot cache) | warm (disk snapshot cache hit) | worker peak memory |
+|---|---|---|---|
+| 7.6 MB | 7.4 s | 3.4 s | 0.5 GB |
+| 24.2 MB | 124 s | 18 s | 3.2 GB |
+| 51.1 MB | 507 s at a 12 GB limit, 553 s at 8 GB; 5 GB: no result in 2 h, now refused after `RVTBALLET_SNAPSHOT_TIMEOUT` (default 7200 s) | 68 s | between 5 and 8 GB |
+| 63.7 MB and up | element verify needs more than 14 GB: use the labelled limited verification (SAVE AS only: 24 MB 62 s / 4.9 GB, 64 MB about 7 min / 6-8 GB) | - | - |
+Each edit adds one dump of the output (the same cost as the cold column, no cache hit possible). Numbers are one run each.
