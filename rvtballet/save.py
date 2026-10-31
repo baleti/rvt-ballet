@@ -424,6 +424,7 @@ def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     """SAVE! : overwrite the source (needs allow_overwrite + open gate; Conflict if the file changed since load unless force)"""
     _cloud_gate(src); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t)
     check_memory(src, d.buf)
+    if os.path.islink(d.path): d.path = os.path.realpath(d.path)      # SAVE! of a symlinked source must replace the real file and keep the link (savegate replaces the link itself otherwise)
     ws = worksharing_state(d.buf)
     if not (ws or '').startswith('Not enabled') and os.environ.get('RVTBALLET_ALLOW_WORKSHARED') != '1':
         raise Workshared('overwrite refused: the model is %s (Worksharing: %s); worksets and the central link are not maintained by the writer. Use SAVE AS and check the copy in Revit; the file was not touched.' % ('workshared' if ws else 'of unknown worksharing state', ws or 'unreadable'))
@@ -448,13 +449,14 @@ def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
 def backups(src):
     sg = _import()
     import time
+    src = os.path.realpath(src)      # backups of a symlinked source are made for the real file
     return [{'n': i, 'name': n, 'path': p, 'size': sz, 'mtime': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(os.stat(p).st_mtime))}
             for i, (n, p, sz) in enumerate(sg.list_backups(src))]
 
 
 def restore_backup(ss, mid, src, n=0):
     """put backup n (0 = newest) back over the source (savegate backs the current file up first); the doc is re-opened so the fingerprint matches"""
-    sg = _import(); ss.close(mid); ss.edits(mid).ops.clear()      # pending edits were recorded against the old content
+    sg = _import(); ss.close(mid); ss.edits(mid).ops.clear(); src = os.path.realpath(src)      # pending edits were recorded against the old content; a symlinked source is restored in its real file
     used = sg.restore(src, n)
     from savegate.atomic import sha256_file
     return {'ok': True, 'restored_from': used, 'sha256': sha256_file(src)[:12], 'size': os.path.getsize(src)}
