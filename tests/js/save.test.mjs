@@ -15,6 +15,7 @@ test('describeError maps codes and shows the changed elements and pending edits'
   assert.match(describeError({ code: 'conflict' }, 409)[0], /changed on disk/);
   assert.match(describeError(null, 500)[0], /HTTP 500/);
   assert.match(describeError({ code: 'bad_dest' }, 400)[0], /not usable/);
+  assert.match(describeError({ code: 'workshared' }, 409)[0], /workshared/); assert.match(describeError({ code: 'group_or_option' }, 409)[0], /group or design-option/);
   assert.match(describeError({ code: 'output_unreadable' }, 422)[0], /could not be read back/);
   assert.match(describeError({ code: 'layout_changed' }, 409)[0], /not confirmed/);
   const e2 = describeError({ code: 'verify_failed', changed_detail: [{ cls: 'FamilyInstance', id: 7, name: 'Door' }], edits: [{ field: 'DatumPlane.m_text', eid: 355 }] }, 422);
