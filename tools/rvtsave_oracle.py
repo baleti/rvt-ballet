@@ -16,11 +16,11 @@ async def save(src, scen, eid):
     async with TestClient(TestServer(server.make_app(models))) as c:
         import aiohttp; c.session._timeout = aiohttp.ClientTimeout(total=None)      # the test client's default 300 s total timeout is a harness artifact on big files
         await c.get('/api/m/m/saveinfo')
-        body = {'none': None, 'move': {'op': 'move', 'eid': eid, 'dx': float(os.environ.get('RVTSAVE_DX', '2.0'))}, 'param': {'op': 'set_string', 'eid': eid, 'param': 'Comments', 'value': 'rvtsave'}, 'delete': {'op': 'delete', 'eid': eid}}[op]
+        body = {'none': None, 'move': {'op': 'move', 'eid': eid, 'dx': float(os.environ.get('RVTSAVE_DX', '2.0'))}, 'param': {'op': 'set_string', 'eid': eid, 'param': os.environ.get('RVTSAVE_PARAM', 'Comments'), 'value': os.environ.get('RVTSAVE_VALUE', 'rvtsave')}, 'delete': {'op': 'delete', 'eid': eid}}[op]
         if body:
             r = await c.post('/api/m/m/edit', json=body)
             if op == 'param':      # first candidate instance that actually stores the string parameter
-                for e in CANDS[:int(os.environ.get("RVTSAVE_NCAND", "25"))]:
+                for e in ([eid] + CANDS)[:int(os.environ.get("RVTSAVE_NCAND", "25"))]:
                     body['eid'] = e; r = await c.post('/api/m/m/edit', json=body)
                     if r.status == 200: eid = e; break
                 print('param element', body['eid'], file=sys.stderr)
@@ -46,7 +46,7 @@ def main(src, year, scen, eid=0):
     if out is None:
         print('\t'.join(['c3x-rvtsave', os.path.basename(src)[:8], year, scen, 'refused', 'src_untouched=%s' % untouched, msg])); return
     if os.environ.get('RVTSAVE_NOVM'):
-        keep = '%s/outs/%s_%s_%s_e%s_dx%s%s' % (W, os.path.basename(src)[:2], year, scen, eid, os.environ.get('RVTSAVE_DX', '2'), os.path.splitext(src)[1]); os.makedirs(os.path.dirname(keep), exist_ok=True); shutil.copy(out, keep)
+        keep = '%s/outs/%s_%s_%s_e%s_dx%s%s%s' % (W, os.path.basename(src)[:2], year, scen, eid, os.environ.get('RVTSAVE_DX', '2'), ('_' + os.environ['RVTSAVE_VALUE']) if scen == 'param' and 'RVTSAVE_VALUE' in os.environ else '', os.path.splitext(src)[1]); os.makedirs(os.path.dirname(keep), exist_ok=True); shutil.copy(out, keep)
         print('\t'.join(['c3x-rvtsave', os.path.basename(src)[:8], year, scen, 'saved', 'eid=%s' % eid, 'gate_accepted', 'out=' + keep, 'changed_vs_src=%s' % (sha(out) != h0)])); return
     sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab/campaign')); os.environ['STAGEB'] = '1'
     import stages
