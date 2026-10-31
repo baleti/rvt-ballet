@@ -21,13 +21,19 @@ JS = r"""(async () => {
   t('layout_changed text', /not confirmed/.test(m.describeError({ code: 'layout_changed' }, 409)[0]));
   t('not_applied text', m.describeError({ code: 'verify_failed', report: { n_unexpected: 1, unexpected: [['not_applied', 'el:7']] } }, 422).some(x => /had no effect on 1 element/.test(x)));
   t('backup line', /#2 .*5 bytes/.test(m.describeBackup({ n: 2, mtime: 'x', size: 5, name: 'n' })));
+  for (const code of %CODES%) { const msg = 'reason text for ' + code + ' that must be visible'; const lines = m.describeError({ code, error: msg }, 409); t('code ' + code + ': reason shown, head is specific', lines.join(' | ').includes(msg) && !/^Save failed/.test(lines[0]) || code === 'error' || code === 'refused' || code === 'conflict' || code === 'edit_error'); }
   return JSON.stringify(out); })()"""
+def server_codes():
+    """every machine code the server can answer with (save.error_status mapping), read from the source so a new code without a UI text fails this test"""
+    import re
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'rvtballet', 'save.py')).read(); body = src[src.index('def error_status'):src.index('_UNTOUCHED')]
+    return sorted(set(re.findall(r"\(\d{3}, '(\w+)'\)", body)))
 async def main(md, port):
     srv = subprocess.Popen([os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'rvt-ballet'), 'serve', md, '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     cdp.wait_http('http://127.0.0.1:%d/api/models' % port); b = cdp.Browser(size=(800, 600)); await b.start()
     try:
         await b.goto('http://127.0.0.1:%d/save.js' % port); await asyncio.sleep(1)
-        r = json.loads(await b.ev(JS)); [print(x) for x in r]; bad = [x for x in r if x.startswith('FAIL')]
+        r = json.loads(await b.ev(JS.replace('%CODES%', json.dumps(server_codes())))); [print(x) for x in r]; bad = [x for x in r if x.startswith('FAIL')]
     finally: await b.close(); srv.terminate()
     print('JS OK %d checks' % len(r) if not bad else 'JS FAILED'); sys.exit(1 if bad else 0)
 asyncio.run(main(sys.argv[1], int(sys.argv[2])))
