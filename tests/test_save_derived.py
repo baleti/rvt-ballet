@@ -19,3 +19,13 @@ f = save._same_mark_base
 assert f('D-1', 'D-1(610)') and f('W(137)-16(1162)', 'W(137)-16(1467)') and f('W(137)-16', 'W(137)-16')
 assert not f('W(137)-16(1162)', 'W(137)-17(1467)') and not f('A', 'B(5)') and not f('A(5)', 'B')
 print('mark base OK')
+# compose(): repeated ops of one element merged (QUEUE 83)
+from rvtballet.edit import compose
+mv = lambda e, d: {'op': 'move', 'eid': e, 'dx': d, 'dy': 0.0, 'dz': 0.0}
+ss_ = lambda e, v: {'op': 'set_string', 'eid': e, 'param': 'Comments', 'value': v, 'kind': 'AString', 'pid': None}
+assert compose([mv(1, 2.0), mv(1, -2.0)]) == [] and compose([mv(1, 2.0), mv(1, 1.0)])[0]['dx'] == 3.0
+assert [o['value'] for o in compose([ss_(2, 'a'), ss_(2, 'b')])] == ['b']
+assert compose([{'op': 'rotate', 'eid': 4, 'deg': 180.0}, {'op': 'rotate', 'eid': 4, 'deg': 180.0}]) == []
+assert compose([mv(3, 1.0), {'op': 'delete', 'eid': 3}, {'op': 'delete', 'eid': 3}]) == [{'op': 'delete', 'eid': 3}]
+assert len(compose([ss_(2, 'a'), ss_(5, 'a')])) == 2
+print('compose OK')

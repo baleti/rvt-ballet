@@ -331,10 +331,11 @@ def _pending(ss, mid, d, new_bytes, manifest):
     """bytes + manifest of the recorded edits replayed on the loaded bytes (explicit new_bytes win)"""
     if new_bytes is not None: return new_bytes, manifest or {}
     from .edit import apply_full, Edits
+    from .edit import compose
     e = ss.edits(mid); ops = list(e.ops); ss.applied[mid] = len(ops)
-    nb, deleted = apply_full(d.buf, ops); m = Edits(); m.ops = ops
-    _readback(d.buf, nb, ops)
-    mf = m.manifest(deleted); echoes = derived_echoes(d.buf, nb, ops)
+    nb, deleted = apply_full(d.buf, ops); m = Edits(); m.ops = ops; cops = compose(ops)
+    _readback(d.buf, nb, cops)
+    mf = m.manifest(deleted); echoes = derived_echoes(d.buf, nb, cops)
     if echoes: mf['modified'] = sorted(set(mf['modified']) | {'el:%d' % i for i in echoes}); ss.derived[mid] = len(echoes)
     else: ss.derived.pop(mid, None)
     return nb, mf

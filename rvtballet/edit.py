@@ -89,9 +89,40 @@ class Edits:
         return self.ops.pop()
     def manifest(self, deleted=None):
         gone = {'el:%d' % i for i in (deleted or [])}
-        m = {'modified': sorted({'el:%d' % o['eid'] for o in self.ops if o['op'] != 'delete'} - gone)}
+        m = {'modified': sorted({'el:%d' % o['eid'] for o in compose(self.ops) if o['op'] != 'delete'} - gone)}
         if gone: m['deleted'] = sorted(gone)
         return m
+
+
+def compose(ops):
+    """the ops of one save with repeated edits of the same thing merged (QUEUE 83: the record editor diffs every op against the ORIGINAL record, so two string edits of one parameter overlapped and corrupted the
+    record, and move +2 then move -2 overlaid to -2 instead of 0). Rules: by-name/id parameter edits: the last one per (element, parameter, kind) wins; moves of one element add up; rotations of one element add up
+    (a rotation about the instance's own origin commutes with a translation); a net zero move / rotation is dropped (the element is unchanged, so it is not declared either); every other op on a deleted element is dropped.
+    Ops without a parameter name/id (text-match edits) are kept as they are, in order."""
+    import math
+    dels = {o['eid'] for o in ops if o['op'] == 'delete'}; seen_del = set(); out = []; slot = {}
+    for o in ops:
+        e = o['eid']; k = None
+        if o['op'] == 'delete':
+            if e in seen_del: continue
+            seen_del.add(e); out.append(o); continue
+        if e in dels: continue
+        if o['op'] in ('set_string', 'set_num') and (o.get('param') is not None or o.get('pid') is not None): k = (o['op'], e, o.get('kind'), o.get('pid'), o.get('param'))
+        elif o['op'] == 'move': k = ('move', e)
+        elif o['op'] == 'rotate': k = ('rotate', e)
+        if k is None: out.append(o); continue
+        if k in slot:
+            i = slot[k]
+            if o['op'] == 'move': out[i] = dict(out[i], dx=out[i]['dx'] + o['dx'], dy=out[i]['dy'] + o['dy'], dz=out[i]['dz'] + o['dz'])
+            elif o['op'] == 'rotate': out[i] = dict(out[i], deg=out[i]['deg'] + o['deg'])
+            else: out[i] = o
+        else: slot[k] = len(out); out.append(dict(o))
+    keep = []
+    for o in out:
+        if o['op'] == 'move' and max(abs(o['dx']), abs(o['dy']), abs(o['dz'])) < 1e-12: continue
+        if o['op'] == 'rotate' and abs(math.remainder(o['deg'], 360.0)) < 1e-9: continue
+        keep.append(o)
+    return keep
 
 
 def apply(buf, ops): return apply_full(buf, ops)[0]
@@ -99,6 +130,7 @@ def apply(buf, ops): return apply_full(buf, ops)[0]
 
 def apply_full(buf, ops):
     """replay ops on bytes -> new bytes (the source bytes are never modified). Backend: env RVTBALLET_EDIT_BACKEND = wledit (default) | rvtedit"""
+    ops = compose(ops)
     if not ops: return buf, []
     d = tempfile.mkdtemp(prefix='rvtballet-edit-'); a = os.path.join(d, 'in.rvt'); b = os.path.join(d, 'out.rvt')
     try:
