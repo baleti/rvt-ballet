@@ -387,6 +387,13 @@ def _read_params(buf):
     return v
 
 
+def _same_mark_base(old, new):
+    """a column location mark is 'GRID' or 'GRID(offset mm)'; a move changes only the offset ('D-1' -> 'D-1(610)', and 'W(137)-16(1162)' -> 'W(137)-16(1467)' when it already had one): same base text, different or added trailing offset"""
+    import re
+    new = str(new); strip = lambda t: re.sub(r'\(-?\d+(\.\d+)?\)$', '', t)
+    return new.startswith(old) or (strip(old) == strip(new) and bool(re.search(r'\(-?\d+(\.\d+)?\)$', new)))
+
+
 def _readback(src_buf, nb, ops):
     """the gate declares an edited element 'modified', so ANY change inside it passes verify. Read the edited elements back from the produced bytes: the edited parameter must hold the requested value (strings: exactly;
     numbers: changed), no other parameter of the element may change (except reader aliases carrying the new value) and the parameter count must not shrink. Severity-1 found by c3x-rvtmatrix: an emoji value left the
@@ -404,7 +411,7 @@ def _readback(src_buf, nb, ops):
         else:
             x, y = g(a.get(o['eid'])), g(b.get(o['eid']))
             # the column location mark is derived from the position ('D-1' -> 'D-1(610)' = offset from grid D-1): a move legitimately appends the offset (seen on 2017 columns)
-            ch = [k for k in set(x) | set(y) if x.get(k) != y.get(k) and not (k.startswith('Column Location Mark') and isinstance(x.get(k), str) and str(y.get(k)).startswith(x[k]))]
+            ch = [k for k in set(x) | set(y) if x.get(k) != y.get(k) and not (k.startswith('Column Location Mark') and isinstance(x.get(k), str) and _same_mark_base(x[k], y.get(k)))]
             if ch: bad.append('moved element %d: parameters changed' % o['eid'])
     for o in fl:
         if o['eid'] not in b: bad.append('field-edited element %d missing in the output' % o['eid'])

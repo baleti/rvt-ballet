@@ -14,3 +14,8 @@ assert got == [2], got      # 2 = echo; 3 also changed Mark (not an echo, stays 
 assert save.derived_echoes(b'a', b'b', [{'op': 'move', 'eid': 1, 'dx': 1.0}]) == []
 assert save.derived_echoes(b'a', b'b', [dict(op, param='Mark')]) == []
 print('derived echoes OK:', got)
+# column location mark after a move (read-back tolerance, QUEUE 73o): only the trailing offset may change
+f = save._same_mark_base
+assert f('D-1', 'D-1(610)') and f('W(137)-16(1162)', 'W(137)-16(1467)') and f('W(137)-16', 'W(137)-16')
+assert not f('W(137)-16(1162)', 'W(137)-17(1467)') and not f('A', 'B(5)') and not f('A(5)', 'B')
+print('mark base OK')
