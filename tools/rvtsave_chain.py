@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""rvtsave_chain.py SRC YEAR EID1 EID2: two in-place SAVEs in a row on one working copy (move EID1, save, move EID2, save), then open the result in the Revit VM (audit on)."""
+"""rvtsave_chain.py SRC YEAR OP1 OP2 (OP = EID | move:EID | str:EID:PARAM:VALUE): two in-place SAVEs in a row on one working copy (OP1, save, OP2, save), then open the result in the Revit VM (audit on)."""
 import os, sys, asyncio, tempfile, shutil, json
 W = os.path.expanduser('~/rvtsave-work'); _T = tempfile.mkdtemp(dir=W)
 os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'
 json.dump({'rvt': {'2024': 'open', '2026': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+def op(spec):
+    k, *a = str(spec).split(':')      # 'EID' or 'move:EID' = move 2 ft; 'str:EID:PARAM:VALUE' = set_string
+    if k == 'str': return {'op': 'set_string', 'eid': int(a[0]), 'param': a[1], 'value': a[2]}, int(a[0])
+    e = int(a[0] if k == 'move' else k); return {'op': 'move', 'eid': e, 'dx': 2.0}, e
+
 async def run(work, e1, e2):
     from rvtballet import server
     from aiohttp.test_utils import TestClient, TestServer
@@ -12,12 +17,13 @@ async def run(work, e1, e2):
     md = _T + '/m'; os.makedirs(md); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': work}
     async with TestClient(TestServer(server.make_app(models))) as c:
         c.session._timeout = aiohttp.ClientTimeout(total=None); await c.get('/api/m/m/saveinfo')
-        for e in (e1, e2):
-            r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': e, 'dx': 2.0}); assert r.status == 200, await r.text()
+        for sp in (e1, e2):
+            body, e = op(sp)
+            r = await c.post('/api/m/m/edit', json=body); assert r.status == 200, await r.text()
             r = await c.post('/api/m/m/save', json={}); j = await r.json(); print('save', e, r.status, str(j.get('error') or j.get('code') or 'ok')[:200], flush=True)
             if r.status != 200: return False
     return True
-src, year, e1, e2 = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
+src, year, e1, e2 = sys.argv[1:5]
 work = _T + '/src.rvt'; shutil.copy(src, work)
 if asyncio.run(run(work, e1, e2)):
     sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab/campaign')); os.environ['STAGEB'] = '1'
