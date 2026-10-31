@@ -216,7 +216,7 @@ _MEMBER_WORKER = r"""
 import sys, os, re, json
 sys.path[:0] = [os.path.expanduser('~/rvt-research')]
 import rvt_xcache
-x = rvt_xcache.get_x_ro(sys.argv[1]); want = set(json.loads(sys.argv[2]))
+x = rvt_xcache.get_x_ro(sys.argv[1]); want = set(json.load(open(sys.argv[2])))
 ids = lambda v: [int(m) for m in re.findall(r'\d+', str(v))]
 def find(o, key, res):
     if isinstance(o, dict):
@@ -250,7 +250,8 @@ def membership(buf, eids):
     try:
         p = os.path.join(d, 'm.rvt')
         with open(p, 'wb') as f: f.write(buf)
-        r = subprocess.run([sys.executable, '-c', _MEMBER_WORKER, p, json.dumps(sorted(int(e) for e in eids))], capture_output=True, text=True, timeout=1800)
+        ip = os.path.join(d, 'ids.json'); json.dump(sorted(int(e) for e in eids), open(ip, 'w'))      # a file, not argv: a long id list exceeds the argument limit
+        r = subprocess.run([sys.executable, '-c', _MEMBER_WORKER, p, ip], capture_output=True, text=True, timeout=1800)
         if r.returncode: raise RuntimeError('group/design-option check failed: ' + (r.stderr.strip().splitlines() or ['?'])[-1][:150])
         res = {}
         for e, recs in json.loads(r.stdout.strip().splitlines()[-1]).items():

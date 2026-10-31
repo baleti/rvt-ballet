@@ -12,6 +12,7 @@ async def run():
     src = os.path.join(_T, 'src.rvt'); shutil.copy(SRC, src); h0 = sha(src); md = os.path.join(_T, 'm'); os.makedirs(md)
     m = save.membership(open(src, 'rb').read(), [1365188, 1421734, 1421744])
     assert m == {1421734: ['group 1421744'], 1421744: ['group 1421744']}, m
+    big = save.membership(open(src, 'rb').read(), range(1, 1500000)); assert 1421734 in big and 1365188 not in big, 'long id list: wrong membership'      # 1.5M ids must not hit the argv limit
     models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     real = save.membership
     async with TestClient(TestServer(server.make_app(models))) as c:
