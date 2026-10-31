@@ -26,15 +26,15 @@ async def main(src0):
                     v = int(str(l[4])[4:-1]); pid = v - (1 << 64) if v >= (1 << 63) else v; nm = rvt_params.PNAMES.get(str(pid)); val = base.get(eid, {}).get(nm) if nm else None
                     if nm and isinstance(val, (int, float)): num = (eid, nm, float(val)); break
         if c == 'FamilyInstance':
-            if rot is None: rot = eid
-            elif leaf is None:
+            if leaf is None:
                 try:
-                    if ed.cascade(eid) == [eid]: leaf = eid
+                    if ed.cascade(eid) == [eid]: leaf = eid; continue
                 except Exception: pass
+            if rot is None: rot = eid
         if num and rot and leaf: break
     del ed; cm = next((e for e, d in base.items() if d.get('Comments') == '' and e not in (num or (0,))[:1] and e not in (rot, leaf)), None)
-    if not (num and rot and leaf and cm): print('NO_CANDIDATES', bool(num), bool(rot), bool(leaf), bool(cm)); return
-    plan = [('double', {'op': 'set_num', 'eid': num[0], 'param': num[1], 'value': round(num[2] + 0.25, 6)}), ('rotate', {'op': 'rotate', 'eid': rot, 'deg': 30}), ('delete', {'op': 'delete', 'eid': leaf}), ('string', {'op': 'set_string', 'eid': cm, 'param': 'Comments', 'value': 'chain2 edit'})]
+    if not (num and leaf and cm): print('NO_CANDIDATES', bool(num), bool(rot), bool(leaf), bool(cm)); return      # no second FamilyInstance to rotate: that round is skipped (reported)
+    plan = [('double', {'op': 'set_num', 'eid': num[0], 'param': num[1], 'value': round(num[2] + 0.25, 6)}), ] + ([('rotate', {'op': 'rotate', 'eid': rot, 'deg': 30})] if rot else []) + [('delete', {'op': 'delete', 'eid': leaf}), ('string', {'op': 'set_string', 'eid': cm, 'param': 'Comments', 'value': 'chain2 edit'})]
     from aiohttp.test_utils import TestClient, TestServer
     import aiohttp
     models = server.Models(); md = os.path.join(_T, 'm'); os.makedirs(md); models.m['m'] = {'dir': md, 'name': 'f', 'src': src}; rows = []; gens = [sha(src)]
