@@ -1,6 +1,6 @@
 """delete op (opt-in, rvtedit backend): refused unless RVTBALLET_ENABLE_DELETE=1; with it, the manifest lists the deleted ids and savegate verify REFUSES the delete of 301592 because its neighbour 301593 changes (documented current behaviour)."""
 import os, sys, asyncio, tempfile, shutil, subprocess, sqlite3
-_T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
+_T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_DELETE_ANY'] = '1'
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)
 RTE = os.path.expanduser('~/rvt-research/write-lab/scenes/classtests/2024_writer_cols2.rte')
 from rvtballet import server, save

@@ -1,7 +1,7 @@
 """Delete sweep (c5x-rvtmatrix): opt-in delete op over one element per class (up to N classes x K elements) of a scene; each tried alone: SAVE AS must be refused (nothing written) or
 verify clean. Accepted outputs are kept in KEEP_DIR for the Revit VM. Aggregate output only.   usage: tools/rvt_delete_sweep.py OUT.json FILE [N_PER_CLASS=2] [KEEP_DIR]"""
 import os, sys, asyncio, tempfile, shutil, json, hashlib, collections
-_T = tempfile.mkdtemp(dir=os.environ.get('TMPDIR')); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_ENABLE_DELETE'] = '1'
+_T = tempfile.mkdtemp(dir=os.environ.get('TMPDIR')); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_ENABLE_DELETE'] = '1'; os.environ['RVTBALLET_DELETE_ANY'] = '1'
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 for p in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab'), os.path.expanduser('~/src/savegate')): sys.path.insert(0, p)
 from rvtballet import server

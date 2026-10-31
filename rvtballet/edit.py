@@ -244,9 +244,14 @@ def _set_string_by_pid(ed, o):
 UNIQUE_CLASS = __import__('re').compile(r'(Tracker|Settings?(Elem|Element)?|Table|Manager|Navigator|Library|Cache|Lock)$|^AllProject|^ProjectInfo|^Units')      # singleton-style classes; evidence: AllProjectRevisions delete -> Revit repair dialog (c7x-rvtmatrix, 2024 VM)
 
 
+DELETE_VM_VERIFIED = {'CategoryElem', 'BasePoint', 'BrowserOrganization'}      # Revit 2024 VM, single-element delete on the cols2 scene: opens with no dialog (c7x-rvtmatrix); extend only with a VM verdict
+
+
 def _delete(ed, eid):
     """delete with what Revit's Delete removes: class-specific paths of rvtedit (floor / view / sheet), else owned_set; returns every deleted id (they all go in the manifest)"""
     cls = ed.g.e.trace(eid)[2]['class']
+    if os.environ.get('RVTBALLET_DELETE_ANY') != '1' and cls not in DELETE_VM_VERIFIED:
+        raise EditError('element %d is a %s: delete is only enabled for classes whose output was opened in Revit without a repair prompt (%s); other classes are refused (override for experiments: RVTBALLET_DELETE_ANY=1)' % (eid, cls, ', '.join(sorted(DELETE_VM_VERIFIED))))
     if UNIQUE_CLASS.search(cls): raise EditError('element %d is a %s: a project-wide settings / tracker / table element that Revit expects to exist exactly once (deleting AllProjectRevisions made Revit show "Repair Missing Unique Elements"); not deleted' % (eid, cls))
     if cls == 'Floor': return list(ed.delete_floor(eid))
     if cls.startswith('DBView') and cls not in ('DBViewType',): return list(ed.delete_view(eid))

@@ -2,7 +2,7 @@
 edits in other partitions, temp directories are removed when a later pass fails, a deleted element is not also listed as modified, limited verify turns an empty-members stream into LightVerifyFailed."""
 import os, sys, types, tempfile, subprocess, glob
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_ENABLE_DELETE'] = '1'
+os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_ENABLE_DELETE'] = '1'; os.environ['RVTBALLET_DELETE_ANY'] = '1'
 from rvtballet import save, edit, lightverify
 if not save.SaveSessions().available: print('skip'); raise SystemExit
 # --- worker classification
