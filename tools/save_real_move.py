@@ -30,7 +30,8 @@ async def main(out, src):
     r = subprocess.run([os.path.join(HERE, 'rvt-ballet'), 'convert', dest, _T + '/c_out'], capture_output=True, text=True, timeout=3600)
     a, b = bbs(_T + '/c_src'), bbs(_T + '/c_out'); moved = {i for i in a if i in b and a[i] != b[i]}
     d = [[b[eid][k][x] - a[eid][k][x] for x in range(3)] for k in (0, 1)] if eid in b else None
-    row['only_target_moved'] = moved - alias == {eid}; alias = {i for i in moved - {eid} if i in a and eid in a and a[i] == a[eid] and i in b and b[i] == b[eid]}      # reader attributes the instance's geometry to its style element (same box before/after): not a second element moving
+    alias = {i for i in moved - {eid} if i in a and eid in a and a[i] == a[eid] and i in b and b[i] == b[eid]}      # reader attributes the instance's geometry to its style element (same box before/after): not a second element moving
+    row['only_target_moved'] = moved - alias == {eid}
     row['style_alias_boxes'] = len(alias); row['other_boxes_changed'] = len(moved - {eid} - alias); row['shift_ft'] = [round(v, 6) for v in d[0]] if d else None
     row['seconds'] = round(time.time() - t0, 1); row['result'] = 'OK' if row['only_target_moved'] and d and all(abs(d[k][0] - 1) < 1e-6 and abs(d[k][1]) < 1e-6 and abs(d[k][2]) < 1e-6 for k in (0, 1)) and row['verify_diffs'] == 0 else 'MISMATCH'
     kd = os.environ.get('KEEP_DIR')
