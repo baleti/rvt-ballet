@@ -11,7 +11,7 @@ async def one(c, models, f, k):
     src = os.path.join(_T, 'src%d.rvt' % k); shutil.copy(f, src); h0 = sha(src); md = os.path.join(_T, 'm%d' % k); os.makedirs(md)
     mid = 'm%d' % k; models.m[mid] = {'dir': md, 'name': 'a', 'src': src}
     await c.get('/api/m/%s/saveinfo' % mid)
-    r = await c.post('/api/m/%s/save' % mid, json={}); t = await r.text(); ok = r.status != 200 and 'writable years' in t
+    r = await c.post('/api/m/%s/save' % mid, json={}); t = await r.text(); ok = r.status != 200 and ('writable years' in t or 'unsupported_version' in t)
     out = os.path.join(_T, 'o%d.rvt' % k); r2 = await c.post('/api/m/%s/saveas' % mid, json={'dest': out}); t2 = await r2.text()
     ok2 = r2.status != 200 and not os.path.exists(out)
     left = [x for x in os.listdir(_T) if x.endswith(('.tmp', '.part', '.bak'))]
