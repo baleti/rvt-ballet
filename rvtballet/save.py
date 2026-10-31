@@ -348,6 +348,21 @@ def _note_derived(ss, mid, r):
     if n: r.setdefault('warnings', []).append('%d other element(s) show the edited parameter too (the reader derives it from the edited element, e.g. a view\'s Detail Level on its viewports): they were declared as changed together with the edit' % n)
 
 
+def expectations(ops, deleted=None):
+    """what a successful save promises, in a form an INDEPENDENT checker (tools/rvt_expect_check.py: Revit API readback) can replay: per element, a parameter value, a location shift (feet), a rotation (degrees)
+    or absence. From the composed ops, so a move +2 / -2 that cancels is not promised."""
+    from .edit import compose
+    out = []
+    for o in compose(list(ops)):
+        e = o['eid']
+        if o['op'] == 'set_num' and o.get('param'): out.append({'eid': e, 'kind': 'param', 'name': o['param'], 'value': o['value'], 'type': o.get('kind', 'Double')})
+        elif o['op'] == 'set_string' and o.get('param'): out.append({'eid': e, 'kind': 'param', 'name': o['param'], 'value': o['value'], 'type': 'String'})
+        elif o['op'] == 'move': out.append({'eid': e, 'kind': 'move', 'd': [o['dx'], o['dy'], o['dz']]})
+        elif o['op'] == 'rotate': out.append({'eid': e, 'kind': 'rotate', 'deg': o['deg']})
+    for e in (deleted or []): out.append({'eid': int(e), 'kind': 'absent'})
+    return out
+
+
 def derived_echoes(src_buf, nb, ops):
     """ids of UNEDITED elements whose reader view changed only because the reader shows the edited element's parameter on them too (a view's Detail Level on its viewports / elevation arrows, a family's Section Shape on its
     symbols; QUEUE 64). Strict rule: the element changed in exactly ONE parameter, the edited parameter name, from exactly the edited element's old value to exactly its new value. Anything else stays an undeclared
@@ -465,8 +480,11 @@ def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     _cloud_gate(src, dest); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t)
     check_memory(src, d.buf)      # TooBig (507) before any work; the UI then offers the labelled limited verification
     gw = group_warning(ss, mid, d.buf) if new_bytes is None else None
+    explicit = new_bytes is not None
     new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _stage(ss, mid, 'verifying and writing')
+    exp = [] if explicit else expectations(ss.edits(mid).ops, [int(k[3:]) for k in manifest.get('deleted', ())])
     r = result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite))
+    if exp: r['expectations'] = exp      # replayable by tools/rvt_expect_check.py through the Revit API
     if gw: r.setdefault('warnings', []).append(gw)
     lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
     if lc is None: r.setdefault('warnings', []).append('the page-layout check could not run: this output is NOT confirmed to keep the layout of the source')

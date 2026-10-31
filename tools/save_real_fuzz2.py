@@ -94,7 +94,7 @@ async def main(src, n, seed, out):
                 row['exact'] = bool(exact); stat['exact' if exact else 'MISMATCH'] += 1
                 kd = os.environ.get('KEEP_DIR')
                 if kd and exact and (dels if os.environ.get('KEEP_ONLY_DELETE') else len(sets) + len(nset) + len(moves) + len(rots) + len(dels) >= 2) and stat['kept'] < int(os.environ.get('KEEP_N', '5')):      # KEEP_ONLY_DELETE: keep chains that contain a delete      # local only, for the Revit harness
-                    import shutil; os.makedirs(kd, exist_ok=True); shutil.copy(dest, os.path.join(kd, 'chain%d.rvt' % k)); stat['kept'] += 1
+                    import shutil; os.makedirs(kd, exist_ok=True); shutil.copy(dest, os.path.join(kd, 'chain%d.rvt' % k)); json.dump(j.get('expectations', []), open(os.path.join(kd, 'chain%d.exp.json' % k), 'w')); stat['kept'] += 1
                 os.remove(dest)
             else: row['code'] = j.get('code'); row['n_unexpected'] = (j.get('report') or {}).get('n_unexpected'); row['detail'] = str(j.get('error'))[:100]
             row['seconds'] = round(time.time() - t0, 1); rows.append(row); print(row, flush=True)
