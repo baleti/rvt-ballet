@@ -13,7 +13,7 @@ def bbs(d): return {r[0]: json.loads(r[1]) for r in sqlite3.connect(os.path.join
 async def main(src, n, seed, out):
     rnd = random.Random(seed); stat = collections.Counter(); rows = []
     conv = subprocess.run([os.path.join(HERE, 'rvt-ballet'), 'convert', src, _T + '/c_src'], capture_output=True, text=True, timeout=3600); assert conv.returncode == 0
-    db = sqlite3.connect(_T + '/c_src/model.sqlite'); movable = [r[0] for r in db.execute("select id from el where cls='FamilyInstance' and bb is not null order by id limit 30")]; ids = [r[0] for r in db.execute("select id from el where cls in ('Wall','Floor','Level','FamilyInstance','DBViewPlan')")]
+    db = sqlite3.connect(_T + '/c_src/model.sqlite'); movable = [r[0] for r in db.execute("select id from el where cls='FamilyInstance' and bb is not null order by id limit 30")]; ids = [r[0] for r in db.execute("select id from el where cls in ('Wall','Floor','Level','FamilyInstance','DBViewPlan','TextNoteAttributes')")]
     pr = rvt_params.params(src); base = {e: dict(g(d)) for e, d in pr.items()}; del pr
     strs = [e for e, d in base.items() if d.get('Comments') == '']
     ed = rvtedit.Edit(src); nums = []
@@ -35,9 +35,9 @@ async def main(src, n, seed, out):
         for k in range(n):
             t0 = time.time()
             while (await (await c.get('/api/m/m/edits')).json())['ops']: await c.post('/api/m/m/edit/undo')
-            sets = {}; nset = {}; moves = {}
+            sets = {}; nset = {}; moves = {}; rots = {}
             for _ in range(rnd.randint(1, 3)):
-                kind = rnd.choice(['s', 'n', 'm'])
+                kind = rnd.choice(['s', 'n', 'm', 'r'] if os.environ.get('FUZZ_ROTATE') else ['s', 'n', 'm'])
                 if kind == 's' and strs:
                     e = rnd.choice(strs); v = rnd.choice(['x', 'Ünï ✓', 'a' * 40, 'Mark-9'])
                     r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': e, 'param': 'Comments', 'value': v}); stat['edit_%d' % r.status] += 1
@@ -46,14 +46,19 @@ async def main(src, n, seed, out):
                     e, nm, v0 = rnd.choice(nums); nv = round(v0 + rnd.choice([1.0, 2.5, -0.5]), 6)
                     r = await c.post('/api/m/m/edit', json={'op': 'set_num', 'eid': e, 'param': nm, 'value': nv}); stat['edit_%d' % r.status] += 1
                     if r.status == 200: nset[(e, nm)] = nv
+                elif kind == 'r' and movable:
+                    e = rnd.choice(movable)
+                    if e in moves or e in rots: continue
+                    dg = rnd.choice([15, 30, -45, 90]); r = await c.post('/api/m/m/edit', json={'op': 'rotate', 'eid': e, 'deg': dg}); stat['edit_%d' % r.status] += 1
+                    if r.status == 200: rots[e] = dg
                 elif kind == 'm' and movable:
                     e = rnd.choice(movable)
-                    if e in moves: continue
+                    if e in moves or e in rots: continue
                     r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': e, 'dx': 1.0}); stat['edit_%d' % r.status] += 1
                     if r.status == 200: moves[e] = 1.0
-            if not (sets or nset or moves): stat['no_edit'] += 1; continue
+            if not (sets or nset or moves or rots): stat['no_edit'] += 1; continue
             dest = os.path.join(_T, 'o%d.rvt' % k); r = await c.post('/api/m/m/saveas', json={'dest': dest}); j = await r.json(); stat['save_%d_%s' % (r.status, j.get('code', 'ok'))] += 1
-            row = {'chain': k, 'strings': len(sets), 'nums': len(nset), 'moves': len(moves), 'status': r.status}
+            row = {'chain': k, 'strings': len(sets), 'nums': len(nset), 'moves': len(moves), 'rots': len(rots), 'status': r.status}
             if r.status == 200:
                 exact = True
                 if sets or nset:
@@ -62,10 +67,11 @@ async def main(src, n, seed, out):
                         a = base[e]; b = g(now.get(e)); ch = {x for x in set(a) | set(b) if a.get(x) != b.get(x)}
                         want = ({'Comments'} if e in sets else set()) | {nm for (ee, nm) in nset if ee == e}
                         exact &= ch == want and (e not in sets or b.get('Comments') == sets[e]) and all(abs(b.get(nm) - v) < 1e-9 for (ee, nm), v in nset.items() if ee == e)
-                if moves:
+                if moves or rots:
                     subprocess.run([os.path.join(HERE, 'rvt-ballet'), 'convert', dest, _T + '/c_o%d' % k], capture_output=True, text=True, timeout=3600)
                     a2, b2 = bbs(_T + '/c_src'), bbs(_T + '/c_o%d' % k); moved = {i for i in a2 if i in b2 and a2[i] != b2[i]}
-                    exact &= moved == set(moves) and all(abs((b2[e][0][0] - a2[e][0][0]) - 1.0) < 1e-6 for e in moves)
+                    row['extra_boxes_changed'] = len(moved - set(moves) - set(rots)); row['target_boxes_unchanged'] = len((set(moves) | set(rots)) - moved); row['unchanged_rot_degs'] = sorted(rots[e] for e in rots if e not in moved); row['rot_degs'] = sorted(rots.values())
+                    exact &= moved == set(moves) | set(rots) and all(abs((b2[e][0][0] - a2[e][0][0]) - 1.0) < 1e-6 for e in moves) and all(a2[e] != b2[e] for e in rots if rots[e] % 90)
                 row['exact'] = bool(exact); stat['exact' if exact else 'MISMATCH'] += 1; os.remove(dest)
             else: row['code'] = j.get('code'); row['n_unexpected'] = (j.get('report') or {}).get('n_unexpected'); row['detail'] = str(j.get('error'))[:100]
             row['seconds'] = round(time.time() - t0, 1); rows.append(row); print(row, flush=True)
