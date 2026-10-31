@@ -182,6 +182,7 @@ def make_app(models):
         r = await asyncio.get_event_loop().run_in_executor(None, lambda: saves.info(mid, src))
         cfg = saves.cfg; r['allow_overwrite'] = bool(cfg and cfg.allow_overwrite)
         from . import edit as _ed; r['name_edit'] = _ed.BACKEND() == 'rvtedit'      # parameter edits by name/id need the rvtedit backend
+        r['safety_overrides'] = sorted(k for k in ('RVTBALLET_ALLOW_LAYOUT_CHANGE', 'RVTBALLET_ALLOW_WORKSHARED', 'RVTBALLET_ALLOW_GROUP_EDIT', 'RVTBALLET_ENABLE_DELETE') if os.environ.get(k) == '1')      # safety checks switched off for this process: the UI must say so
         r['pending_edits'] = len(saves.edits(mid).ops)      # in memory only: a viewer restart drops them (the file on disk is untouched until a save)
         if r.get('open') and cfg:
             from . import save as _s; sg = _s._import(); d_ = saves.docs[mid]

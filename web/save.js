@@ -25,7 +25,7 @@ export function describeBackup(b) { return `#${b.n}  ${b.mtime}  ${b.size} bytes
 export const NOT_EDITABLE = /^(UniqueId|IfcGUID|Type IfcGUID|Family|Type Id|Type|Family and Type|Name|Category\|ElementId|Design Option\|String)$/;
 export function paramEditable(name, value) { return typeof value === 'string' && !NOT_EDITABLE.test(name); }
 export function actions(info) {   // which buttons are enabled and why not
-  const a = { saveas: { on: !!(info && info.open), why: info && info.open ? '' : (info && info.error) || 'saving unavailable for this model' } };
+  const a = { overrides: (info && info.safety_overrides) || [], saveas: { on: !!(info && info.open), why: info && info.open ? '' : (info && info.error) || 'saving unavailable for this model' } };
   a.save = { on: !!(info && info.open && info.allow_overwrite && info.gate_open), why: '' };
   if (a.save.on && info.workshared) { a.save.on = false; a.save.why = 'workshared model: overwrite is refused, use Save as'; return a; }
   if (!a.save.on) a.save.why = !info || !info.open ? a.saveas.why : !info.allow_overwrite ? 'overwrite disabled in the configuration' : 'overwrite gate closed for this version';
@@ -47,7 +47,7 @@ export function initSave($, getMid) {
     if (mid !== getMid()) return;      // the user switched models while saveinfo ran: do not set the buttons from the old model
     canNameEdit = !!(info && info.open && info.name_edit); const pe = (info && info.pending_edits) || 0; bUndo.hidden = !pe; bUndo.textContent = `Undo edit (${pe} pending)`;
     const a = actions(info); bBk.disabled = !a.saveas.on; bAs.disabled = !a.saveas.on; bAs.title = a.saveas.on ? 'Save a copy under a new name (never touches the original)' : a.saveas.why;
-    bOver.disabled = !a.save.on; bOver.title = a.save.on ? 'Overwrite the source file (a backup is kept)' : a.save.why;
+    bOver.disabled = !a.save.on; bOver.title = a.save.on ? 'Overwrite the source file (a backup is kept)' + (a.overrides.length ? ' - WARNING: safety checks switched off by the server environment: ' + a.overrides.join(', ') : '') : a.save.why;
   }
   async function doSave(path, body, force) {
     let live = true; const poll = async () => { while (live) { try { const p = await (await fetch(`/api/m/${getMid()}/saveprogress`)).json(); if (live && p.busy && p.stage) show([`Saving... ${p.stage} (${p.elapsed} s)`], false); } catch (e) {} await new Promise(r => setTimeout(r, 700)); } };

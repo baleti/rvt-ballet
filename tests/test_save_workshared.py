@@ -16,6 +16,8 @@ async def run():
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
         i = await (await c.get('/api/m/m/saveinfo')).json(); assert i['workshared'] is False and i['worksharing'] == 'Not enabled', i
+        assert i['safety_overrides'] == [], i
+        os.environ['RVTBALLET_ALLOW_LAYOUT_CHANGE'] = '1'; assert (await (await c.get('/api/m/m/saveinfo')).json())['safety_overrides'] == ['RVTBALLET_ALLOW_LAYOUT_CHANGE']; del os.environ['RVTBALLET_ALLOW_LAYOUT_CHANGE']
         save.worksharing_state = lambda b: 'Central'; i = await (await c.get('/api/m/m/saveinfo')).json(); assert i['workshared'] is True, i; save.worksharing_state = real
         for forced in ('Central', 'Local', None):
             save.worksharing_state = lambda b, f=forced: f
