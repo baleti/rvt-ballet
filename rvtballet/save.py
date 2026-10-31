@@ -302,7 +302,7 @@ def error_status(exc):
     n = type(exc).__name__
     return {'Conflict': (409, 'conflict'), 'GateClosed': (409, 'gate_closed'), 'OverwriteDisabled': (409, 'overwrite_disabled'),
             'Exists': (409, 'exists'), 'SaveError': (409, 'refused'), 'Locked': (423, 'locked'), 'VerifyFailed': (422, 'verify_failed'),
-            'EditError': (400, 'edit_error'), 'LightVerifyFailed': (422, 'verify_failed'), 'LayoutChanged': (409, 'layout_changed'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'Workshared': (409, 'workshared'), 'GroupOrOption': (409, 'group_or_option'), 'CloudPlaceholder': (409, 'cloud_placeholder'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
+            'EditError': (400, 'edit_error'), 'LightVerifyFailed': (422, 'verify_failed'), 'LayoutChanged': (409, 'layout_changed'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'Workshared': (409, 'workshared'), 'ReadOnlyTarget': (409, 'read_only'), 'GroupOrOption': (409, 'group_or_option'), 'CloudPlaceholder': (409, 'cloud_placeholder'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
 
 
 _UNTOUCHED = ("untouched", "not touched", "unchanged", "nothing was written", "nothing written", "not changed", "nothing was replaced", "not written")
