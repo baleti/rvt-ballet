@@ -250,7 +250,8 @@ def membership(buf, eids):
     try:
         p = os.path.join(d, 'm.rvt')
         with open(p, 'wb') as f: f.write(buf)
-        ip = os.path.join(d, 'ids.json'); json.dump(sorted(int(e) for e in eids), open(ip, 'w'))      # a file, not argv: a long id list exceeds the argument limit
+        ip = os.path.join(d, 'ids.json')
+        with open(ip, 'w') as f_ids: json.dump(sorted(int(e) for e in eids), f_ids)      # a file, not argv: a long id list exceeds the argument limit
         r = subprocess.run([sys.executable, '-c', _MEMBER_WORKER, p, ip], capture_output=True, text=True, timeout=1800)
         if r.returncode: raise RuntimeError('group/design-option check failed: ' + (r.stderr.strip().splitlines() or ['?'])[-1][:150])
         res = {}
@@ -393,7 +394,7 @@ def _same_mark_base(old, new):
     """a column location mark is 'GRID' or 'GRID(offset mm)'; a move changes only the offset ('D-1' -> 'D-1(610)', and 'W(137)-16(1162)' -> 'W(137)-16(1467)' when it already had one): same base text, different or added trailing offset"""
     import re
     new = str(new); strip = lambda t: re.sub(r'\(-?\d+(\.\d+)?\)$', '', t)
-    return new.startswith(old) or (strip(old) == strip(new) and bool(re.search(r'\(-?\d+(\.\d+)?\)$', new)))
+    return bool(old) and (new.startswith(old) or strip(old) == strip(new))      # 'D-1' -> 'D-1(610)', 'W-16(1162)' -> 'W-16(1467)', and 'D-1(610)' -> 'D-1' (moved back onto the grid line)
 
 
 def _readback(src_buf, nb, ops):
@@ -449,7 +450,8 @@ def risky_membership(mem, ops):
 
 def group_warning(ss, mid, buf):
     """warning text when a pending edit touches a group member / group instance / design-option element (None otherwise). Revit evidence (rac_advanced 2024, in-place move of one array-group member): the file opens, audits and regenerates cleanly, but that instance no longer matches the other 15 instances of its group type, so the copy is not what the user meant."""
-    ops = list(ss.edits(mid).ops)
+    from .edit import compose
+    ops = compose(list(ss.edits(mid).ops))      # what is really applied (a move +2 / -2 that cancels is not a move)
     if not ops: return None
     try: mem = risky_membership(membership(buf, {o['eid'] for o in ops}), ops)
     except Exception as e: return 'could not check whether the edited elements belong to a group or design option (%s): verify the copy in Revit' % e
@@ -495,7 +497,8 @@ def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     ws = worksharing_state(d.buf)
     if not (ws or '').startswith('Not enabled') and os.environ.get('RVTBALLET_ALLOW_WORKSHARED') != '1':
         raise Workshared('overwrite refused: the model is %s (Worksharing: %s); worksets and the central link are not maintained by the writer. Use SAVE AS and check the copy in Revit; the file was not touched.' % ('workshared' if ws else 'of unknown worksharing state', ws or 'unreadable'))
-    ops = list(ss.edits(mid).ops) if new_bytes is None else []
+    from .edit import compose
+    ops = compose(list(ss.edits(mid).ops)) if new_bytes is None else []
     if ops and os.environ.get('RVTBALLET_ALLOW_GROUP_EDIT') != '1':
         _stage(ss, mid, 'checking groups and design options')
         try: mem = risky_membership(membership(d.buf, {o['eid'] for o in ops}), ops)

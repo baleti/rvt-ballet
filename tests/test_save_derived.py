@@ -18,6 +18,7 @@ print('derived echoes OK:', got)
 f = save._same_mark_base
 assert f('D-1', 'D-1(610)') and f('W(137)-16(1162)', 'W(137)-16(1467)') and f('W(137)-16', 'W(137)-16')
 assert not f('W(137)-16(1162)', 'W(137)-17(1467)') and not f('A', 'B(5)') and not f('A(5)', 'B')
+assert f('D-1(610)', 'D-1') and not f('', 'anything') and not f('', '')      # moved back onto the grid line; an empty old mark never matches
 print('mark base OK')
 # compose(): repeated ops of one element merged (QUEUE 83)
 from rvtballet.edit import compose
