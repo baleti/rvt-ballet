@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 for p in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab'), os.path.expanduser('~/src/savegate')): sys.path.insert(0, p)
 from rvtballet import server
 import rvt_params
+SWEEP_OP = os.environ.get('SWEEP_OP', 'delete')      # delete (default) or rotate (90 degrees): same accept/refuse sweep for the rotate op
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 async def run(out, f, n, keep):
     from aiohttp.test_utils import TestClient, TestServer
@@ -18,13 +19,13 @@ async def run(out, f, n, keep):
         await c.get('/api/m/m/saveinfo')
         for cls, ids in sorted(bycls.items()):
             for eid in ids[:n]:
-                r = await c.post('/api/m/m/edit', json={'op': 'delete', 'eid': eid})
+                r = await c.post('/api/m/m/edit', json=dict({'op': 'delete'} if SWEEP_OP == 'delete' else {'op': 'rotate', 'deg': 90.0}, eid=eid))
                 if r.status != 200: rows.append({'class': cls, 'result': 'INPUT_REFUSED'}); continue
                 dest = os.path.join(_T, 'o%d%s' % (k, os.path.splitext(f)[1])); k += 1
                 r = await c.post('/api/m/m/saveas', json={'dest': dest}); j = await r.json()
                 if r.status == 200: res = 'ACCEPTED verify_unexpected=%s' % j.get('verify', {}).get('n_unexpected'); assert os.path.exists(dest)
                 else: res = 'REFUSED_%d %s' % (r.status, j.get('code')); assert not os.path.exists(dest)
-                if r.status == 200 and keep: shutil.copy(dest, os.path.join(keep, 'del_%s_%d%s' % (cls, eid, os.path.splitext(f)[1])))
+                if r.status == 200 and keep: shutil.copy(dest, os.path.join(keep, '%s_%s_%d%s' % (SWEEP_OP[:3], cls, eid, os.path.splitext(f)[1])))
                 rows.append({'class': cls, 'result': res}); await c.post('/api/m/m/edit/undo')
     assert sha(src) == h0; json.dump(rows, open(out, 'w'))
     print(collections.Counter((r['class'], r['result'].split()[0]) for r in rows))
