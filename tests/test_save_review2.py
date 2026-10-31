@@ -55,7 +55,7 @@ finally:
     else: sys.modules['rvtedit'] = real_edit
 # --- manifest: a deleted element is not also 'modified'
 e = edit.Edits(); e.ops = [edit.validate_op({'op': 'move', 'eid': 5, 'dx': 1.0}), edit.validate_op({'op': 'delete', 'eid': 6})]
-m = e.manifest([5, 6]); assert m == {'modified': [], 'deleted': ['el:5', 'el:6']}, m
+m = e.manifest([5, 6]); assert m == {'modified': [], 'deleted': ['el:5', 'el:6'], 'must_delete': ['el:6']}, m
 # --- limited verify: no gzip members at all -> LightVerifyFailed (not ValueError)
 WL = edit.WL
 if os.path.exists(os.path.join(WL, 'cfb.py')):

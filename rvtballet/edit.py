@@ -91,6 +91,8 @@ class Edits:
         gone = {'el:%d' % i for i in (deleted or [])}
         m = {'modified': sorted({'el:%d' % o['eid'] for o in compose(self.ops) if o['op'] != 'delete'} - gone)}
         if gone: m['deleted'] = sorted(gone)
+        asked = {'el:%d' % o['eid'] for o in compose(self.ops) if o['op'] == 'delete'}
+        if asked: m['must_delete'] = sorted(asked)      # savegate: the elements the caller explicitly asked to delete must really be gone from the output (a delete that silently did nothing is refused)
         return m
 
 
