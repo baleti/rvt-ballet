@@ -37,7 +37,7 @@ async def main(src, cls):
         r = await c.post('/api/m/m/edit', json={'op': 'set_num', 'eid': eid, 'param': nm, 'value': nv, 'kind': KIND}); j = await r.json(); print('edit', r.status, str(j.get('error', ''))[:120], flush=True)
         if r.status != 200: return
         out = os.path.join(_T, 'o.rvt'); r = await c.post('/api/m/m/saveas', json={'dest': out}); j = await r.json()
-        if r.status != 200: print('SAVE', r.status, j.get('code'), str(j.get('error'))[:200]); return
+        if r.status != 200: print('SAVE', r.status, j.get('code'), str(j.get('error'))[:200]); os.environ.get('SHOW_DIFFS') and print('DIFFS', json.dumps(j, default=str)[:3000]); return
         a = base[eid]; b = g(rvt_params.params(out).get(eid)); ch = {x for x in set(a) | set(b) if a.get(x) != b.get(x)}
         ok = ch == {nm} and abs(b[nm] - nv) < 1e-9
         print('NUM-EDIT', {'verify_diffs': j['verify']['n_unexpected'], 'only_param_changed': ch == {nm}, 'value_ok': abs(b.get(nm, 1e9) - nv) < 1e-9, 'changed_n': len(ch), 'seconds': round(time.time() - t0), 'result': 'OK' if ok and j['verify']['n_unexpected'] == 0 else 'MISMATCH'})
