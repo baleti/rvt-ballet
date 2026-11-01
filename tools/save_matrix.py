@@ -3,6 +3,7 @@ asserts output == source bytes at both generations and the library verify report
 usage: tools/save_matrix.py OUTJSON FILE [FILE...]   (files: .rvt/.rte; writable years only reach saveas)"""
 import os, sys, asyncio, tempfile, hashlib, json, time, shutil
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'
+import atexit, shutil as _sh; atexit.register(_sh.rmtree, _T, True); os.environ.setdefault('RVT_BALLET_CACHE', _T + '/bc'); os.environ.setdefault('RVT_CORE_CACHE', _T + '/cc')      # temp dir and ALL caches die with the process (host disk emergency 2026-11-01)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from rvtballet import server
 def elemtable_raw(path):

@@ -32,6 +32,14 @@ try {
       var w = fi.Host as Wall; if (w != null) width = " wallwidth=" + w.Width.ToString("F6");
       log.AppendLine("HOST " + s + " host=" + fi.Host.Id + " " + fi.Host.GetType().Name + " dist_to_hostline=" + dist + width + " hostparam=" + (e.get_Parameter(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM) != null ? e.get_Parameter(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM).AsValueString() : "-"));
     }
+    foreach (var tg in new FilteredElementCollector(d).OfClass(typeof(IndependentTag)).Cast<IndependentTag>()) {
+      bool hit = false; try { hit = tg.GetTaggedLocalElementIds().Any(x => x.ToString() == s); } catch {}
+      if (hit) { string head = "?"; try { var hp = tg.TagHeadPosition; head = hp.X.ToString("F6") + " " + hp.Y.ToString("F6") + " " + hp.Z.ToString("F6"); } catch {} log.AppendLine("TAG " + s + " tag=" + tg.Id + " head=" + head + " leader=" + tg.HasLeader); }
+    }
+    foreach (var dm in new FilteredElementCollector(d).OfClass(typeof(Dimension)).Cast<Dimension>()) {
+      bool hit = false; try { foreach (Reference rf in dm.References) { if (rf.ElementId.ToString() == s) { hit = true; break; } } } catch {}
+      if (hit) log.AppendLine("DIM " + s + " dim=" + dm.Id + " value=" + (dm.Value.HasValue ? dm.Value.Value.ToString("F6") : "-"));
+    }
     log.AppendLine("RB " + s + " loc=" + loc + " group=" + e.GroupId + " mark=" + (mark != null ? mark.AsString() : "-"));
   }
   try { using (var t = new Transaction(d, "rg")) { t.Start(); d.Regenerate(); log.AppendLine("REGEN ok"); t.RollBack(); } } catch (Exception ex) { log.AppendLine("REGEN " + ex.GetType().Name + " " + ex.Message.Replace("\r", " ").Replace("\n", " ")); }

@@ -3,6 +3,7 @@ ParamValueAString.m_value, optional undo, then SAVE AS. Every chain must end 200
 usage: tools/save_fuzz.py SRC.rvt MODELDIR(sqlite with el table) CHAINS SEED OUT.json   (aggregate output)"""
 import os, sys, asyncio, tempfile, hashlib, json, random, time, sqlite3, collections
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'
+import atexit, shutil as _sh; atexit.register(_sh.rmtree, _T, True); os.environ.setdefault('RVT_BALLET_CACHE', _T + '/bc'); os.environ.setdefault('RVT_CORE_CACHE', _T + '/cc')      # temp dir and ALL caches die with the process (host disk emergency 2026-11-01)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from rvtballet import server
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()

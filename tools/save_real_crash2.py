@@ -3,6 +3,7 @@ bytes (never a mix), a SAVE AS target is absent or exactly the NEW bytes, no *.s
 of the same copy still works (no stale lock). Aggregate output only. usage: tools/save_real_crash2.py FILE [REPS]"""
 import os, sys, tempfile, hashlib, shutil, subprocess, signal, json
 _T = tempfile.mkdtemp(); J = _T + '/j'; C = _T + '/c'
+import atexit, shutil as _sh; atexit.register(_sh.rmtree, _T, True); os.environ.setdefault('RVT_BALLET_CACHE', _T + '/bc'); os.environ.setdefault('RVT_CORE_CACHE', _T + '/cc')      # temp dir and ALL caches die with the process (host disk emergency 2026-11-01)
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 CHILD = r'''

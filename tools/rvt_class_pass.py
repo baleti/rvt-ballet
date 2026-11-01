@@ -4,6 +4,7 @@ rvt-ballet server API in ONE session, SAVE AS (element-level verify), then SAVE!
 Aggregate output only (class names, counts, percentages; no element names or paths).   usage: tools/rvt_class_pass.py OUT.json FILE CLASS[,CLASS...]|ALL [KEEP_DIR]"""
 import os, sys, asyncio, tempfile, time, json, hashlib, shutil
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
+import atexit, shutil as _sh; atexit.register(_sh.rmtree, _T, True); os.environ.setdefault('RVT_BALLET_CACHE', _T + '/bc'); os.environ.setdefault('RVT_CORE_CACHE', _T + '/cc')      # temp dir and ALL caches die with the process (host disk emergency 2026-11-01)
 os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'
 _H = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, os.path.join(_H, '..')); sys.path.insert(0, _H)
 for p in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab'), os.path.expanduser('~/src/savegate')): sys.path.insert(0, p)
