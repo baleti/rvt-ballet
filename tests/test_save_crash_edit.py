@@ -52,5 +52,6 @@ def main():
         ss = save.SaveSessions(__import__('savegate').Config(allow_overwrite=True, require_gate=False)); ss.doc('m', src)
         save.add_edit(ss, 'm', src, {'op': 'set_string', 'eid': EID, 'param': 'Comments', 'value': 'after-crash'})
         save.save_overwrite(ss, 'm', src); assert g(rvt_params.params(src).get(EID)).get('Comments') == 'after-crash'; ss.close()
+        left = [f for f in os.listdir(d) if 'sgtmp' in f or f.endswith('.part')]; res[step] += '|after_next_save_tmp=%d' % len(left)
     print('save crash edit OK', json.dumps(res))
 main()
