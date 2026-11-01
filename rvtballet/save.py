@@ -445,6 +445,7 @@ def expectations(ops, deleted=None):
 
 
 _VIEWNAME_KEYS = {'View Name', 'View Name|String', 'Panel Schedule Name', 'Sheet Name'}
+_LEVELREF_KEYS = {'Work Plane|String', 'Host|String', 'Work Plane', 'Host'}
 _ECHO_ALIAS = {'Name': ('View Name',), 'View Name': ('Name',)}
 
 
@@ -454,11 +455,11 @@ def derived_echoes(src_buf, nb, ops):
     change and is refused by the gate. Numeric / string parameter edits only."""
     tg = [o for o in ops if o.get('op') in ('set_string', 'set_num') and o.get('param')]
     rn = [o for o in ops if o.get('op') == 'set_string' and o.get('field') == 'DBView.m_viewName']
-    if not tg and not rn: return []
+    if not tg and not rn and not any(o.get('field') == 'DatumPlane.m_text' for o in ops): return []
     g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
     try: a, b = _read_params(src_buf), _read_params(nb)
     except Exception: return []
-    edited = {o['eid'] for o in tg + rn}; out = set()
+    edited = {o['eid'] for o in tg + rn} | {o['eid'] for o in ops if o.get('op') == 'set_string' and o.get('field') == 'DatumPlane.m_text'}; out = set()
     for o in rn:      # view rename: dependents (Viewer, Viewport, Sheet) show the name under these keys; EVERY changed key must be one of them and go exactly old -> new
         x, y = g(a.get(o['eid'])), g(b.get(o['eid'])); old, new = x.get('View Name'), y.get('View Name')
         if old is None or new is None or old == new: continue
@@ -466,6 +467,15 @@ def derived_echoes(src_buf, nb, ops):
             if e in edited or e not in b: continue
             p0, p1 = g(d0), g(b[e]); ch = {k for k in set(p0) | set(p1) if p0.get(k) != p1.get(k)}
             if ch and ch <= _VIEWNAME_KEYS and all(p0.get(k) == old and p1.get(k) == new for k in ch): out.add(e)
+    for o in [o for o in ops if o.get('op') == 'set_string' and o.get('field') == 'DatumPlane.m_text']:    # level rename: hosted elements show 'Level : <name>' under Work Plane / Host (strict: every changed key of the dependent is one of them and goes exactly 'Level : old' -> 'Level : new')
+        x, y = g(a.get(o['eid'])), g(b.get(o['eid'])); ck = {k: (x.get(k), y.get(k)) for k in set(x) | set(y) if x.get(k) != y.get(k)}
+        pairs = {v for v in ck.values() if isinstance(v[0], str) and isinstance(v[1], str)}
+        if len(pairs) != 1: continue
+        old, new = next(iter(pairs))
+        for e, d0 in a.items():
+            if e in edited or e not in b: continue
+            p0, p1 = g(d0), g(b[e]); ch = {k for k in set(p0) | set(p1) if p0.get(k) != p1.get(k)}
+            if ch and ch <= _LEVELREF_KEYS and all(p0.get(k) == 'Level : ' + old and p1.get(k) == 'Level : ' + new for k in ch): out.add(e)
     for o in tg:
         n = o['param']; x, y = g(a.get(o['eid'])), g(b.get(o['eid']))
         if n not in x or n not in y or x[n] == y[n]: continue

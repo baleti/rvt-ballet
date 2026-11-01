@@ -22,6 +22,11 @@ mem[b'f'] = {1: {'View Name': 'V2'}, 2: {'View Name': 'V2', 'Sheet Name': 'V2'},
 rn = {'op': 'set_string', 'eid': 1, 'field': 'DBView.m_viewName', 'value': 'V2', 'match': 'V1'}
 assert save.derived_echoes(b'e', b'f', [rn]) == [2, 5]   # 3 also changed Mark; 4 not a view-name key
 print('view rename echo OK')
+mem[b'g'] = {1: {'Level Name': 'L1'}, 2: {'Work Plane|String': 'Level : L1'}, 3: {'Host|String': 'Level : L1', 'Work Plane|String': 'Level : L1'}, 4: {'Work Plane|String': 'Level : L1', 'Mark': 'm'}, 5: {'Work Plane|String': 'Level : L2'}, 6: {'Comments': 'Level : L1'}}
+mem[b'h'] = {1: {'Level Name': 'L9'}, 2: {'Work Plane|String': 'Level : L9'}, 3: {'Host|String': 'Level : L9', 'Work Plane|String': 'Level : L9'}, 4: {'Work Plane|String': 'Level : L9', 'Mark': 'n'}, 5: {'Work Plane|String': 'Level : L2'}, 6: {'Comments': 'Level : L9'}}
+lr = {'op': 'set_string', 'eid': 1, 'field': 'DatumPlane.m_text', 'value': 'L9', 'match': 'L1'}
+assert save.derived_echoes(b'g', b'h', [lr]) == [2, 3]   # 4 also changed Mark, 5 other level, 6 not a work plane key
+print('level rename echo OK')
 # column location mark after a move (read-back tolerance, QUEUE 73o): only the trailing offset may change
 f = save._same_mark_base
 assert f('D-1', 'D-1(610)') and f('W(137)-16(1162)', 'W(137)-16(1467)') and f('W(137)-16', 'W(137)-16')
