@@ -45,6 +45,20 @@ def _disk_dir():
     return os.path.expanduser(d) if d else os.path.join(plat.dirs.cache_dir('rvtballet'), 'snapshots')
 
 
+_DIGESTS = {}
+
+
+def _file_digest(path):
+    """sha256 of the file CONTENT (a touch / checkout / copy that keeps the bytes must not invalidate the snapshot cache; any byte change must). Memoised per process by (size, mtime_ns, inode); an unreadable file hashes to a marker that never matches a readable one."""
+    import hashlib
+    st = os.stat(path); k = (path, st.st_size, st.st_mtime_ns, st.st_ino); v = _DIGESTS.get(k)
+    if v is None:
+        try: v = hashlib.sha256(open(path, 'rb').read()).hexdigest()[:20]
+        except OSError: v = 'unreadable'
+        _DIGESTS[k] = v
+    return v
+
+
 def _reader_stamp():
     """changes whenever the reader / write-lab code that produces the dump changes (a stale dump would weaken verification)"""
     import hashlib
@@ -52,7 +66,7 @@ def _reader_stamp():
     for root in (os.path.expanduser(os.environ.get('SAVEGATE_RVT_LIB') or '~/rvt-research/write-lab'), os.path.expanduser('~/rvt-research'), os.path.dirname(os.path.abspath(__file__)), os.path.expanduser('~/src/savegate/savegate'), os.path.expanduser('~/rvt-research/edit-lab')):
         try:
             for n in sorted(os.listdir(root)):
-                if n.endswith('.py'): st = os.stat(os.path.join(root, n)); h.update(('%s:%d:%d;' % (n, st.st_size, st.st_mtime_ns)).encode())
+                if n.endswith('.py'): h.update(('%s:%s;' % (n, _file_digest(os.path.join(root, n)))).encode())
         except OSError: pass
     return h.hexdigest()[:16]
 

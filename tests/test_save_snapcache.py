@@ -21,12 +21,17 @@ os.environ['RVTBALLET_SNAPSHOT_CACHE'] = '0'; assert save._disk_get(b'x' * 32) i
 print('cold %.2fs warm %.2fs' % (t1, t2)); print('OK')
 
 def _stamp_covers_savegate():
-    """c7x-rvtmatrix: the dump code lives in savegate (rvt_elements, adapters); touching it must change the reader stamp or a stale dump would weaken verification"""
+    """c7x-rvtmatrix: the dump code lives in savegate (rvt_elements, adapters): its directory must be in the stamp roots. c4x-rvtmatrix: the stamp is a CONTENT hash: a pure touch keeps it (agents / checkouts touching files no longer make saves cold), a one-byte change moves it. Mutation happens in a private temp dir (SAVEGATE_RVT_LIB), never in another repo."""
+    import inspect, tempfile, shutil
     from rvtballet import save
-    p = os.path.expanduser('~/src/savegate/savegate/rvt_elements.py')
-    if not os.path.exists(p): print('skip stamp check'); return
-    a = _REAL_STAMP(); st = os.stat(p); os.utime(p, ns=(st.st_atime_ns, st.st_mtime_ns + 1000))
-    try: b = _REAL_STAMP()
-    finally: os.utime(p, ns=(st.st_atime_ns, st.st_mtime_ns))
-    assert a != b, 'reader stamp ignores savegate/rvt_elements.py'; print('stamp covers savegate: OK')
+    assert 'savegate/savegate' in inspect.getsource(_REAL_STAMP), 'reader stamp does not scan savegate/'
+    d = tempfile.mkdtemp(); old = os.environ.get('SAVEGATE_RVT_LIB'); os.environ['SAVEGATE_RVT_LIB'] = d
+    try:
+        p = os.path.join(d, 'x.py'); open(p, 'w').write('A = 1\n'); a = _REAL_STAMP(); st = os.stat(p)
+        os.utime(p, ns=(st.st_atime_ns, st.st_mtime_ns + 1000)); assert _REAL_STAMP() == a, 'stamp changed on a pure touch'
+        open(p, 'w').write('A = 2\n'); assert _REAL_STAMP() != a, 'stamp ignores a content change'
+        open(p, 'w').write('A = 1\n'); assert _REAL_STAMP() == a, 'same bytes, other mtime: stamp must match'
+    finally:
+        shutil.rmtree(d, True); os.environ.pop('SAVEGATE_RVT_LIB', None) if old is None else os.environ.__setitem__('SAVEGATE_RVT_LIB', old)
+    print('stamp: content-based, ignores touch, covers savegate: OK')
 _stamp_covers_savegate()
