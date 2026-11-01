@@ -263,3 +263,23 @@ def network_fs_kind(path):
         return ty if ty.startswith('fuse') or ty in net or ty in ('osxfuse', 'macfuse') else ''
     except Exception:
         return ''
+
+
+_RESERVED = {'CON', 'PRN', 'AUX', 'NUL', 'CONIN$', 'CONOUT$'} | {'COM%d' % i for i in range(1, 10)} | {'LPT%d' % i for i in range(1, 10)}
+
+
+def bad_filename(name):
+    """'' when `name` (a single path component) is safe on Windows, macOS and Linux; else the reason. Applied on every OS so a
+    file saved on Linux can be opened on Windows: device names (CON.dwg opens the console), trailing dot/space (silently
+    stripped, so a different file is written), characters Windows forbids, control characters, over-long names."""
+    if not name or name in ('.', '..'):
+        return 'empty file name'
+    if any(ord(c) < 32 or c in '<>:"/\\|?*' for c in name):
+        return 'the file name contains a character that is not allowed on Windows (< > : " / \\ | ? * or a control character)'
+    if name[-1] in '. ':
+        return 'the file name may not end with a dot or a space (Windows would drop it and write a different file)'
+    if name.split('.')[0].rstrip(' ').upper() in _RESERVED:
+        return 'the file name is a reserved Windows device name (%s)' % name.split('.')[0].upper()
+    if len(name.encode('utf-8')) > 255:
+        return 'the file name is longer than 255 bytes'
+    return ''

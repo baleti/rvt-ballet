@@ -677,6 +677,9 @@ def check_dest(dest, src):
     if not os.path.isabs(dest): raise BadDest('destination must be an absolute path')
     if os.path.basename(dest) in ('', '.', '..') or dest.endswith(('/', os.sep)): raise BadDest('destination must name a file')
     if os.path.realpath(dest) != os.path.realpath(src) and os.path.splitext(dest)[1].lower() not in ('.rvt', '.rte', '.rfa', '.rft'): raise BadDest('destination must end in .rvt, .rte, .rfa or .rft')
+    from . import plat
+    _bn = plat.fsio.bad_filename(os.path.basename(dest))
+    if _bn: raise BadDest(_bn)
     d = os.path.dirname(dest)
     if not os.path.isdir(d): raise BadDest('destination folder does not exist: %s' % d)
     if os.path.lexists(dest) and not os.path.isfile(dest) and not os.path.islink(dest): raise BadDest('destination exists and is not a regular file')
