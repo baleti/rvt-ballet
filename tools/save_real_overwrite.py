@@ -13,7 +13,7 @@ sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
 async def main(out, src0):
     row = {'size_mb': round(os.path.getsize(src0) / 2 ** 20, 1)}; t0 = time.time(); src = os.path.join(_T, 'copy.rvt'); shutil.copy(src0, src); h0 = sha(src)
-    pr = rvt_params.params(src); eid = next(e for e, d in pr.items() if g(d).get('Comments') == ''); a = g(pr[eid])
+    pr = rvt_params.params(src); eid = next(e for e, d in pr.items() if g(d).get('Comments') == ''); a = g(pr[eid]); row['eid'] = eid
     from aiohttp.test_utils import TestClient, TestServer
     import aiohttp
     models = server.Models(); md = os.path.join(_T, 'm'); os.makedirs(md); models.m['m'] = {'dir': md, 'name': 'f', 'src': src}
@@ -21,7 +21,7 @@ async def main(out, src0):
         info = await (await c.get('/api/m/m/saveinfo')).json(); row['overwrite_enabled'] = bool(info.get('allow_overwrite') and info.get('gate_open'))
         r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': eid, 'param': 'Comments', 'value': 'overwritten by h2-viewer test'}); assert r.status == 200, await r.text()
         r = await c.post('/api/m/m/save', json={}); j = await r.json(); row['save_status'] = r.status
-        if r.status != 200: row['result'] = 'SAVE_%d %s' % (r.status, j.get('code')); row['detail'] = str(j.get('error'))[:160]; print(row); json.dump(row, open(out, 'w')); return
+        if r.status != 200: row['result'] = 'SAVE_%d %s' % (r.status, j.get('code')); row['detail'] = str(j.get('error'))[:160]; row['edited_class'] = str(pr[eid].get('class') if isinstance(pr[eid], dict) else None); row['report_keys'] = sorted((j.get('report') or {}).keys()); row['unexpected_sample'] = str((j.get('report') or {}).get('unexpected', ''))[:600]; print(row); json.dump(row, open(out, 'w')); return
         row['verify_diffs'] = j['verify']['n_unexpected']; row['backup_is_original'] = bool(j.get('backup')) and sha(j['backup']) == h0; row['file_changed'] = sha(src) != h0
         b = g(rvt_params.params(src).get(eid)); row['only_comments_changed'] = {k for k in set(a) | set(b) if a.get(k) != b.get(k)} == {'Comments'}
         if os.environ.get('KEEP_OUT'): shutil.copy(src, os.environ['KEEP_OUT'])      # keep the in-place SAVE! output (before the restore) for a VM open; local only
