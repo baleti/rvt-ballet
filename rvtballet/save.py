@@ -38,6 +38,21 @@ pickle.dump(res, open(o + '.tmp', 'wb')); os.replace(o + '.tmp', o)      # atomi
 '''
 
 
+def _run_worker(argv, lim, timeout):
+    """run the verification worker with captured text output. POSIX: the worker caps itself (RLIMIT_AS in _WORKER). Windows has no resource module, so the
+    child is put in a Job Object with a per-process memory limit (plat.proc.popen_capped): a model that does not fit makes the worker raise MemoryError (-> TooBig), never the viewer."""
+    import subprocess
+    if sys.platform != 'win32':
+        return subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    from . import plat
+    p = plat.proc.popen_capped(argv, lim / 2 ** 30, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        out, err = p.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        p.kill(); p.communicate(); raise
+    return subprocess.CompletedProcess(argv, p.returncode, out, err)
+
+
 def _disk_dir():
     d = os.environ.get('RVTBALLET_SNAPSHOT_CACHE')
     if d == '0': return None
@@ -112,7 +127,7 @@ def _cached_adapter():
             d = tempfile.mkdtemp(prefix='rvtballet-snap-'); a = os.path.join(d, 'in.rvt'); o = os.path.join(d, 'out.pkl')
             try:
                 with open(a, 'wb') as f: f.write(buf)
-                r = subprocess.run([sys.executable, '-c', _WORKER, a, o, str(int(lim)), os.path.expanduser(os.environ.get('SAVEGATE_RVT_LIB') or '~/rvt-research/write-lab'), os.path.dirname(os.path.dirname(os.path.abspath(__file__)))], capture_output=True, text=True, timeout=float(os.environ.get('RVTBALLET_SNAPSHOT_TIMEOUT', '7200')))
+                r = _run_worker([sys.executable, '-c', _WORKER, a, o, str(int(lim)), os.path.expanduser(os.environ.get('SAVEGATE_RVT_LIB') or '~/rvt-research/write-lab'), os.path.dirname(os.path.dirname(os.path.abspath(__file__)))], lim, float(os.environ.get('RVTBALLET_SNAPSHOT_TIMEOUT', '7200')))
                 if os.path.exists(o):
                     try: kind, payload = pickle.load(open(o, 'rb'))
                     except Exception as e: raise RuntimeError('verification worker left an unreadable result (%s, exit %s)' % (type(e).__name__, r.returncode))
