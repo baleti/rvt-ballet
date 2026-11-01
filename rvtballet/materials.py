@@ -2,6 +2,7 @@
 Colours, transparency, shininess/smoothness and the texture asset PATH come from the .rvt ('from file'); the texture bitmaps themselves are not stored in the .rvt, so the viewer
 draws a built-in procedural texture of the matching class ('fallback'), scaled by the asset's real-world scale. The inspector says which is which."""
 import os, re
+from . import plat
 from . import reader
 
 TEX_CLASSES = ['none', 'brick', 'concrete', 'wood', 'stone', 'metal', 'glass', 'tile', 'plaster', 'grass', 'water', 'roof', 'insulation', 'siding', 'carpet']
@@ -33,7 +34,7 @@ def classify(m):
 
 
 UNIT_FT = {3: 1.0, 6: 1.0 / 12.0, 2: 1.0 / 30.48, 1: 1.0 / 304.8, 4: 3.28084}      # AProperty.m_unit of distances: 3 = feet, 6 = inches (seen in the corpus); 1/2/4 assumed mm/cm/m
-TEX_LIB = os.environ.get('RVT_TEXTURE_LIB', os.path.expanduser('~/.cache/rvt-textures'))   # optional local copy of the Autodesk material library textures (never shipped)
+TEX_LIB = os.environ.get('RVT_TEXTURE_LIB', os.path.join(plat.dirs.cache_dir('rvt-textures')))   # optional local copy of the Autodesk material library textures (never shipped)
 
 
 def _ob(o): return o.get('obj', o) if isinstance(o, dict) else o

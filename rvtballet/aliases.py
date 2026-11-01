@@ -1,8 +1,9 @@
 """Command aliases for the command line, ~/.config/rvt-ballet/aliases.pgp (acad.pgp style, user editable): `ALIAS, *COMMAND [arguments]` per line, `;` starts a comment.
 Created with the defaults on first use; never overwritten."""
 import os
+from . import plat
 
-FILE = os.environ.get('RVT_BALLET_ALIASES') or os.path.expanduser('~/.config/rvt-ballet/aliases.pgp')
+FILE = os.environ.get('RVT_BALLET_ALIASES') or os.path.join(plat.dirs.config_dir('rvt-ballet'), 'aliases.pgp')
 DEFAULT = """; rvt-ballet command aliases: ALIAS, *COMMAND [arguments]   (edit freely; reload the page to apply)
 Z,   *FIT
 ZE,  *FIT

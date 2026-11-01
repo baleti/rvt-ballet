@@ -53,7 +53,8 @@ def load_plugins(app, models):
     import importlib, sys
     cfg = []
     for n in filter(None, os.environ.get('RVT_PLUGINS', '').split(',')): cfg.append({'module': n.strip()})
-    f = os.path.expanduser('~/.config/rvt-ballet/plugins.json')
+    from . import plat
+    f = os.path.join(plat.dirs.config_dir('rvt-ballet'), 'plugins.json')
     if os.path.exists(f):
         try: cfg += json.load(open(f)).get('plugins', [])
         except Exception as ex: print('plugins.json unreadable:', ex)

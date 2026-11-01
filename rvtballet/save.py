@@ -41,7 +41,8 @@ pickle.dump(res, open(o + '.tmp', 'wb')); os.replace(o + '.tmp', o)      # atomi
 def _disk_dir():
     d = os.environ.get('RVTBALLET_SNAPSHOT_CACHE')
     if d == '0': return None
-    return os.path.expanduser(d or '~/.cache/rvtballet/snapshots')
+    from . import plat
+    return os.path.expanduser(d) if d else os.path.join(plat.dirs.cache_dir('rvtballet'), 'snapshots')
 
 
 def _reader_stamp():

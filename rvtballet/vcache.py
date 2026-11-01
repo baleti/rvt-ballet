@@ -1,9 +1,10 @@
 """scene cache keys shared by the server (viewctl.py) and the warm job (vscene_worker.py --warm): content based, so a cache warmed on remote-host is valid on remote-host.
 key = md5(file name, file size, rvt-sheets code (contents of rvtsheets/*.py), worker code, request)"""
 import os, json, hashlib
+from . import plat
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CACHE = os.path.expanduser('~/.cache/rvt-ballet/vscene')
+CACHE = os.path.join(plat.dirs.cache_dir('rvt-ballet'), 'vscene')   # Linux: ~/.cache/rvt-ballet/vscene as before
 SHEETS = os.path.expanduser(os.environ.get('RVTSHEETS', '~/src/rvt-sheets'))
 _stamp = None
 

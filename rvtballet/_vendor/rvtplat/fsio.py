@@ -224,3 +224,42 @@ def changed_since(path, fp):
     except OSError:
         return True
     return now[0] != fp[0] or now[2] != fp[2]
+
+
+def network_fs_kind(path):
+    """'' for a local file system; a short label when the path is on a network share (Windows: UNC or a drive whose type is
+    DRIVE_REMOTE; macOS: smbfs/nfs/afpfs/webdav/fuse mounts from `mount`; Linux: /proc/self/mountinfo). Never raises."""
+    try:
+        rp = os.path.abspath(path)
+        if _WIN:
+            if rp.startswith('\\\\') and not rp.startswith('\\\\?\\'):
+                return 'unc'
+            if rp.startswith('\\\\?\\UNC\\'):
+                return 'unc'
+            import ctypes
+            drv = os.path.splitdrive(rp.replace('\\\\?\\', ''))[0]
+            if len(drv) == 2 and drv[1] == ':':
+                t = ctypes.windll.kernel32.GetDriveTypeW(drv + '\\')
+                return 'remote-drive' if t == 4 else ''
+            return ''
+        rp = os.path.realpath(path)
+        net = ('nfs', 'nfs4', 'cifs', 'smb3', 'smbfs', '9p', 'davfs', 'afs', 'afpfs', 'webdav', 'ncpfs', 'ceph', 'glusterfs', 'lustre')
+        best = ('', '')
+        if sys.platform == 'darwin':
+            import subprocess, re
+            out = subprocess.run(['/sbin/mount'], capture_output=True, text=True, timeout=5).stdout
+            for ln in out.splitlines():
+                m = re.match(r'.* on (.+) \(([^,)]+)', ln)
+                if m and (rp == m.group(1) or rp.startswith(m.group(1).rstrip('/') + '/')) and len(m.group(1)) >= len(best[0]):
+                    best = (m.group(1), m.group(2))
+        else:
+            for ln in open('/proc/self/mountinfo'):
+                f = ln.split(' ')
+                i = f.index('-')
+                mp = f[4].replace('\\040', ' ')
+                if (rp == mp or rp.startswith(mp.rstrip('/') + '/')) and len(mp) >= len(best[0]):
+                    best = (mp, f[i + 1])
+        ty = best[1]
+        return ty if ty.startswith('fuse') or ty in net or ty in ('osxfuse', 'macfuse') else ''
+    except Exception:
+        return ''

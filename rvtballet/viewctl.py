@@ -12,7 +12,7 @@ from . import vcache, plat
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHEETS_PY = plat.sheets_py()
 CACHE = vcache.CACHE
-PRESETS = os.path.expanduser('~/.config/rvt-ballet/vctl-presets.json')
+PRESETS = os.path.join(plat.dirs.config_dir('rvt-ballet'), 'vctl-presets.json')
 IDLE = 600
 
 
