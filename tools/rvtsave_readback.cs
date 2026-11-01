@@ -41,7 +41,7 @@ try {
       bool hit = false; try { foreach (Reference rf in dm.References) { if (rf.ElementId.ToString() == s) { hit = true; break; } } } catch {}
       if (hit) log.AppendLine("DIM " + s + " dim=" + dm.Id + " value=" + (dm.Value.HasValue ? dm.Value.Value.ToString("F6") : "-"));
     }
-    log.AppendLine("RB " + s + " loc=" + loc + " group=" + e.GroupId + " mark=" + (mark != null ? mark.AsString() : "-"));
+    log.AppendLine("RB " + s + " loc=" + loc + " group=" + e.GroupId + " mark=" + (mark != null ? string.Concat((mark.AsString() ?? "").Select(ch => ch < 128 ? ch.ToString() : "\\u" + ((int)ch).ToString("x4"))) : "-") + " marklen=" + (mark != null ? (mark.AsString() ?? "").Length : -1));
   }
   try { using (var t = new Transaction(d, "rg")) { t.Start(); d.Regenerate(); log.AppendLine("REGEN ok"); t.RollBack(); } } catch (Exception ex) { log.AppendLine("REGEN " + ex.GetType().Name + " " + ex.Message.Replace("\r", " ").Replace("\n", " ")); }
   d.Close(false);
