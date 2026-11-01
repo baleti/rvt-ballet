@@ -8,6 +8,8 @@ def run(opt):
     with contextlib.redirect_stdout(buf): exec(compile(save._MEMBER_WORKER, 'w', 'exec'), {'__name__': '__main__'})
     os.remove(ip); return json.loads(buf.getvalue().splitlines()[-1])['7'][0]['options']
 assert run(4294967295) == [], 'FAIL 4-byte -1 counted as option'
+assert run(4294967292) == [], 'FAIL 4-byte -4 counted as option'
+assert run(2 ** 64 - 4) == [], 'FAIL 8-byte -4 counted as option'
 assert run(2 ** 64 - 1) == [], 'FAIL 8-byte -1 counted as option'
 assert run(123456) == [123456], 'FAIL real option dropped'
 print('OK')

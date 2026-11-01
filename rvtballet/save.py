@@ -237,7 +237,7 @@ out = {}
 for (e, c), r in x['recs'].items():
     if e not in want: continue
     d = []; find(r.get('fields'), 'm_designOptionId', d); h = []; find(r.get('fields'), 'm_hostId', h)
-    out.setdefault(str(e), []).append({'cls': c, 'groups': sorted(members.get(e, ())), 'options': [i for v in d for i in ids(v) if i < 2 ** 32 - 1], 'hosts': [i for v in h for i in ids(v) if i < 2 ** 32 - 1]})
+    out.setdefault(str(e), []).append({'cls': c, 'groups': sorted(members.get(e, ())), 'options': [i for v in d for i in ids(v) if i < 2 ** 31], 'hosts': [i for v in h for i in ids(v) if i < 2 ** 32 - 1]})
 print(json.dumps(out))
 """
 
