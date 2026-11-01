@@ -67,7 +67,13 @@ async def one_class(c, models, k, src, cls, pr, ix):
         if o['op'] != 'move' and o.get('param') and not (o['param'] in ch): bad.append('target_unchanged:%s' % o['op'])
         if o['op'] != 'move' and o.get('param') and [x for x in ch - {o['param']} if b.get(x) != b.get(o['param'])]: bad.append('side_effect:%s:%d' % (o['op'], len(ch - {o['param']})))      # aliases of the same stored value (e.g. Number / Room Number|String) carry the new value and are not side effects
     others = [e for e in pr if e not in used and g(pr[e]) != g(po.get(e))]; row['other_elements_param_changed'] = len(others)
-    if others: bad.append('others_changed')
+    if others:
+        names = set()
+        for e in others:
+            a2, b2 = g(pr[e]), g(po.get(e)); names |= {x for x in set(a2) | set(b2) if a2.get(x) != b2.get(x)}
+        row['others_changed_params'] = sorted(names)[:8]
+        if names <= {'View Name'} and row.get('verify_diffs') == 0: row['declared_dependents'] = len(others)   # gate-declared derived View Name (Viewer/Viewport); verify passed
+        else: bad.append('others_changed')
     row.update({k2: v for k2, v in U.report(work, out).items() if not k2.startswith('_')})
     t0 = time.time(); r = await c.post('/api/m/%s/save' % mid, json={}); j2 = await r.json(); row['save_s'] = round(time.time() - t0, 1)
     if r.status == 409 and j2.get('code') == 'layout_changed': row['save_over'] = 'refused_layout_changed'; row['detail'] = str(j2.get('error'))[:120]      # deliberate: re-paged partition not confirmed in Revit; SAVE AS stays the path
