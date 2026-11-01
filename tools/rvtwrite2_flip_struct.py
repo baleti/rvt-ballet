@@ -1,0 +1,33 @@
+#!/usr/bin/env python3
+"""rvtwrite2_flip_struct.py YEAR SRC N SEED: like rvtwrite2_flip but flips only bytes of CFB structure (header 0-511, directory, FAT, minifat sectors). RESEARCH ONLY. Original doc:  RESEARCH ONLY (widened gate in-process). Flip one byte at N random offsets (one file per trial), no-edit SAVE AS; reports saved/refused and whether a saved output differs from the damaged source (damage carried silently). Aggregate lines only."""
+import sys, os, random, shutil, importlib.util, asyncio
+sys.path.insert(0, os.path.expanduser('~/src/savegate')); from savegate import adapters
+year, src, n, seed = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
+adapters.RVT_WRITABLE = adapters.RVT_WRITABLE + (year,)
+if os.environ.get('RVT_LEGACY_LAYOUT'): adapters._first_member_record_sizes = lambda s: {16}   # research only: bypass the pre-2024 record-layout refusal
+if os.environ.get('RVT_MEMBER_MAX'): adapters.RVT_MEMBER_MAX = int(os.environ['RVT_MEMBER_MAX'])
+spec = importlib.util.spec_from_file_location('o', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rvtsave_oracle.py')); o = importlib.util.module_from_spec(spec); spec.loader.exec_module(o)
+import json; json.dump({'rvt': {year: 'open'}}, open(o._T + '/gate.json', 'w'))
+SC = os.environ.get('FLIP_SCEN', 'none'); EID = int(os.environ.get('FLIP_EID') or (o.pick(src) if SC != 'none' else 0)); print('scenario', SC, 'eid', EID, flush=True)
+b = bytearray(open(src, 'rb').read()); r = random.Random(int(seed)); res = {}
+import struct; sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab')); import cfb
+_c = cfb.CFB(bytes(b)); _ss = _c.ss; _H = _c.header; _regs = [(0, 512)]
+def _chain(s):
+    while s < 0xFFFFFFFA: yield s; s = _c.fat[s]
+_off = lambda sec: (sec + 1) * _ss if _c.major == 4 else 512 + sec * _ss
+for sec in _chain(struct.unpack('<I', _H[48:52])[0]): _regs.append((_off(sec), _off(sec) + _ss))
+mf = struct.unpack('<I', _H[60:64])[0]
+if mf < 0xFFFFFFFA: _regs += [(_off(sec), _off(sec) + _ss) for sec in _chain(mf)]
+_regs += [(_off(s_), _off(s_) + _ss) for s_, v in enumerate(_c.fat) if v == 0xFFFFFFFD]
+for i in range(n):
+    a_, z_ = r.choice(_regs); off = r.randrange(a_, min(z_, len(b))); d = bytearray(b); d[off] ^= 1 << r.randrange(8)
+    w = o._T + '/src.rvt'; open(w, 'wb').write(d); h0 = o.sha(w)
+    try: out, msg = asyncio.run(o.save(w, SC, EID))
+    except BaseException as e: out, msg = None, 'EXC %s' % type(e).__name__
+    k = 'refused' if not out else ('saved_identical_to_damaged' if (o.sha(out) == h0) else 'saved_DIFFERENT')
+    k += '' if o.sha(w) == h0 else ' SRC_CHANGED'
+    res[k] = res.get(k, 0) + 1; print(i, off, k, (msg or '')[:90], flush=True)
+    for x in os.listdir(o._T):
+        if x.startswith('out'): os.unlink(o._T + '/' + x)
+    shutil.rmtree(o._T + '/m', ignore_errors=True)
+print('SUMMARY', year, res)
