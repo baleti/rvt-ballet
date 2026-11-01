@@ -318,7 +318,7 @@ def error_status(exc):
     n = type(exc).__name__
     return {'Conflict': (409, 'conflict'), 'GateClosed': (409, 'gate_closed'), 'OverwriteDisabled': (409, 'overwrite_disabled'),
             'Exists': (409, 'exists'), 'SaveError': (409, 'refused'), 'Locked': (423, 'locked'), 'VerifyFailed': (422, 'verify_failed'),
-            'EditError': (400, 'edit_error'), 'LightVerifyFailed': (422, 'verify_failed'), 'LayoutChanged': (409, 'layout_changed'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'Workshared': (409, 'workshared'), 'ReadOnlyTarget': (409, 'read_only'), 'GroupOrOption': (409, 'group_or_option'), 'CloudPlaceholder': (409, 'cloud_placeholder'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
+            'EditError': (400, 'edit_error'), 'LightVerifyFailed': (422, 'verify_failed'), 'LayoutChanged': (409, 'layout_changed'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'Workshared': (409, 'workshared'), 'ReadOnlyTarget': (409, 'read_only'), 'GroupOrOption': (409, 'group_or_option'), 'CloudPlaceholder': (409, 'cloud_placeholder'), 'NetworkFS': (409, 'network_fs'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
 
 
 _UNTOUCHED = ("untouched", "not touched", "unchanged", "nothing was written", "nothing written", "not changed", "nothing was replaced", "not written")
@@ -570,7 +570,7 @@ def save_as_light(ss, mid, src, dest, overwrite=False):
 
 def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     """SAVE! : overwrite the source (needs allow_overwrite + open gate; Conflict if the file changed since load unless force)"""
-    _cloud_gate(src); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t)
+    _cloud_gate(src); _network_gate(src); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t)
     check_memory(src, d.buf)
     if os.path.islink(d.path): d.path = os.path.realpath(d.path)      # SAVE! of a symlinked source must replace the real file and keep the link (savegate replaces the link itself otherwise)
     ws = worksharing_state(d.buf)
@@ -652,6 +652,17 @@ def check_dest(dest, src):
     except OSError: pass
     if same: raise BadDest('destination is the source file (use SAVE to overwrite)')
     return dest
+
+
+class NetworkFS(Exception):
+    """SAVE! source is on a network share or FUSE mount: rename/flush are not atomic there and sync clients may upload a half-written file"""
+
+
+def _network_gate(path):
+    from . import plat
+    k = plat.fsio.network_fs_kind(path)
+    if k and os.environ.get('RVTBALLET_ALLOW_NETWORK_OVERWRITE') != '1':
+        raise NetworkFS('the model is on a network or FUSE file system (%s): rename and flush are not atomic there, so SAVE! is refused and the file was not touched. Use SAVE AS to a local folder, or set RVTBALLET_ALLOW_NETWORK_OVERWRITE=1 if you accept that risk' % k)
 
 
 class CloudPlaceholder(Exception):
