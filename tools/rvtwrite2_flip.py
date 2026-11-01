@@ -8,11 +8,12 @@ if os.environ.get('RVT_LEGACY_LAYOUT'): adapters._first_member_record_sizes = la
 if os.environ.get('RVT_MEMBER_MAX'): adapters.RVT_MEMBER_MAX = int(os.environ['RVT_MEMBER_MAX'])
 spec = importlib.util.spec_from_file_location('o', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rvtsave_oracle.py')); o = importlib.util.module_from_spec(spec); spec.loader.exec_module(o)
 import json; json.dump({'rvt': {year: 'open'}}, open(o._T + '/gate.json', 'w'))
+SC = os.environ.get('FLIP_SCEN', 'none'); EID = int(os.environ.get('FLIP_EID') or (o.pick(src) if SC != 'none' else 0)); print('scenario', SC, 'eid', EID, flush=True)
 b = bytearray(open(src, 'rb').read()); r = random.Random(int(seed)); res = {}
 for i in range(n):
     off = r.randrange(512, len(b)); d = bytearray(b); d[off] ^= 1 << r.randrange(8)
     w = o._T + '/src.rvt'; open(w, 'wb').write(d); h0 = o.sha(w)
-    try: out, msg = asyncio.run(o.save(w, os.environ.get('FLIP_SCEN', 'none'), 0))
+    try: out, msg = asyncio.run(o.save(w, SC, EID))
     except BaseException as e: out, msg = None, 'EXC %s' % type(e).__name__
     k = 'refused' if not out else ('saved_identical_to_damaged' if (o.sha(out) == h0) else 'saved_DIFFERENT')
     k += '' if o.sha(w) == h0 else ' SRC_CHANGED'

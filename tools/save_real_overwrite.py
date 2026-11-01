@@ -24,6 +24,7 @@ async def main(out, src0):
         if r.status != 200: row['result'] = 'SAVE_%d %s' % (r.status, j.get('code')); row['detail'] = str(j.get('error'))[:160]; print(row); json.dump(row, open(out, 'w')); return
         row['verify_diffs'] = j['verify']['n_unexpected']; row['backup_is_original'] = bool(j.get('backup')) and sha(j['backup']) == h0; row['file_changed'] = sha(src) != h0
         b = g(rvt_params.params(src).get(eid)); row['only_comments_changed'] = {k for k in set(a) | set(b) if a.get(k) != b.get(k)} == {'Comments'}
+        if os.environ.get('KEEP_OUT'): shutil.copy(src, os.environ['KEEP_OUT'])      # keep the in-place SAVE! output (before the restore) for a VM open; local only
         r = await c.post('/api/m/m/restore', json={'n': 0, 'confirm': True}); jr = await r.json(); row['restored_identical'] = r.status == 200 and sha(src) == h0
     row['seconds'] = round(time.time() - t0, 1)
     row['result'] = 'OK' if all([row['overwrite_enabled'], row['verify_diffs'] == 0, row['backup_is_original'], row['file_changed'], row['only_comments_changed'], row['restored_identical']]) else 'MISMATCH'

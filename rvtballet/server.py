@@ -139,6 +139,17 @@ def make_app(models):
         return web.json_response([[i, v[:3]] for i, v in out.items()])
     from . import save as savemod
     saves = savemod.SaveSessions(); app['saves'] = saves
+    def run_to_completion(handler):
+        """SAVE / SAVE AS / RESTORE must finish when the browser disconnects: aiohttp cancels the handler on a dropped connection, the `finally` would then free the
+        per-model busy flag while the worker thread is still replacing the file (a second save could start), and the post-save bookkeeping would be skipped.
+        The work runs as its own task; the handler only waits for it."""
+        import functools
+        @functools.wraps(handler)
+        async def wrapped(req):
+            t = asyncio.ensure_future(handler(req))
+            t.add_done_callback(lambda f: f.cancelled() or f.exception())
+            return await asyncio.shield(t)
+        return wrapped
     async def save_common(req, fn, need_dest):
         mid, d = mdir(req)
         try: body = await req.json() if req.can_read_body else {}
@@ -207,7 +218,7 @@ def make_app(models):
             st, code = savemod.error_status(e); return web.json_response({'ok': False, 'code': code, 'error': savemod.user_message(e, st)}, status=st)
     async def recover(req):
         return web.json_response(savemod.recoverable(saves) if saves.available else [])
-    app.router.add_get('/api/m/{mid}/backups', backups); app.router.add_post('/api/m/{mid}/restore', restore); app.router.add_get('/api/recover', recover)
+    app.router.add_get('/api/m/{mid}/backups', backups); app.router.add_post('/api/m/{mid}/restore', run_to_completion(restore)); app.router.add_get('/api/recover', recover)
     async def edit_add(req):
         mid, d = mdir(req); src = PluginContext(models).source_path(mid)
         try: body = await req.json()
@@ -234,8 +245,8 @@ def make_app(models):
         mid, d = mdir(req); p = saves.progress.get(mid); busy = mid in saves.busy
         return web.json_response({'busy': busy, 'stage': p['stage'] if p and busy else None, 'elapsed': round(time.time() - p['t0'], 1) if p and busy else 0})
     app.router.add_get('/api/m/{mid}/saveprogress', save_progress)
-    app.router.add_post('/api/m/{mid}/save', save_over)
-    app.router.add_post('/api/m/{mid}/saveas', save_as)
+    app.router.add_post('/api/m/{mid}/save', run_to_completion(save_over))
+    app.router.add_post('/api/m/{mid}/saveas', run_to_completion(save_as))
     app.router.add_get('/', index)
     app.router.add_get('/api/models', list_models)
     app.router.add_get('/m/{mid}/meta.json', meta)
