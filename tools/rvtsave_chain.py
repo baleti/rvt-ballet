@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""rvtsave_chain.py SRC YEAR OP1 OP2 (OP = EID | move:EID | str:EID:PARAM:VALUE): two in-place SAVEs in a row on one working copy (OP1, save, OP2, save), then open the result in the Revit VM (audit on)."""
+"""rvtsave_chain.py SRC YEAR OP1 OP2 (OP = EID | move:EID | str:EID:PARAM:VALUE | del:EID): two in-place SAVEs in a row on one working copy (OP1, save, OP2, save), then open the result in the Revit VM (audit on)."""
 import os, sys, asyncio, tempfile, shutil, json
 W = os.path.expanduser('~/rvtsave-work'); _T = tempfile.mkdtemp(dir=W)
 os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'
@@ -7,6 +7,7 @@ json.dump({'rvt': {'2024': 'open', '2026': 'open'}}, open(_T + '/gate.json', 'w'
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 def op(spec):
     k, *a = str(spec).split(':')      # 'EID' or 'move:EID' = move 2 ft; 'str:EID:PARAM:VALUE' = set_string
+    if k == 'del': return {'op': 'delete', 'eid': int(a[0])}, int(a[0])
     if k == 'str': return {'op': 'set_string', 'eid': int(a[0]), 'param': a[1], 'value': a[2]}, int(a[0])
     e = int(a[0] if k == 'move' else k); return {'op': 'move', 'eid': e, 'dx': 2.0}, e
 
