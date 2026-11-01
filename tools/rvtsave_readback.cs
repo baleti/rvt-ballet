@@ -9,6 +9,7 @@ app.FailuresProcessing += fh;
 try {
   var op = new OpenOptions(); op.Audit = true;
   var d = app.OpenDocumentFile(ModelPathUtils.ConvertUserVisiblePathToModelPath(file), op);
+  log.AppendLine("RB count=" + new FilteredElementCollector(d).WhereElementIsNotElementType().GetElementCount() + " types=" + new FilteredElementCollector(d).WhereElementIsElementType().GetElementCount());
   foreach (var s in ids) {
     var e = d.GetElement(new ElementId(long.Parse(s)));
     if (e == null) { log.AppendLine("RB " + s + " missing"); continue; }
