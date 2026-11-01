@@ -445,6 +445,7 @@ def expectations(ops, deleted=None):
 
 
 _VIEWNAME_KEYS = {'View Name', 'View Name|String', 'Panel Schedule Name', 'Sheet Name'}
+_LEVELNAME_KEYS = {'Associated Level', 'Associated Level|String', 'Level', 'Level|String'}     # bare level name echoes (views' Associated Level, elements' Level)
 _LEVELREF_KEYS = {'Work Plane|String', 'Host|String', 'Work Plane', 'Host'}
 _ECHO_ALIAS = {'Name': ('View Name',), 'View Name': ('Name',)}
 
@@ -476,6 +477,7 @@ def derived_echoes(src_buf, nb, ops):
             if e in edited or e not in b: continue
             p0, p1 = g(d0), g(b[e]); ch = {k for k in set(p0) | set(p1) if p0.get(k) != p1.get(k)}
             if ch and ch <= _LEVELREF_KEYS and all(p0.get(k) == 'Level : ' + old and p1.get(k) == 'Level : ' + new for k in ch): out.add(e)
+            elif ch and ch <= _LEVELNAME_KEYS and all(p0.get(k) == old and p1.get(k) == new for k in ch): out.add(e)
     for o in tg:
         n = o['param']; x, y = g(a.get(o['eid'])), g(b.get(o['eid']))
         if n not in x or n not in y or x[n] == y[n]: continue
