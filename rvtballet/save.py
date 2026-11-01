@@ -312,6 +312,31 @@ def worksharing_state(buf):
     return None
 
 
+class SourceDamaged(Exception):
+    """the source holds a gzip member whose stored CRC32/ISIZE does not match its content (c7x-rvtwrite 2026-11-01: edited saves used to carry such a member silently)"""
+
+
+def source_damage(buf):
+    """[(stream, member index)] of CRC-bad independent gzip members in the Partitions/* streams; [] when clean or when the check cannot run (a lower bound: gzcheck walks only the members it can frame; 0 false positives on 101 real partition streams of 77 corpus files)"""
+    try:
+        from .edit import WL
+        if WL not in sys.path: sys.path.insert(0, WL)
+        import cfb, rvtw
+        from .gzcheck import member_report
+        out = []
+        for k, v in cfb.CFB(bytes(buf)).streams().items():
+            if k.startswith('Partitions/'):
+                out.extend((k, i) for i in member_report(bytes(rvtw.Stream(v.data).payload))[1])
+        return out
+    except Exception:
+        return []
+
+
+def _refuse_damaged(d):
+    bad = source_damage(d.buf)
+    if bad: raise SourceDamaged('refused: the source file is already damaged (%d compressed block(s) in %s fail their checksum), so saving would carry the damage into the copy. Nothing was written.' % (len(bad), ', '.join(sorted({k for k, _ in bad}))))
+
+
 class GroupOrOption(Exception):
     """in-place save of an edit that touches a group (member or instance) or a design-option element"""
 
@@ -333,7 +358,7 @@ def error_status(exc):
     n = type(exc).__name__
     return {'Conflict': (409, 'conflict'), 'GateClosed': (409, 'gate_closed'), 'OverwriteDisabled': (409, 'overwrite_disabled'),
             'Exists': (409, 'exists'), 'SaveError': (409, 'refused'), 'Locked': (423, 'locked'), 'VerifyFailed': (422, 'verify_failed'),
-            'EditError': (400, 'edit_error'), 'LightVerifyFailed': (422, 'verify_failed'), 'LayoutChanged': (409, 'layout_changed'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'Workshared': (409, 'workshared'), 'ReadOnlyTarget': (409, 'read_only'), 'GroupOrOption': (409, 'group_or_option'), 'CloudPlaceholder': (409, 'cloud_placeholder'), 'NetworkFS': (409, 'network_fs'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
+            'EditError': (400, 'edit_error'), 'LightVerifyFailed': (422, 'verify_failed'), 'LayoutChanged': (409, 'layout_changed'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'Workshared': (409, 'workshared'), 'ReadOnlyTarget': (409, 'read_only'), 'GroupOrOption': (409, 'group_or_option'), 'SourceDamaged': (409, 'source_damaged'), 'CloudPlaceholder': (409, 'cloud_placeholder'), 'NetworkFS': (409, 'network_fs'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
 
 
 _UNTOUCHED = ("untouched", "not touched", "unchanged", "nothing was written", "nothing written", "not changed", "nothing was replaced", "not written")
@@ -553,7 +578,7 @@ def group_warning(ss, mid, buf):
 
 def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     """SAVE AS: never touches the source. new_bytes defaults to the loaded bytes (identity save)."""
-    _cloud_gate(src, dest); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t)
+    _cloud_gate(src, dest); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t); _refuse_damaged(d)
     check_memory(src, d.buf)      # TooBig (507) before any work; the UI then offers the labelled limited verification
     gw = group_warning(ss, mid, d.buf) if new_bytes is None else None
     explicit = new_bytes is not None
@@ -572,7 +597,7 @@ def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
 def save_as_light(ss, mid, src, dest, overwrite=False):
     """SAVE AS with LIMITED verification (rvtballet.lightverify) for models too large for the element-level verify. Explicit opt-in, SAVE AS only: never used for overwrite."""
     from .lightverify import light_verify
-    _cloud_gate(src, dest); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src, precheck=False)
+    _cloud_gate(src, dest); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src, precheck=False); _refuse_damaged(d)
     new_bytes, manifest = _pending(ss, mid, d, None, None, light=True); n = len(ss.edits(mid).ops)
     _stage(ss, mid, 'limited verification (structure only)'); rep = light_verify(d.buf, new_bytes, max(1, n))
     _stage(ss, mid, 'writing'); r = result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite, verify=False))
@@ -585,7 +610,7 @@ def save_as_light(ss, mid, src, dest, overwrite=False):
 
 def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     """SAVE! : overwrite the source (needs allow_overwrite + open gate; Conflict if the file changed since load unless force)"""
-    _cloud_gate(src); _network_gate(src); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t)
+    _cloud_gate(src); _network_gate(src); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t); _refuse_damaged(d)
     check_memory(src, d.buf)
     if os.path.islink(d.path): d.path = os.path.realpath(d.path)      # SAVE! of a symlinked source must replace the real file and keep the link (savegate replaces the link itself otherwise)
     ws = worksharing_state(d.buf)
