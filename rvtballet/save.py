@@ -662,7 +662,11 @@ def recoverable(ss):
 def add_edit(ss, mid, src, op):
     """record an edit after a trial replay on the loaded bytes (so an op the writer cannot apply is refused now, not at save time)"""
     from .edit import apply_full, validate_op
-    d = ss.doc(mid, src); e = ss.edits(mid); op = validate_op(op); _, deleted = apply_full(d.buf, e.ops + [op])
+    op = validate_op(op)
+    try: d = ss.doc(mid, src); e = ss.edits(mid); _, deleted = apply_full(d.buf, e.ops + [op])
+    except ValueError as ex:      # the reader's own refusal of a damaged file ('file truncated: ...'): a clean 409, not a bare 500
+        if 'truncated' in str(ex).lower() or 'corrupt' in str(ex).lower(): raise SourceDamaged('the model file is damaged (%s); nothing was written' % str(ex)[:160])
+        raise
     e.ops.append(op)
     return {'ok': True, 'n': len(e.ops), 'ops': e.ops, 'manifest': e.manifest(deleted)}
 
