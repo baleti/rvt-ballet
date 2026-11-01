@@ -21,7 +21,7 @@ async def main(src, cls):
         if os.environ.get('SINGLE_RECORD') and ed.latest_partition(eid) != pn: continue      # element with an older copy in an earlier partition: the reader read-back sees the OLD copy (QUEUE 58g)
         for l in log:
             if l[1] == 'ParamValue%s.m_paramId' % KIND:
-                v = int(str(l[4])[4:-1]); pid = v - (1 << 64) if v >= (1 << 63) else v; nm = rvt_params.PNAMES.get(str(pid)); val = base.get(eid, {}).get(nm) if nm else None
+                v = int(str(l[4])[4:-1]); pid = v - (1 << 64) if v >= (1 << 63) else v - (1 << 32) if (1 << 31) <= v < (1 << 32) else v;      # 4-byte ids (2017-2023 layouts) print unsigned 32-bit nm = rvt_params.PNAMES.get(str(pid)); val = base.get(eid, {}).get(nm) if nm else None
                 if nm and isinstance(val, (int, float)): pick = (eid, nm, val); break
         if pick: break
     del ed
