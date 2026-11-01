@@ -14,6 +14,14 @@ assert got == [2], got      # 2 = echo; 3 also changed Mark (not an echo, stays 
 assert save.derived_echoes(b'a', b'b', [{'op': 'move', 'eid': 1, 'dx': 1.0}]) == []
 assert save.derived_echoes(b'a', b'b', [dict(op, param='Mark')]) == []
 print('derived echoes OK:', got)
+mem[b'c'] = {1: {'Name': 'V1'}, 2: {'View Name': 'V1', 'x': 1}, 3: {'View Name': 'V1', 'x': 1}, 4: {'View Name': 'Other'}}
+mem[b'd'] = {1: {'Name': 'V2'}, 2: {'View Name': 'V2', 'x': 1}, 3: {'View Name': 'V2', 'x': 2}, 4: {'View Name': 'Other'}}
+assert save.derived_echoes(b'c', b'd', [{'op': 'set_string', 'eid': 1, 'param': 'Name', 'value': 'V2'}]) == [2]   # 3 also changed x: not an echo
+mem[b'e'] = {1: {'View Name': 'V1'}, 2: {'View Name': 'V1', 'Sheet Name': 'V1'}, 3: {'View Name': 'V1', 'Sheet Name': 'V1', 'Mark': 'm'}, 4: {'Comments': 'V1'}, 5: {'View Name': 'V1', 'Sheet Name': 'keep'}}
+mem[b'f'] = {1: {'View Name': 'V2'}, 2: {'View Name': 'V2', 'Sheet Name': 'V2'}, 3: {'View Name': 'V2', 'Sheet Name': 'V2', 'Mark': 'n'}, 4: {'Comments': 'V2'}, 5: {'View Name': 'V2', 'Sheet Name': 'keep'}}
+rn = {'op': 'set_string', 'eid': 1, 'field': 'DBView.m_viewName', 'value': 'V2', 'match': 'V1'}
+assert save.derived_echoes(b'e', b'f', [rn]) == [2, 5]   # 3 also changed Mark; 4 not a view-name key
+print('view rename echo OK')
 # column location mark after a move (read-back tolerance, QUEUE 73o): only the trailing offset may change
 f = save._same_mark_base
 assert f('D-1', 'D-1(610)') and f('W(137)-16(1162)', 'W(137)-16(1467)') and f('W(137)-16', 'W(137)-16')

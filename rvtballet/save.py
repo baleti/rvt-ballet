@@ -329,18 +329,51 @@ def _stage(ss, mid, text):
     p = ss.progress.setdefault(mid, {'t0': time.time()}); p['stage'] = text; p['t'] = time.time()
 
 
-def _pending(ss, mid, d, new_bytes, manifest):
-    """bytes + manifest of the recorded edits replayed on the loaded bytes (explicit new_bytes win)"""
+def _pending(ss, mid, d, new_bytes, manifest, light=False):
+    """bytes + manifest of the recorded edits replayed on the loaded bytes (explicit new_bytes win). light=True (limited verification of models too big for the element dump): the full reader read-back and the derived-echo scan
+    (two whole-model reader dumps, 10+ GB on a 64 MB project) are replaced by a record-level read-back of the edited elements only"""
     if new_bytes is not None: return new_bytes, manifest or {}
     from .edit import apply_full, Edits
     from .edit import compose
     e = ss.edits(mid); ops = list(e.ops); ss.applied[mid] = len(ops)
     nb, deleted = apply_full(d.buf, ops); m = Edits(); m.ops = ops; cops = compose(ops)
-    _readback(d.buf, nb, cops)
-    mf = m.manifest(deleted); echoes = derived_echoes(d.buf, nb, cops)
+    if light: _light_readback(d.buf, nb, cops)
+    else: _readback(d.buf, nb, cops)
+    mf = m.manifest(deleted); echoes = [] if light else derived_echoes(d.buf, nb, cops)
     if echoes: mf['modified'] = sorted(set(mf['modified']) | {'el:%d' % i for i in echoes}); ss.derived[mid] = len(echoes)
     else: ss.derived.pop(mid, None)
     return nb, mf
+
+
+def _light_readback(src_buf, nb, ops):
+    """read-back of the edited elements at RECORD level, without the reader's whole-model dump: for every by-name parameter edit, the element's parameter entries (name, value) before and after must be the same list except
+    for exactly one VALUE entry (the edited one). Catches the 'edit left the element with half of its parameters' class (QUEUE severity-1 emoji case) on models where the full read-back does not fit in memory."""
+    tg = [o for o in ops if o.get('op') in ('set_string', 'set_num') and o.get('param')]
+    if not tg: return
+    sg = _import(); import tempfile, shutil
+    from . import edit as _ed
+    for p in (_ed.EL, _ed.WL, os.path.expanduser('~/rvt-research')):
+        if p not in sys.path: sys.path.insert(0, p)
+    os.environ.setdefault('RVT_GEOM', '1')
+    import rvtedit
+    d = tempfile.mkdtemp(prefix='rvtballet-lrb-'); a = os.path.join(d, 'a.rvt'); b = os.path.join(d, 'b.rvt'); bad = []; saved = os.environ.get('PART')
+    try:
+        open(a, 'wb').write(src_buf); open(b, 'wb').write(nb)
+        for o in tg:
+            os.environ.pop('PART', None); probe = rvtedit.Edit(a); lp = probe.latest_partition(o['eid']); del probe
+            if lp: os.environ['PART'] = str(lp)
+            def entries(f):
+                ed = rvtedit.Edit(f); log = ed.g.e.trace(o['eid'])[3]; r = [(l[1], str(l[4])) for l in log if l[1].startswith('ParamValue') and l[1].endswith(('.m_value', '.m_paramId'))]; del ed; return r
+            try: x, y = entries(a), entries(b)
+            except Exception as e: bad.append('element %d: could not be read back at record level (%s)' % (o['eid'], type(e).__name__)); continue
+            diff = [i for i in range(min(len(x), len(y))) if x[i] != y[i]]
+            if len(x) != len(y): bad.append('element %d lost or gained parameter entries (%d -> %d)' % (o['eid'], len(x), len(y)))
+            elif len(diff) != 1 or not x[diff[0]][0].endswith('.m_value'): bad.append('element %d: %d parameter entries changed (exactly one value entry may)' % (o['eid'], len(diff)))
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+        if saved is None: os.environ.pop('PART', None)
+        else: os.environ['PART'] = saved
+    if bad: raise sg.VerifyFailed('record-level read-back of the edited element(s) failed: %s' % '; '.join(bad[:3]), {'n_unexpected': len(bad), 'unexpected': bad[:20]})
 
 
 def _note_derived(ss, mid, r):
@@ -363,16 +396,28 @@ def expectations(ops, deleted=None):
     return out
 
 
+_VIEWNAME_KEYS = {'View Name', 'View Name|String', 'Panel Schedule Name', 'Sheet Name'}
+_ECHO_ALIAS = {'Name': ('View Name',), 'View Name': ('Name',)}
+
+
 def derived_echoes(src_buf, nb, ops):
     """ids of UNEDITED elements whose reader view changed only because the reader shows the edited element's parameter on them too (a view's Detail Level on its viewports / elevation arrows, a family's Section Shape on its
     symbols; QUEUE 64). Strict rule: the element changed in exactly ONE parameter, the edited parameter name, from exactly the edited element's old value to exactly its new value. Anything else stays an undeclared
     change and is refused by the gate. Numeric / string parameter edits only."""
     tg = [o for o in ops if o.get('op') in ('set_string', 'set_num') and o.get('param')]
-    if not tg: return []
+    rn = [o for o in ops if o.get('op') == 'set_string' and o.get('field') == 'DBView.m_viewName']
+    if not tg and not rn: return []
     g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
     try: a, b = _read_params(src_buf), _read_params(nb)
     except Exception: return []
-    edited = {o['eid'] for o in tg}; out = set()
+    edited = {o['eid'] for o in tg + rn}; out = set()
+    for o in rn:      # view rename: dependents (Viewer, Viewport, Sheet) show the name under these keys; EVERY changed key must be one of them and go exactly old -> new
+        x, y = g(a.get(o['eid'])), g(b.get(o['eid'])); old, new = x.get('View Name'), y.get('View Name')
+        if old is None or new is None or old == new: continue
+        for e, d0 in a.items():
+            if e in edited or e not in b: continue
+            p0, p1 = g(d0), g(b[e]); ch = {k for k in set(p0) | set(p1) if p0.get(k) != p1.get(k)}
+            if ch and ch <= _VIEWNAME_KEYS and all(p0.get(k) == old and p1.get(k) == new for k in ch): out.add(e)
     for o in tg:
         n = o['param']; x, y = g(a.get(o['eid'])), g(b.get(o['eid']))
         if n not in x or n not in y or x[n] == y[n]: continue
@@ -380,8 +425,9 @@ def derived_echoes(src_buf, nb, ops):
         for e, d0 in a.items():
             if e in edited or e not in b: continue
             p0, p1 = g(d0), g(b[e])
-            if p0 == p1 or p0.get(n) != old or p1.get(n) != new: continue
-            if {k for k in set(p0) | set(p1) if p0.get(k) != p1.get(k)} == {n}: out.add(e)
+            if p0 == p1: continue
+            for m in (n,) + tuple(_ECHO_ALIAS.get(n, ())):      # a renamed view shows up as 'View Name' on its Viewer / Viewport elements
+                if p0.get(m) == old and p1.get(m) == new and {k for k in set(p0) | set(p1) if p0.get(k) != p1.get(k)} == {m}: out.add(e); break
     return sorted(out)
 
 
@@ -497,7 +543,7 @@ def save_as_light(ss, mid, src, dest, overwrite=False):
     """SAVE AS with LIMITED verification (rvtballet.lightverify) for models too large for the element-level verify. Explicit opt-in, SAVE AS only: never used for overwrite."""
     from .lightverify import light_verify
     _cloud_gate(src, dest); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src, precheck=False)
-    new_bytes, manifest = _pending(ss, mid, d, None, None); n = len(ss.edits(mid).ops)
+    new_bytes, manifest = _pending(ss, mid, d, None, None, light=True); n = len(ss.edits(mid).ops)
     _stage(ss, mid, 'limited verification (structure only)'); rep = light_verify(d.buf, new_bytes, max(1, n))
     _stage(ss, mid, 'writing'); r = result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite, verify=False))
     r['verify'] = rep; r['limited_verification'] = True
