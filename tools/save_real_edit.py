@@ -22,6 +22,7 @@ async def one(c, models, k, src):
     out = os.path.join(_T, 'o%d.rvt' % k); keep = os.environ.get('RVT_KEEP_DIR'); r = await c.post('/api/m/%s/saveas' % mid, json={'dest': out}); j = await r.json(); keep and r.status == 200 and __import__('shutil').copy(out, os.path.join(keep, 'k%d_%s.rvt' % (k, os.path.basename(src)[:6].replace(' ', '_'))))
     if r.status != 200: row['result'] = 'SAVE_%d %s' % (r.status, j.get('code')); row['detail'] = str(j.get('error'))[:160]; row['n_unexpected'] = (j.get('report') or {}).get('n_unexpected'); return row
     row['verify_diffs'] = j['verify']['n_unexpected']; row['warnings'] = bool(j.get('warnings'))
+    if j.get('warnings') and os.environ.get('SHOW_WARNINGS'): print('WARNINGS', [str(w)[:200] for w in j['warnings']][:5])
     b = g(rvt_params.params(out).get(eid)); a = g(pr.get(eid)); changed = {x for x in set(a) | set(b) if a.get(x) != b.get(x)}
     row['only_comments_changed'] = changed == {'Comments'} and b.get('Comments') == os.environ.get('RVT_EDIT_VALUE', 'edited by h2-viewer test')
     row['seconds'] = round(time.time() - t0, 1); row['result'] = 'OK' if row['only_comments_changed'] and row['verify_diffs'] == 0 else 'MISMATCH'
