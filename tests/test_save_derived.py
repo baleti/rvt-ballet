@@ -30,6 +30,10 @@ mem[b'i'] = {**mem[b'g'], 7: {'Associated Level': 'L1'}, 8: {'Associated Level':
 mem[b'j'] = {**mem[b'h'], 7: {'Associated Level': 'L9'}, 8: {'Associated Level': 'L9', 'Mark': 'n'}, 9: {'Associated Level': 'L2'}}
 assert save.derived_echoes(b'i', b'j', [lr]) == [2, 3, 7]   # bare-name echo accepted only when it is the sole change and exactly L1 -> L9
 print('level rename echo OK')
+mem[b'k'] = {1: {'Name': 'W1'}, 2: {'Column Location Mark|String': 'A(610)-W1(-17678)'}, 3: {'Column Location Mark|String': 'W1(5)-B(7)'}, 4: {'Column Location Mark|String': 'A(610)-W12(-1)'}, 5: {'Column Location Mark|String': 'A(610)-W1(-17678)', 'Mark': 'm'}}
+mem[b'l'] = {1: {'Name': 'Z'}, 2: {'Column Location Mark|String': 'A(610)-Z(-17678)'}, 3: {'Column Location Mark|String': 'Z(5)-B(7)'}, 4: {'Column Location Mark|String': 'A(610)-W12(-1)'}, 5: {'Column Location Mark|String': 'A(610)-Z(-17678)', 'Mark': 'n'}}
+assert save.derived_echoes(b'k', b'l', [{'op': 'set_string', 'eid': 1, 'field': 'DatumPlane.m_text', 'value': 'Z', 'match': 'W1'}]) == [2, 3]   # W12 is another grid; 5 also changed Mark
+print('grid rename mark echo OK')
 # column location mark after a move (read-back tolerance, QUEUE 73o): only the trailing offset may change
 f = save._same_mark_base
 assert f('D-1', 'D-1(610)') and f('W(137)-16(1162)', 'W(137)-16(1467)') and f('W(137)-16', 'W(137)-16')
