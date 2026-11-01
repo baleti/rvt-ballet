@@ -26,8 +26,8 @@ mem[b'g'] = {1: {'Level Name': 'L1'}, 2: {'Work Plane|String': 'Level : L1'}, 3:
 mem[b'h'] = {1: {'Level Name': 'L9'}, 2: {'Work Plane|String': 'Level : L9'}, 3: {'Host|String': 'Level : L9', 'Work Plane|String': 'Level : L9'}, 4: {'Work Plane|String': 'Level : L9', 'Mark': 'n'}, 5: {'Work Plane|String': 'Level : L2'}, 6: {'Comments': 'Level : L9'}}
 lr = {'op': 'set_string', 'eid': 1, 'field': 'DatumPlane.m_text', 'value': 'L9', 'match': 'L1'}
 assert save.derived_echoes(b'g', b'h', [lr]) == [2, 3]   # 4 also changed Mark, 5 other level, 6 not a work plane key
-mem[b'i'] = dict(mem[b'g'], **{7: {'Associated Level': 'L1'}, 8: {'Associated Level': 'L1', 'Mark': 'm'}, 9: {'Associated Level': 'L2'}})
-mem[b'j'] = dict(mem[b'h'], **{7: {'Associated Level': 'L9'}, 8: {'Associated Level': 'L9', 'Mark': 'n'}, 9: {'Associated Level': 'L2'}})
+mem[b'i'] = {**mem[b'g'], 7: {'Associated Level': 'L1'}, 8: {'Associated Level': 'L1', 'Mark': 'm'}, 9: {'Associated Level': 'L2'}}
+mem[b'j'] = {**mem[b'h'], 7: {'Associated Level': 'L9'}, 8: {'Associated Level': 'L9', 'Mark': 'n'}, 9: {'Associated Level': 'L2'}}
 assert save.derived_echoes(b'i', b'j', [lr]) == [2, 3, 7]   # bare-name echo accepted only when it is the sole change and exactly L1 -> L9
 print('level rename echo OK')
 # column location mark after a move (read-back tolerance, QUEUE 73o): only the trailing offset may change
