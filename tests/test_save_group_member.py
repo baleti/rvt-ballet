@@ -16,7 +16,7 @@ async def run():
     big = save.membership(open(src, 'rb').read(), range(1, 1500000)); assert 1421734 in big and 1365188 not in big, 'long id list: wrong membership'      # 1.5M ids must not hit the argv limit
     models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     real = save.membership
-    async with TestClient(TestServer(server.make_app(models))) as c:
+    async with TestClient(TestServer(server.make_app(models)), timeout=__import__("aiohttp").ClientTimeout(total=None)) as c:
         await c.get('/api/m/m/saveinfo')
         r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': 1365188, 'dx': 2.0}); assert r.status == 200, await r.text()
         for fake in ({1365188: ['group 1']}, {1365188: ['design option 7']}):
