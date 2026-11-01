@@ -60,18 +60,11 @@ def _disk_dir():
     return os.path.expanduser(d) if d else os.path.join(plat.dirs.cache_dir('rvtballet'), 'snapshots')
 
 
-_DIGESTS = {}
-
-
 def _file_digest(path):
-    """sha256 of the file CONTENT (a touch / checkout / copy that keeps the bytes must not invalidate the snapshot cache; any byte change must). Memoised per process by (size, mtime_ns, inode); an unreadable file hashes to a marker that never matches a readable one."""
+    """sha256 of the file CONTENT (a touch / checkout / copy that keeps the bytes must not invalidate the snapshot cache; any byte change must). Not memoised on stat: a same-size rewrite inside one mtime tick would return a stale digest and weaken verification."""
     import hashlib
-    st = os.stat(path); k = (path, st.st_size, st.st_mtime_ns, st.st_ino); v = _DIGESTS.get(k)
-    if v is None:
-        try: v = hashlib.sha256(open(path, 'rb').read()).hexdigest()[:20]
-        except OSError: v = 'unreadable'
-        _DIGESTS[k] = v
-    return v
+    try: return hashlib.sha256(open(path, 'rb').read()).hexdigest()[:20]
+    except OSError: return 'unreadable'
 
 
 def _reader_stamp():
