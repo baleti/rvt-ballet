@@ -19,7 +19,7 @@ def stub(year, path):
 async def run():
     from aiohttp.test_utils import TestClient, TestServer
     res = {}
-    for year in range(2017, 2027):
+    for year in range(2011, 2027):
         d = os.path.join(_T, str(year)); os.makedirs(d); src = os.path.join(d, 'a.rvt'); stub(year, src)
         md = os.path.join(d, 'm'); os.makedirs(md); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
         dest = os.path.join(d, 'out.rvt')
