@@ -5,6 +5,15 @@ W = os.path.expanduser('~/rvtsave-work'); _T = tempfile.mkdtemp(dir=W)
 os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'
 json.dump({'rvt': {'2024': 'open', '2026': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+if os.environ.get('RVTSAVE_PADPATCH'):      # scratch experiment: consume the zero pad left by an earlier save (see demo-state/c3x-rvtsave-padconsume.patch.txt); NOT the shared write-lab
+    from rvtballet import edit as _ed
+    sys.path.insert(0, _ed.WL); import wledit, rvtw
+    def _sp(payload, st):
+        cap = st.full * rvtw.PAGE_PAYLOAD + getattr(st, 'cap_last', 0)
+        if len(payload) < cap: return payload + b'\0' * (cap - len(payload))
+        ex = len(payload) - cap
+        return payload[:cap] if 0 < ex and payload.endswith(b'\0' * (ex + 4)) else payload
+    wledit._shrinkpad = _sp
 def op(spec):
     k, *a = str(spec).split(':')      # 'EID' or 'move:EID' = move 2 ft; 'str:EID:PARAM:VALUE' = set_string
     if k == 'num': return {'op': 'set_num', 'eid': int(a[0]), 'param': a[1], 'value': float(a[2])}, int(a[0])
