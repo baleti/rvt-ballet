@@ -9,7 +9,7 @@ from rvtballet import save
 ss = save.SaveSessions(); ss.doc("m1", p)
 import json
 OP = json.loads(os.environ["KILL_OP"]) if os.environ.get("KILL_OP") else {"op": "set_string", "eid": 0, "field": "SymbolInfo.m_name"}
-save.add_edit(ss, "m1", p, dict(OP) if OP.get("op") == "move" else dict(OP, value=os.environ.get("EVAL", "KillEveryCall")))
+save.add_edit(ss, "m1", p, dict(OP) if OP.get("op") in ("move", "delete") else dict(OP, value=os.environ.get("EVAL", "KillEveryCall")))
 n = [0]
 def wrap(name):
     f = getattr(os, name)
@@ -25,7 +25,7 @@ except BaseException as e: print("REFUSED", type(e).__name__, str(e)[:200].repla
 f = sys.argv[1]; src = open(f, 'rb').read(); h0 = hashlib.sha256(src).hexdigest()
 sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab')); import wledit
 def edited(p):
-    if os.environ.get("KILL_OP") and json.loads(os.environ["KILL_OP"]).get("op") == "move":      # move: no readable string; "edited" = differs from the original and savegate validate accepts the whole file
+    if os.environ.get("KILL_OP") and json.loads(os.environ["KILL_OP"]).get("op") in ("move", "delete"):      # move/delete: no readable string; "edited" = differs from the original and savegate validate accepts the whole file
         try:
             sys.path.insert(0, os.path.expanduser('~/src/savegate')); from savegate.adapters import RvtAdapter
             return str(RvtAdapter().validate(open(p, 'rb').read())).startswith('ok')      # raises on a damaged container
@@ -43,7 +43,7 @@ env = dict(os.environ, PYTHONPATH=os.path.expanduser('~/src/savegate'), SAVEGATE
 sha = lambda x: hashlib.sha256(open(x, 'rb').read()).hexdigest()
 def run(stop):
     w = tempfile.mkdtemp(); p = w + ('/a.rvt' if f.lower().endswith('.rvt') else '/a.rfa'); shutil.copy(f, p)
-    pr = subprocess.Popen([sys.executable, '-c', CH, HERE, p, str(stop)], env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True); calls = []
+    pr = subprocess.Popen([sys.executable, '-c', CH, HERE, p, str(stop)], env=env, stdout=subprocess.PIPE, stderr=(None if os.environ.get("KILL_DEBUG") else subprocess.DEVNULL), text=True); calls = []
     for line in pr.stdout:
         calls.append(line.split()[1:] if line.startswith('CALL') else line.strip())
         if stop and line.startswith('CALL %d ' % stop): pr.send_signal(signal.SIGKILL); break
