@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 def op(spec):
     k, *a = str(spec).split(':')      # 'EID' or 'move:EID' = move 2 ft; 'str:EID:PARAM:VALUE' = set_string
     if k == 'num': return {'op': 'set_num', 'eid': int(a[0]), 'param': a[1], 'value': float(a[2])}, int(a[0])
+    if k == 'int': return {'op': 'set_num', 'eid': int(a[0]), 'param': a[1], 'value': int(a[2]), 'kind': 'Int'}, int(a[0])
     if k == 'del': return {'op': 'delete', 'eid': int(a[0])}, int(a[0])
     if k == 'str': return {'op': 'set_string', 'eid': int(a[0]), 'param': a[1], 'value': a[2]}, int(a[0])
     e = int(a[0] if k == 'move' else k); return {'op': 'move', 'eid': e, 'dx': 2.0}, e
