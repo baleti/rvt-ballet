@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""rvtsave_chain.py SRC YEAR OP1 OP2 [OP3 ...] (OP = EID | move:EID | str:EID:PARAM:VALUE | del:EID | num:EID:PARAM:VALUE): two in-place SAVEs in a row on one working copy (OP1, save, OP2, save), then open the result in the Revit VM (audit on)."""
+"""rvtsave_chain.py SRC YEAR OP1 OP2 [OP3 ...] (OP = EID | lvl:EID:NEWNAME | move:EID | str:EID:PARAM:VALUE | del:EID | num:EID:PARAM:VALUE): two in-place SAVEs in a row on one working copy (OP1, save, OP2, save), then open the result in the Revit VM (audit on)."""
 import os, sys, asyncio, tempfile, shutil, json
 W = os.path.expanduser('~/rvtsave-work'); _T = tempfile.mkdtemp(dir=W)
 os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'
@@ -19,6 +19,7 @@ def op(spec):
     if k == 'num': return {'op': 'set_num', 'eid': int(a[0]), 'param': a[1], 'value': float(a[2])}, int(a[0])
     if k == 'int': return {'op': 'set_num', 'eid': int(a[0]), 'param': a[1], 'value': int(a[2]), 'kind': 'Int'}, int(a[0])
     if k == 'rot': return {'op': 'rotate', 'eid': int(a[0]), 'deg': float(a[1])}, int(a[0])
+    if k == 'lvl': return {'op': 'set_string', 'eid': int(a[0]), 'value': a[1], 'field': 'DatumPlane.m_text'}, int(a[0])     # level/grid rename (derived echoes on dependents)
     if k == 'del': return {'op': 'delete', 'eid': int(a[0])}, int(a[0])
     if k == 'str': return {'op': 'set_string', 'eid': int(a[0]), 'param': a[1], 'value': a[2]}, int(a[0])
     e = int(a[0] if k == 'move' else k); return {'op': 'move', 'eid': e, 'dx': 2.0}, e
