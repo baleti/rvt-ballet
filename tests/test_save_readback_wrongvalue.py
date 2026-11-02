@@ -25,3 +25,23 @@ for label, out, ops in (('wrong value', nbA, opsB), ('no-op output', buf, opsA))
     try: save._readback(buf, out, ops); print('FAIL accepted:', label); sys.exit(1)
     except sg.VerifyFailed as x: print('refused', label + ':', str(x)[:100])
 print('save readback wrong-value OK')
+
+# numeric: right element and parameter, WRONG number
+sys.path.insert(0, os.path.expanduser('~/rvt-research/edit-lab')); import rvtedit
+base = {e: dict(g(d)) for e, d in pr.items()}; ed = rvtedit.Edit(F); pick = None
+for eid in list(pr)[:3000]:
+    try: pn, i, r, log, q = ed.g.e.trace(eid)
+    except Exception: continue
+    if ed.latest_partition(eid) != pn: continue
+    for l in log:
+        if l[1] == 'ParamValueDouble.m_paramId':
+            v = int(str(l[4])[4:-1]); pid = v - (1 << 64) if v >= (1 << 63) else v - (1 << 32) if (1 << 31) <= v < (1 << 32) else v; nm = rvt_params.PNAMES.get(str(pid)); val = base.get(eid, {}).get(nm) if nm else None
+            if nm and isinstance(val, float): pick = (eid, nm, val); break
+    if pick: break
+eid, nm, v0 = pick; del ed
+mk = lambda x: edit.validate_op({'op': 'set_num', 'eid': eid, 'param': nm, 'value': x, 'kind': 'Double'})
+nbN, _ = edit.apply_full(buf, [mk(v0 + 0.25)])
+save._readback(buf, nbN, [mk(v0 + 0.25)])              # honest number passes
+try: save._readback(buf, nbN, [mk(v0 + 7.0)]); print('FAIL wrong number accepted'); sys.exit(1)
+except sg.VerifyFailed as x: print('refused wrong number:', str(x)[:100])
+print('save readback wrong-number OK')
