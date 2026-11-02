@@ -553,6 +553,39 @@ def _rot_fit(a, b):
     return math.degrees(th), res, max(abs(p[2] - q[2]) for p, q in zip(a, b))
 
 
+def _inst_trf(buf, eid):
+    """Trf.m_3x3 (9 doubles, row-major) of one element record read with the edit-lab record tracer, or None. For a FamilyInstance the columns are the instance axes in world coordinates: a rotation about the world vertical axis by t makes M_new = Rz(t) . M_old"""
+    import sys, tempfile, struct
+    for lib in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab'), os.path.expanduser('~/rvt-research/edit-lab')):
+        if lib not in sys.path: sys.path.insert(0, lib)
+    import rvtedit
+    d = tempfile.mkdtemp(prefix='rvtballet-trf-'); p = os.path.join(d, 'x.rvt')
+    try:
+        with open(p, 'wb') as f: f.write(buf)
+        ed = rvtedit.Edit(p); log = ed.g.e.trace(eid)[3]
+        for l in log:
+            if l[1] == 'Trf.m_3x3' and l[3] - l[2] == 72: return struct.unpack_from('<9d', ed.g.bj, l[2])
+        return None
+    finally:
+        import shutil; shutil.rmtree(d, True)
+
+
+def _is_rotation(m):
+    """finite, orthonormal 3x3 (row-major 9-tuple), determinant +-1, tolerance 1e-6"""
+    import math
+    if not all(math.isfinite(x) and abs(x) <= 1.0 + 1e-6 for x in m): return False
+    r = (m[0:3], m[3:6], m[6:9])
+    return all(abs(sum(r[i][k] * r[j][k] for k in range(3)) - (1.0 if i == j else 0.0)) < 1e-6 for i in range(3) for j in range(3))
+
+
+def _rotz_residual(m0, m1, deg):
+    """largest entry of |M1 . M0^T - Rz(deg)| (M0 orthonormal, row-major 3x3 as 9-tuples)"""
+    import math
+    a = math.radians(deg); c, s = math.cos(a), math.sin(a); R = ((c, -s, 0.0), (s, c, 0.0), (0.0, 0.0, 1.0))
+    A = [m1[0:3], m1[3:6], m1[6:9]]; B = [m0[0:3], m0[3:6], m0[6:9]]
+    return max(abs(sum(A[i][k] * B[j][k] for k in range(3)) - R[i][j]) for i in range(3) for j in range(3))
+
+
 def _bbox_of(buf, eid):
     """bounding box [[x0,y0,z0],[x1,y1,z1]] (feet) of one FamilyInstance read from bytes via the geometry reader, or None (other classes / no box)"""
     import sys, tempfile
@@ -602,6 +635,11 @@ def _readback(src_buf, nb, ops):
     for o in [r for r in mv if r['op'] == 'rotate']:      # the rotation itself: the element's mesh must be turned by exactly o['deg'] about the vertical axis (rigid, z unchanged); FamilyInstance only, skipped when the geometry reader has no mesh for the SOURCE element
         try: t0 = _tris_of(src_buf, o['eid']); t1 = _tris_of(nb, o['eid']) if t0 else None
         except Exception: t0, t1 = None, None
+        try: q0 = _inst_trf(src_buf, o['eid']); q1 = _inst_trf(nb, o['eid']) if q0 else None
+        except Exception: q0, q1 = None, None
+        if q0 is not None and not _is_rotation(q0): q0 = None      # the tracer did not land on a real orientation matrix in this file (garbage / NaN / scaled): no witness
+        if q0 is not None:      # the record's own orientation matrix: independent of what the geometry reader can show
+            if q1 is None or _rotz_residual(q0, q1, o['deg']) > 1e-6: bad.append('rotated element %d: the orientation matrix in the output is not the source turned by %.4g deg about the vertical axis' % (o['eid'], o['deg'])); continue
         if not t0: continue
         if not t1 or len(t1) != len(t0): continue      # the reader returns a DIFFERENT mesh for the output (2019/2022 sample instances: type geometry in local coordinates once the saved tessellation is dropped, 1368 -> 1239 vertices): no witness, not a failure (measured by tools/rvtrot_years.py); equal-count meshes are always compared
         if t1 == t0 and nb != src_buf: continue      # cached tessellation not rebuilt (same exemption as moves); byte-identical output is refused below
