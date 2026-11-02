@@ -853,7 +853,7 @@ def recover_edits(ss, mid, src):
     if not ops: return {'ok': True, 'n': len(ss.edits(mid).ops), 'recovered': 0}
     e = ss.edits(mid); before = list(e.ops)
     try:
-        for op in ops: add_edit(ss, mid, src, op)
+        add_edits(ss, mid, src, ops)
     except BaseException:
         e.ops[:] = before; sync_edits(ss, mid, src); raise
     return {'ok': True, 'n': len(e.ops), 'recovered': len(ops)}
@@ -868,6 +868,18 @@ def add_edit(ss, mid, src, op):
         if 'truncated' in str(ex).lower() or 'corrupt' in str(ex).lower(): raise SourceDamaged('the model file is damaged (%s); nothing was written' % str(ex)[:160])
         raise
     e.ops.append(op); sync_edits(ss, mid, src)
+    return {'ok': True, 'n': len(e.ops), 'ops': e.ops, 'manifest': e.manifest(deleted)}
+
+
+def add_edits(ss, mid, src, ops):
+    """record several edits after ONE trial replay of the whole list (add_edit replays everything per call: about 20 s each on a 28 MB model). All or none: a refusal of any op leaves the recorded edits as they were."""
+    from .edit import apply_full, validate_op
+    ops = [validate_op(o) for o in ops]
+    try: d = ss.doc(mid, src); e = ss.edits(mid); _, deleted = apply_full(d.buf, e.ops + ops)
+    except ValueError as ex:
+        if 'truncated' in str(ex).lower() or 'corrupt' in str(ex).lower(): raise SourceDamaged('the model file is damaged (%s); nothing was written' % str(ex)[:160])
+        raise
+    e.ops.extend(ops); sync_edits(ss, mid, src)
     return {'ok': True, 'n': len(e.ops), 'ops': e.ops, 'manifest': e.manifest(deleted)}
 
 
