@@ -1,4 +1,4 @@
-"""inject_eio_save_rvt.py FILE.rvt|.rte OPJSON : raise OSError(EIO) ONCE at each fsync/replace/rename/unlink/link call of an in-place save_overwrite (exception injection, the sibling of kill_every_call_rvt.py SIGKILL). Per call: refused with the original byte-identical, or saved with an ok-validating file AND a hash-equal backup present. Prints per-call lines + a summary."""
+"""inject_eio_save_rvt.py FILE.rvt|.rte OPJSON : raise OSError(EIO) ONCE at each fsync/replace/rename/unlink/link call of an in-place save_overwrite (exception injection, the sibling of kill_every_call_rvt.py SIGKILL). Per call: refused with the original byte-identical, or saved with an ok-validating file AND a hash-equal backup present. PERSIST=1: every call from k on fails (persistent EIO). Prints per-call lines + a summary."""
 import os, sys, json, shutil, tempfile, hashlib, glob
 T = tempfile.mkdtemp()
 open(T+'/c.json','w').write('{"allow_overwrite": true}'); open(T+'/g.json','w').write('{"rvt": {"*": "open"}}')
@@ -14,7 +14,7 @@ def attempt(fail):
     def wrap(c):
         def g(*a, **k):
             n[0] += 1
-            if n[0] == fail: names.append(c); raise OSError(5, 'injected EIO at call %d (%s)' % (fail, c))
+            if fail and (n[0] >= fail if os.environ.get('PERSIST') else n[0] == fail): names.append(c); raise OSError(5, 'injected EIO at call %d (%s)' % (fail, c))
             return orig[c](*a, **k)
         return g
     for c in calls: setattr(os, c, wrap(c))
