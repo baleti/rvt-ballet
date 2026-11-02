@@ -10,6 +10,26 @@ DIR = os.environ.get('RVTBALLET_EDITSTORE') or os.path.join(plat.dirs.data_dir('
 def _file(src): return os.path.join(DIR, hashlib.sha1(os.fsencode(os.path.realpath(src))).hexdigest() + '.json')
 
 
+def sweep(max_age=30 * 86400, gone_age=7 * 86400):
+    """drop stores older than 30 days, and stores whose source file no longer exists once they are 7 days old (a recent one may belong to a drive that is just not mounted)"""
+    n = 0
+    try:
+        now = time.time()
+        for x in os.listdir(DIR):
+            p = os.path.join(DIR, x)
+            if x.endswith('.tmp') or x.endswith('.json'):
+                try:
+                    age = now - os.stat(p).st_mtime
+                    if x.endswith('.tmp'): dead = age > 3600
+                    else:
+                        src = json.load(open(p, encoding='utf-8')).get('src')
+                        dead = age > max_age or (age > gone_age and not (isinstance(src, str) and os.path.exists(src)))
+                    if dead: os.remove(p); n += 1
+                except (OSError, ValueError): pass
+    except OSError: pass
+    return n
+
+
 def sync(src, ops, sha256):
     """write (or remove, when no ops are pending) the store for this source file. Never raises: losing the safety net must not break an edit"""
     try:
@@ -18,7 +38,7 @@ def sync(src, ops, sha256):
             try: os.remove(p)
             except FileNotFoundError: pass
             return
-        os.makedirs(DIR, exist_ok=True)
+        os.makedirs(DIR, exist_ok=True); sweep()
         fd, tmp = tempfile.mkstemp(dir=DIR, suffix='.tmp')
         with os.fdopen(fd, 'w', encoding='utf-8') as f:
             json.dump({'src': os.path.realpath(src), 'sha256': sha256, 'saved': int(time.time()), 'ops': list(ops)}, f); f.flush(); os.fsync(f.fileno())
