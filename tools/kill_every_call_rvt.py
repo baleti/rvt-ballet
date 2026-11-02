@@ -1,5 +1,5 @@
 """kill_every_call_rvt.py FILE.rfa|FILE.rvt (project: set KILL_OP='{"op":"set_string","eid":N,"param":"Comments"}') : RVT twin of dwg-viewer tools/kill_every_call.py. save_overwrite with a real edit (SymbolInfo.m_name = KillEveryCall); os.fsync/replace/rename/unlink/link wrapped; the child is SIGKILLed at every such call. Afterwards: target byte-identical to the original, or complete with the edit readable (wledit trace) AND a backup byte-equal to the original present; a clean re-save works. A clean re-save must work (SAVED) or be refused cleanly by LayoutChanged with the file untouched. Exit 1 on any violation."""
-import os, sys, shutil, tempfile, subprocess, hashlib, signal, glob
+import json, os, sys, shutil, tempfile, subprocess, hashlib, signal, glob
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CH = r'''
 import sys, os, time
@@ -9,7 +9,7 @@ from rvtballet import save
 ss = save.SaveSessions(); ss.doc("m1", p)
 import json
 OP = json.loads(os.environ["KILL_OP"]) if os.environ.get("KILL_OP") else {"op": "set_string", "eid": 0, "field": "SymbolInfo.m_name"}
-save.add_edit(ss, "m1", p, dict(OP, value=os.environ.get("EVAL", "KillEveryCall")))
+save.add_edit(ss, "m1", p, dict(OP) if OP.get("op") == "move" else dict(OP, value=os.environ.get("EVAL", "KillEveryCall")))
 n = [0]
 def wrap(name):
     f = getattr(os, name)
@@ -25,6 +25,11 @@ except BaseException as e: print("REFUSED", type(e).__name__, str(e)[:200].repla
 f = sys.argv[1]; src = open(f, 'rb').read(); h0 = hashlib.sha256(src).hexdigest()
 sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab')); import wledit
 def edited(p):
+    if os.environ.get("KILL_OP") and json.loads(os.environ["KILL_OP"]).get("op") == "move":      # move: no readable string; "edited" = differs from the original and savegate validate accepts the whole file
+        try:
+            from savegate.adapters import RvtAdapter
+            return str(RvtAdapter().validate(open(p, 'rb').read())).startswith('ok')      # raises on a damaged container
+        except Exception: return False
     if os.environ.get("KILL_OP"):      # project mode: the edited parameter reads back as KillEveryCall
         import json; sys.path.insert(0, os.path.expanduser('~/rvt-research')); import rvt_params; o = json.loads(os.environ["KILL_OP"])
         try: d = rvt_params.params(p)[o["eid"]]; return d.get("params", d).get(o["param"]) == "KillEveryCall"
