@@ -7,6 +7,7 @@ members it never reaches are NOT reported. Evidence for the need: a flipped defl
 edited SAVE AS today (c7x-rvtwrite 2026-11-01); not wired into save.py yet (decision for the owner)."""
 import zlib, struct
 GZ = b'\x1f\x8b\x08\x00'
+MAXGAP = 512
 
 
 def member_report(payload, start=None):
@@ -22,4 +23,6 @@ def member_report(payload, start=None):
         crc, isz = struct.unpack('<II', payload[end - 8:end])
         if crc != (zlib.crc32(raw) & 0xffffffff) or isz != (len(raw) & 0xffffffff): bad.append(seen)
         seen += 1; pos = end + 32
+        if payload[pos:pos + 4] != GZ:      # the frame is not always 32 bytes (220 seen after member 339 of a real 20 MB partition, 64% -> 99.7% coverage): resync on the next magic within MAXGAP
+            nxt = payload.find(GZ, end, end + MAXGAP); pos = nxt if nxt >= 0 else pos
     return seen, bad, stop

@@ -33,4 +33,9 @@ for off in range(start + 12, start + len(mems[2]) - 12):
     n, b, st = member_report(bytes(bad))
     if st == 2: break
 else: raise AssertionError('no inflate-breaking damage found')
+# frames of a different size (220, as in a real partition after member 339) must not end the walk: a CRC-bad member AFTER the gap is reported
+gp = b'\x00' * 44 + (b'\xaa' * 32).join(mems[:2]) + b'\xbb' * 220 + (b'\xaa' * 32).join(mems[2:])
+assert member_report(gp) == (5, [], None), member_report(gp)
+bad = bytearray(gp); bad[-1] ^= 1
+assert member_report(bytes(bad)) == (5, [4], None), member_report(bytes(bad))
 print('OK')
