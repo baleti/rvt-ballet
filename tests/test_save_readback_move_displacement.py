@@ -14,4 +14,9 @@ for label, ops in (('wrong amount', [mk(3.0, 0.5)]), ('wrong axis', [mk(0.5, 1.0
     except sg.VerifyFailed as x: print('refused', label + ':', str(x)[:110])
 try: save._readback(buf, buf, [mk(1.0, 0.5)]); print('FAIL unmoved output accepted'); sys.exit(1)
 except sg.VerifyFailed as x: print('refused unmoved:', str(x)[:110])
+D = os.path.expanduser('~/rvtfix/corpus/2024/42_Snowdon_Towers_Sample_HVAC.rvt')      # duct whose box comes from cached tessellation: an honest move must NOT be falsely refused
+if os.path.exists(D):
+    db = open(D, 'rb').read(); o = edit.validate_op({'op': 'move', 'eid': 1365188, 'dx': 2.0, 'dy': 0.0, 'dz': 0.0}); nd, _ = edit.apply_full(db, [o])
+    try: save._readback(db, nd, [o]); print('cached-tessellation duct move passes')
+    except sg.VerifyFailed as x: print('FAIL false refusal:', str(x)[:110]); sys.exit(1)
 print('save readback move displacement OK')
