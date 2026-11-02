@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab')); import wledi
 def edited(p):
     if os.environ.get("KILL_OP") and json.loads(os.environ["KILL_OP"]).get("op") == "move":      # move: no readable string; "edited" = differs from the original and savegate validate accepts the whole file
         try:
-            from savegate.adapters import RvtAdapter
+            sys.path.insert(0, os.path.expanduser('~/src/savegate')); from savegate.adapters import RvtAdapter
             return str(RvtAdapter().validate(open(p, 'rb').read())).startswith('ok')      # raises on a damaged container
         except Exception: return False
     if os.environ.get("KILL_OP"):      # project mode: the edited parameter reads back as KillEveryCall
@@ -50,12 +50,13 @@ def run(stop):
     pr.wait(); return w, p, calls
 w, p, calls = run(0); shutil.rmtree(w, True); w, p, calls = run(0); names = [c[1] for c in calls if isinstance(c, list)]; total = len(names); assert total > 0, 'the warm save made no fsync/replace/rename call (child crashed or refused): %r' % calls[:3]; print('calls in a warm full save:', total, names[:40], [c for c in calls if isinstance(c, str) and c.startswith('REFUSED')]); shutil.rmtree(w, True)
 bad = 0; res = {}
-for k in range(1, total + 1):
+for k in range(int(os.environ.get('KILL_FROM', '1')), total + 1):
     w, p, calls = run(k); now = sha(p)
     bks = [x for pat in (w + '/.savegate/*', w + '/*.bak*', side + '/c/*/*') for x in glob.glob(pat) if os.path.isfile(x) and not x.endswith('.part')]
     if now == h0: st = 'orig'
     else:
         st = 'new' if edited(p) else 'PARTIAL'
+        if st == 'PARTIAL' and os.environ.get('KILL_KEEP'): shutil.copy(p, os.environ['KILL_KEEP'] + '/partial_%d.rvt' % k)
         if st == 'new' and not any(sha(x) == h0 for x in bks): st = 'NEW-WITHOUT-BACKUP'
     ok = st in ('orig', 'new')
     if ok:
