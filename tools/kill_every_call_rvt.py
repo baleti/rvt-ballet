@@ -1,4 +1,4 @@
-"""kill_every_call_rvt.py FILE.rfa : RVT twin of dwg-viewer tools/kill_every_call.py. save_overwrite with a real edit (SymbolInfo.m_name = KillEveryCall); os.fsync/replace/rename/unlink/link wrapped; the child is SIGKILLed at every such call. Afterwards: target byte-identical to the original, or complete with the edit readable (wledit trace) AND a backup byte-equal to the original present; a clean re-save works. Exit 1 on any violation."""
+"""kill_every_call_rvt.py FILE.rfa : RVT twin of dwg-viewer tools/kill_every_call.py. save_overwrite with a real edit (SymbolInfo.m_name = KillEveryCall); os.fsync/replace/rename/unlink/link wrapped; the child is SIGKILLed at every such call. Afterwards: target byte-identical to the original, or complete with the edit readable (wledit trace) AND a backup byte-equal to the original present; a clean re-save works. A clean re-save must work (SAVED) or be refused cleanly by LayoutChanged with the file untouched. Exit 1 on any violation."""
 import os, sys, shutil, tempfile, subprocess, hashlib, signal, glob
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CH = r'''
@@ -16,7 +16,8 @@ def wrap(name):
         return f(*a, **k)
     setattr(os, name, g)
 for nm in ("fsync", "replace", "rename", "unlink", "link"): wrap(nm)
-save.save_overwrite(ss, "m1", p); print("SAVED", flush=True)
+try: save.save_overwrite(ss, "m1", p); print("SAVED", flush=True)
+except BaseException as e: print("REFUSED", type(e).__name__, flush=True)
 '''
 f = sys.argv[1]; src = open(f, 'rb').read(); h0 = hashlib.sha256(src).hexdigest()
 sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab')); import wledit
@@ -46,7 +47,7 @@ for k in range(1, total + 1):
         if st == 'new' and not any(sha(x) == h0 for x in bks): st = 'NEW-WITHOUT-BACKUP'
     ok = st in ('orig', 'new')
     if ok:
-        r = subprocess.run([sys.executable, '-c', CH, HERE, p, '0'], env=dict(env, EVAL='KillEveryCall2'), capture_output=True, text=True, timeout=1800); ok = 'SAVED' in r.stdout
+        r = subprocess.run([sys.executable, '-c', CH, HERE, p, '0'], env=dict(env, EVAL='KillEveryCall2'), capture_output=True, text=True, timeout=1800); ok = 'SAVED' in r.stdout or ('REFUSED LayoutChanged' in r.stdout and sha(p) == now)      # a 2nd edit of the same element is refused by design when it would change the page layout; the file must stay as it was
         if not ok: st += ' (clean re-save failed)'
     res[st] = res.get(st, 0) + 1
     if not ok: bad += 1; print('FAIL kill at call', k, calls[-1] if calls else '?', st)
