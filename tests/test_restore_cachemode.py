@@ -15,8 +15,16 @@ async def run():
         r = await c.post('/api/m/m/save', json={}); j = await r.json(); assert r.status == 200, j
         assert not os.path.exists(os.path.join(d, '.savegate')), 'backup created beside the model in cache mode'
         r = await c.get('/api/m/m/backups'); bl = await r.json(); assert bl, bl
+        files = [os.path.join(r, n) for r, _, ns in os.walk(os.environ['SAVEGATE_CACHE']) for n in ns if '.rvt.' in n and not n.endswith('.part')]; assert len(files) == 1, files
+        good = open(files[0], 'rb').read(); b = bytearray(good); b[len(b) // 2] ^= 1; open(files[0], 'wb').write(bytes(b))      # bit flip in the backup
+        cur = open(src, 'rb').read()
+        r = await c.post('/api/m/m/restore', json={'confirm': True, 'n': 0}); assert r.status >= 400, ('corrupt backup was restored', r.status)
+        assert open(src, 'rb').read() == cur, 'a refused restore changed the model'
+        os.remove(files[0]); r = await c.post('/api/m/m/restore', json={'confirm': True, 'n': 0}); assert r.status >= 400, r.status
+        assert open(src, 'rb').read() == cur
+        open(files[0], 'wb').write(good)
         os.truncate(src, os.path.getsize(src) // 2)         # damage the model
-        r = await c.post('/api/m/m/restore', json={'confirm': True, 'n': len(bl) - 1 if isinstance(bl, list) else 0}); j = await r.json(); assert r.status == 200, (r.status, j)
+        r = await c.post('/api/m/m/restore', json={'confirm': True, 'n': 0}); j = await r.json(); assert r.status == 200, (r.status, j)
     assert sha(src) == h0, 'restored bytes differ from the original'
     assert sorted(f for f in os.listdir(d) if f != 'm') == ['a.rvt'], os.listdir(d)
     print('restore (cache mode) OK')
