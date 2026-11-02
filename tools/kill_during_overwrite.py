@@ -20,7 +20,7 @@ print('full save %.1f s' % T, flush=True); tot = {}; bad = 0
 for k in range(trials):
     shutil.copy(f, p)
     pr = subprocess.Popen([sys.executable, '-c', CHILD, HERE, p], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    try: pr.wait(timeout=random.uniform(0, T * 1.1))
+    try: pr.wait(timeout=random.uniform(T * float(os.environ.get("LO", "0")), T * 1.1))
     except subprocess.TimeoutExpired: pr.send_signal(signal.SIGKILL); pr.wait()
     b = open(p, 'rb').read()
     if hashlib.sha256(b).hexdigest() == h0: out = 'ORIGINAL'
