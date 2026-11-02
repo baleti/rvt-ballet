@@ -37,7 +37,8 @@ export function initSave($, getMid) {
   const top = document.getElementById('top'); const sp = top.querySelector('.sp');
   const mk = (id, txt) => { const b = document.createElement('button'); b.id = id; b.textContent = txt; b.disabled = true; top.insertBefore(b, sp.nextSibling); return b; };
   const bUndo = mk('bUndoEdit', 'Undo edit'); bUndo.disabled = false; bUndo.hidden = true; bUndo.title = 'Remove the last pending edit (nothing is written until you Save or Save as)';
-  let canNameEdit = false;
+  let canNameEdit = false, pendingEdits = 0;
+  window.addEventListener('beforeunload', (ev) => { if (pendingEdits > 0) { ev.preventDefault(); ev.returnValue = ''; } });      // edits live in the server's memory until Save: closing the window may end the server and drop them
   const bBk = mk('bBackups', 'Backups'), bOver = mk('bSaveOver', 'Save'), bAs = mk('bSaveAs', 'Save as');
   const panel = document.createElement('div'); panel.id = 'savepanel'; panel.hidden = true; document.body.appendChild(panel);
   const show = (lines, bad, extra) => { panel.replaceChildren(); panel.className = bad ? 'bad' : 'ok'; lines.forEach(l => { const d = document.createElement('div'); d.textContent = l; panel.appendChild(d); }); if (extra) panel.appendChild(extra); const x = document.createElement('button'); x.textContent = 'close'; x.onclick = () => { panel.hidden = true; }; panel.appendChild(x); panel.hidden = false; };
@@ -45,14 +46,14 @@ export function initSave($, getMid) {
   async function refresh() {
     const mid = getMid(); if (!mid) return; let info = null; try { info = await (await fetch(`/api/m/${mid}/saveinfo`)).json(); } catch (e) {}
     if (mid !== getMid()) return;      // the user switched models while saveinfo ran: do not set the buttons from the old model
-    canNameEdit = !!(info && info.open && info.name_edit); const pe = (info && info.pending_edits) || 0; bUndo.hidden = !pe; bUndo.textContent = `Undo edit (${pe} pending)`;
+    canNameEdit = !!(info && info.open && info.name_edit); const pe = (info && info.pending_edits) || 0; bUndo.hidden = !pe; bUndo.textContent = `Undo edit (${pe} pending)`; pendingEdits = pe;
     const a = actions(info); bBk.disabled = !a.saveas.on; bAs.disabled = !a.saveas.on; bAs.title = a.saveas.on ? 'Save a copy under a new name (never touches the original)' : a.saveas.why;
     bOver.disabled = !a.save.on; bOver.title = a.save.on ? 'Overwrite the source file (a backup is kept)' + (a.overrides.length ? ' - WARNING: safety checks switched off by the server environment: ' + a.overrides.join(', ') : '') : a.save.why;
   }
   async function doSave(path, body, force) {
     let live = true; const poll = async () => { while (live) { try { const p = await (await fetch(`/api/m/${getMid()}/saveprogress`)).json(); if (live && p.busy && p.stage) show([`Saving... ${p.stage} (${p.elapsed} s)`], false); } catch (e) {} await new Promise(r => setTimeout(r, 700)); } };
     poll(); let r, j; try { [r, j] = await post(path, body); } catch (e) { live = false; show(['The save request did not complete (' + e + ').', 'Do not assume the file was written: check the file and the Backups list before retrying.'], true); return; } finally { live = false; }
-    if (r.ok && j && j.ok) { show(describeResult(j), false); return; }
+    if (r.ok && j && j.ok) { show(describeResult(j), false); refresh(); return; }      // refresh: SAVE clears the server's pending edits, SAVE AS keeps them
     if (j && j.code === 'conflict' && !force) {
       const b = document.createElement('button'); b.textContent = 'Overwrite anyway'; b.onclick = () => { if (confirm('Overwrite the changed file with the loaded version? A backup is kept.')) doSave(path, { ...body, force: true, confirm: true }, true); };
       const rl = document.createElement('button'); rl.textContent = 'Reload'; rl.onclick = () => location.reload(); const w = document.createElement('span'); w.append(b, rl);
