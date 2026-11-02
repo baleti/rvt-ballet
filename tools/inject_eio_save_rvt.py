@@ -30,8 +30,15 @@ def attempt(fail):
         from savegate.adapters import RvtAdapter
         ok = str(RvtAdapter().validate(open(p,'rb').read()))[:20]
     return res + ' ' + ok + (' BACKUP=' + str(hb) if res == 'saved' else ''), sha(p) == h0, n[0], stray
-r0 = attempt(0); total = r0[2]; print('warm', r0, flush=True); out = {}
+import subprocess, ast
+if os.environ.get('EIO_K') is not None:      # child: one attempt in a fresh process (memory guard counts this process RSS, so repeated saves in one process get TooBig)
+    print('RESULT', repr(attempt(int(os.environ['EIO_K'])))); sys.exit(0)
+def child(k):
+    r = subprocess.run([sys.executable, os.path.abspath(__file__)] + sys.argv[1:], env=dict(os.environ, EIO_K=str(k)), capture_output=True, text=True)
+    line = [l for l in r.stdout.splitlines() if l.startswith('RESULT ')]
+    return ast.literal_eval(line[-1][7:]) if line else ('CHILD FAILED ' + r.stderr[-200:], False, 0, [])
+r0 = child(0); total = r0[2]; print('warm', r0, flush=True); out = {}
 for k in range(1, total+1):
-    res, same, _, stray = attempt(k); print(k, names[-1:], res, 'orig' if same else 'CHANGED', stray, flush=True)
+    res, same, _, stray = child(k); print(k, res, 'orig' if same else 'CHANGED', stray, flush=True)
     key = (res, 'orig' if same else 'changed', bool(stray)); out[key] = out.get(key, 0) + 1
 print(out)
