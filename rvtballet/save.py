@@ -491,7 +491,8 @@ def derived_echoes(src_buf, nb, ops):
             p0, p1 = g(d0), g(b[e])
             if p0 == p1: continue
             for m in (n,) + tuple(_ECHO_ALIAS.get(n, ())):      # a renamed view shows up as 'View Name' on its Viewer / Viewport elements
-                if p0.get(m) == old and p1.get(m) == new and {k for k in set(p0) | set(p1) if p0.get(k) != p1.get(k)} == {m}: out.add(e); break
+                ch = {k for k in set(p0) | set(p1) if p0.get(k) != p1.get(k)}
+                if p0.get(m) == old and p1.get(m) == new and ch and ch <= {m, 'Type ' + m} and all(p0.get(k) == old and p1.get(k) == new for k in ch): out.add(e); break      # 'Type IfcGUID' is the same stored value shown under its type alias (SegmentCenterLine 1379375 of a duct has no parameter entries of its own; c4x-rvtmatrix 2026-11-02)
     return sorted(out)
 
 
