@@ -36,6 +36,7 @@ def _check_text(v):
     """NUL / length, and no characters beyond the BMP: a surrogate pair in a by-name string parameter was written without error and the gate accepted the output, but the element's parameter list then reads back truncated
     (13 of 26 parameters, edited one unreadable; c3x-rvtmatrix 2026-10-30, 2024 Construction template, rvtedit backend). Refused until the writer encoding is proven."""
     if '\0' in v or len(v) > 4096: raise EditError('value must not contain NUL and must be at most 4096 characters')
+    if any(0xD800 <= ord(ch) <= 0xDFFF for ch in v): raise EditError('unpaired surrogate characters cannot be encoded; nothing was changed')
     if any(ord(ch) > 0xFFFF for ch in v): raise EditError('characters outside the Basic Multilingual Plane (emoji, rare CJK) are not supported in values yet; nothing was changed')
 
 
