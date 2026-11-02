@@ -647,7 +647,8 @@ def _readback(src_buf, nb, ops):
     element with 13 of 26 parameters and the gate said OK. A reader failure here refuses the save (nothing written)."""
     tg = [o for o in ops if o.get('op') in ('set_string', 'set_num') and o.get('param')]; mv = [o for o in ops if o.get('op') in ('move', 'rotate')]
     fl = [o for o in ops if o.get('op') == 'set_string' and not o.get('param')]   # field (name) edits: not visible as a parameter, so only presence and untouched parameters are checked
-    if not tg and not mv and not fl: return
+    dl = [o for o in ops if o.get('op') == 'delete']
+    if not tg and not mv and not fl and not dl: return
     g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
     sg = _import()
     try: a, b = _read_params(src_buf), _read_params(nb)
@@ -691,6 +692,8 @@ def _readback(src_buf, nb, ops):
         if w0 is None: continue
         d = (o['dx'], o['dy'], o['dz'])
         if w1 is None or any(abs((w1[i] - w0[i]) - d[i]) > 1e-6 * max(1.0, abs(d[i])) + 1e-6 for i in range(3)): bad.append('moved wall %d: the placement origin in the output is not the source moved by (%.4g, %.4g, %.4g)' % ((o['eid'],) + d))
+    for o in dl:      # a declared deletion must really have happened: the gate accepts a manifest that names a still-present element as deleted (tests/test_save_escape_delete.py)
+        if o['eid'] in a and o['eid'] in b: bad.append('element %d was declared deleted but is still in the output' % o['eid'])
     for o in fl:
         if o['eid'] not in b: bad.append('field-edited element %d missing in the output' % o['eid'])
         else:
