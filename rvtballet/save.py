@@ -522,6 +522,25 @@ def _same_mark_base(old, new):
     return bool(old) and (new.startswith(old) or strip(old) == strip(new))      # 'D-1' -> 'D-1(610)', 'W-16(1162)' -> 'W-16(1467)', and 'D-1(610)' -> 'D-1' (moved back onto the grid line)
 
 
+def _bbox_of(buf, eid):
+    """bounding box [[x0,y0,z0],[x1,y1,z1]] (feet) of one FamilyInstance read from bytes via the geometry reader, or None (other classes / no box)"""
+    import sys, tempfile
+    for lib in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab')):
+        if lib not in sys.path: sys.path.insert(0, lib)
+    import rvt_geometry as G
+    fd, tmp = tempfile.mkstemp(suffix='.rte')
+    try:
+        os.write(fd, buf); os.close(fd)
+        r = G.element_geometry(tmp, eid)
+        bb = r.get('bbox') if isinstance(r, dict) and r.get('class') == 'FamilyInstance' else None      # only FamilyInstance boxes are exact translations: a wall's box carries join extensions that change with the move
+        return [list(map(float, bb[0])), list(map(float, bb[1]))] if bb else None
+    finally:
+        try: os.remove(tmp)
+        except OSError: pass
+        try: G._ctx.pop(tmp, None)
+        except Exception: pass
+
+
 def _readback(src_buf, nb, ops):
     """the gate declares an edited element 'modified', so ANY change inside it passes verify. Read the edited elements back from the produced bytes: the edited parameter must hold the requested value (strings: exactly;
     numbers: changed), no other parameter of the element may change (except reader aliases carrying the new value) and the parameter count must not shrink. Severity-1 found by c3x-rvtmatrix: an emoji value left the
@@ -541,6 +560,13 @@ def _readback(src_buf, nb, ops):
             # the column location mark is derived from the position ('D-1' -> 'D-1(610)' = offset from grid D-1): a move legitimately appends the offset (seen on 2017 columns)
             ch = [k for k in set(x) | set(y) if x.get(k) != y.get(k) and not (k.startswith('Column Location Mark') and isinstance(x.get(k), str) and _same_mark_base(x[k], y.get(k)))]
             if ch: bad.append('moved element %d: parameters changed' % o['eid'])
+            if o['op'] == 'move' and not any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv):      # the displacement itself: the element's bounding box must shift by exactly (dx, dy, dz) (feet); skipped only when the geometry reader has no box for the SOURCE element
+                try: b0 = _bbox_of(src_buf, o['eid']); b1 = _bbox_of(nb, o['eid']) if b0 else None
+                except Exception as ex: b0, b1 = None, None
+                if b0 is not None:
+                    d = (o['dx'], o['dy'], o['dz'])
+                    if b1 is None: bad.append('moved element %d: no geometry in the output' % o['eid'])
+                    elif any(abs((b1[i][k] - b0[i][k]) - d[k]) > 1e-6 * max(1.0, abs(d[k])) + 1e-6 for i in (0, 1) for k in range(3)): bad.append('moved element %d: displacement in the output is not the requested (%.4g, %.4g, %.4g)' % ((o['eid'],) + d))
     for o in fl:
         if o['eid'] not in b: bad.append('field-edited element %d missing in the output' % o['eid'])
         else:
