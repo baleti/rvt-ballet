@@ -682,10 +682,10 @@ def _readback(src_buf, nb, ops):
         import math
         th, res, dz = _rot_fit(t0, t1); err = abs(math.remainder(th - o['deg'], 360.0))
         if err > 1e-3 or res > 1e-4 or dz > 1e-5: bad.append('rotated element %d: the output is turned by %.4g deg (residual %.2g ft, dz %.2g), not the requested %.4g' % (o['eid'], th, res, dz, o['deg']))
-    for o in [r for r in mv if r['op'] == 'move']:      # walls: the placement origin in the record must move by exactly the requested displacement (the geometry reader has no mesh for a moved wall, and the box carries join extensions)
+    for o in [r for r in mv if r['op'] == 'move']:      # walls and linear dimensions: the placement origin in the record must move by exactly the requested displacement (the geometry reader has no mesh for a moved wall, and the box carries join extensions)
         if any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv): continue
         try:
-            if _bbox_class(src_buf, o['eid']) != 'SWall': continue
+            if _bbox_class(src_buf, o['eid']) not in ('SWall', 'LinearDimString'): continue
             w0 = _trf_origin(src_buf, o['eid']); w1 = _trf_origin(nb, o['eid']) if w0 else None
         except Exception: continue
         if w0 is None: continue

@@ -15,3 +15,18 @@ for label, out, ops in (('wrong amount', na, [b]), ('unmoved output', buf, [a]))
     try: save._readback(buf, out, ops); print('FAIL accepted:', label); sys.exit(1)
     except sg.VerifyFailed as x: print('refused', label + ':', str(x)[:100])
 print('save readback wall move OK')
+
+# linear dimension (Trf.m_or moves by the displacement as for walls)
+ix = None
+sys.path[:0] = [os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab')]
+import rvt_geometry as G
+dim = next((e for e, v in G.file_geometry_index(F).items() if str(v) == 'LinearDimString'), None)
+if dim is None: print('no LinearDimString in the scene: dimension part skipped')
+else:
+    da, db = [edit.validate_op({'op': 'move', 'eid': dim, 'dx': x, 'dy': 2.0, 'dz': 0.5}) for x in (1.0, 2.0)]
+    nd = edit.apply_full(buf, [da])[0]
+    save._readback(buf, nd, [da])
+    for label, out, ops in (('wrong amount (dim)', nd, [db]), ('unmoved output (dim)', buf, [da])):
+        try: save._readback(buf, out, ops); print('FAIL accepted:', label); sys.exit(1)
+        except sg.VerifyFailed as x: print('refused', label + ':', str(x)[:90])
+    print('save readback dim move OK')
