@@ -586,6 +586,42 @@ def _rotz_residual(m0, m1, deg):
     return max(abs(sum(A[i][k] * B[j][k] for k in range(3)) - R[i][j]) for i in range(3) for j in range(3))
 
 
+def _bbox_class(buf, eid):
+    """element class name from the geometry reader, '' if unknown"""
+    import sys, tempfile
+    for lib in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab')):
+        if lib not in sys.path: sys.path.insert(0, lib)
+    import rvt_geometry as G
+    fd, tmp = tempfile.mkstemp(suffix='.rte')
+    try:
+        os.write(fd, buf); os.close(fd)
+        r = G.file_geometry_index(tmp); return str(r.get(eid, ''))
+    finally:
+        try: os.remove(tmp)
+        except OSError: pass
+        try: G._ctx.pop(tmp, None)
+        except Exception: pass
+
+
+def _trf_origin(buf, eid):
+    """first Trf.m_or (3 finite doubles) of one element record read with the edit-lab record tracer, or None. For an SWall this is the placement origin: a move by (dx,dy,dz) adds exactly that (measured on the 2024 cols2 wall: (0,0,0) -> (1,2,0.5))"""
+    import sys, tempfile, struct, math
+    for lib in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab'), os.path.expanduser('~/rvt-research/edit-lab')):
+        if lib not in sys.path: sys.path.insert(0, lib)
+    import rvtedit
+    d = tempfile.mkdtemp(prefix='rvtballet-trf-'); p = os.path.join(d, 'x.rvt')
+    try:
+        with open(p, 'wb') as f: f.write(buf)
+        ed = rvtedit.Edit(p)
+        for l in ed.g.e.trace(eid)[3]:
+            if l[1] == 'Trf.m_or' and l[3] - l[2] == 24:
+                v = struct.unpack_from('<3d', ed.g.bj, l[2])
+                return v if all(math.isfinite(x) and abs(x) < 1e7 for x in v) else None
+        return None
+    finally:
+        import shutil; shutil.rmtree(d, True)
+
+
 def _bbox_of(buf, eid):
     """bounding box [[x0,y0,z0],[x1,y1,z1]] (feet) of one FamilyInstance read from bytes via the geometry reader, or None (other classes / no box)"""
     import sys, tempfile
@@ -646,6 +682,15 @@ def _readback(src_buf, nb, ops):
         import math
         th, res, dz = _rot_fit(t0, t1); err = abs(math.remainder(th - o['deg'], 360.0))
         if err > 1e-3 or res > 1e-4 or dz > 1e-5: bad.append('rotated element %d: the output is turned by %.4g deg (residual %.2g ft, dz %.2g), not the requested %.4g' % (o['eid'], th, res, dz, o['deg']))
+    for o in [r for r in mv if r['op'] == 'move']:      # walls: the placement origin in the record must move by exactly the requested displacement (the geometry reader has no mesh for a moved wall, and the box carries join extensions)
+        if any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv): continue
+        try:
+            if _bbox_class(src_buf, o['eid']) != 'SWall': continue
+            w0 = _trf_origin(src_buf, o['eid']); w1 = _trf_origin(nb, o['eid']) if w0 else None
+        except Exception: continue
+        if w0 is None: continue
+        d = (o['dx'], o['dy'], o['dz'])
+        if w1 is None or any(abs((w1[i] - w0[i]) - d[i]) > 1e-6 * max(1.0, abs(d[i])) + 1e-6 for i in range(3)): bad.append('moved wall %d: the placement origin in the output is not the source moved by (%.4g, %.4g, %.4g)' % ((o['eid'],) + d))
     for o in fl:
         if o['eid'] not in b: bad.append('field-edited element %d missing in the output' % o['eid'])
         else:
