@@ -360,6 +360,7 @@ _UNTOUCHED = ("untouched", "not touched", "unchanged", "nothing was written", "n
 def user_message(exc, status=None):
     """refusal text for the user: the error plus a plain statement that no file was changed (unless it already says so). Not for 5xx after the write started."""
     m = str(exc).rstrip(". ")
+    if "after rename" in m: return m + ". The file on disk WAS replaced and may be damaged; use RESTORE to bring back the previous version (the backup was made before the save)"      # found wrong after the replace: never claim it is untouched
     if any(w in m.lower() for w in _UNTOUCHED): return m
     return m + ("; the model file was not touched" if (status or 0) < 500 or type(exc).__name__ == "DiskError" else "")
 
