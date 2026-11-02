@@ -25,11 +25,12 @@ async def run(work, ops):
             body, e = op(sp)
             r = await c.post('/api/m/m/edit', json=body); assert r.status == 200, await r.text()
             r = await c.post('/api/m/m/save', json={}); j = await r.json(); print('save', e, r.status, str(j.get('error') or j.get('code') or 'ok')[:200], flush=True)
+            if os.environ.get('RVTSAVE_KEEP'): shutil.copy(work, '%s/after_%s.rvt' % (os.environ['RVTSAVE_KEEP'], ops.index(sp) + 1))
             if r.status != 200: return False
     return True
 src, year = sys.argv[1:3]; ops = sys.argv[3:]
-work = _T + '/src.rvt'; shutil.copy(src, work)
-if asyncio.run(run(work, ops)):
+work = _T + '/src' + os.path.splitext(src)[1].lower(); shutil.copy(src, work)      # keep .rte for templates: Revit rejects an .rte saved under .rvt
+if asyncio.run(run(work, ops)) and not os.environ.get('RVTSAVE_NOVM'):
     sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab/campaign')); os.environ['STAGEB'] = '1'
     import stages
     r = stages.api_stage(int(year), work, True, 'rsch%s' % _T[-5:]); print({k: r.get(k) for k in ('ok', 'cmp', 'dialogs', 'err')})
