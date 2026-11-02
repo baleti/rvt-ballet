@@ -16,7 +16,7 @@ p, eid = sys.argv[1], int(sys.argv[2])
 try:
     ss = save.SaveSessions(sg.Config(allow_overwrite=True, require_gate=False)); ss.doc('m', p)
     save.add_edit(ss, 'm', p, {'op': 'set_string', 'eid': eid, 'param': 'Comments', 'value': 'dmg-edit'}); save.save_overwrite(ss, 'm', p); print('SAVED')
-except BaseException as e: print('REFUSED', type(e).__name__)
+except BaseException as e: print('REFUSED', type(e).__name__, str(e)[:70].replace(chr(10), ' '))
 '''
 T = tempfile.mkdtemp(); gate = T + '/gate.json'; json.dump({'rvt': {'2024': 'open'}}, open(gate, 'w'))
 ENV = dict(os.environ, SAVEGATE_JOURNAL=T + '/j', SAVEGATE_CACHE=T + '/c', RVTBALLET_EDIT_BACKEND='rvtedit', RVTBALLET_ALLOW_OVERWRITE='1', SAVEGATE_GATE=gate)
@@ -37,7 +37,7 @@ for seed in (1, 2, 3):
         p = '%s/%s_%d.rvt' % (T, mode, seed); open(p, 'wb').write(c); h0 = sha(p)
         try: r = subprocess.run([sys.executable, '-c', CHILD % {'here': HERE}, p, str(EID)], env=ENV, capture_output=True, text=True, timeout=300); out = (r.stdout.strip().splitlines() or ['CRASH rc%d' % r.returncode])[-1]
         except subprocess.TimeoutExpired: out = 'HANG'
-        if out.startswith('REFUSED'): C['refused'] += 1; ok = sha(p) == h0
+        if out.startswith('REFUSED'): C['refused'] += 1; ok = sha(p) == h0; print(mode, seed, out)
         elif out == 'SAVED':
             try: rvt_params.params(p); ok = True
             except Exception: ok = False
