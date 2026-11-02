@@ -31,7 +31,7 @@ def edited(p):
             return str(RvtAdapter().validate(open(p, 'rb').read())).startswith('ok')      # raises on a damaged container
         except Exception: return False
     if os.environ.get("KILL_OP"):      # project mode: the edited parameter reads back as KillEveryCall
-        import json; sys.path.insert(0, os.path.expanduser('~/rvt-research')); import rvt_params; o = json.loads(os.environ["KILL_OP"])
+        sys.path.insert(0, os.path.expanduser("~/rvt-research")); import rvt_params; o = json.loads(os.environ["KILL_OP"])
         try: d = rvt_params.params(p)[o["eid"]]; return d.get("params", d).get(o["param"]) == "KillEveryCall"
         except Exception: return False
     q = tempfile.mktemp(suffix='.rfa'); shutil.copy(p, q)
