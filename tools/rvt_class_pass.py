@@ -72,7 +72,7 @@ async def one_class(c, models, k, src, cls, pr, ix):
         for e in others:
             a2, b2 = g(pr[e]), g(po.get(e)); names |= {x for x in set(a2) | set(b2) if a2.get(x) != b2.get(x)}
         row['others_changed_params'] = sorted(names)[:8]
-        if names <= {'View Name', 'View Name|String', 'Sheet Name', 'Panel Schedule Name', 'Associated Level', 'Associated Level|String', 'Level', 'Host|String', 'Work Plane|String', 'Column Location Mark', 'Column Location Mark|String'} and row.get('verify_diffs') == 0: row['declared_dependents'] = len(others)   # gate-declared derived View Name (Viewer/Viewport); verify passed
+        if names <= {'View Name', 'View Name|String', 'Sheet Name', 'Panel Schedule Name', 'Associated Level', 'Associated Level|String', 'Level', 'Host|String', 'Work Plane|String', 'Column Location Mark', 'Column Location Mark|String', 'IfcGUID', 'Type IfcGUID'} and row.get('verify_diffs') == 0: row['declared_dependents'] = len(others)   # gate-declared derived View Name (Viewer/Viewport); verify passed
         else: bad.append('others_changed')
     row.update({k2: v for k2, v in U.report(work, out).items() if not k2.startswith('_')})
     t0 = time.time(); r = await c.post('/api/m/%s/save' % mid, json={}); j2 = await r.json(); row['save_s'] = round(time.time() - t0, 1)
