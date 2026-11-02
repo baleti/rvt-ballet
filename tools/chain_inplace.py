@@ -12,7 +12,8 @@ async def main(src0, n, kd):
     from aiohttp.test_utils import TestClient, TestServer
     import aiohttp
     ext = os.path.splitext(src0)[1]; work = _T + '/w' + ext; shutil.copy(src0, work); os.makedirs(kd, exist_ok=True)
-    els = [e for e, d in rvt_params.params(work).items() if g(d).get('Comments') == ''][:n]
+    els = [e for e, d in rvt_params.params(work).items() if g(d).get('Comments') == '']
+    els = els[-n:] if os.environ.get('CHAIN_PICK') == 'last' else els[:n]      # CHAIN_PICK=last: elements late in the list (tail of the partition)
     for k, eid in enumerate(els):
         md = '%s/m%d' % (_T, k); os.makedirs(md); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': work}
         async with TestClient(TestServer(server.make_app(models))) as c:
