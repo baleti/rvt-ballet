@@ -13,7 +13,7 @@ sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
 async def main(out, src0):
     row = {'size_mb': round(os.path.getsize(src0) / 2 ** 20, 1)}; t0 = time.time(); src = os.path.join(_T, 'copy.rvt'); shutil.copy(src0, src); h0 = sha(src)
-    pr = rvt_params.params(src); eid = next(e for e, d in pr.items() if g(d).get('Comments') == ''); a = g(pr[eid]); row['eid'] = eid
+    pr = rvt_params.params(src); eid = int(os.environ['EID']) if os.environ.get('EID') else next(e for e, d in pr.items() if g(d).get('Comments') == ''); a = g(pr[eid]); row['eid'] = eid
     from aiohttp.test_utils import TestClient, TestServer
     import aiohttp
     models = server.Models(); md = os.path.join(_T, 'm'); os.makedirs(md); models.m['m'] = {'dir': md, 'name': 'f', 'src': src}
