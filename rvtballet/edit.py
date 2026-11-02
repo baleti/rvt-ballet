@@ -234,6 +234,7 @@ def _rvtedit_pass(a, b, ops):
             else: ed._str_edit(o['eid'], o['field'], o['value'], o['match'])
         except (IndexError, KeyError, StopIteration, AssertionError, struct_error()) as e:
             hint = ' (the record layout of this kind of element, e.g. a group member, is not handled by the edit backend)' if o['op'] in ('move', 'rotate') else ''
+            if o['op'] == 'rotate' and isinstance(e, KeyError): hint = ' (rotate is only supported for placed family instances such as columns, doors and furniture; walls, floors and annotations cannot be rotated here)'
             raise EditError('element %d: %s could not be applied (%s)%s; nothing was changed' % (o['eid'], o.get('field') or o['op'] + (' parameter %s' % o['pid'] if o.get('pid') is not None else ''), type(e).__name__, hint))
         except RuntimeError as e:        # e.g. rvtedit: 'element N lives in Partitions/X but this save edits Partitions/Y' (one partition per save)
             raise EditError('edit refused by the edit backend: %s' % e)

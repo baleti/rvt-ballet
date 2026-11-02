@@ -14,3 +14,8 @@ for label, out, ops in (('wrong angle', n30, [r90]), ('translation instead of ro
     try: save._readback(buf, out, ops); print('FAIL accepted:', label); sys.exit(1)
     except sg.VerifyFailed as x: print('refused', label + ':', str(x)[:90])
 print('save readback rotate OK')
+
+# a rotate on a wall is refused at edit time with a message that names the supported class
+try: edit.apply_full(buf, [edit.validate_op({'op': 'rotate', 'eid': 301553, 'deg': 30})]); print('FAIL wall rotate accepted'); sys.exit(1)
+except edit.EditError as x:
+    assert 'placed family instances' in str(x), str(x); print('wall rotate refused with a clear message')
