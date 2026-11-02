@@ -511,12 +511,44 @@ def _read_params(buf):
     rr = os.path.expanduser('~/rvt-research')
     if rr not in sys.path: sys.path.insert(0, rr)
     import rvt_params
-    d = tempfile.mkdtemp(prefix='rvtballet-rb-')
-    try:
-        f = os.path.join(d, 'x.rvt'); open(f, 'wb').write(buf); v = rvt_params.params(f)
-    finally: shutil.rmtree(d, ignore_errors=True)
+    v = _rp_disk_get(k)
+    if v is None:
+        d = tempfile.mkdtemp(prefix='rvtballet-rb-')
+        try:
+            f = os.path.join(d, 'x.rvt'); open(f, 'wb').write(buf); v = rvt_params.params(f)
+        finally: shutil.rmtree(d, ignore_errors=True)
+        _rp_disk_put(k, v)
     _RB_MEMO.insert(0, (k, v)); del _RB_MEMO[2:]
     return v
+
+
+def _rp_file(key):
+    d = _disk_dir()
+    return os.path.join(d, 'rp-%s-%s.rpk' % (key.hex(), _reader_stamp())) if d else None
+
+
+def _rp_disk_get(key):
+    """reader params of the bytes with this sha256, cached on disk (checksummed, keyed by content hash AND reader code stamp); any damage is a miss"""
+    import hashlib, pickle
+    f = _rp_file(key)
+    try:
+        raw = open(f, 'rb').read()
+        if len(raw) < 32 or hashlib.sha256(raw[32:]).digest() != raw[:32]: return None
+        return pickle.loads(raw[32:])
+    except Exception: return None
+
+
+def _rp_disk_put(key, v, keep=6):
+    import hashlib, pickle
+    f = _rp_file(key)
+    if not f: return
+    try:
+        os.makedirs(os.path.dirname(f), exist_ok=True); body = pickle.dumps(v, 4); t = f + '.%d.tmp' % os.getpid()
+        with open(t, 'wb') as o: o.write(hashlib.sha256(body).digest() + body)
+        os.replace(t, f); d = os.path.dirname(f)
+        old = sorted((os.path.join(d, n) for n in os.listdir(d) if n.endswith('.rpk')), key=os.path.getmtime)
+        for x in old[:-keep]: os.remove(x)
+    except Exception: pass
 
 
 def _same_mark_base(old, new):

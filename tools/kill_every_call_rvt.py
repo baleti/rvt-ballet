@@ -10,6 +10,7 @@ ss = save.SaveSessions(); ss.doc("m1", p)
 import json
 OP = json.loads(os.environ["KILL_OP"]) if os.environ.get("KILL_OP") else {"op": "set_string", "eid": 0, "field": "SymbolInfo.m_name"}
 save.add_edit(ss, "m1", p, dict(OP) if OP.get("op") in ("move", "delete") else dict(OP, value=os.environ.get("EVAL", "KillEveryCall")))
+if os.environ.get("KILL_OP2"): save.add_edit(ss, "m1", p, json.loads(os.environ["KILL_OP2"]))      # a second op in the same save
 n = [0]
 def wrap(name):
     f = getattr(os, name)
