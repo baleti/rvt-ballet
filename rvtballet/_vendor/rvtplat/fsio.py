@@ -180,6 +180,9 @@ def read_retry(path, mode='rb', tries=8, delay=0.02, **kw):
 def is_cloud_placeholder(path):
     """True for a OneDrive/Dropbox 'online-only' file whose content is not on disk yet (Windows reparse /
     FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS 0x400000, OFFLINE 0x1000). Reading it triggers a download."""
+    if sys.platform == 'darwin':          # iCloud Drive / File Provider 'Optimise storage': an evicted file has SF_DATALESS (0x40000000) set; reading it downloads it
+        try: return bool(os.stat(path).st_flags & 0x40000000)
+        except (OSError, AttributeError): return False
     if not _WIN:
         return False
     try:
