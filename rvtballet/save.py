@@ -687,8 +687,11 @@ def backups(src):
 
 def restore_backup(ss, mid, src, n=0):
     """put backup n (0 = newest) back over the source (savegate backs the current file up first); the doc is re-opened so the fingerprint matches"""
-    sg = _import(); ss.close(mid); ss.edits(mid).ops.clear(); src = os.path.realpath(src)      # pending edits were recorded against the old content; a symlinked source is restored in its real file
-    used = sg.restore(src, n)
+    sg = _import(); ss.close(mid); ops = ss.edits(mid).ops; kept = list(ops); src = os.path.realpath(src)      # a symlinked source is restored in its real file
+    try: used = sg.restore(src, n)
+    except BaseException:
+        ops[:] = kept; raise           # a refused restore (corrupt/missing backup, lock) left the file as it was: the user's pending edits stay too
+    ops.clear()                        # pending edits were recorded against the old content: only a restore that happened drops them
     from savegate.atomic import sha256_file
     return {'ok': True, 'restored_from': used, 'sha256': sha256_file(src)[:12], 'size': os.path.getsize(src)}
 
