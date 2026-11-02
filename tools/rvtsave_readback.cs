@@ -41,6 +41,7 @@ try {
       bool hit = false; try { foreach (Reference rf in dm.References) { if (rf.ElementId.ToString() == s) { hit = true; break; } } } catch {}
       if (hit) log.AppendLine("DIM " + s + " dim=" + dm.Id + " value=" + (dm.Value.HasValue ? dm.Value.Value.ToString("F6") : "-"));
     }
+    foreach (var pn in "__PARAMS__".Split('|')) { if (pn.Length == 0) continue; var pp = e.LookupParameter(pn); log.AppendLine("PRM " + s + " " + pn + "=" + (pp == null ? "none" : (pp.StorageType == StorageType.Double ? pp.AsDouble().ToString("R") : pp.AsValueString() ?? pp.AsString()))); }
     log.AppendLine("RB " + s + " loc=" + loc + " group=" + e.GroupId + " mark=" + (mark != null ? string.Concat((mark.AsString() ?? "").Select(ch => ch >= 32 && ch < 127 ? ch.ToString() : "\\u" + ((int)ch).ToString("x4"))) : "-") + " marklen=" + (mark != null ? (mark.AsString() ?? "").Length : -1));
   }
   try { using (var t = new Transaction(d, "rg")) { t.Start(); d.Regenerate(); log.AppendLine("REGEN ok"); t.RollBack(); } } catch (Exception ex) { log.AppendLine("REGEN " + ex.GetType().Name + " " + ex.Message.Replace("\r", " ").Replace("\n", " ")); }
