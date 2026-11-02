@@ -351,7 +351,7 @@ def error_status(exc):
     n = type(exc).__name__
     return {'Conflict': (409, 'conflict'), 'GateClosed': (409, 'gate_closed'), 'OverwriteDisabled': (409, 'overwrite_disabled'),
             'Exists': (409, 'exists'), 'SaveError': (409, 'refused'), 'Locked': (423, 'locked'), 'VerifyFailed': (422, 'verify_failed'),
-            'EditError': (400, 'edit_error'), 'LightVerifyFailed': (422, 'verify_failed'), 'LayoutChanged': (409, 'layout_changed'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'Workshared': (409, 'workshared'), 'ReadOnlyTarget': (409, 'read_only'), 'GroupOrOption': (409, 'group_or_option'), 'SourceDamaged': (409, 'source_damaged'), 'CloudPlaceholder': (409, 'cloud_placeholder'), 'NetworkFS': (409, 'network_fs'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
+            'EditError': (400, 'edit_error'), 'LightVerifyFailed': (422, 'verify_failed'), 'LayoutChanged': (409, 'layout_changed'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'StaleEdits': (409, 'stale_edits'), 'Workshared': (409, 'workshared'), 'ReadOnlyTarget': (409, 'read_only'), 'GroupOrOption': (409, 'group_or_option'), 'SourceDamaged': (409, 'source_damaged'), 'CloudPlaceholder': (409, 'cloud_placeholder'), 'NetworkFS': (409, 'network_fs'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
 
 
 _UNTOUCHED = ("untouched", "not touched", "unchanged", "nothing was written", "nothing written", "not changed", "nothing was replaced", "not written")
@@ -674,6 +674,8 @@ def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     _note_derived(ss, mid, r)
     if nlink > 1: r.setdefault('warnings', []).append('the file had %d hard links: the save replaced this name only, the other name(s) still hold the OLD content' % nlink)
     del ss.edits(mid).ops[:ss.applied.pop(mid, 0)]          # only the ops that were applied are in the file now
+    if not ss.edits(mid).ops:
+        from . import editstore; editstore.sync(src, [], None)      # nothing pending any more: the stored copy goes
     return r
 
 
@@ -692,6 +694,7 @@ def restore_backup(ss, mid, src, n=0):
     except BaseException:
         ops[:] = kept; raise           # a refused restore (corrupt/missing backup, lock) left the file as it was: the user's pending edits stay too
     ops.clear()                        # pending edits were recorded against the old content: only a restore that happened drops them
+    from . import editstore; editstore.sync(src, [], None)
     from savegate.atomic import sha256_file
     return {'ok': True, 'restored_from': used, 'sha256': sha256_file(src)[:12], 'size': os.path.getsize(src)}
 
@@ -707,6 +710,29 @@ def recoverable(ss):
     return out
 
 
+def sync_edits(ss, mid, src):
+    """persist the pending edit list (see editstore); called after every change of it"""
+    from . import editstore
+    d = ss.docs.get(mid)
+    sha = d.fingerprint.sha256 if d is not None and getattr(d, 'fingerprint', None) else None
+    if sha is None and ss.edits(mid).ops: return             # no loaded document = no fingerprint to bind the ops to: do not store unbound ops
+    editstore.sync(src, ss.edits(mid).ops, sha)
+
+
+def recover_edits(ss, mid, src):
+    """replay the stored ops of this file through add_edit (trial replay each); all or nothing"""
+    from . import editstore
+    d = ss.doc(mid, src); ops, why = editstore.load(src, d.fingerprint.sha256)
+    if why: raise StaleEdits(why)
+    if not ops: return {'ok': True, 'n': len(ss.edits(mid).ops), 'recovered': 0}
+    e = ss.edits(mid); before = list(e.ops)
+    try:
+        for op in ops: add_edit(ss, mid, src, op)
+    except BaseException:
+        e.ops[:] = before; sync_edits(ss, mid, src); raise
+    return {'ok': True, 'n': len(e.ops), 'recovered': len(ops)}
+
+
 def add_edit(ss, mid, src, op):
     """record an edit after a trial replay on the loaded bytes (so an op the writer cannot apply is refused now, not at save time)"""
     from .edit import apply_full, validate_op
@@ -715,11 +741,14 @@ def add_edit(ss, mid, src, op):
     except ValueError as ex:      # the reader's own refusal of a damaged file ('file truncated: ...'): a clean 409, not a bare 500
         if 'truncated' in str(ex).lower() or 'corrupt' in str(ex).lower(): raise SourceDamaged('the model file is damaged (%s); nothing was written' % str(ex)[:160])
         raise
-    e.ops.append(op)
+    e.ops.append(op); sync_edits(ss, mid, src)
     return {'ok': True, 'n': len(e.ops), 'ops': e.ops, 'manifest': e.manifest(deleted)}
 
 
 class BadDest(Exception): pass
+
+
+class StaleEdits(Exception): pass
 
 
 def check_dest(dest, src):

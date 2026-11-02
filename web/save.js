@@ -39,6 +39,7 @@ export function initSave($, getMid) {
   const bUndo = mk('bUndoEdit', 'Undo edit'); bUndo.disabled = false; bUndo.hidden = true; bUndo.title = 'Remove the last pending edit (nothing is written until you Save or Save as)';
   let canNameEdit = false, pendingEdits = 0;
   window.addEventListener('beforeunload', (ev) => { if (pendingEdits > 0) { ev.preventDefault(); ev.returnValue = ''; } });      // edits live in the server's memory until Save: closing the window may end the server and drop them
+  const bRec = mk('bRecoverEdits', 'Recover edits'); bRec.hidden = true; bRec.title = 'Unsaved edits of an earlier session of this file (the viewer was closed or restarted) can be put back';
   const bBk = mk('bBackups', 'Backups'), bOver = mk('bSaveOver', 'Save'), bAs = mk('bSaveAs', 'Save as');
   const panel = document.createElement('div'); panel.id = 'savepanel'; panel.hidden = true; document.body.appendChild(panel);
   const show = (lines, bad, extra) => { panel.replaceChildren(); panel.className = bad ? 'bad' : 'ok'; lines.forEach(l => { const d = document.createElement('div'); d.textContent = l; panel.appendChild(d); }); if (extra) panel.appendChild(extra); const x = document.createElement('button'); x.textContent = 'close'; x.onclick = () => { panel.hidden = true; }; panel.appendChild(x); panel.hidden = false; };
@@ -47,6 +48,7 @@ export function initSave($, getMid) {
     const mid = getMid(); if (!mid) return; let info = null; try { info = await (await fetch(`/api/m/${mid}/saveinfo`)).json(); } catch (e) {}
     if (mid !== getMid()) return;      // the user switched models while saveinfo ran: do not set the buttons from the old model
     canNameEdit = !!(info && info.open && info.name_edit); const pe = (info && info.pending_edits) || 0; bUndo.hidden = !pe; bUndo.textContent = `Undo edit (${pe} pending)`; pendingEdits = pe;
+    bRec.hidden = true; if (!pe && info && info.open) { try { const st = await (await fetch(`/api/m/${mid}/edits/stored`)).json(); if (mid === getMid() && st && st.n > 0) { bRec.hidden = false; bRec.disabled = !st.usable; bRec.textContent = `Recover ${st.n} unsaved edit${st.n > 1 ? 's' : ''}`; if (!st.usable) bRec.title = st.why || 'not usable'; } } catch (e) {} }
     const a = actions(info); bBk.disabled = !a.saveas.on; bAs.disabled = !a.saveas.on; bAs.title = a.saveas.on ? 'Save a copy under a new name (never touches the original)' : a.saveas.why;
     bOver.disabled = !a.save.on; bOver.title = a.save.on ? 'Overwrite the source file (a backup is kept)' + (a.overrides.length ? ' - WARNING: safety checks switched off by the server environment: ' + a.overrides.join(', ') : '') : a.save.why;
   }
@@ -78,6 +80,7 @@ export function initSave($, getMid) {
   };
   bAs.onclick = async () => { const dest = prompt('Save as (full path of the new .rvt):'); if (dest) doSave('saveas', { dest }); };
   bOver.onclick = () => { if (confirm('Overwrite the source file? A backup of the original is kept.')) doSave('save', {}); };
+  bRec.onclick = async () => { const [r, j] = await post('edits/recover', {}); show(r.ok && j && j.ok ? [`Recovered ${j.recovered} unsaved edit${j.recovered > 1 ? 's' : ''} (${j.n} pending). Use Save as / Save to write them.`] : describeError(j, r.status), !(r.ok && j && j.ok)); refresh(); };
   bUndo.onclick = async () => { const r = await fetch(`/api/m/${getMid()}/edit/undo`, { method: 'POST' }); const j = await r.json().catch(() => null); show(r.ok ? [`Removed the last pending edit (${j.n} pending).`] : describeError(j, r.status), !r.ok); refresh(); };
   // pencil on editable string parameter rows of the inspector; the server resolves the NAME to the one parameter stored on the element and refuses anything else
   function decorate(eid, table) {

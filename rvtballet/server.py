@@ -218,6 +218,25 @@ def make_app(models):
             st, code = savemod.error_status(e); return web.json_response({'ok': False, 'code': code, 'error': savemod.user_message(e, st)}, status=st)
     async def recover(req):
         return web.json_response(savemod.recoverable(saves) if saves.available else [])
+    async def edits_stored(req):
+        """unsaved edits of an earlier session of this file (viewer restarted) that can be offered back: {n, usable, why}"""
+        mid, d = mdir(req); src = PluginContext(models).source_path(mid)
+        if not saves.available or not src or not os.path.exists(src): return web.json_response({'n': 0})
+        from . import editstore
+        def look():
+            doc = saves.doc(mid, src); ops, why = editstore.load(src, doc.fingerprint.sha256); return {'n': len(ops), 'usable': bool(ops) and not why, 'why': why}
+        try: return web.json_response(await asyncio.get_event_loop().run_in_executor(None, look))
+        except Exception as e: return web.json_response({'n': 0, 'why': str(e)[:160]})
+    async def edits_recover(req):
+        mid, d = mdir(req); src = PluginContext(models).source_path(mid)
+        if not saves.available or not src: return web.json_response({'ok': False, 'code': 'unavailable', 'error': 'saving is not available'}, status=501)
+        if mid in saves.busy: return web.json_response({'ok': False, 'code': 'locked', 'error': 'a save of this model is in progress'}, status=423)
+        saves.busy.add(mid)
+        try: return web.json_response(await asyncio.get_event_loop().run_in_executor(None, lambda: savemod.recover_edits(saves, mid, src)))
+        except Exception as e:
+            st, code = savemod.error_status(e); return web.json_response({'ok': False, 'code': code, 'error': savemod.user_message(e, st)}, status=st)
+        finally: saves.busy.discard(mid)
+    app.router.add_get('/api/m/{mid}/edits/stored', edits_stored); app.router.add_post('/api/m/{mid}/edits/recover', edits_recover)
     app.router.add_get('/api/m/{mid}/backups', backups); app.router.add_post('/api/m/{mid}/restore', run_to_completion(restore)); app.router.add_get('/api/recover', recover)
     async def edit_add(req):
         mid, d = mdir(req); src = PluginContext(models).source_path(mid)
@@ -233,7 +252,7 @@ def make_app(models):
     async def edit_undo(req):
         mid, d = mdir(req)
         if mid in saves.busy: return web.json_response({'ok': False, 'code': 'locked', 'error': 'a save of this model is in progress'}, status=423)
-        try: op = saves.edits(mid).undo()
+        try: op = saves.edits(mid).undo(); savemod.sync_edits(saves, mid, PluginContext(models).source_path(mid))
         except Exception as e:
             st, code = savemod.error_status(e); return web.json_response({'ok': False, 'code': code, 'error': savemod.user_message(e, st)}, status=st)
         return web.json_response({'ok': True, 'undone': op, 'n': len(saves.edits(mid).ops)})
