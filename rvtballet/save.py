@@ -216,7 +216,9 @@ class SaveSessions:
             from savegate import rvt_elements
             d = sg.open_doc(src, _cached_adapter()(elements_fn=rvt_elements.elements), cfg=self.cfg)      # element-level verify
             if d.version == '?':          # an explicit adapter skips pick_adapter's refusal of non-Revit bytes
-                d.close(); raise sg.UnsupportedVersion('%s is not a Revit file (unknown format, nothing can be saved)' % os.path.basename(src))
+                d.close()
+                if open(src, 'rb').read(8) == b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1': raise SourceDamaged('the model file is damaged (an OLE container whose Revit streams cannot be read); nothing was written')
+                raise sg.UnsupportedVersion('%s is not a Revit file (unknown format, nothing can be saved)' % os.path.basename(src))
             self.docs[mid] = d
         return d
     def edits(self, mid):
@@ -349,6 +351,7 @@ def _guard(fn, *a, **k):
 def error_status(exc):
     """savegate exception -> (http status, machine code)"""
     n = type(exc).__name__
+    if n == 'Bad' and 'no layout fits' in str(exc): return (409, 'source_damaged')      # writer could not lay out a damaged source
     return {'Conflict': (409, 'conflict'), 'GateClosed': (409, 'gate_closed'), 'OverwriteDisabled': (409, 'overwrite_disabled'),
             'Exists': (409, 'exists'), 'SaveError': (409, 'refused'), 'Locked': (423, 'locked'), 'VerifyFailed': (422, 'verify_failed'),
             'EditError': (400, 'edit_error'), 'LightVerifyFailed': (422, 'verify_failed'), 'LayoutChanged': (409, 'layout_changed'), 'TooBig': (507, 'too_big'), 'OutputUnreadable': (422, 'output_unreadable'), 'BadDest': (400, 'bad_dest'), 'StaleEdits': (409, 'stale_edits'), 'Workshared': (409, 'workshared'), 'ReadOnlyTarget': (409, 'read_only'), 'GroupOrOption': (409, 'group_or_option'), 'SourceDamaged': (409, 'source_damaged'), 'CloudPlaceholder': (409, 'cloud_placeholder'), 'NetworkFS': (409, 'network_fs'), 'UnsupportedVersion': (415, 'unsupported_version'), 'DiskError': (507, 'disk_error')}.get(n, (500, 'error'))
