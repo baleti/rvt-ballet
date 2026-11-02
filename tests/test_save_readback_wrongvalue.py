@@ -45,3 +45,11 @@ save._readback(buf, nbN, [mk(v0 + 0.25)])              # honest number passes
 try: save._readback(buf, nbN, [mk(v0 + 7.0)]); print('FAIL wrong number accepted'); sys.exit(1)
 except sg.VerifyFailed as x: print('refused wrong number:', str(x)[:100])
 print('save readback wrong-number OK')
+
+# Int: right element and parameter, WRONG integer (reader returns int; honest 2 passes, requested 3 vs written 2 refused)
+mi = lambda x: edit.validate_op({'op': 'set_num', 'eid': 356, 'param': 'Detail Level', 'value': x, 'kind': 'Int'})
+nbI, _ = edit.apply_full(buf, [mi(2)])
+save._readback(buf, nbI, [mi(2)])                      # honest integer passes
+try: save._readback(buf, nbI, [mi(3)]); print('FAIL wrong integer accepted'); sys.exit(1)
+except sg.VerifyFailed as x: print('refused wrong integer:', str(x)[:100])
+print('save readback wrong-int OK')
