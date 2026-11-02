@@ -523,6 +523,36 @@ def _same_mark_base(old, new):
     return bool(old) and (new.startswith(old) or strip(old) == strip(new))      # 'D-1' -> 'D-1(610)', 'W-16(1162)' -> 'W-16(1467)', and 'D-1(610)' -> 'D-1' (moved back onto the grid line)
 
 
+def _tris_of(buf, eid):
+    """flat list of the triangle vertices (feet) of one FamilyInstance from the geometry reader, [] if none"""
+    import sys, tempfile
+    for lib in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab')):
+        if lib not in sys.path: sys.path.insert(0, lib)
+    import rvt_geometry as G
+    fd, tmp = tempfile.mkstemp(suffix='.rte')
+    try:
+        os.write(fd, buf); os.close(fd)
+        r = G.element_geometry(tmp, eid)
+        if not (isinstance(r, dict) and r.get('class') == 'FamilyInstance'): return []
+        return [v for sl in r.get('solids', ()) if isinstance(sl, dict) for tr in sl.get('triangles', ()) for v in tr]
+    finally:
+        try: os.remove(tmp)
+        except OSError: pass
+        try: G._ctx.pop(tmp, None)
+        except Exception: pass
+
+
+def _rot_fit(a, b):
+    """best-fit rotation about the vertical axis (degrees) taking vertex list a to b (translation removed), the largest xy residual and the largest z change"""
+    import math
+    ca = [sum(v[i] for v in a) / len(a) for i in (0, 1)]; cb = [sum(v[i] for v in b) / len(b) for i in (0, 1)]; sd = sc = 0.0
+    for p, q in zip(a, b):
+        x, y, u, w = p[0] - ca[0], p[1] - ca[1], q[0] - cb[0], q[1] - cb[1]; sd += x * u + y * w; sc += x * w - y * u
+    th = math.atan2(sc, sd); c, sn = math.cos(th), math.sin(th)
+    res = max(math.hypot(c * (p[0] - ca[0]) - sn * (p[1] - ca[1]) - (q[0] - cb[0]), sn * (p[0] - ca[0]) + c * (p[1] - ca[1]) - (q[1] - cb[1])) for p, q in zip(a, b))
+    return math.degrees(th), res, max(abs(p[2] - q[2]) for p, q in zip(a, b))
+
+
 def _bbox_of(buf, eid):
     """bounding box [[x0,y0,z0],[x1,y1,z1]] (feet) of one FamilyInstance read from bytes via the geometry reader, or None (other classes / no box)"""
     import sys, tempfile
@@ -569,6 +599,15 @@ def _readback(src_buf, nb, ops):
                     if b1 is None: bad.append('moved element %d: no geometry in the output' % o['eid'])
                     elif b1 == b0 and nb != src_buf: pass      # box unchanged but the output differs from the source: the cached tessellation of some elements (HVAC duct 1365188) is not rebuilt by the writer although Revit moves the element exactly (+2 ft, API readback); not a witness. Byte-identical output is still refused below
                     elif any(abs((b1[i][k] - b0[i][k]) - d[k]) > 1e-6 * max(1.0, abs(d[k])) + 1e-6 for i in (0, 1) for k in range(3)): bad.append('moved element %d: displacement in the output is not the requested (%.4g, %.4g, %.4g)' % ((o['eid'],) + d))
+    for o in [r for r in mv if r['op'] == 'rotate']:      # the rotation itself: the element's mesh must be turned by exactly o['deg'] about the vertical axis (rigid, z unchanged); FamilyInstance only, skipped when the geometry reader has no mesh for the SOURCE element
+        try: t0 = _tris_of(src_buf, o['eid']); t1 = _tris_of(nb, o['eid']) if t0 else None
+        except Exception: t0, t1 = None, None
+        if not t0: continue
+        if not t1 or len(t1) != len(t0): bad.append('rotated element %d: geometry in the output does not match the source mesh' % o['eid']); continue
+        if t1 == t0 and nb != src_buf: continue      # cached tessellation not rebuilt (same exemption as moves); byte-identical output is refused below
+        import math
+        th, res, dz = _rot_fit(t0, t1); err = abs(math.remainder(th - o['deg'], 360.0))
+        if err > 1e-3 or res > 1e-4 or dz > 1e-5: bad.append('rotated element %d: the output is turned by %.4g deg (residual %.2g ft, dz %.2g), not the requested %.4g' % (o['eid'], th, res, dz, o['deg']))
     for o in fl:
         if o['eid'] not in b: bad.append('field-edited element %d missing in the output' % o['eid'])
         else:
