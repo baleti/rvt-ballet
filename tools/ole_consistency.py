@@ -18,11 +18,20 @@ def check(src):
     if msh != 6: P.append('mini sector shift %d' % msh)
     ss = 1 << ssh; ms = 1 << msh
     nfat, dirstart, _, cutoff, minifat0, nminifat, difat0, ndifat = struct.unpack_from('<IIIIIIII', d, 0x2C)
+    # header fields a conforming reader ignores (and so a dead-byte flip could pass unnoticed); Revit rejected a flip in the unused DIFAT part, so treat deviations as findings (0 on the local corpus)
+    major, minor = struct.unpack_from('<HH', d, 0x1A)[0], struct.unpack_from('<H', d, 0x18)[0]
+    if (major, ssh) not in ((3, 9), (4, 12)): P.append('major version %d with sector shift %d' % (major, ssh))
+    if minor != 0x3E: P.append('minor version %04x' % minor)
+    if any(d[0x08:0x18]): P.append('header CLSID not zero')
+    if any(d[0x22:0x28]): P.append('header reserved bytes not zero')
+    if ssh == 9 and struct.unpack_from('<I', d, 0x28)[0]: P.append('directory sector count set in a v3 file')
+    if struct.unpack_from('<I', d, 0x34)[0] != 0: P.append('transaction signature %08x' % struct.unpack_from('<I', d, 0x34)[0])
     if cutoff != 4096: P.append('mini stream cutoff %d' % cutoff)
     hdr = ss if ss > 512 else 512; nsec = (len(d) - hdr) // ss
     if (len(d) - hdr) % ss: P.append('file size %d is not header + n*%d (partial last sector of %d bytes)' % (len(d), ss, (len(d) - hdr) % ss))
     off = lambda s: (s + 1) * ss
     def sec(s): return d[off(s):off(s) + ss]
+    if not ndifat and difat0 != END: P.append('first DIFAT sector %08x although the DIFAT is empty' % difat0)
     # DIFAT
     fatsecs = [x for x in struct.unpack_from('<109I', d, 0x4C)]
     difsecs = []; s = difat0; seen = set()
@@ -63,6 +72,8 @@ def check(src):
         return out
     # directory
     dsecs = chain(dirstart, 'directory')
+    nds = struct.unpack_from('<I', d, 0x28)[0]
+    if ssh == 12 and dsecs and nds != len(dsecs): P.append('header says %d directory sectors, chain has %d' % (nds, len(dsecs)))
     dd = b''.join(sec(x) for x in dsecs); ents = []
     for i in range(len(dd) // 128):
         e = dd[i * 128:(i + 1) * 128]; nl = struct.unpack_from('<H', e, 64)[0]; typ = e[66]
