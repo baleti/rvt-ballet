@@ -6,6 +6,8 @@ import sys, os, time
 here, p, stop = sys.argv[1], sys.argv[2], int(sys.argv[3]); sys.path.insert(0, here)
 os.environ.setdefault('RVTBALLET_EDIT_BACKEND', 'rvtedit')
 from rvtballet import save
+if os.environ.get("KILL_WIDEN_YEAR"):      # research only: year gate widened in this child process (shipped gate unchanged)
+    from savegate import adapters; adapters.RVT_WRITABLE = adapters.RVT_WRITABLE + (os.environ["KILL_WIDEN_YEAR"],)
 ss = save.SaveSessions(); ss.doc("m1", p)
 import json
 OP = json.loads(os.environ["KILL_OP"]) if os.environ.get("KILL_OP") else {"op": "set_string", "eid": 0, "field": "SymbolInfo.m_name"}
