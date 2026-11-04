@@ -21,7 +21,7 @@ async def main(out, src0):
         info = await (await c.get('/api/m/m/saveinfo')).json(); row['overwrite_enabled'] = bool(info.get('allow_overwrite') and info.get('gate_open'))
         import sqlite3, subprocess
         HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); subprocess.run([os.path.join(HERE, 'rvt-ballet'), 'convert', src, _T + '/c_src'], capture_output=True, timeout=3600)
-        cand = [x[0] for x in sqlite3.connect(_T + '/c_src/model.sqlite').execute("select id from el where cls='FamilyInstance' and bb is not null order by id limit 50")]
+        cand = [x[0] for x in sqlite3.connect(_T + '/c_src/model.sqlite').execute("select id from el where cls='FamilyInstance' and bb is not null order by id limit 50 offset %d" % int(os.environ.get('CAND_OFFSET', 0)))]
         for e in ([int(os.environ['EID'])] if os.environ.get('EID') else cand):
             r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': e, 'dx': 1.0})
             if r.status == 200: eid = e; break
