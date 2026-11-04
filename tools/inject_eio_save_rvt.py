@@ -14,7 +14,7 @@ def attempt(fail):
     def wrap(c):
         def g(*a, **k):
             n[0] += 1
-            if fail and (n[0] >= fail if os.environ.get('PERSIST') else n[0] == fail): names.append(c); raise OSError(5, 'injected EIO at call %d (%s)' % (fail, c))
+            if fail and (n[0] >= fail if os.environ.get('PERSIST') else n[0] == fail): names.append(c); raise OSError(int(os.environ.get('INJECT_ERRNO', 5)), 'injected errno at call %d (%s)' % (fail, c))
             return orig[c](*a, **k)
         return g
     for c in calls: setattr(os, c, wrap(c))
