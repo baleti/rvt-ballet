@@ -703,7 +703,7 @@ def _readback(src_buf, nb, ops):
                     d = (o['dx'], o['dy'], o['dz'])
                     if b1 is None: bad.append('moved element %d: no geometry in the output' % o['eid'])
                     elif b1 == b0 and nb != src_buf: pass      # box unchanged but the output differs from the source: the cached tessellation of some elements (HVAC duct 1365188) is not rebuilt by the writer although Revit moves the element exactly (+2 ft, API readback); not a witness. Byte-identical output is still refused below
-                    elif any(abs((b1[i][k] - b0[i][k]) - d[k]) > 1e-6 * max(1.0, abs(d[k])) + 1e-6 for i in (0, 1) for k in range(3)): bad.append('moved element %d: displacement in the output is not the requested (%.4g, %.4g, %.4g)' % ((o['eid'],) + d))
+                    elif any(abs((b1[i][k] - b0[i][k]) - d[k]) > 1e-6 * max(1.0, abs(d[k])) + 1e-6 for i in (0, 1) for k in range(3)): bad.append('moved element %d: displacement in the output is not the requested (%.4g, %.4g, %.4g); measured box shift (%s)' % ((o['eid'],) + d + (' | '.join(', '.join('%.9g' % (b1[i][k] - b0[i][k]) for k in range(3)) for i in (0, 1)),)))
     for o in [r for r in mv if r['op'] == 'rotate']:      # the rotation itself: the element's mesh must be turned by exactly o['deg'] about the vertical axis (rigid, z unchanged); FamilyInstance only, skipped when the geometry reader has no mesh for the SOURCE element
         try: t0 = _tris_of(src_buf, o['eid']); t1 = _tris_of(nb, o['eid']) if t0 else None
         except Exception: t0, t1 = None, None
