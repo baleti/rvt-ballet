@@ -17,5 +17,7 @@ for tag, mt in (('epoch0', 0), ('future2100', 4102444800), ('pre1970', -86400 * 
     assert sha(p) != h0, tag + ': file unchanged'
     bk = r.get('backup') if isinstance(r, dict) else None
     assert bk and sha(bk) == h0, tag + ': backup is not the original'
-    print(tag, 'saved, backup == original')
+    save.restore_backup(ss, 'm' + tag, p, 0)
+    assert sha(p) == h0, tag + ': restore did not return the original'
+    print(tag, 'saved, backup == original, restore byte-identical, restored mtime %d' % os.stat(p).st_mtime)
 print('clock-skew mtimes OK')
