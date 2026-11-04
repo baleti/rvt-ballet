@@ -25,7 +25,7 @@ def attempt(fail):
         def __exit__(s, *a): return s.f.__exit__(*a)
         def __getattr__(s, k): return getattr(s.f, k)
     def wopen(*a, **k):
-        f = oo(*a, **k); m = a[1] if len(a) > 1 else k.get('mode', 'r'); return W(f) if 'wb' in m else f
+        f = oo(*a, **k); m = a[1] if len(a) > 1 else k.get('mode', 'r'); return W(f) if 'wb' in m and str(a[0]).startswith((d, T + '/c')) else f
     def wfd(*a, **k):
         f = ofd(*a, **k); m = a[1] if len(a) > 1 else k.get('mode', 'r'); return W(f) if 'wb' in m else f
     builtins.open = wopen; os.fdopen = wfd
