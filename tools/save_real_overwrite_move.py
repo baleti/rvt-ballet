@@ -27,7 +27,7 @@ async def main(out, src0):
             if r.status == 200: eid = e; break
         row['eid'] = eid; assert eid is not None, 'no movable candidate'
         r = await c.post('/api/m/m/save', json={}); j = await r.json(); row['save_status'] = r.status
-        if r.status != 200: row['result'] = 'SAVE_%d %s' % (r.status, j.get('code')); row['detail'] = str(j.get('error'))[:160]; row['edited_class'] = str(pr[eid].get('class') if isinstance(pr[eid], dict) else None); row['report_keys'] = sorted((j.get('report') or {}).keys()); row['unexpected_sample'] = str((j.get('report') or {}).get('unexpected', ''))[:600]; print(row); json.dump(row, open(out, 'w')); return
+        if r.status != 200: row['result'] = 'SAVE_%d %s' % (r.status, j.get('code')); row['detail'] = str(j.get('error'))[:160]; row['report_keys'] = sorted((j.get('report') or {}).keys()); row['unexpected_sample'] = str((j.get('report') or {}).get('unexpected', ''))[:600]; print(row); json.dump(row, open(out, 'w')); return
         row['verify_diffs'] = j['verify']['n_unexpected']; row['backup_is_original'] = bool(j.get('backup')) and sha(j['backup']) == h0; row['file_changed'] = sha(src) != h0
         if os.environ.get('KEEP_OUT'): shutil.copy(src, os.environ['KEEP_OUT'])      # keep the in-place SAVE! output (before the restore) for a VM open; local only
         r = await c.post('/api/m/m/restore', json={'n': 0, 'confirm': True}); jr = await r.json(); row['restored_identical'] = r.status == 200 and sha(src) == h0
