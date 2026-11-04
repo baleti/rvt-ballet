@@ -20,12 +20,11 @@ async def main(out, src):
         info = await (await c.get('/api/m/m/saveinfo')).json()
         if not info.get('open'): row['result'] = 'NOT_OPEN'; print(row); return
         eid = None
+        if os.environ.get('SKIP_WARNED'):      # research: drop candidates the writer warns about (group / design option / hosted), using the writer's own membership check on the source
+            from rvtballet import save as _sv
+            mem = _sv.membership(open(src, 'rb').read(), cand); row['skipped_warned'] = len(mem); cand = [e for e in cand if e not in mem]
         for e in cand:                        # first instance the writer can move
             r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': e, 'dx': 1.0}); j = await r.json()
-            if r.status == 200 and os.environ.get('SKIP_WARNED'):     # research: skip candidates whose edit record mentions a group / design option / host (writer warns on those)
-                txt = json.dumps(j) + json.dumps(await (await c.get('/api/m/m/edits')).json())
-                if any(k in txt for k in ('hosted on', 'group', 'design option')):
-                    await c.post('/api/m/m/edit/undo', json={}); row['skipped_warned'] = row.get('skipped_warned', 0) + 1; continue
             if r.status == 200: eid = e; break
             row.setdefault('refused', []).append(j.get('error', '')[:60])
         if eid is None: row['result'] = 'NO_MOVABLE_CANDIDATE'; row['refused'] = row.get('refused', [])[:3]; print(row); json.dump(row, open(out, 'w')); return
