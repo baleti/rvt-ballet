@@ -1,0 +1,55 @@
+"""inject_write_save_rvt.py (derived from inject_eio_save_rvt.py): short write + OSError(ENOSPC) at the k-th write() to any file opened wb (temp file, backup part); WFRAC = fraction of that write that lands first (default 0.5). Original docstring: inject_eio_save_rvt.py FILE.rvt|.rte OPJSON : raise OSError(EIO) ONCE at each fsync/replace/rename/unlink/link call of an in-place save_overwrite (exception injection, the sibling of kill_every_call_rvt.py SIGKILL). Per call: refused with the original byte-identical, or saved with an ok-validating file AND a hash-equal backup present. PERSIST=1: every call from k on fails (persistent EIO). Prints per-call lines + a summary."""
+import os, sys, json, shutil, tempfile, hashlib, glob
+T = tempfile.mkdtemp()
+open(T+'/c.json','w').write('{"allow_overwrite": true}'); open(T+'/g.json','w').write('{"rvt": {"*": "open"}}')
+os.environ.update(SAVEGATE_JOURNAL=T+'/j', SAVEGATE_CACHE=T+'/c', DWG_BALLET_CONFIG=T+'/c.json', SAVEGATE_GATE=T+'/g.json', RVTBALLET_ALLOW_OVERWRITE='1', RVTBALLET_EDIT_BACKEND='rvtedit', RVTBALLET_ALLOW_LAYOUT_CHANGE='1')
+sys.path[:0] = [os.path.expanduser('~/src/rvt-viewer'), os.path.expanduser('~/src/savegate'), os.path.expanduser('~/rvt-research')]
+from rvtballet import save
+src = sys.argv[1]; sha = lambda p: hashlib.sha256(open(p,'rb').read()).hexdigest(); h0 = sha(src)
+op = json.loads(sys.argv[2]); calls = ('fsync','replace','rename','unlink','link')
+names = []
+def attempt(fail):
+    d = tempfile.mkdtemp(dir=T); p = d+'/a.rvt'; shutil.copy(src, p)
+    ss = save.SaveSessions(); ss.doc('m', p); save.add_edit(ss, 'm', p, dict(op)); n = [0]; orig = {c: getattr(os, c) for c in calls}
+    import builtins
+    FRAC = float(os.environ.get('WFRAC', 0.5)); oo = builtins.open; ofd = os.fdopen
+    class W:
+        def __init__(s, f): s.f = f
+        def write(s, data):
+            n[0] += 1
+            if fail and (n[0] >= fail if os.environ.get('PERSIST') else n[0] == fail):
+                names.append('write'); cut = int(len(data) * FRAC); s.f.write(bytes(data)[:cut]); s.f.flush()
+                raise OSError(int(os.environ.get('INJECT_ERRNO', 28)), 'injected short write at call %d (%d of %d bytes)' % (fail, cut, len(data)))
+            return s.f.write(data)
+        def __enter__(s): s.f.__enter__(); return s
+        def __exit__(s, *a): return s.f.__exit__(*a)
+        def __getattr__(s, k): return getattr(s.f, k)
+    def wopen(*a, **k):
+        f = oo(*a, **k); m = a[1] if len(a) > 1 else k.get('mode', 'r'); return W(f) if 'wb' in m else f
+    def wfd(*a, **k):
+        f = ofd(*a, **k); m = a[1] if len(a) > 1 else k.get('mode', 'r'); return W(f) if 'wb' in m else f
+    builtins.open = wopen; os.fdopen = wfd
+    try: save.save_overwrite(ss, 'm', p); res = 'saved'
+    except BaseException as e: res = 'raised ' + type(e).__name__
+    finally:
+        builtins.open = oo; os.fdopen = ofd
+    stray = [x for x in glob.glob(d+'/*')+glob.glob(d+'/.*') if os.path.basename(x) != 'a.rvt' and os.path.isfile(x) and not os.path.basename(x).startswith('.savegate')]
+    ok = ''
+    bks = [x for pat in (d+'/.savegate/*', T+'/c/*/*') for x in glob.glob(pat) if os.path.isfile(x) and not x.endswith('.part')]
+    hb = any(sha(x) == h0 for x in bks)
+    if res == 'saved':
+        from savegate.adapters import RvtAdapter
+        ok = str(RvtAdapter().validate(open(p,'rb').read()))[:20]
+    return res + ' ' + ok + (' BACKUP=' + str(hb) if res == 'saved' else ''), sha(p) == h0, n[0], stray
+import subprocess, ast
+if os.environ.get('EIO_K') is not None:      # child: one attempt in a fresh process (memory guard counts this process RSS, so repeated saves in one process get TooBig)
+    print('RESULT', repr(attempt(int(os.environ['EIO_K'])))); sys.exit(0)
+def child(k):
+    r = subprocess.run([sys.executable, os.path.abspath(__file__)] + sys.argv[1:], env=dict(os.environ, EIO_K=str(k)), capture_output=True, text=True)
+    line = [l for l in r.stdout.splitlines() if l.startswith('RESULT ')]
+    return ast.literal_eval(line[-1][7:]) if line else ('CHILD FAILED ' + r.stderr[-200:], False, 0, [])
+r0 = child(0); total = r0[2]; print('warm', r0, flush=True); out = {}
+for k in range(1, total+1):
+    res, same, _, stray = child(k); print(k, res, 'orig' if same else 'CHANGED', stray, flush=True)
+    key = (res, 'orig' if same else 'changed', bool(stray)); out[key] = out.get(key, 0) + 1
+print(out)
