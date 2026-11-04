@@ -7,7 +7,7 @@ os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; t = tempfile.mkdtemp(prefix='uwy-
 from rvtballet import save
 root = sys.argv[1]; years = sys.argv[2:] or sorted(os.listdir(root)); bad = 0
 for y in years:
-    fs = [os.path.join(root, y, f) for f in os.listdir(os.path.join(root, y)) if f.lower().endswith(('.rvt', '.rfa', '.rte'))]
+    fs = [os.path.join(root, y, f) for f in os.listdir(os.path.join(root, y)) if f.lower().endswith(tuple(os.environ.get('EXTS', '.rvt .rfa .rte').split()))]
     if not fs: continue
     f = min(fs, key=os.path.getsize); d = tempfile.mkdtemp(prefix='uwd-', dir=t); p = os.path.join(d, 'a' + os.path.splitext(f)[1]); shutil.copy(f, p)
     h0 = hashlib.sha256(open(p, 'rb').read()).hexdigest()
