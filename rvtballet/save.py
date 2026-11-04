@@ -657,6 +657,25 @@ def _trf_origin(buf, eid):
         import shutil; shutil.rmtree(d, True)
 
 
+def _wall_line_origin(buf, eid):
+    """first GLine.m_origin (3 finite doubles) of an SWall record = the wall's location line, or None. A wall move must shift it by exactly (dx,dy,dz): the placement Trf.m_or alone moves a cell pattern origin only (cols2 walls 301553-301556: the wall does not move, and 301556 then fails to open in Revit 2024, InsufficientResources)"""
+    import sys, tempfile, struct, math
+    for lib in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab'), os.path.expanduser('~/rvt-research/edit-lab')):
+        if lib not in sys.path: sys.path.insert(0, lib)
+    import rvtedit
+    d = tempfile.mkdtemp(prefix='rvtballet-gl-'); p = os.path.join(d, 'x.rvt')
+    try:
+        with open(p, 'wb') as f: f.write(buf)
+        ed = rvtedit.Edit(p)
+        for l in ed.g.e.trace(eid)[3]:
+            if l[1] == 'GLine.m_origin' and l[3] - l[2] == 24:
+                v = struct.unpack_from('<3d', ed.g.bj, l[2])
+                return v if all(math.isfinite(x) and abs(x) < 1e7 for x in v) else None
+        return None
+    finally:
+        import shutil; shutil.rmtree(d, True)
+
+
 def _bbox_of(buf, eid):
     """bounding box [[x0,y0,z0],[x1,y1,z1]] (feet) of one FamilyInstance read from bytes via the geometry reader, or None (other classes / no box)"""
     import sys, tempfile
@@ -724,8 +743,12 @@ def _readback(src_buf, nb, ops):
             if _bbox_class(src_buf, o['eid']) not in ('SWall', 'LinearDimString'): continue
             w0 = _trf_origin(src_buf, o['eid']); w1 = _trf_origin(nb, o['eid']) if w0 else None
         except Exception: continue
-        if w0 is None: continue
         d = (o['dx'], o['dy'], o['dz'])
+        if _bbox_class(src_buf, o['eid']) == 'SWall':      # the location line itself must move (the Trf origin alone is not a wall move)
+            try: g0 = _wall_line_origin(src_buf, o['eid']); g1 = _wall_line_origin(nb, o['eid']) if g0 else None
+            except Exception: g0 = g1 = None
+            if g0 is not None and (g1 is None or any(abs((g1[i] - g0[i]) - d[i]) > 1e-6 * max(1.0, abs(d[i])) + 1e-6 for i in range(3))): bad.append('moved wall %d: the wall location line in the output is not the source moved by (%.4g, %.4g, %.4g) (only a pattern origin moved)' % ((o['eid'],) + d)); continue
+        if w0 is None: continue
         if w1 is None or any(abs((w1[i] - w0[i]) - d[i]) > 1e-6 * max(1.0, abs(d[i])) + 1e-6 for i in range(3)): bad.append('moved wall %d: the placement origin in the output is not the source moved by (%.4g, %.4g, %.4g)' % ((o['eid'],) + d))
     for o in dl:      # a declared deletion must really have happened: the gate accepts a manifest that names a still-present element as deleted (tests/test_save_escape_delete.py)
         if o['eid'] in a and o['eid'] in b: bad.append('element %d was declared deleted but is still in the output' % o['eid'])
