@@ -27,7 +27,7 @@ async def main(out, src):
         if eid is None: row['result'] = 'NO_MOVABLE_CANDIDATE'; row['refused'] = row.get('refused', [])[:3]; print(row); json.dump(row, open(out, 'w')); return
         dest = os.path.join(_T, 'o.rvt'); r = await c.post('/api/m/m/saveas', json={'dest': dest}); j = await r.json()
         if r.status != 200: row['result'] = 'SAVE_%d %s' % (r.status, j.get('code')); row['n_unexpected'] = (j.get('report') or {}).get('n_unexpected'); print(row); json.dump(row, open(out, 'w')); return
-        row['verify_diffs'] = j['verify']['n_unexpected']; row['warnings'] = bool(j.get('warnings'))
+        row['verify_diffs'] = j['verify']['n_unexpected']; row['warnings'] = bool(j.get('warnings')); row['warning_text'] = [str(x)[:140] for x in (j.get('warnings') or [])][:3]
     r = subprocess.run([os.path.join(HERE, 'rvt-ballet'), 'convert', dest, _T + '/c_out'], capture_output=True, text=True, timeout=3600)
     a, b = bbs(_T + '/c_src'), bbs(_T + '/c_out'); moved = {i for i in a if i in b and a[i] != b[i]}
     d = [[b[eid][k][x] - a[eid][k][x] for x in range(3)] for k in (0, 1)] if eid in b else None
