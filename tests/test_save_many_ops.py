@@ -10,7 +10,7 @@ if not os.path.exists(S) or not save.SaveSessions().available: print('skip'); sy
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 ss = save.SaveSessions()
 p = T + '/m.rte'; shutil.copy(S, p); h0 = sha(p); d = ss.doc('m', p)
-E = [301553,301554,301555,301556,301557,301558,301559,301560,301561,301562,301563,301564,301565,301581,301583,301584,301585,301586,301592,301593,301594,301595,301596,301597,301598,301599,301600,301601,301602,301603]
+E = [int(x) for x in os.environ.get("EIDS", "301553").split(",")]
 d = ss.doc('m', p)
 nb, _ = edit.apply_full(d.buf, [edit.validate_op({'op': 'move', 'eid': e, 'dx': 0.5 + i * 0.25, 'dy': -0.1 * i}) for i, e in enumerate(E)])
 try:
