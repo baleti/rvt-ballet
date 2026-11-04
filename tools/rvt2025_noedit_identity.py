@@ -9,12 +9,12 @@ from rvtballet import server, save
 sg = save._import(); from savegate import adapters; adapters.RVT_WRITABLE = tuple(adapters.RVT_WRITABLE) + ('2025',)
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 def streams(p):
-    from savegate import cfb
+    import cfb
     c = cfb.CFB(open(p, 'rb').read()); return {k: hashlib.sha256(v.data).hexdigest() for k, v in c.streams().items()}
 async def run(files):
     from aiohttp.test_utils import TestClient, TestServer
     models = server.Models()
-    async with TestClient(TestServer(server.make_app(models))) as c:
+    async with TestClient(TestServer(server.make_app(models)), timeout=__import__('aiohttp').ClientTimeout(total=None)) as c:
         for k, f in enumerate(files):
             src = os.path.join(_T, 's%d.rvt' % k); shutil.copy(f, src); h0 = sha(src); md = os.path.join(_T, 'm%d' % k); os.makedirs(md); mid = 'm%d' % k
             models.m[mid] = {'dir': md, 'name': 'a', 'src': src}; out = os.path.join(_T, 'o%d.rvt' % k)
