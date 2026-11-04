@@ -14,7 +14,7 @@ async def main(src, eid, out):
     models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': work}
     async with TestClient(TestServer(server.make_app(models))) as c:
         c.session._timeout = aiohttp.ClientTimeout(total=None); await c.get('/api/m/m/saveinfo')
-        r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': eid, 'dx': 1.0, 'dy': 0.0, 'dz': 0.0}); print('edit', r.status)
+        r = await c.post('/api/m/m/edit', json=dict(json.loads(os.environ['LCS_OP']), eid=eid) if os.environ.get('LCS_OP') else {'op': 'move', 'eid': eid, 'dx': 1.0, 'dy': 0.0, 'dz': 0.0}); print('edit', r.status, '' if r.status == 200 else str((await r.text())[:200]))
         r = await c.post('/api/m/m/save', json={}); j = await r.json(); rep = j.get('report') or j.get('verify') or {}
         print('save', r.status, j.get('code'), str(j.get('error') or '')[:200], 'n_unexpected', rep.get('n_unexpected'), 'changed', sha(work) != h0, 'size', os.path.getsize(work))
         if r.status == 200 and sha(work) != h0: shutil.copy(work, out); print('kept', sha(out)[:6])
