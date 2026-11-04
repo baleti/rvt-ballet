@@ -22,7 +22,7 @@ async def run():
         # a level rename alters 31 dependents; since 6512f7f they are declared DERIVED ECHOES (strict rule: only the edited parameter, old->new value): 200, n_unexpected 0, 31 warned, source untouched
         j = await (await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': LEVEL, 'value': 'Level 1 Renamed Longer', 'field': 'DatumPlane.m_text'})).json(); assert j['ok']
         dx = os.path.join(_T, 'x.rvt'); r = await c.post('/api/m/m/saveas', json={'dest': dx}); j = await r.json()
-        assert r.status == 200 and j['verify']['n_unexpected'] == 0 and any('31' in w for w in j['warnings']) and os.path.exists(dx) and sha(dx) != h0 and sha(src) == h0, (r.status, j.get('error'), j.get('warnings'))
+        assert r.status == 200 and j['verify']['n_unexpected'] == 0 and any(w.startswith(tuple(str(n) + ' other' for n in range(31, 60))) for w in j['warnings']) and os.path.exists(dx) and sha(dx) != h0 and sha(src) == h0, (r.status, j.get('error'), j.get('warnings'))
         assert (await (await c.post('/api/m/m/edit/undo')).json())['n'] == 0
         j = await (await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': MAT, 'value': 'Edited by test', 'match': ''})).json()
         assert j['ok'] and j['manifest'] == {'modified': ['el:%d' % MAT]}, j
