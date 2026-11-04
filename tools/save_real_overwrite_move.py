@@ -22,11 +22,15 @@ async def main(out, src0):
         import sqlite3, subprocess
         HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); subprocess.run([os.path.join(HERE, 'rvt-ballet'), 'convert', src, _T + '/c_src'], capture_output=True, timeout=3600)
         cand = [x[0] for x in sqlite3.connect(_T + '/c_src/model.sqlite').execute("select id from el where cls='FamilyInstance' and bb is not null order by id limit 50 offset %d" % int(os.environ.get('CAND_OFFSET', 0)))]
+        eid = None; skipped = 0
         for e in ([int(os.environ['EID'])] if os.environ.get('EID') else cand):
             r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': e, 'dx': 1.0})
-            if r.status == 200: eid = e; break
-        row['eid'] = eid; assert eid is not None, 'no movable candidate'
-        r = await c.post('/api/m/m/save', json={}); j = await r.json(); row['save_status'] = r.status
+            if r.status != 200: continue
+            eid = e; r = await c.post('/api/m/m/save', json={}); j = await r.json(); row['save_status'] = r.status
+            if r.status == 409 and j.get('code') == 'group_or_option' and not os.environ.get('EID'):      # hosted/grouped candidate: the gate refused correctly, undo the pending edit and try the next one
+                skipped += 1; await c.post('/api/m/m/edit/undo', json={}); continue
+            break
+        row['eid'] = eid; row['hosted_refusals_skipped'] = skipped; assert eid is not None, 'no movable candidate'
         if r.status != 200: row['result'] = 'SAVE_%d %s' % (r.status, j.get('code')); row['detail'] = str(j.get('error'))[:160]; row['report_keys'] = sorted((j.get('report') or {}).keys()); row['unexpected_sample'] = str((j.get('report') or {}).get('unexpected', ''))[:600]; print(row); json.dump(row, open(out, 'w')); return
         row['verify_diffs'] = j['verify']['n_unexpected']; row['backup_is_original'] = bool(j.get('backup')) and sha(j['backup']) == h0; row['file_changed'] = sha(src) != h0
         if os.environ.get('KEEP_OUT'): shutil.copy(src, os.environ['KEEP_OUT'])      # keep the in-place SAVE! output (before the restore) for a VM open; local only
