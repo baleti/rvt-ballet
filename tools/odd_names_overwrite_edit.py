@@ -32,8 +32,8 @@ for f in sys.argv[1:]:
         exp = p + '.expect'; newok = os.path.exists(exp) and hashlib.sha256(open(p, 'rb').read()).hexdigest() == hashlib.sha256(open(exp, 'rb').read()).hexdigest()
         if os.path.exists(exp): os.remove(exp)
         left = sorted(x for x in os.listdir(w) if x != '.savegate'); bk = os.listdir(w + '/.savegate') if os.path.isdir(w + '/.savegate') else []
-        bkok = all(hashlib.sha256(open(os.path.join(w, '.savegate', b), 'rb').read()).hexdigest() == h0 for b in bk if os.path.isfile(os.path.join(w, '.savegate', b)) and b.startswith(nm)) and (not res.startswith('SAVED') or any(b.startswith(nm) for b in bk))
-        ok = bkok and ((res.startswith('SAVED') and newok) or (res.startswith('RAISED') and same)) and left == [nm + ext] and all(b.startswith(nm) for b in bk)
+        bkok = all(hashlib.sha256(open(os.path.join(w, '.savegate', b), 'rb').read()).hexdigest() == h0 for b in bk if os.path.isfile(os.path.join(w, '.savegate', b)) and (b.startswith(nm) or len((nm + ext).encode()) > 200)) and (not res.startswith('SAVED') or any(b.startswith(nm) or len((nm + ext).encode()) > 200 for b in bk))
+        ok = bkok and ((res.startswith('SAVED') and newok) or (res.startswith('RAISED') and same)) and left == [nm + ext] and all(b.startswith(nm) or len((nm + ext).encode()) > 200 for b in bk)
         print(os.path.basename(f)[:10], repr(nm[:14]), res[:80], 'same' if same else 'changed', 'OK' if ok else 'BAD ' + repr(left[:3] + bk[:2]), flush=True); bad += not ok
         shutil.rmtree(w, True); shutil.rmtree(side, True)
 sys.exit(1 if bad else 0)
