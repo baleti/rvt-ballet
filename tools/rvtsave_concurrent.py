@@ -42,7 +42,14 @@ async def main(src, val):
         r = await cl.post('/api/m/m/save', json={}); print(val, 'SAVE!', r.status, str((await r.json()).get('error'))[:160], flush=True)
         if os.environ.get('API_RESTORE'):      # list backups and restore through the viewer's own endpoints
             import hashlib; r = await cl.get('/api/m/m/backups'); j = await r.json(); print('backups', r.status, str(j)[:200], flush=True)
+            if os.environ.get('DAMAGE_BACKUP'):      # truncate / flip the newest backup (its name tag still records the true hash)
+                bp = j[0]['path']; sz = os.path.getsize(bp)
+                if os.environ['DAMAGE_BACKUP'] == 'trunc': os.truncate(bp, sz // 2)
+                else:
+                    bb = bytearray(open(bp, 'rb').read()); bb[sz // 2] ^= 1; open(bp, 'wb').write(bb)
+            pre = hashlib.sha256(open(src, 'rb').read()).hexdigest()[:12]
             r = await cl.post('/api/m/m/restore', json={'confirm': True, 'n': 0}); print('restore', r.status, (await r.text())[:160], flush=True)
+            print('current_unchanged_by_restore=%s' % (hashlib.sha256(open(src, 'rb').read()).hexdigest()[:12] == pre) if os.environ.get('DAMAGE_BACKUP') else '', flush=True)
             print('restored_sha', hashlib.sha256(open(src, 'rb').read()).hexdigest()[:12], flush=True)
         if os.environ.get('RETRY'):      # a failed SAVE! must leave the session usable: same edit still pending, save again
             h = __import__('hashlib').sha256(open(src, 'rb').read()).hexdigest()[:12]
