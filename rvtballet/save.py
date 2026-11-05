@@ -723,6 +723,19 @@ def _readback(src_buf, nb, ops):
                     if b1 is None: bad.append('moved element %d: no geometry in the output' % o['eid'])
                     elif b1 == b0 and nb != src_buf: pass      # box unchanged but the output differs from the source: the cached tessellation of some elements (HVAC duct 1365188) is not rebuilt by the writer although Revit moves the element exactly (+2 ft, API readback); not a witness. Byte-identical output is still refused below
                     elif any(abs((b1[i][k] - b0[i][k]) - d[k]) > 1e-6 * max(1.0, abs(d[k])) + 1e-6 for i in (0, 1) for k in range(3)): bad.append('moved element %d: displacement in the output is not the requested (%.4g, %.4g, %.4g); measured box shift (%s)' % ((o['eid'],) + d + (' | '.join(', '.join('%.9g' % (b1[i][k] - b0[i][k]) for k in range(3)) for i in (0, 1)),)))
+    for o in [r for r in mv if r['op'] == 'move']:      # no witness, no move: only classes whose displacement the gate can measure (instance box or record origin; wall / dimension origin below) are accepted. SketchPlane and GeoLocation moves used to pass on 'bytes differ' alone (c6x-rvtmatrix 2026-11-04; a project-location shift nobody can read back)
+        if any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv): continue
+        try: cl = _bbox_class(src_buf, o['eid'])
+        except Exception: cl = ''
+        if cl and cl not in ('FamilyInstance', 'SWall', 'LinearDimString'): bad.append('moved element %d: class %s has no readable displacement witness, so the move cannot be verified (refused)' % (o['eid'], cl))
+        elif cl in ('FamilyInstance', ''):      # '' = the class index does not list the element (older files): box or record origin must witness
+            try: has_box = _bbox_of(src_buf, o['eid']) is not None
+            except Exception: has_box = False
+            if not has_box:
+                try: w0 = _trf_origin(src_buf, o['eid']); w1 = _trf_origin(nb, o['eid']) if w0 else None
+                except Exception: w0 = w1 = None
+                d = (o.get('dx', 0.0), o.get('dy', 0.0), o.get('dz', 0.0))
+                if w0 is None or w1 is None or any(abs((w1[i] - w0[i]) - d[i]) > 1e-6 * max(1.0, abs(d[i])) + 1e-6 for i in range(3)): bad.append('moved element %d: no box and no readable record origin shift, so the move cannot be verified (refused)' % o['eid'])
     for o in [r for r in mv if r['op'] == 'rotate']:      # the rotation itself: the element's mesh must be turned by exactly o['deg'] about the vertical axis (rigid, z unchanged); FamilyInstance only, skipped when the geometry reader has no mesh for the SOURCE element
         try: t0 = _tris_of(src_buf, o['eid']); t1 = _tris_of(nb, o['eid']) if t0 else None
         except Exception: t0, t1 = None, None
