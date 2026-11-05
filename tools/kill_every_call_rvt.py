@@ -8,6 +8,8 @@ os.environ.setdefault('RVTBALLET_EDIT_BACKEND', 'rvtedit')
 from rvtballet import save
 if os.environ.get("KILL_WIDEN_YEAR"):      # research only: year gate widened in this child process (shipped gate unchanged)
     from savegate import adapters; adapters.RVT_WRITABLE = adapters.RVT_WRITABLE + (os.environ["KILL_WIDEN_YEAR"],)
+if os.environ.get("KILL_LEGACY_LAYOUT"):      # research only: bypass the pre-2024 record-layout refusal in this child
+    from savegate import adapters; adapters._first_member_record_sizes = lambda s: {16}
 ss = save.SaveSessions(); ss.doc("m1", p)
 import json
 OP = json.loads(os.environ["KILL_OP"]) if os.environ.get("KILL_OP") else {"op": "set_string", "eid": 0, "field": "SymbolInfo.m_name"}
