@@ -14,4 +14,11 @@ raw = open(f[0], 'rb').read(); open(f[0], 'wb').write(raw[:-5] + b'xxxxx'); asse
 save._RB_MEMO.clear(); assert save._read_params(buf) == v1 and save._rp_disk_get(k) is not None      # recomputed + rewritten
 real = save._reader_stamp; save._reader_stamp = lambda: 'other'; assert save._rp_disk_get(k) is None; save._reader_stamp = real
 os.environ['RVTBALLET_SNAPSHOT_CACHE'] = '0'; assert save._rp_disk_get(k) is None
+# content change = new key: a one-byte-different buffer never gets the cached params of the original (stale-cache escape), and a failed read leaves no entry
+os.environ['RVTBALLET_SNAPSHOT_CACHE'] = _T + '/snap'; b2 = bytearray(buf); b2[len(b2) // 2] ^= 0xFF; b2 = bytes(b2); k2 = hashlib.sha256(b2).digest()
+assert k2 != k and save._rp_disk_get(k2) is None; save._RB_MEMO.clear()
+try: v3 = save._read_params(b2)
+except Exception: v3 = None; assert save._rp_disk_get(k2) is None
+assert v3 is None or save._rp_disk_get(k2) is not None
+assert save._rp_disk_get(k) is not None and len(glob.glob(_T + '/snap/*.rpk')) == 1 + (v3 is not None)      # original entry intact, one entry per distinct content
 print('cold %.2fs warm %.2fs' % (t1, t2)); print('OK')
