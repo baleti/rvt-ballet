@@ -784,7 +784,8 @@ def _readback(src_buf, nb, ops):
         if o['op'] == 'set_string' and y.get(n) != o['value']: bad.append('element %d: %r reads back %r, not the requested value' % (o['eid'], n, str(y.get(n))[:30]))
         if o['op'] == 'set_num' and isinstance(y.get(n), (int, float)) and isinstance(o.get('value'), (int, float)) and abs(float(y[n]) - float(o['value'])) > 1e-6 * max(1.0, abs(float(o['value']))):      # severity: a wrong NUMBER inside the declared element used to pass (c1x-rvtmatrix 2026-11-02)
             bad.append('element %d: %r reads back %r, not the requested %r' % (o['eid'], n, y.get(n), o['value']))
-        if [k for k in ch - {n} if y.get(k) != y.get(n)]: bad.append('element %d: %d other parameter(s) changed' % (o['eid'], len(ch - {n})))
+        sib = {q.get('param') for q in tg if q['eid'] == o['eid'] and q is not o}      # parameters the same save edits on this element: each is verified by its own iteration, so they are not 'other' changes (c6x-rvtmatrix item 8)
+        if [k for k in ch - {n} - sib if y.get(k) != y.get(n)]: bad.append('element %d: %d other parameter(s) changed' % (o['eid'], len(ch - {n} - sib)))
     if bad: raise sg.VerifyFailed('read-back of the edited element(s) failed: %s' % '; '.join(bad[:3]), {'n_unexpected': len(bad), 'unexpected': bad[:20]})
 
 
