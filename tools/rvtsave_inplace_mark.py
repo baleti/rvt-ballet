@@ -17,7 +17,7 @@ async def run(orig, keep):
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
         r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': e, 'param': 'Mark', 'value': 'MKIP', 'match': old}); res['edit'] = r.status
-        r = await c.post('/api/m/m/save', json={}); j = await r.json(); res['save'] = r.status; res['code'] = j.get('code', 'ok')
+        r = await c.post('/api/m/m/save', json={}, timeout=__import__('aiohttp').ClientTimeout(total=None)); j = await r.json(); res['save'] = r.status; res['code'] = j.get('code', 'ok')
         if r.status != 200:
             res['untouched'] = sha(src) == h0; print(res); return
         res['changed'] = sha(src) != h0
