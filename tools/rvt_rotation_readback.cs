@@ -12,8 +12,10 @@ try {
     if (e == null) { log.AppendLine("RB " + s + " missing"); continue; }
     var lp = e.Location as LocationPoint; var lc = e.Location as LocationCurve;
     string loc = lp != null ? lp.Point.X.ToString("F6") + " " + lp.Point.Y.ToString("F6") + " " + lp.Point.Z.ToString("F6") : (lc != null ? lc.Curve.GetEndPoint(0).X.ToString("F6") + " " + lc.Curve.GetEndPoint(0).Y.ToString("F6") + " " + lc.Curve.GetEndPoint(0).Z.ToString("F6") : "noloc");
+    var li = e as RevitLinkInstance; string tfrot = null;
+    if (lp == null && lc == null && li != null) { var t = li.GetTotalTransform(); loc = t.Origin.X.ToString("F6") + " " + t.Origin.Y.ToString("F6") + " " + t.Origin.Z.ToString("F6"); tfrot = (Math.Atan2(t.BasisX.Y, t.BasisX.X) * 180.0 / Math.PI).ToString("F4"); }
     var mark = e.get_Parameter(BuiltInParameter.ALL_MODEL_MARK);
-    string rot = lp != null ? (lp.Rotation * 180.0 / Math.PI).ToString("F4") : "-"; log.AppendLine("RB " + s + " loc=" + loc + " rotdeg=" + rot + " group=" + e.GroupId + " mark=" + (mark != null ? mark.AsString() : "-"));
+    string rot = lp != null ? (lp.Rotation * 180.0 / Math.PI).ToString("F4") : (tfrot ?? "-"); log.AppendLine("RB " + s + " loc=" + loc + " rotdeg=" + rot + " group=" + e.GroupId + " mark=" + (mark != null ? mark.AsString() : "-"));
   }
   d.Close(false);
   log.AppendLine("RESULT ok");

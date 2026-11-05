@@ -13,6 +13,7 @@ def parse_loc(txt):
     for l in txt.splitlines():
         m = re.match(r'RB (\d+) loc=(\S+) (\S+) (\S+) rotdeg=(\S+)', l)
         if m: d[int(m.group(1))] = {'loc': [float(m.group(i)) for i in (2, 3, 4)], 'rot': float(m.group(5))}
+        elif re.match(r'RB (\d+) loc=noloc', l): d[int(l.split()[1])] = {'loc': None, 'rot': None}  # exists, no Location
         elif re.match(r'RB (\d+) missing', l): d[int(l.split()[1])] = None
     return d
 def parse_par(txt):
@@ -31,10 +32,10 @@ for e in exp:
     if k == 'absent': ok = res['orig']['loc'].get(e['eid']) is not None and res['out']['loc'].get(e['eid'], 1) is None; why = 'present before, missing after'
     elif k == 'move':
         a, b = res['orig']['loc'].get(e['eid']), res['out']['loc'].get(e['eid'])
-        ok = bool(a and b) and all(abs((b['loc'][i] - a['loc'][i]) - e['d'][i]) < 1e-6 for i in range(3)); why = 'shift %s' % ([round(b['loc'][i] - a['loc'][i], 6) for i in range(3)] if a and b else '?')
+        ok = bool(a and b and a['loc'] and b['loc']) and all(abs((b['loc'][i] - a['loc'][i]) - e['d'][i]) < 1e-6 for i in range(3)); why = 'shift %s' % ([round(b['loc'][i] - a['loc'][i], 6) for i in range(3)] if a and b and a['loc'] and b['loc'] else '?')
     elif k == 'rotate':
         a, b = res['orig']['loc'].get(e['eid']), res['out']['loc'].get(e['eid'])
-        ok = bool(a and b) and abs(math.remainder((b['rot'] - a['rot']) - e['deg'], 360.0)) < 1e-3; why = 'rotation change %s' % (round(b['rot'] - a['rot'], 4) if a and b else '?')
+        ok = bool(a and b and a['rot'] is not None and b['rot'] is not None) and abs(math.remainder((b['rot'] - a['rot']) - e['deg'], 360.0)) < 1e-3; why = 'rotation change %s' % (round(b['rot'] - a['rot'], 4) if a and b and a['rot'] is not None and b['rot'] is not None else '?')
     elif k == 'param':
         a, b = res['orig']['par'].get((e['eid'], e['name'])), res['out']['par'].get((e['eid'], e['name']))
         if b is None: why = 'not read'
