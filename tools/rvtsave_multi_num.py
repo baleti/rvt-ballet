@@ -3,6 +3,7 @@ import sys, os, asyncio, tempfile, json
 sys.path[:0] = [os.path.expanduser('~/src/savegate'), os.path.expanduser('~/rvt-research'), os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')]
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 json.dump({'rvt': {'2024': 'open', '2026': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
+BOOLNAMES = set(os.environ.get('BOOLNAMES', 'Return Airflow,Power Load Units,Lighting Load Units').split(','))      # 0/1 params that really have a stored ParamValueInt (item 69: the other 0/1 reader values are derived defaults)
 NOEDIT = {'Phase', 'Phase Filter', 'Type', 'Family'}
 async def run(src, out):
     from rvtballet import server, save as S
@@ -16,7 +17,7 @@ async def run(src, out):
         for n, v in pr[e].get('params', {}).items():
             if '|' in n or n in NOEDIT or n not in known or n.startswith('Family'): continue
             if isinstance(v, float): cands['Double'].append((e, n, v, {'op': 'set_num', 'eid': e, 'param': n, 'value': v + 0.5, 'kind': 'Double'}))
-            elif isinstance(v, int) and v in (0, 1): cands['Bool'].append((e, n, v, {'op': 'set_num', 'eid': e, 'param': n, 'value': 1 - v, 'kind': 'Int'}))
+            elif isinstance(v, int) and v in (0, 1) and n in BOOLNAMES: cands['Bool'].append((e, n, v, {'op': 'set_num', 'eid': e, 'param': n, 'value': 1 - v, 'kind': 'Int'}))
             elif isinstance(v, int) and 2 <= v <= 1000: cands['Int'].append((e, n, v, {'op': 'set_num', 'eid': e, 'param': n, 'value': v + 1, 'kind': 'Int'}))
     print({k: len(v) for k, v in cands.items()}); ops = []; used = set()
     md = tempfile.mkdtemp(); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
