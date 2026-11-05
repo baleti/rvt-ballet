@@ -18,5 +18,7 @@ async def run(src, out):
         for body in ({'op': 'set_string', 'eid': A, 'param': 'Mark', 'value': 'MA1'}, {'op': 'set_string', 'eid': B, 'param': 'Mark', 'value': 'MB2'}, {'op': 'move', 'eid': C, 'dx': 1.5}) + (({'op': 'delete', 'eid': next(e for e, v in d.items() if v.startswith(os.environ.get('MULTI_DELETE', 'FamilyInstance') + '|') and e > 1000)},) if os.environ.get('MULTI_DELETE') else ()):
             r = await c.post('/api/m/m/edit', json=body); print(body['op'], body['eid'], r.status, (await r.text())[:120] if r.status != 200 else '')
             if r.status != 200: return
+        if os.environ.get('MULTI_INPLACE'): r = await c.post('/api/m/m/save', json={}); print('SAVE! in place', r.status, str((await r.json()).get('error'))[:200]); return
         r = await c.post('/api/m/m/saveas', json={'dest': out}); print('saveas', r.status, str((await r.json()).get('error'))[:200])
+if os.environ.get('MULTI_INPLACE'): os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'
 asyncio.run(run(sys.argv[1], sys.argv[2]))
