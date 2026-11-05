@@ -18,6 +18,7 @@ def main():
         try:
             save.add_edit(ss, 'm', src, {'op': 'set_string', 'eid': 24, 'value': v, 'match': ''}); save.save_as(ss, 'm', src, out); res = 'saved'
         except Exception as e: res = 'refused %s' % type(e).__name__
+        if res == 'saved' and os.environ.get('KEEP'): os.makedirs(os.environ['KEEP'], exist_ok=True); shutil.copy(out, os.path.join(os.environ['KEEP'], '2024_hostile_%s.rte' % k))
         ok = sha(src) == h0 and (res.startswith('refused') or os.path.exists(out))
         print(k, res, 'src_untouched=%s' % (sha(src) == h0), 'OK' if ok else 'FAIL', flush=True); bad += not ok
     sys.exit(1 if bad else 0)
