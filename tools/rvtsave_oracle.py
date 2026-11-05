@@ -40,7 +40,7 @@ def pick(path):
     for e, v in d.items():
         if v.startswith('FamilyInstance|') and e > 1000 and json.loads(v.split('|')[1])[2]: CANDS.append(e)
     if os.environ.get('RVTSAVE_BOTH'):      # scenario both: only instances whose Comments is stored (empty string) so the set_string has a unique target
-        from rvtballet import save as _s; pr = _s._read_params(open(path, 'rb').read()); CANDS[:] = [e for e in CANDS if pr.get(e, {}).get('params', pr.get(e, {})).get('Comments') == '']
+        from rvtballet import save as _s; pr = _s._read_params(open(path, 'rb').read()); CANDS[:] = [e for e in CANDS if pr.get(e, {}).get('params', pr.get(e, {})).get(os.environ.get('RVTSAVE_PARAM', 'Comments')) is not None]
     if CANDS: return CANDS[0]
     return 0
 def main(src, year, scen, eid=0):

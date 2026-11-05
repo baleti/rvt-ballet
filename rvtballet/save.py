@@ -713,7 +713,8 @@ def _readback(src_buf, nb, ops):
         else:
             x, y = g(a.get(o['eid'])), g(b.get(o['eid']))
             # the column location mark is derived from the position ('D-1' -> 'D-1(610)' = offset from grid D-1): a move legitimately appends the offset (seen on 2017 columns)
-            ch = [k for k in set(x) | set(y) if x.get(k) != y.get(k) and not (k.startswith('Column Location Mark') and isinstance(x.get(k), str) and _same_mark_base(x[k], y.get(k)))]
+            own = {t['param'] for t in tg if t['eid'] == o['eid']}      # parameters a set op on the SAME element changes on purpose are verified by the set-op check below, not here
+            ch = [k for k in set(x) | set(y) if k not in own and x.get(k) != y.get(k) and not (k.startswith('Column Location Mark') and isinstance(x.get(k), str) and _same_mark_base(x[k], y.get(k)))]
             if ch: bad.append('moved element %d: parameters changed' % o['eid'])
             if o['op'] == 'move' and not any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv):      # the displacement itself: the element's bounding box must shift by exactly (dx, dy, dz) (feet); skipped only when the geometry reader has no box for the SOURCE element
                 try: b0 = _bbox_of(src_buf, o['eid']); b1 = _bbox_of(nb, o['eid']) if b0 else None
