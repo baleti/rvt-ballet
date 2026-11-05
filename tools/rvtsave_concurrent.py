@@ -58,6 +58,14 @@ async def main(src, val):
             bp = j[0]['path']; os.truncate(bp, os.path.getsize(bp) // 2); pre = sh()
             r = await cl.post('/api/m/m/restore', json={'confirm': True, 'n': 0}); print('restore n=0 (damaged)', r.status, 'unchanged', sh() == pre, flush=True)
             r = await cl.post('/api/m/m/restore', json={'confirm': True, 'n': 1}); print('restore n=1', r.status, (await r.text())[-120:], 'sha', sh(), flush=True)
+        if os.environ.get('LOCKED_RESTORE'):      # another process (this one, a second handle) holds the save lock while the viewer restores
+            import hashlib; sys.path.insert(0, os.path.expanduser('~/src/savegate')); from savegate.guard import Lock
+            sh = lambda: hashlib.sha256(open(src, 'rb').read()).hexdigest()[:12]; pre = sh(); lk = Lock(src); lk.acquire()
+            try:
+                r = await cl.post('/api/m/m/restore', json={'confirm': True, 'n': 0}); print('restore under lock', r.status, (await r.text())[:150], 'unchanged', sh() == pre, flush=True)
+                r = await cl.post('/api/m/m/save', json={}); print('SAVE! under lock', r.status, (await r.text())[:150], 'unchanged', sh() == pre, flush=True)
+            finally: lk.release()
+            r = await cl.post('/api/m/m/restore', json={'confirm': True, 'n': 0}); print('restore after release', r.status, 'sha', sh(), flush=True)
         if os.environ.get('RETRY'):      # a failed SAVE! must leave the session usable: same edit still pending, save again
             h = __import__('hashlib').sha256(open(src, 'rb').read()).hexdigest()[:12]
             r = await cl.post('/api/m/m/save', json={}); print('SAVE retry', r.status, str((await r.json()).get('error'))[:160], 'changed=%s' % (__import__('hashlib').sha256(open(src, 'rb').read()).hexdigest()[:12] != h), flush=True)
