@@ -8,7 +8,7 @@ HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.
 import rvt_params, rvt_geometry as G
 from rvtballet import server
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
-g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
+g = lambda x: ({k: repr(v) if isinstance(v, float) and v != v else v for k, v in (x.get('params', x) if isinstance(x, dict) else {}).items()})      # NaN != NaN would count unchanged elements as changed
 TXT = ['中文测试 テスト 한글', 'café über Ñoño ß Łódź', 'emoji \U0001F600\U0001F680 end', 'x' * 200]
 if os.environ.get('TXTMODE') == 'ascii': TXT = ['a1', 'b2', 'c3', 'd4']
 async def main(out, src0):
