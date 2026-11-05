@@ -22,12 +22,12 @@ def _inject():
             if only(*a) and not (os.environ.get('INJECT_ONCE') and fired): fired.append(1); err()
             return real(*a, **k)
         return f
-    if w == 'backup_copy': backup.shutil.copyfileobj = wrap(backup.shutil.copyfileobj)
+    if w == 'backup_copy': backup.shutil.copyfileobj = wrap(backup.shutil.copyfileobj, lambda a, b, *x: str(getattr(b, 'name', '')).endswith('.part'))
     elif w == 'backup_hash': backup.sha256_file = wrap(backup.sha256_file, lambda p: str(p).endswith('.part'))
     elif w in ('commit', 'commit_eio'):
         atomic.commit_temp = wrap(atomic.commit_temp)
         if hasattr(core, 'commit_temp'): core.commit_temp = atomic.commit_temp
-    elif w == 'replace': os.replace = wrap(os.replace, lambda a, b, *x: not str(a).endswith('.part'))
+    elif w == 'replace': os.replace = wrap(os.replace, lambda a, b, *x: str(a).endswith('.sgtmp'))
 async def main(src, val):
     _inject()
     eid = next(e for e, d in rvt_params.params(src).items() if g(d).get('Comments') == '')
