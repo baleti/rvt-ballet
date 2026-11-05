@@ -6,6 +6,9 @@ json.dump({'rvt': {'2024': 'open', '2026': 'open'}}, open(_T + '/gate.json', 'w'
 BOOLNAMES = set(os.environ.get('BOOLNAMES', 'Return Airflow,Power Load Units,Lighting Load Units').split(','))      # 0/1 params that really have a stored ParamValueInt (item 69: the other 0/1 reader values are derived defaults)
 NOEDIT = {'Phase', 'Phase Filter', 'Type', 'Family'}
 async def run(src, out):
+    import hashlib, shutil
+    inplace = bool(os.environ.get('INPLACE'))
+    if inplace: os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; orig = src; src = out; shutil.copy(orig, src); h0 = hashlib.sha256(open(src, 'rb').read()).hexdigest()[:12]      # INPLACE=1: out is a private copy that SAVE! overwrites
     from rvtballet import server, save as S
     import rvt_params
     from aiohttp.test_utils import TestClient, TestServer
@@ -33,6 +36,13 @@ async def run(src, out):
             else: print(k, 'no candidate accepted', tried)
             if tried >= 60 and not any(o in ops for o in [x[3] for x in cands[k]]): print(k, 'gave up after 60 refusals', (await r.text())[:120])
         if not ops: return
+        if inplace:
+            r = await c.post('/api/m/m/save', json={}); j = await r.json(); print('SAVE! in place', r.status, str(j.get('error'))[:200]); h1 = hashlib.sha256(open(src, 'rb').read()).hexdigest()[:12]; print('sha', h0, '->', h1)
+            if r.status != 200: return
+            bk = await (await c.get('/api/m/m/backups')).json(); print('backups', [(b['n'], b['size']) for b in bk])
+            import shutil as _s; _s.copy(src, src + '.edited')
+            rr = await c.post('/api/m/m/restore', json={'confirm': True, 'n': 0}); print('restore', rr.status, 'sha', hashlib.sha256(open(src, 'rb').read()).hexdigest()[:12], 'want', h0)
+            _s.move(src + '.edited', src); return
         r = await c.post('/api/m/m/saveas', json={'dest': out}); j = await r.json(); print('saveas', r.status, str(j.get('error'))[:200], 'verify_diffs', (j.get('verify') or {}).get('n_unexpected'))
         if r.status != 200: return
     po = rvt_params.params(out)
