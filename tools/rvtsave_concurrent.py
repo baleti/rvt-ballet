@@ -51,6 +51,13 @@ async def main(src, val):
             r = await cl.post('/api/m/m/restore', json={'confirm': True, 'n': 0}); print('restore', r.status, (await r.text())[:160], flush=True)
             print('current_unchanged_by_restore=%s' % (hashlib.sha256(open(src, 'rb').read()).hexdigest()[:12] == pre) if os.environ.get('DAMAGE_BACKUP') else '', flush=True)
             print('restored_sha', hashlib.sha256(open(src, 'rb').read()).hexdigest()[:12], flush=True)
+        if os.environ.get('OLDER_BACKUP'):      # two backups exist after save+restore; damage the newest, restore n=1 (older, intact) through the endpoint
+            import hashlib; sh = lambda: hashlib.sha256(open(src, 'rb').read()).hexdigest()[:12]
+            r = await cl.post('/api/m/m/restore', json={'confirm': True, 'n': 0}); print('restore#1', r.status, 'sha', sh(), flush=True)
+            j = await (await cl.get('/api/m/m/backups')).json(); print('backups', [(b['n'], b['name'][-8:], b['size']) for b in j], flush=True)
+            bp = j[0]['path']; os.truncate(bp, os.path.getsize(bp) // 2); pre = sh()
+            r = await cl.post('/api/m/m/restore', json={'confirm': True, 'n': 0}); print('restore n=0 (damaged)', r.status, 'unchanged', sh() == pre, flush=True)
+            r = await cl.post('/api/m/m/restore', json={'confirm': True, 'n': 1}); print('restore n=1', r.status, (await r.text())[-120:], 'sha', sh(), flush=True)
         if os.environ.get('RETRY'):      # a failed SAVE! must leave the session usable: same edit still pending, save again
             h = __import__('hashlib').sha256(open(src, 'rb').read()).hexdigest()[:12]
             r = await cl.post('/api/m/m/save', json={}); print('SAVE retry', r.status, str((await r.json()).get('error'))[:160], 'changed=%s' % (__import__('hashlib').sha256(open(src, 'rb').read()).hexdigest()[:12] != h), flush=True)
