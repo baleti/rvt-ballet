@@ -332,6 +332,10 @@ def _refuse_damaged(d):
     if bad: raise SourceDamaged('refused: the source file is already damaged (%d compressed block(s) in %s fail their checksum), so saving would carry the damage into the copy. Nothing was written.' % (len(bad), ', '.join(sorted({k for k, _ in bad}))))
 
 
+class DiskError(Exception):      # maps to 507 disk_error in the server (same name as the savegate library's)
+    pass
+
+
 class GroupOrOption(Exception):
     """in-place save of an edit that touches a group (member or instance) or a design-option element"""
 
@@ -857,6 +861,7 @@ def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     if ops and os.environ.get('RVTBALLET_ALLOW_GROUP_EDIT') != '1':
         _stage(ss, mid, 'checking groups and design options')
         try: mem = risky_membership(membership(d.buf, {o['eid'] for o in ops}), ops)
+        except OSError as e: raise DiskError('overwrite refused: disk error while checking the edited elements (%s); the file was not touched. Free disk space or use SAVE AS elsewhere.' % e)
         except Exception as e: raise GroupOrOption('overwrite refused: could not check whether the edited elements belong to a group or design option (%s); the file was not touched. Use SAVE AS.' % e)
         if mem:
             e0 = sorted(mem)[0]
