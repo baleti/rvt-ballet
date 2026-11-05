@@ -28,9 +28,9 @@ def _inject():
         atomic.commit_temp = wrap(atomic.commit_temp)
         if hasattr(core, 'commit_temp'): core.commit_temp = atomic.commit_temp
     elif w == 'replace': os.replace = wrap(os.replace, lambda a, b, *x: str(a).endswith('.sgtmp'))
-def _plant_lock(src):
+def _plant_lock(src, k=None):
     """PLANT_LOCK=deadpid|garbage|empty|otherhost|livepid: leave a lock file as a crash would"""
-    k = os.environ.get('PLANT_LOCK')
+    k = k or os.environ.get('PLANT_LOCK')
     if not k: return
     import socket, time
     sys.path.insert(0, os.path.expanduser('~/src/savegate')); from savegate.guard import _lock_path
@@ -48,6 +48,7 @@ async def main(src, val):
         r = await cl.post('/api/m/m/edit', json={'op': 'set_string', 'eid': eid, 'param': 'Comments', 'value': val}); print(val, 'edit', r.status, flush=True)
         if os.environ.get('GO_AT'):
             import time; time.sleep(max(0, float(os.environ['GO_AT']) - time.time()))
+        if os.environ.get('PLANT_LOCK_LATE'): _plant_lock(src, os.environ['PLANT_LOCK_LATE'])      # planted right before SAVE! (fresh, < 10 s old)
         if os.environ.get('EXTERNAL_BEFORE'):      # an outside program rewrites the file between our edit and our first SAVE!
             import hashlib; b = bytearray(open(src, 'rb').read()); b[-1] ^= 0x55; open(src, 'wb').write(b); print('external_sha', hashlib.sha256(b).hexdigest()[:12], flush=True)
         r = await cl.post('/api/m/m/save', json={}); print(val, 'SAVE!', r.status, str((await r.json()).get('error'))[:160], flush=True)
