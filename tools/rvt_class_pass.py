@@ -97,5 +97,10 @@ async def main(out, src, classes):
     async with TestClient(TestServer(server.make_app(models)), timeout=aiohttp.ClientTimeout(total=None)) as c:
         for k, cl in enumerate(classes):
             rows.append(await one_class(c, models, k, src, cl, pr, ix)); print(rows[-1], flush=True)
+            try: c.app['saves'].close('c%d' % k)      # release the loaded model of this class: held models made later classes fail 'too_big' (memory guard) in a 2024 HVAC run
+            except Exception: pass
+            models.m.pop('c%d' % k, None); import gc; gc.collect()
+            try: os.remove(os.path.join(_T, 'w%d.rvt' % k))
+            except OSError: pass
     json.dump(rows, open(out, 'w'), indent=1); print('CLASS-PASS', {'classes': len(rows), 'ok': sum(r['result'] == 'OK' for r in rows), 'absent': sum(r['result'] == 'ABSENT' for r in rows)})
 asyncio.run(main(sys.argv[1], sys.argv[2], sys.argv[3].split(',')))
