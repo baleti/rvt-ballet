@@ -10,9 +10,12 @@ def run(tool, ids, f):
     return r.stdout
 def parse_loc(txt):
     d = {}
+    tf = {}
     for l in txt.splitlines():
+        t = re.match(r'TF (\d+) X=(\S+) Y=(\S+) Z=(\S+)', l)      # FamilyInstance.GetTransform() basis vectors
+        if t: tf[int(t.group(1))] = [[float(x) for x in t.group(i).split(',')] for i in (2, 3, 4)]
         m = re.match(r'RB (\d+) loc=(\S+) (\S+) (\S+) rotdeg=(\S+)', l)
-        if m: d[int(m.group(1))] = {'loc': [float(m.group(i)) for i in (2, 3, 4)], 'rot': float(m.group(5))}
+        if m: d[int(m.group(1))] = {'loc': [float(m.group(i)) for i in (2, 3, 4)], 'rot': float(m.group(5)), 'tf': tf.get(int(m.group(1)))}
         elif re.match(r'RB (\d+) loc=noloc', l): d[int(l.split()[1])] = {'loc': None, 'rot': None}  # exists, no Location
         elif re.match(r'RB (\d+) missing', l): d[int(l.split()[1])] = None
     return d
@@ -35,7 +38,12 @@ for e in exp:
         ok = bool(a and b and a['loc'] and b['loc']) and all(abs((b['loc'][i] - a['loc'][i]) - e['d'][i]) < 1e-6 for i in range(3)); why = 'shift %s' % ([round(b['loc'][i] - a['loc'][i], 6) for i in range(3)] if a and b and a['loc'] and b['loc'] else '?')
     elif k == 'rotate':
         a, b = res['orig']['loc'].get(e['eid']), res['out']['loc'].get(e['eid'])
-        ok = bool(a and b and a['rot'] is not None and b['rot'] is not None) and abs(math.remainder((b['rot'] - a['rot']) - e['deg'], 360.0)) < 1e-3; why = 'rotation change %s' % (round(b['rot'] - a['rot'], 4) if a and b and a['rot'] is not None and b['rot'] is not None else '?')
+        if a and b and a.get('tf') and b.get('tf'):      # FamilyInstance: Location.Rotation is not the world-Z angle of a tilted instance, so compare the whole frame: every basis vector must equal Rz(deg) of the source's
+            c, sn = math.cos(math.radians(e['deg'])), math.sin(math.radians(e['deg']))
+            err = max(abs(r - w) for u, v in zip(a['tf'], b['tf']) for r, w in zip((c * u[0] - sn * u[1], sn * u[0] + c * u[1], u[2]), v))
+            ok = err < 1e-3; why = 'frame rotated %s deg about Z (max basis error %.5f; Location.Rotation change %s)' % (e['deg'], err, round(b['rot'] - a['rot'], 4) if a['rot'] is not None and b['rot'] is not None else '?')
+        else:
+            ok = bool(a and b and a['rot'] is not None and b['rot'] is not None) and abs(math.remainder((b['rot'] - a['rot']) - e['deg'], 360.0)) < 1e-3; why = 'rotation change %s' % (round(b['rot'] - a['rot'], 4) if a and b and a['rot'] is not None and b['rot'] is not None else '?')
     elif k == 'param':
         a, b = res['orig']['par'].get((e['eid'], e['name'])), res['out']['par'].get((e['eid'], e['name']))
         if b is None: why = 'not read'

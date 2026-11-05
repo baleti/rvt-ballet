@@ -15,6 +15,7 @@ try {
     var li = e as RevitLinkInstance; string tfrot = null;
     if (lp == null && lc == null && li != null) { var t = li.GetTotalTransform(); loc = t.Origin.X.ToString("F6") + " " + t.Origin.Y.ToString("F6") + " " + t.Origin.Z.ToString("F6"); tfrot = (Math.Atan2(t.BasisX.Y, t.BasisX.X) * 180.0 / Math.PI).ToString("F4"); }
     var mark = e.get_Parameter(BuiltInParameter.ALL_MODEL_MARK);
+    var fi2 = e as FamilyInstance; if (fi2 != null) { var tt = fi2.GetTransform(); log.AppendLine("TF " + s + " X=" + tt.BasisX.X.ToString("F4") + "," + tt.BasisX.Y.ToString("F4") + "," + tt.BasisX.Z.ToString("F4") + " Y=" + tt.BasisY.X.ToString("F4") + "," + tt.BasisY.Y.ToString("F4") + "," + tt.BasisY.Z.ToString("F4") + " Z=" + tt.BasisZ.X.ToString("F4") + "," + tt.BasisZ.Y.ToString("F4") + "," + tt.BasisZ.Z.ToString("F4") + " mirrored=" + fi2.Mirrored + " hand=" + fi2.HandFlipped + " facing=" + fi2.FacingOrientation.X.ToString("F4") + "," + fi2.FacingOrientation.Y.ToString("F4") + "," + fi2.FacingOrientation.Z.ToString("F4")); }
     string rot = lp != null ? (lp.Rotation * 180.0 / Math.PI).ToString("F4") : (tfrot ?? "-"); log.AppendLine("RB " + s + " loc=" + loc + " rotdeg=" + rot + " group=" + e.GroupId + " mark=" + (mark != null ? mark.AsString() : "-"));
   }
   d.Close(false);
