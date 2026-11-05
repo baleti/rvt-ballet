@@ -2,11 +2,13 @@
 import sys, os, asyncio, tempfile, json
 sys.path[:0] = [os.path.expanduser('~/src/savegate'), os.path.expanduser('~/rvt-research'), os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')]
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
-json.dump({'rvt': {'2024': 'open', '2026': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
+json.dump({'rvt': {y: 'open' for y in os.environ.get('GATE_YEARS', '2024,2026').split(',')}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
 BOOLNAMES = set(os.environ.get('BOOLNAMES', 'Return Airflow,Power Load Units,Lighting Load Units').split(','))      # 0/1 params that really have a stored ParamValueInt (item 69: the other 0/1 reader values are derived defaults)
 NOEDIT = {'Phase', 'Phase Filter', 'Type', 'Family'}
 async def run(src, out):
     import hashlib, shutil
+    if '2025' in os.environ.get('GATE_YEARS', ''):      # RESEARCH ONLY, in-process: production still refuses 2025
+        save._import(); from savegate import adapters; adapters.RVT_WRITABLE = tuple(adapters.RVT_WRITABLE) + ('2025',)
     inplace = bool(os.environ.get('INPLACE'))
     if inplace: os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; orig = src; src = out; shutil.copy(orig, src); h0 = hashlib.sha256(open(src, 'rb').read()).hexdigest()[:12]      # INPLACE=1: out is a private copy that SAVE! overwrites
     from rvtballet import server, save as S
