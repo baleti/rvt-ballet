@@ -28,7 +28,18 @@ def _inject():
         atomic.commit_temp = wrap(atomic.commit_temp)
         if hasattr(core, 'commit_temp'): core.commit_temp = atomic.commit_temp
     elif w == 'replace': os.replace = wrap(os.replace, lambda a, b, *x: str(a).endswith('.sgtmp'))
+def _plant_lock(src):
+    """PLANT_LOCK=deadpid|garbage|empty|otherhost|livepid: leave a lock file as a crash would"""
+    k = os.environ.get('PLANT_LOCK')
+    if not k: return
+    import socket, time
+    sys.path.insert(0, os.path.expanduser('~/src/savegate')); from savegate.guard import _lock_path
+    host = socket.gethostname(); p = _lock_path(src)
+    body = {'deadpid': json.dumps({'pid': 2 ** 22 - 3, 'host': host, 'time': time.time()}), 'garbage': 'xx\x00\xff not json', 'empty': '',
+            'otherhost': json.dumps({'pid': 1, 'host': 'some-other-host', 'time': time.time()}), 'livepid': json.dumps({'pid': os.getppid(), 'host': host, 'time': time.time()})}[k]
+    open(p, 'w').write(body); print('planted', k, os.path.basename(p), flush=True)
 async def main(src, val):
+    _plant_lock(src)
     _inject()
     eid = next(e for e, d in rvt_params.params(src).items() if g(d).get('Comments') == '')
     md = tempfile.mkdtemp(); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
