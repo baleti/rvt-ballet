@@ -7,6 +7,7 @@ BOOLNAMES = set(os.environ.get('BOOLNAMES', 'Return Airflow,Power Load Units,Lig
 NOEDIT = {'Phase', 'Phase Filter', 'Type', 'Family'}
 async def run(src, out):
     import hashlib, shutil
+    from rvtballet import save
     if '2025' in os.environ.get('GATE_YEARS', ''):      # RESEARCH ONLY, in-process: production still refuses 2025
         save._import(); from savegate import adapters; adapters.RVT_WRITABLE = tuple(adapters.RVT_WRITABLE) + ('2025',)
     inplace = bool(os.environ.get('INPLACE'))
