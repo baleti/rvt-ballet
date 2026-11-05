@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """rvtsave_oracle.py SRC YEAR SCENARIO [EID]: edit + SAVE AS / in-place SAVE through rvtballet (savegate), then open the output in the offline Revit VM (audit on).
-SCENARIO: none | move | param | delete | none_inplace | move_inplace.  Output: one TSV line (savegate-matrix.tsv RVT row format). Work files stay in ~/rvtsave-work (local only)."""
+SCENARIO: none | move | param | both (param+move, same element) | delete | none_inplace | move_inplace.  Output: one TSV line (savegate-matrix.tsv RVT row format). Work files stay in ~/rvtsave-work (local only)."""
 import os, sys, asyncio, tempfile, shutil, hashlib, json
 W = os.path.expanduser('~/rvtsave-work'); os.makedirs(W, exist_ok=True)
 _T = tempfile.mkdtemp(dir=W); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
@@ -16,15 +16,18 @@ async def save(src, scen, eid):
     async with TestClient(TestServer(server.make_app(models))) as c:
         import aiohttp; c.session._timeout = aiohttp.ClientTimeout(total=None)      # the test client's default 300 s total timeout is a harness artifact on big files
         await c.get('/api/m/m/saveinfo')
-        body = {'none': None, 'move': {'op': 'move', 'eid': eid, 'dx': float(os.environ.get('RVTSAVE_DX', '2.0'))}, 'param': {'op': 'set_string', 'eid': eid, 'param': os.environ.get('RVTSAVE_PARAM', 'Comments'), 'value': os.environ.get('RVTSAVE_VALUE', 'rvtsave')}, 'delete': {'op': 'delete', 'eid': eid}}[op]
+        body = {'none': None, 'move': {'op': 'move', 'eid': eid, 'dx': float(os.environ.get('RVTSAVE_DX', '2.0'))}, 'param': {'op': 'set_string', 'eid': eid, 'param': os.environ.get('RVTSAVE_PARAM', 'Comments'), 'value': os.environ.get('RVTSAVE_VALUE', 'rvtsave')}, 'delete': {'op': 'delete', 'eid': eid}}['param' if op == 'both' else op]
         if body:
             r = await c.post('/api/m/m/edit', json=body)
-            if op == 'param':      # first candidate instance that actually stores the string parameter
+            if op in ('param', 'both'):      # first candidate instance that actually stores the string parameter
                 for e in ([eid] + CANDS)[:int(os.environ.get("RVTSAVE_NCAND", "25"))]:
                     body['eid'] = e; r = await c.post('/api/m/m/edit', json=body)
                     if r.status == 200: eid = e; break
                 print('param element', body['eid'], file=sys.stderr)
             if r.status != 200: return None, 'edit refused: %s' % (await r.text())[:150]
+            if op == 'both':      # scenario both: Comments change AND move on the SAME element in one save (two edits, one session)
+                r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': eid, 'dx': float(os.environ.get('RVTSAVE_DX', '2.0'))})
+                if r.status != 200: return None, 'move refused: %s' % (await r.text())[:150]
         if inplace: r = await c.post('/api/m/m/save', json={}); out = src
         else: out = _T + '/out' + os.path.splitext(src)[1]; r = await c.post('/api/m/m/saveas', json={'dest': out})
         j = await r.json(); return (out if r.status == 200 else None), ('ok' if r.status == 200 else 'refused: %s' % str(j.get('error'))[:200])
@@ -36,6 +39,8 @@ def pick(path):
     import json
     for e, v in d.items():
         if v.startswith('FamilyInstance|') and e > 1000 and json.loads(v.split('|')[1])[2]: CANDS.append(e)
+    if os.environ.get('RVTSAVE_BOTH'):      # scenario both: only instances whose Comments is stored (empty string) so the set_string has a unique target
+        from rvtballet import save as _s; pr = _s._read_params(open(path, 'rb').read()); CANDS[:] = [e for e in CANDS if pr.get(e, {}).get('params', pr.get(e, {})).get('Comments') == '']
     if CANDS: return CANDS[0]
     return 0
 def main(src, year, scen, eid=0):
