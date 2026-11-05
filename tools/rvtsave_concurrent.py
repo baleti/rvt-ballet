@@ -8,7 +8,31 @@ from rvtballet import server
 import rvt_params, aiohttp
 from aiohttp.test_utils import TestClient, TestServer
 g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
+def _inject():
+    """INJECT=backup_copy|backup_hash|commit|fsync_dir: raise OSError(ENOSPC/EIO) at that step of the savegate write path"""
+    w = os.environ.get('INJECT')
+    if not w: return
+    import errno
+    sys.path.insert(0, os.path.expanduser('~/src/savegate'))
+    from savegate import backup, atomic, core
+    def boom(*a, **k): raise OSError(errno.ENOSPC if w != 'commit_eio' else errno.EIO, 'injected ' + w)
+    if w == 'backup_copy': backup.shutil.copyfileobj = boom
+    elif w == 'backup_hash':
+        o = backup.sha256_file; n = [0]
+        def f(p):
+            n[0] += 1
+            if str(p).endswith('.part'): boom()
+            return o(p)
+        backup.sha256_file = f
+    elif w in ('commit', 'commit_eio'): atomic.commit_temp = boom; core.commit_temp = boom if hasattr(core, 'commit_temp') else None
+    elif w == 'replace':
+        o = os.replace
+        def r(a, b, *x, **k):
+            if not str(a).endswith('.part'): boom()
+            return o(a, b, *x, **k)
+        os.replace = r
 async def main(src, val):
+    _inject()
     eid = next(e for e, d in rvt_params.params(src).items() if g(d).get('Comments') == '')
     md = tempfile.mkdtemp(); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models))) as cl:
