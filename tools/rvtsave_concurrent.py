@@ -16,6 +16,8 @@ async def main(src, val):
         r = await cl.post('/api/m/m/edit', json={'op': 'set_string', 'eid': eid, 'param': 'Comments', 'value': val}); print(val, 'edit', r.status, flush=True)
         if os.environ.get('GO_AT'):
             import time; time.sleep(max(0, float(os.environ['GO_AT']) - time.time()))
+        if os.environ.get('EXTERNAL_BEFORE'):      # an outside program rewrites the file between our edit and our first SAVE!
+            import hashlib; b = bytearray(open(src, 'rb').read()); b[-1] ^= 0x55; open(src, 'wb').write(b); print('external_sha', hashlib.sha256(b).hexdigest()[:12], flush=True)
         r = await cl.post('/api/m/m/save', json={}); print(val, 'SAVE!', r.status, str((await r.json()).get('error'))[:160], flush=True)
         if os.environ.get('EXTERNAL_AFTER'):      # an outside program rewrites the file after our save; the next SAVE! must not overwrite it
             import hashlib; b = bytearray(open(src, 'rb').read()); b[-1] ^= 0x55; open(src, 'wb').write(b); h = hashlib.sha256(b).hexdigest()[:12]
