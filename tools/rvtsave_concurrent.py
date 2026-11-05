@@ -9,28 +9,25 @@ import rvt_params, aiohttp
 from aiohttp.test_utils import TestClient, TestServer
 g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
 def _inject():
-    """INJECT=backup_copy|backup_hash|commit|fsync_dir: raise OSError(ENOSPC/EIO) at that step of the savegate write path"""
+    """INJECT=backup_copy|backup_hash|commit|commit_eio|replace: raise OSError (ENOSPC, EIO for commit_eio) at that step of the savegate write path; INJECT_ONCE=1 fails only the first call"""
     w = os.environ.get('INJECT')
     if not w: return
     import errno
     sys.path.insert(0, os.path.expanduser('~/src/savegate'))
     from savegate import backup, atomic, core
-    def boom(*a, **k): raise OSError(errno.ENOSPC if w != 'commit_eio' else errno.EIO, 'injected ' + w)
-    if w == 'backup_copy': backup.shutil.copyfileobj = boom
-    elif w == 'backup_hash':
-        o = backup.sha256_file; n = [0]
-        def f(p):
-            n[0] += 1
-            if str(p).endswith('.part'): boom()
-            return o(p)
-        backup.sha256_file = f
-    elif w in ('commit', 'commit_eio'): atomic.commit_temp = boom; core.commit_temp = boom if hasattr(core, 'commit_temp') else None
-    elif w == 'replace':
-        o = os.replace
-        def r(a, b, *x, **k):
-            if not str(a).endswith('.part'): boom()
-            return o(a, b, *x, **k)
-        os.replace = r
+    fired = []
+    def err(): raise OSError(errno.EIO if w == 'commit_eio' else errno.ENOSPC, 'injected ' + w)
+    def wrap(real, only=lambda *a: True):
+        def f(*a, **k):
+            if only(*a) and not (os.environ.get('INJECT_ONCE') and fired): fired.append(1); err()
+            return real(*a, **k)
+        return f
+    if w == 'backup_copy': backup.shutil.copyfileobj = wrap(backup.shutil.copyfileobj)
+    elif w == 'backup_hash': backup.sha256_file = wrap(backup.sha256_file, lambda p: str(p).endswith('.part'))
+    elif w in ('commit', 'commit_eio'):
+        atomic.commit_temp = wrap(atomic.commit_temp)
+        if hasattr(core, 'commit_temp'): core.commit_temp = atomic.commit_temp
+    elif w == 'replace': os.replace = wrap(os.replace, lambda a, b, *x: not str(a).endswith('.part'))
 async def main(src, val):
     _inject()
     eid = next(e for e, d in rvt_params.params(src).items() if g(d).get('Comments') == '')
@@ -43,6 +40,9 @@ async def main(src, val):
         if os.environ.get('EXTERNAL_BEFORE'):      # an outside program rewrites the file between our edit and our first SAVE!
             import hashlib; b = bytearray(open(src, 'rb').read()); b[-1] ^= 0x55; open(src, 'wb').write(b); print('external_sha', hashlib.sha256(b).hexdigest()[:12], flush=True)
         r = await cl.post('/api/m/m/save', json={}); print(val, 'SAVE!', r.status, str((await r.json()).get('error'))[:160], flush=True)
+        if os.environ.get('RETRY'):      # a failed SAVE! must leave the session usable: same edit still pending, save again
+            h = __import__('hashlib').sha256(open(src, 'rb').read()).hexdigest()[:12]
+            r = await cl.post('/api/m/m/save', json={}); print('SAVE retry', r.status, str((await r.json()).get('error'))[:160], 'changed=%s' % (__import__('hashlib').sha256(open(src, 'rb').read()).hexdigest()[:12] != h), flush=True)
         if os.environ.get('EXTERNAL_AFTER'):      # an outside program rewrites the file after our save; the next SAVE! must not overwrite it
             import hashlib; b = bytearray(open(src, 'rb').read()); b[-1] ^= 0x55; open(src, 'wb').write(b); h = hashlib.sha256(b).hexdigest()[:12]
             r = await cl.post('/api/m/m/edit', json={'op': 'set_string', 'eid': eid, 'param': 'Comments', 'value': val + '2'}); print('edit2', r.status, flush=True)
