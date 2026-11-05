@@ -15,7 +15,7 @@ async def run(src, out):
     md = tempfile.mkdtemp(); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models))) as c:
         c.session._timeout = aiohttp.ClientTimeout(total=None); await c.get('/api/m/m/saveinfo')
-        for body in ({'op': 'set_string', 'eid': A, 'param': 'Mark', 'value': 'MA1'}, {'op': 'set_string', 'eid': B, 'param': 'Mark', 'value': 'MB2'}, {'op': 'move', 'eid': C, 'dx': 1.5}) + (({'op': 'delete', 'eid': next(e for e in fi if e not in (A, B, C))},) if os.environ.get('MULTI_DELETE') else ()):
+        for body in ({'op': 'set_string', 'eid': A, 'param': 'Mark', 'value': 'MA1'}, {'op': 'set_string', 'eid': B, 'param': 'Mark', 'value': 'MB2'}, {'op': 'move', 'eid': C, 'dx': 1.5}) + (({'op': 'delete', 'eid': next(e for e, v in d.items() if v.startswith(os.environ.get('MULTI_DELETE', 'FamilyInstance') + '|') and e > 1000)},) if os.environ.get('MULTI_DELETE') else ()):
             r = await c.post('/api/m/m/edit', json=body); print(body['op'], body['eid'], r.status, (await r.text())[:120] if r.status != 200 else '')
             if r.status != 200: return
         r = await c.post('/api/m/m/saveas', json={'dest': out}); print('saveas', r.status, str((await r.json()).get('error'))[:200])
