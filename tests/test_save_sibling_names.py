@@ -10,7 +10,7 @@ if not os.path.exists(S) or not save.SaveSessions().available: print('skip'); sy
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 ss = save.SaveSessions()
 p = T + '/m.rte'; shutil.copy(S, p); h0 = sha(p); d = ss.doc('m', p)
-sib = ['m.rte.bak','m.rte~','m.bak','m.rte.orig','m.rte.tmp','m.rte.new','~m.rte','m.rte.sgtmp','m (1).rte','m.rte.1']
+sib = ['m.rte.bak','m.rte~','m.bak','m.rte.orig','m.rte.tmp','m.rte.new','~m.rte','m.rte.sgtmp','m (1).rte','m.rte.1','m.0001.rte','m.0002.rte','m.rte.lock','m.rte.lck','m.slog','m.rte.sgtmp.0']
 for i, n in enumerate(sib): open(T + '/' + n, 'wb').write(('sentinel%d' % i).encode() * 5000)
 snap = {n: sha(T + '/' + n) for n in sib}
 nb, _ = edit.apply_full(d.buf, [edit.validate_op({'op': 'move', 'eid': 301595, 'dx': 1.0})])
