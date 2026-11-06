@@ -11,8 +11,8 @@ sys.path[:0] = [os.path.expanduser('~/src/savegate'), here]
 from rvtballet import save, edit
 ss = save.SaveSessions(); d = ss.doc('m', p)
 if stop < 0:
-    nb, _ = edit.apply_full(d.buf, [edit.validate_op({'op': 'move', 'eid': 301595, 'dx': 1.0})])
-    save.save_overwrite(ss, 'm', p, new_bytes=nb, manifest={'modified': ['el:301595']}); print('SAVED'); sys.exit(0)
+    nb, _ = edit.apply_full(d.buf, [edit.validate_op({'op': 'move', 'eid': int(os.environ.get('KR_EID', 301595)), 'dx': 1.0})])
+    save.save_overwrite(ss, 'm', p, new_bytes=nb, manifest={'modified': ['el:%d' % int(os.environ.get('KR_EID', 301595))]}); print('SAVED'); sys.exit(0)
 n = [0]
 def wrap(name):
     f = getattr(os, name)
