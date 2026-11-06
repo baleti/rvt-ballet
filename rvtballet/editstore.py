@@ -4,7 +4,7 @@ replay (a ruined op is refused) and only when the file is still byte-identical t
 import os, json, hashlib, tempfile, time
 from . import plat
 
-DIR = os.environ.get('RVTBALLET_EDITSTORE') or os.path.join(plat.dirs.data_dir('rvt-ballet'), 'pending-edits')
+DIR = os.path.abspath(os.path.expanduser(os.environ['RVTBALLET_EDITSTORE'])) if os.environ.get('RVTBALLET_EDITSTORE') else os.path.join(plat.dirs.data_dir('rvt-ballet'), 'pending-edits')
 
 
 def _file(src): return os.path.join(DIR, hashlib.sha1(os.fsencode(os.path.realpath(src))).hexdigest() + '.json')
