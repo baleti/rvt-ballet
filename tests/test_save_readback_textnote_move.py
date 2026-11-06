@@ -16,3 +16,10 @@ for label, out, ops in (('wrong amount', na, [b]), ('unmoved output', buf, [a]))
     try: save._readback(buf, out, ops); print('FAIL accepted:', label); sys.exit(1)
     except sg.VerifyFailed as x: print('refused', label + ':', str(x)[:100])
 print('textnote move readback OK')
+# two moves of the same note in one save add up (composed to one) and the gate accepts the composed displacement
+c1, c2 = mk(1.0), mk(0.5)
+ops = edit.compose([c1, c2]); assert len(ops) == 1 and abs(ops[0]['dx'] - 1.5) < 1e-12
+nc = edit.apply_full(buf, ops)[0]; save._readback(buf, nc, ops)
+try: save._readback(buf, nc, [c1]); print('FAIL accepted partial of composed move'); sys.exit(1)
+except sg.VerifyFailed: print('refused partial of composed move')
+print('textnote composed move OK')
