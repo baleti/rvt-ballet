@@ -18,7 +18,7 @@ async def run(orig, n):
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
         for k in range(1, n + 1):
-            new = 'CH%d' % k
+            new = 'CH%d' % (k + int(os.environ.get('CH_OFF', '0')))
             r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': e, 'param': 'Mark', 'value': new, 'match': cur}); assert r.status == 200, r.status
             b = sha(src); sz = os.path.getsize(src)
             r = await c.post('/api/m/m/save', json={}, timeout=aiohttp.ClientTimeout(total=None)); j = await r.json()
@@ -28,6 +28,7 @@ async def run(orig, n):
             else: row['untouched'] = sha(src) == b; row['error'] = str(j.get('error'))[:200]
             rows.append(row); print(row, flush=True)
             if r.status != 200: break
+        if os.environ.get('KEEP_OUT') and ok: os.makedirs(os.environ['KEEP_OUT'], exist_ok=True); shutil.copy(src, os.path.join(os.environ['KEEP_OUT'], 'chain_last.rvt'))
         bl = await (await c.get('/api/m/m/backups')).json()
         print({'saves_ok': ok, 'backups': len(bl), 'oldest_is_original': bool(bl) and sha(bl[-1]['path']) == h0})
 asyncio.run(run(sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 3))
