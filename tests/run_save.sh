@@ -16,9 +16,11 @@ if [ "${ALL:-0}" = 1 ]; then
   LIST=" $(grep -o 'for t in .*; do' "$D/tests/run_save.sh" | head -1) "
   for f in "$D"/tests/test_save*.py; do t=$(basename "$f" .py); case "$LIST" in *" $t "*) continue;; esac
     s=$(date +%s)
-    if grep -qE '^(async )?def test' "$f"; then out=$(nice "$PY" -m pytest -q "$f" 2>&1 | tail -1 | cut -c1-110); case "$out" in *passed*) out="OK $out";; esac
-    else out=$(nice "$PY" "$f" 2>&1 | tail -1 | cut -c1-110); fi
-    echo "$t: $out ($(( $(date +%s)-s ))s)"; case "$out" in *OK*|skip*|*"FAILURES []"*|*"failures 0"*) ;; *) F=1;; esac
+    if grep -qE '^(async )?def test' "$f"; then full=$(nice "$PY" -m pytest -q "$f" 2>&1); rc=$?
+    else full=$(nice "$PY" "$f" 2>&1); rc=$?; fi
+    out=$(echo "$full" | tail -1 | cut -c1-110)
+    # the scripts assert and exit non-zero on failure; wording differs per script (OK, REFUSED..., deterministic...), so the exit status is the verdict
+    echo "$t: rc=$rc $out ($(( $(date +%s)-s ))s)"; [ $rc = 0 ] || F=1
   done
 fi
 [ $F = 0 ] && echo SAVE-SUITE OK || echo SAVE-SUITE FAILED; exit $F
