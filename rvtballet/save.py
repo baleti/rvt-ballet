@@ -661,6 +661,15 @@ def _trf_origin(buf, eid):
         import shutil; shutil.rmtree(d, True)
 
 
+def _origin_move_bad(src_buf, nb, o):
+    """box not rebuilt by the writer: the record origin must shift by exactly the declared displacement (c2x-rvtsave: dx=7 bytes passed under declared dx=1). Returns a list of problems."""
+    d = (o.get('dx', 0.0), o.get('dy', 0.0), o.get('dz', 0.0))
+    try: w0 = _trf_origin(src_buf, o['eid']); w1 = _trf_origin(nb, o['eid']) if w0 else None
+    except Exception: w0 = w1 = None
+    if w0 is None or w1 is None: return ['moved element %d: box not rebuilt and no readable record origin, so the move cannot be verified (refused)' % o['eid']]
+    if any(abs((w1[i] - w0[i]) - d[i]) > 1e-6 * max(1.0, abs(d[i])) + 1e-6 for i in range(3)): return ['moved element %d: record origin shifted by (%s), not the requested (%.4g, %.4g, %.4g)' % ((o['eid'], ', '.join('%.9g' % (w1[i] - w0[i]) for i in range(3))) + d)]
+    return []
+
 def _wall_line_origin(buf, eid):
     """first GLine.m_origin (3 finite doubles) of an SWall record = the wall's location line, or None. A wall move must shift it by exactly (dx,dy,dz): the placement Trf.m_or alone moves a cell pattern origin only (cols2 walls 301553-301556: the wall does not move, and 301556 then fails to open in Revit 2024, InsufficientResources)"""
     import sys, tempfile, struct, math
@@ -726,7 +735,7 @@ def _readback(src_buf, nb, ops):
                 if b0 is not None:
                     d = (o['dx'], o['dy'], o['dz'])
                     if b1 is None: bad.append('moved element %d: no geometry in the output' % o['eid'])
-                    elif b1 == b0 and nb != src_buf: pass      # box unchanged but the output differs from the source: the cached tessellation of some elements (HVAC duct 1365188) is not rebuilt by the writer although Revit moves the element exactly (+2 ft, API readback); not a witness. Byte-identical output is still refused below
+                    elif b1 == b0 and nb != src_buf: bad.extend(_origin_move_bad(src_buf, nb, o))      # box unchanged but the output differs from the source: the cached tessellation of some elements (HVAC duct 1365188) is not rebuilt by the writer although Revit moves the element exactly (+2 ft, API readback); not a witness. Byte-identical output is still refused below
                     elif any(abs((b1[i][k] - b0[i][k]) - d[k]) > 1e-6 * max(1.0, abs(d[k])) + 1e-6 for i in (0, 1) for k in range(3)): bad.append('moved element %d: displacement in the output is not the requested (%.4g, %.4g, %.4g); measured box shift (%s)' % ((o['eid'],) + d + (' | '.join(', '.join('%.9g' % (b1[i][k] - b0[i][k]) for k in range(3)) for i in (0, 1)),)))
     for o in [r for r in mv if r['op'] == 'move']:      # no witness, no move: only classes whose displacement the gate can measure (instance box or record origin; wall / dimension origin below) are accepted. SketchPlane and GeoLocation moves used to pass on 'bytes differ' alone (c6x-rvtmatrix 2026-11-04; a project-location shift nobody can read back)
         if any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv): continue
