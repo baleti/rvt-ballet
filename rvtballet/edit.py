@@ -255,7 +255,8 @@ def _rvtedit_pass(a, b, ops):
             if o['op'] == 'delete': deleted += _delete(ed, o['eid'])
             elif o['op'] == 'move':
                 try: ed.move(o['eid'], o['dx'], o['dy'], o['dz'])
-                except NotImplementedError:      # view annotations (TextNote): origin in TextElement.m_orig, 2D in the view plane
+                except NotImplementedError as ne:      # view annotations (TextNote): origin in TextElement.m_orig, 2D in the view plane
+                    if 'class TextNote' not in str(ne): raise
                     if o['dz']: raise NotImplementedError('annotation move needs dz = 0')
                     ed.move_annotation(o['eid'], o['dx'], o['dy'])
             elif o['op'] == 'rotate': ed.rotate(o['eid'], o['deg'])
