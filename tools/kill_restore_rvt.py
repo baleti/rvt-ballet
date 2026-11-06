@@ -8,6 +8,8 @@ import sys, os, time
 here, p, stop, T = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
 os.environ.update(SAVEGATE_JOURNAL=T + '/j', SAVEGATE_CACHE=T + '/c', RVTBALLET_SNAPSHOT_CACHE='0', RVTBALLET_EDIT_BACKEND='rvtedit', RVTBALLET_ALLOW_OVERWRITE='1', SAVEGATE_GATE=T + '/gate.json')
 sys.path[:0] = [os.path.expanduser('~/src/savegate'), here]
+if os.environ.get('KR_YEAR'):      # research only: year gate widened in this child process (shipped gate unchanged)
+    from savegate import adapters; adapters.RVT_WRITABLE = adapters.RVT_WRITABLE + (os.environ['KR_YEAR'],)
 from rvtballet import save, edit
 ss = save.SaveSessions(); d = ss.doc('m', p)
 if stop < 0:
@@ -25,7 +27,7 @@ for nm in ('fsync', 'replace', 'rename', 'unlink', 'link'): wrap(nm)
 save.restore_backup(ss, 'm', p, 0); print('RESTORED', n[0], flush=True)
 '''
 def setup():
-    T = tempfile.mkdtemp(dir=os.environ.get('TMPDIR')); open(T + '/gate.json', 'w').write('{"rvt": {"2024": "open"}}')
+    T = tempfile.mkdtemp(dir=os.environ.get('TMPDIR')); open(T + '/gate.json', 'w').write('{"rvt": {"%s": "open"}}' % os.environ.get('KR_YEAR', '2024'))
     p = T + '/m.rte'; shutil.copy(S, p); h0 = sha(p)
     subprocess.run([sys.executable, '-c', CH, HERE, p, '-1', T], check=True, capture_output=True, timeout=900)
     return T, p, h0, sha(p)
