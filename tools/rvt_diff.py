@@ -59,10 +59,13 @@ def diff(fa, fb, want_fields=True, maxrec=200):
     sd, nstreams = stream_diff(fa, fb)
     gd = global_diff(fa, fb, [r['stream'] for r in sd if r['status'] == 'changed'])
     wa, sa = recwalk.walk(fa); wb, sb = recwalk.walk(fb)
+    BIG = 1 << 48        # ids above this are walker artifacts (tail item / sentinel bytes read as an id), reported apart
+    art = sorted(i for i in set(wa) ^ set(wb) if i >= BIG) + sorted(i for i in set(wa) & set(wb) if i >= BIG and wa[i] != wb[i])
+    wa = {k: v for k, v in wa.items() if k < BIG}; wb = {k: v for k, v in wb.items() if k < BIG}
     added = sorted(set(wb) - set(wa)); removed = sorted(set(wa) - set(wb))
     changed = sorted(i for i in set(wa) & set(wb) if wa[i] != wb[i])
     rep = {'streams_total': nstreams, 'streams_changed': sd, 'globals': gd, 'walk_stats_old': {k: list(v) for k, v in sa.items()}, 'walk_stats_new': {k: list(v) for k, v in sb.items()},
-           'elements_old': len(wa), 'elements_new': len(wb), 'added': added[:maxrec], 'n_added': len(added), 'removed': removed[:maxrec], 'n_removed': len(removed), 'n_changed': len(changed), 'changed': []}
+           'elements_old': len(wa), 'elements_new': len(wb), 'added': added[:maxrec], 'n_added': len(added), 'removed': removed[:maxrec], 'n_removed': len(removed), 'n_changed': len(changed), 'walker_artifacts': art[:10], 'changed': []}
     if want_fields:
         ma, mb = wledit.Editor(fa).m, wledit.Editor(fb).m
     for eid in changed[:maxrec]:
@@ -84,7 +87,7 @@ def pretty(rep):
     for n, g in rep['globals'].items():
         L.append(f"global {n}: len {g.get('len_old')}->{g.get('len_new')} runs {g.get('n_runs')}")
         for r in g.get('runs', [])[:8]: L.append(f"    @{r['old_off']} {r['old_len']}B {r['old']} => {r['new_len']}B {r['new']}")
-    L.append(f"elements: {rep['elements_old']} -> {rep['elements_new']}  added {rep['n_added']} {rep['added'][:10]}  removed {rep['n_removed']} {rep['removed'][:10]}  changed {rep['n_changed']}")
+    L.append(f"elements: {rep['elements_old']} -> {rep['elements_new']}  added {rep['n_added']} {rep['added'][:10]}  removed {rep['n_removed']} {rep['removed'][:10]}  changed {rep['n_changed']}  (walker artifacts ignored: {len(rep['walker_artifacts'])})")
     for c in rep['changed']:
         L.append(f"  id {c['id']} hdr_changed={c['header_changed']} reclen {c['rec_len']}")
         for f in c.get('fields', []): L.append(f"      {f['field']} @{f['off']}: {f['old']} => {f['new']}")
