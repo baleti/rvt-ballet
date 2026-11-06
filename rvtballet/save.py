@@ -732,12 +732,18 @@ def _readback(src_buf, nb, ops):
     tg = [o for o in ops if o.get('op') in ('set_string', 'set_num') and o.get('param')]; mv = [o for o in ops if o.get('op') in ('move', 'rotate')]
     fl = [o for o in ops if o.get('op') == 'set_string' and not o.get('param')]   # field (name) edits: not visible as a parameter, so only presence and untouched parameters are checked
     dl = [o for o in ops if o.get('op') == 'delete']
-    if not tg and not mv and not fl and not dl: return
+    ct = [o for o in ops if o.get('op') == 'change_type']      # type changes: the instance must report the requested type id afterwards
+    if not tg and not mv and not fl and not dl and not ct: return
     g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
     sg = _import()
     try: a, b = _read_params(src_buf), _read_params(nb)
     except Exception as e: raise OutputUnreadable('the edited parameters could not be read back (%s: %s); nothing was written' % (type(e).__name__, e)) from e
     bad = []
+    for o in ct:
+        if o['eid'] not in b: bad.append('type-changed element %d missing in the output' % o['eid']); continue
+        x, y = g(a.get(o['eid'])), g(b.get(o['eid']))
+        if str(y.get('Type Id')) != str(o['type_eid']): bad.append('type-changed element %d: Type Id is %s, not the requested %d' % (o['eid'], y.get('Type Id'), o['type_eid']))
+        if len(y) < len(x): bad.append('type-changed element %d lost parameters (%d -> %d)' % (o['eid'], len(x), len(y)))
     for o in mv:      # a move changes placement only: the element must still be there with exactly its parameters
         if o['eid'] not in b: bad.append('moved element %d missing in the output' % o['eid'])
         else:
