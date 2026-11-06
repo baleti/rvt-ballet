@@ -11,4 +11,14 @@ for t in test_save test_save_dest test_save_api test_save_overwrite test_save_ve
   s=$(date +%s); out=$(nice "$PY" "$D/tests/$t.py" 2>&1 | tail -1 | cut -c1-110); echo "$t: $out ($(( $(date +%s)-s ))s)"
   case "$out" in *OK*|skip*) ;; *) F=1;; esac
 done
+# ALL=1: also every other tests/test_save*.py that is in no list above (85 of them were never run by any runner); pytest-style files go through pytest
+if [ "${ALL:-0}" = 1 ]; then
+  LIST=" $(grep -o 'for t in .*; do' "$D/tests/run_save.sh" | head -1) "
+  for f in "$D"/tests/test_save*.py; do t=$(basename "$f" .py); case "$LIST" in *" $t "*) continue;; esac
+    s=$(date +%s)
+    if grep -qE '^(async )?def test' "$f"; then out=$(nice "$PY" -m pytest -q "$f" 2>&1 | tail -1 | cut -c1-110); case "$out" in *passed*) out="OK $out";; esac
+    else out=$(nice "$PY" "$f" 2>&1 | tail -1 | cut -c1-110); fi
+    echo "$t: $out ($(( $(date +%s)-s ))s)"; case "$out" in *OK*|skip*|*"FAILURES []"*|*"failures 0"*) ;; *) F=1;; esac
+  done
+fi
 [ $F = 0 ] && echo SAVE-SUITE OK || echo SAVE-SUITE FAILED; exit $F
