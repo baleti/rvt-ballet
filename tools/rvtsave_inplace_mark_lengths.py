@@ -11,7 +11,7 @@ async def run(orig, keep):
     src = _T + '/p.rvt'; shutil.copy(orig, src); h0 = sha(src)
     pr = save._read_params(open(src, 'rb').read())
     PAR = os.environ.get('PARAM', 'Mark'); CLS = os.environ.get('CLASS')
-    c0 = [(e, v['params'][PAR]) for e, v in sorted(pr.items()) if e >= 1000 and isinstance(v.get('params', {}).get(PAR), str) and (not CLS or v.get('class') == CLS)]
+    c0 = [(e, v['params'].get(PAR)) for e, v in sorted(pr.items()) if e >= 1000 and (v.get('params', {}).get(PAR) is None if os.environ.get('UNSET') else isinstance(v.get('params', {}).get(PAR), str)) and (not CLS or v.get('class') == CLS)]
     res = {'size_mb': round(os.path.getsize(src) / 1e6, 1), 'mark_candidates': len(c0)}
     if not c0: print(res, 'NO_CANDIDATE'); return
     e, old = c0[0]; md = tempfile.mkdtemp(dir=_T); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
@@ -19,11 +19,11 @@ async def run(orig, keep):
         await c.get('/api/m/m/saveinfo')
         for L in [int(x) for x in os.environ['LENGTHS'].split(',')]:
             val = os.environ.get('VALUE') or ('Q' * L)
-            r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': e, 'param': PAR, 'value': val, 'match': old}); row = {'L': L, 'edit': r.status}
+            r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': e, 'param': PAR, 'value': val, 'match': (old or '')}); row = {'L': L, 'edit': r.status}
             if r.status != 200: row['body'] = (await r.text())[:200]; print(row, flush=True); continue
             b0 = sha(src); r = await c.post('/api/m/m/save', json={}, timeout=__import__('aiohttp').ClientTimeout(total=None)); j = await r.json(); row.update(save=r.status, code=j.get('code', 'ok'))
             if r.status == 200:
-                pr2 = save._read_params(open(src, 'rb').read()); row['only_target'] = [k for k in pr if pr[k] != pr2.get(k)] == [e] and pr2[e]['params'][PAR] == val
+                pr2 = save._read_params(open(src, 'rb').read()); row['only_target'] = [k for k in pr if pr[k] != pr2.get(k)] == [e] and pr2[e]['params'].get(PAR) == val
                 rr = await c.post('/api/m/m/restore', json={'n': 0, 'confirm': True}); row['restored_identical'] = sha(src) == h0
             else: row['untouched'] = sha(src) == b0
             print(row, flush=True)
