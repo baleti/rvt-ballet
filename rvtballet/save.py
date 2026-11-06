@@ -337,6 +337,8 @@ def source_damage(buf):
             if k.startswith('Partitions/'):
                 out.extend((k, i) for i in member_report(bytes(rvtw.Stream(v.data).payload))[1])
                 out.extend((k + ' (page ECC)', i) for i in _ecc_bad_pages(v.data, rvtw))      # c7x-rvtread 62: zeroed/flipped bytes that gzip does not see
+            elif k not in rvtw.PLAIN and not k.startswith('\x05') and k != 'Formats/Latest':      # c7x-rvtread 68: the other paged streams (Global/*, Contents..) carry page ECC too; the savegate gate checks them, SAVE AS did not
+                out.extend((k + ' (page ECC)', i) for i in _ecc_bad_pages(v.data, rvtw))
         return out
     except Exception:
         return []
