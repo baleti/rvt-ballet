@@ -311,6 +311,20 @@ class SourceDamaged(Exception):
     """the source holds a gzip member whose stored CRC32/ISIZE does not match its content (c7x-rvtwrite 2026-11-01: edited saves used to carry such a member silently)"""
 
 
+def _ecc_bad_pages(d, rvtw):
+    """indices of stored pages whose ECC fails (same test as the savegate gate); [] for XML/raw gzip streams or when ecc is unavailable"""
+    try: import ecc
+    except ImportError: return []
+    if d[:5] == b'<?xml' or d[:2] == b'\x1f\x8b': return []
+    full = len(d) // rvtw.PAGE_STORED
+    pg = [d[i * rvtw.PAGE_STORED:(i + 1) * rvtw.PAGE_STORED] for i in range(full)]
+    try: ok = ecc.check_many(pg) if pg else []
+    except AttributeError: ok = [ecc.check(q) for q in pg]
+    bad = [i for i in range(full) if not ok[i]]; last = d[full * rvtw.PAGE_STORED:]
+    if last and (ecc.params(len(last)) is None or not ecc.check(last)): bad.append(full)
+    return bad
+
+
 def source_damage(buf):
     """[(stream, member index)] of CRC-bad independent gzip members in the Partitions/* streams; [] when clean or when the check cannot run (a lower bound: gzcheck walks only the members it can frame; 0 false positives on 101 real partition streams of 77 corpus files)"""
     try:
@@ -322,6 +336,7 @@ def source_damage(buf):
         for k, v in cfb.CFB(bytes(buf)).streams().items():
             if k.startswith('Partitions/'):
                 out.extend((k, i) for i in member_report(bytes(rvtw.Stream(v.data).payload))[1])
+                out.extend((k + ' (page ECC)', i) for i in _ecc_bad_pages(v.data, rvtw))      # c7x-rvtread 62: zeroed/flipped bytes that gzip does not see
         return out
     except Exception:
         return []
