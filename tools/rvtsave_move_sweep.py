@@ -7,7 +7,7 @@ buf = open(sys.argv[1], 'rb').read(); pr = save._read_params(buf); N = int(sys.a
 mv = lambda e, dx: edit.validate_op({'op': 'move', 'eid': e, 'dx': dx})
 VF = save._import().VerifyFailed
 c = dict(tried=0, right_ok=0, right_refused=0, wrong_refused=0, ESCAPE=0, nochange=0)
-for e in [e for e, v in sorted(pr.items()) if e >= 1000 and v.get('class') == 'FamilyInstance'][::7][:N]:
+for e in [e for e, v in sorted(pr.items()) if e >= 1000 and v.get('class') == 'FamilyInstance'][::7][int(os.environ.get('OFF', 0)):][:N]:
     c['tried'] += 1
     try: nb, _ = edit.apply_full(buf, [mv(e, 1.0)]); nb7, _ = edit.apply_full(buf, [mv(e, 7.0)])
     except Exception: c['nochange'] += 1; continue
