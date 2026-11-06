@@ -15,7 +15,7 @@ def parse_loc(txt):
         t = re.match(r'TF (\d+) X=(\S+) Y=(\S+) Z=(\S+)', l)      # FamilyInstance.GetTransform() basis vectors
         if t: tf[int(t.group(1))] = [[float(x) for x in t.group(i).split(',')] for i in (2, 3, 4)]
         m = re.match(r'RB (\d+) loc=(\S+) (\S+) (\S+) rotdeg=(\S+)', l)
-        if m: d[int(m.group(1))] = {'loc': [float(m.group(i)) for i in (2, 3, 4)], 'rot': float(m.group(5)), 'tf': tf.get(int(m.group(1)))}
+        if m: d[int(m.group(1))] = {'loc': [float(m.group(i)) for i in (2, 3, 4)], 'rot': (float(m.group(5)) if m.group(5) != '-' else None), 'tf': tf.get(int(m.group(1)))}
         elif re.match(r'RB (\d+) loc=noloc', l): d[int(l.split()[1])] = {'loc': None, 'rot': None}  # exists, no Location
         elif re.match(r'RB (\d+) missing', l): d[int(l.split()[1])] = None
     return d
