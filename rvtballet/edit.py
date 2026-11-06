@@ -41,7 +41,7 @@ def _check_text(v):
 
 
 def validate_op(op):
-    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
+    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate', 'change_type'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
     if not isinstance(op.get('eid'), int) or isinstance(op.get('eid'), bool): raise EditError('eid (element id) must be an integer')
     if not 0 <= op['eid'] < 2 ** 63: raise EditError('eid (element id) is out of range')
     if op['op'] == 'move':
@@ -50,6 +50,12 @@ def validate_op(op):
         if any(isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or abs(v) > 5e4 for v in d): raise EditError('dx, dy, dz must be finite numbers (Revit internal units = feet), |v| <= 50000 (Revit keeps geometry within about 20 miles = 105600 ft of the origin)')
         if not any(d): raise EditError('move by zero')
         return {'op': 'move', 'eid': op['eid'], 'dx': float(d[0]), 'dy': float(d[1]), 'dz': float(d[2])}
+    if op['op'] == 'change_type':
+        if os.environ.get('RVTBALLET_ENABLE_CHANGETYPE') != '1': raise EditError('change_type is disabled (opt-in: RVTBALLET_ENABLE_CHANGETYPE=1; no Revit evidence for it yet)')
+        if BACKEND() != 'rvtedit': raise EditError('change_type needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
+        t = op.get('type_eid')
+        if not isinstance(t, int) or isinstance(t, bool) or not 0 <= t < 2 ** 63: raise EditError('type_eid (the FamilySymbol element id) must be an integer')
+        return {'op': 'change_type', 'eid': op['eid'], 'type_eid': t}
     if op['op'] == 'rotate':
         if BACKEND() != 'rvtedit': raise EditError('rotate needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
         d = op.get('deg')
@@ -114,6 +120,7 @@ def compose(ops):
         if o['op'] in ('set_string', 'set_num') and (o.get('param') is not None or o.get('pid') is not None): k = (o['op'], e, o.get('kind'), o.get('pid'), o.get('param'))
         elif o['op'] == 'move': k = ('move', e)
         elif o['op'] == 'rotate': k = ('rotate', e)
+        elif o['op'] == 'change_type': k = ('change_type', e)      # the last type wins
         if k is None: out.append(o); continue
         if k in slot:
             i = slot[k]
@@ -221,6 +228,25 @@ def _apply_rvtedit(a, b, ops):
         else: os.environ['PART'] = saved_part
 
 
+def _field64(ed, eid, name):
+    import struct
+    for l in ed.g.e.trace(eid)[3]:
+        if l[1] == name and l[3] - l[2] == 8: return struct.unpack_from('<Q', ed.g.bj, l[2])[0]
+    return None
+
+
+def _change_type(ed, o):
+    """point a FamilyInstance at another FamilySymbol of the SAME family: overwrite FamilyInstance.m_masterSymbolId (8-byte ElementId) in the instance record. Refused unless the instance has that field, the target has FamilySymbol.m_familyId, and both families are equal (a symbol of another family would need a different geometry / host relation)"""
+    cur = _field64(ed, o['eid'], 'FamilyInstance.m_masterSymbolId')
+    if cur is None: raise EditError('element %d is not a family instance (no FamilyInstance.m_masterSymbolId): change_type refused' % o['eid'])
+    fam_new = _field64(ed, o['type_eid'], 'FamilySymbol.m_familyId')
+    if fam_new is None: raise EditError('element %d is not a family type (no FamilySymbol.m_familyId): change_type refused' % o['type_eid'])
+    fam_old = _field64(ed, cur, 'FamilySymbol.m_familyId')
+    if fam_old is None or fam_old != fam_new: raise EditError('type %d belongs to another family than the current type %d of element %d: change_type refused (same-family types only)' % (o['type_eid'], cur, o['eid']))
+    if cur == o['type_eid']: raise EditError('element %d already has type %d' % (o['eid'], cur))
+    ed.set_field(o['eid'], 'FamilyInstance.m_masterSymbolId', o['type_eid'], fmt='<Q')
+
+
 def _rvtedit_pass(a, b, ops):
     import rvtedit
     ed = rvtedit.Edit(a); deleted = []
@@ -229,6 +255,7 @@ def _rvtedit_pass(a, b, ops):
             if o['op'] == 'delete': deleted += _delete(ed, o['eid'])
             elif o['op'] == 'move': ed.move(o['eid'], o['dx'], o['dy'], o['dz'])
             elif o['op'] == 'rotate': ed.rotate(o['eid'], o['deg'])
+            elif o['op'] == 'change_type': _change_type(ed, o)
             elif o['op'] == 'set_num': _set_num_by_pid(ed, o)
             elif o['op'] == 'set_string' and o.get('kind') == 'AString': _set_string_by_pid(ed, o)
             elif o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'], o['value'])
