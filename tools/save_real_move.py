@@ -13,6 +13,7 @@ async def main(out, src):
     if r.returncode: row['result'] = 'CONVERT_FAIL'; print(row); json.dump(row, open(out, 'w')); return
     db = sqlite3.connect(_T + '/c_src/model.sqlite'); cand = [x[0] for x in db.execute("select id from el where cls='FamilyInstance' and bb is not null order by id limit 50")]
     row['candidates'] = len(cand)
+    if os.environ.get('MOVE_EID'): cand = [int(os.environ['MOVE_EID'])]      # research: move this exact element (e.g. a group member) via SAVE AS
     from aiohttp.test_utils import TestClient, TestServer
     import aiohttp
     models = server.Models(); md = os.path.join(_T, 'm'); os.makedirs(md); models.m['m'] = {'dir': md, 'name': 'f', 'src': src}
