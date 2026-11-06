@@ -1,7 +1,7 @@
 """Edit coverage by element class for in-place save (c3x-rvtmatrix). For every requested class of a project: pick up to 3 elements (set_string / set_num / move), apply them through the
 rvt-ballet server API in ONE session, SAVE AS (element-level verify), then SAVE! in place on a private copy (gate opened in a temp file only), and check:
   verify n_unexpected == 0 / honest refusal; re-read params: only the declared params changed; SAVE! bytes == SAVE AS bytes; backup restores the original sha256; untouched elements % (tools/rvt_untouched_report).
-Aggregate output only (class names, counts, percentages; no element names or paths).   usage: tools/rvt_class_pass.py OUT.json FILE CLASS[,CLASS...]|ALL   (env KEEP_DIR=dir [KEEP_TAG=tag] keeps each SAVE AS output for Revit VM opens)"""
+Aggregate output only (class names, counts, percentages; no element names or paths).   usage (one fresh process per class unless RVT_CP_INPROC=1, memory released per class): tools/rvt_class_pass.py OUT.json FILE CLASS[,CLASS...]|ALL   (env KEEP_DIR=dir [KEEP_TAG=tag] keeps each SAVE AS output for Revit VM opens)"""
 import os, sys, asyncio, tempfile, time, json, hashlib, shutil
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 import atexit, shutil as _sh; atexit.register(_sh.rmtree, _T, True); os.environ.setdefault('RVT_BALLET_CACHE', _T + '/bc'); os.environ.setdefault('RVT_CORE_CACHE', _T + '/cc')      # temp dir and ALL caches die with the process (host disk emergency 2026-11-01)
@@ -103,4 +103,17 @@ async def main(out, src, classes):
             try: os.remove(os.path.join(_T, 'w%d.rvt' % k))
             except OSError: pass
     json.dump(rows, open(out, 'w'), indent=1); print('CLASS-PASS', {'classes': len(rows), 'ok': sum(r['result'] == 'OK' for r in rows), 'absent': sum(r['result'] == 'ABSENT' for r in rows)})
-asyncio.run(main(sys.argv[1], sys.argv[2], sys.argv[3].split(',')))
+def isolated(out, src, classes):
+    """one fresh process per class: the in-process loop kept growing (10 GB after 3 classes on a 5 MB template, 25 GB on the 22 MB HVAC file); a child's memory is released when it exits. Rows are the children's output, merged into the same OUT.json."""
+    import subprocess, tempfile as _tf
+    rows = []
+    for cl in (DEFAULT if classes == ['ALL'] else classes):
+        o = _tf.mktemp(suffix='.json', prefix='cp1-')
+        r = subprocess.run([sys.executable, os.path.abspath(__file__), o, src, cl], env=dict(os.environ, RVT_CP_CHILD='1'), stdout=subprocess.PIPE, text=True)
+        sys.stdout.write(''.join(l for l in r.stdout.splitlines(True) if not l.startswith('CLASS-PASS'))); sys.stdout.flush()
+        try: rows += json.load(open(o)); os.remove(o)
+        except Exception: rows.append({'class': cl, 'result': 'CHILD_FAILED', 'rc': r.returncode})
+    json.dump(rows, open(out, 'w'), indent=1); print('CLASS-PASS', {'classes': len(rows), 'ok': sum(r['result'] == 'OK' for r in rows), 'absent': sum(r['result'] == 'ABSENT' for r in rows)})
+_cl = sys.argv[3].split(',')
+if os.environ.get('RVT_CP_CHILD') or os.environ.get('RVT_CP_INPROC') or (len(_cl) == 1 and _cl != ['ALL']): asyncio.run(main(sys.argv[1], sys.argv[2], _cl))
+else: isolated(sys.argv[1], sys.argv[2], _cl)
