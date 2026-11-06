@@ -1,4 +1,5 @@
-"""Second-generation edit (editing a file the writer already rewrote) re-pages the partition stream (full pages 72->73, last-page capacity 25704->0, +36864 B) and is NOT confirmed to open in Revit
+"""UPDATED 2026-11-06 (c3x-rvtsave): the writer now consumes its zero pad, so the second-generation case below no longer changes the layout; the layout_changed guard itself is still in save.py (documented by test_save_chain10 / refusal tests).
+Second-generation edit (editing a file the writer already rewrote) re-pages the partition stream (full pages 72->73, last-page capacity 25704->0, +36864 B) and is NOT confirmed to open in Revit
 (gen4/gen8 of the chain were unreachable in the VM). SAVE AS must carry a warning, overwrite must be refused (409 layout_changed) unless RVTBALLET_ALLOW_LAYOUT_CHANGE=1; a first-generation edit of the
 Revit-written original keeps the layout: no warning. The gen-1 file is produced here by the viewer itself.
 VM VERDICT (2026-11-02, c4x-rvtmatrix items 23/24, CORRECTED): a layout-changed in-place output (move, 2024 cols2 and 2026 anno1 scenes, override on) OPENS in Revit 2024/2026 offline VM (revit_open=True cmp 0/0, no dialogs) when the file keeps its .rte extension. An earlier "rejected" verdict was a test artifact (these scenes are templates; renamed .rvt Revit says not a valid .rvt, unedited controls too). Refusal stays default because the layout is not otherwise proven.
@@ -21,9 +22,8 @@ async def run():
         j = await (await c.post('/api/m/a/saveas', json={'dest': g1})).json(); assert j['ok'] and 'warnings' not in j, j          # generation 1: layout kept, no warning
     async with TestClient(TestServer(server.make_app(await session(g1, 'b')))) as c:
         await c.get('/api/m/b/saveinfo'); await c.post('/api/m/b/edit', json=dict(EDIT, eid=25)); h1 = sha(g1)
-        j = await (await c.post('/api/m/b/saveas', json={'dest': g2})).json(); assert j['ok'] and j['warnings'] and 'NOT confirmed' in j['warnings'][0], j     # generation 2: warned
-        r = await c.post('/api/m/b/save', json={}); j = await r.json(); assert r.status == 409 and j['code'] == 'layout_changed' and sha(g1) == h1, (r.status, j)  # overwrite refused, file untouched
-        os.environ['RVTBALLET_ALLOW_LAYOUT_CHANGE'] = '1'; r = await c.post('/api/m/b/save', json={}); assert r.status == 200, await r.text()               # explicit override works
-    print('save layout OK (gen1 clean, gen2 warned + overwrite refused, override honoured)')
+        j = await (await c.post('/api/m/b/saveas', json={'dest': g2})).json(); assert j['ok'] and 'warnings' not in j, j     # generation 2: since rvt-research 8f7719a the re-saved partition consumes its own zero pad, layout kept, no warning
+        r = await c.post('/api/m/b/save', json={}); j = await r.json(); assert r.status == 200 and sha(g1) == sha(g2), (r.status, j)  # overwrite of a layout-keeping edit works and equals SAVE AS
+    print('save layout OK (gen1 and gen2 keep the layout: no warning, overwrite == SAVE AS)')
 if not os.path.exists(RTE) or not save.SaveSessions().available: print('skip')
 else: asyncio.run(run())
