@@ -32,7 +32,7 @@ async def one_class(c, models, k, src, cls, pr, ix):
     for kind in ('set_string', 'set_num', 'move', 'set_field'):
         tried = 0; skip = set()
         for eid in ids:
-            if (eid in used and not os.environ.get('C3X_SAME_ELEMENT')) or tried >= 40: continue
+            if (eid in used and not os.environ.get('C3X_SAME_ELEMENT')) or tried >= int(os.environ.get('CP_MAX_TRY', '40')): continue
             p = g(pr[eid])
             if kind == 'set_string':
                 cands = [n for n, v in p.items() if isinstance(v, str) and '|' not in n and n not in NOEDIT and n in KNOWN]
