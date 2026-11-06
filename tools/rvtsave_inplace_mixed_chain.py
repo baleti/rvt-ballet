@@ -29,7 +29,8 @@ async def run(orig, keep):
                     after = save._read_params(open(src, 'rb').read()); row['only_target'] = [k for k in before if before[k] != after.get(k)] == [eid] and after[eid]['params'][p] == val
                     shas.append(sha(src))
             print(row, flush=True)
-        for n in range(len(shas) - 1):
-            rr = await c.post('/api/m/m/restore', json={'n': 0, 'confirm': True}); print({'restore': n, 'status': rr.status, 'matches_prev_state': sha(src) == shas[len(shas) - 2 - n]}, flush=True)
+        # backups are newest-first and a restore itself adds a backup, so restore the OLDEST chain backup once: must equal the original
+        n = len(shas) - 2
+        rr = await c.post('/api/m/m/restore', json={'n': n, 'confirm': True}); print({'restore_oldest_n': n, 'status': rr.status, 'identical_to_original': sha(src) == h0}, flush=True)
     print('done'); sys.exit(0)
 asyncio.run(run(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None))
