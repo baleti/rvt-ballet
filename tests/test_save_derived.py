@@ -34,6 +34,10 @@ mem[b'k'] = {1: {'Name': 'W1'}, 2: {'Column Location Mark|String': 'A(610)-W1(-1
 mem[b'l'] = {1: {'Name': 'Z'}, 2: {'Column Location Mark|String': 'A(610)-Z(-17678)'}, 3: {'Column Location Mark|String': 'Z(5)-B(7)'}, 4: {'Column Location Mark|String': 'A(610)-W12(-1)'}, 5: {'Column Location Mark|String': 'A(610)-Z(-17678)', 'Mark': 'n'}}
 assert save.derived_echoes(b'k', b'l', [{'op': 'set_string', 'eid': 1, 'field': 'DatumPlane.m_text', 'value': 'Z', 'match': 'W1'}]) == [2, 3]   # W12 is another grid; 5 also changed Mark
 print('grid rename mark echo OK')
+mem[b'k2'] = {1: {'Name': '1'}, 2: {'Column Location Mark|String': 'C-1'}, 3: {'Column Location Mark|String': 'D(6")-1'}, 4: {'Column Location Mark|String': 'C-12'}, 5: {'Column Location Mark|String': '1-B'}}
+mem[b'l2'] = {1: {'Name': 'X'}, 2: {'Column Location Mark|String': 'C-X'}, 3: {'Column Location Mark|String': 'D(6")-X'}, 4: {'Column Location Mark|String': 'C-12'}, 5: {'Column Location Mark|String': 'X-B'}}
+assert save.derived_echoes(b'k2', b'l2', [{'op': 'set_string', 'eid': 1, 'field': 'DatumPlane.m_text', 'value': 'X', 'match': '1'}]) == [2, 3, 5]   # grid name with no offset after it (Snowdon Structural: 4 instances); C-12 is another grid
+print('grid rename mark echo (no offset) OK')
 # column location mark after a move (read-back tolerance, QUEUE 73o): only the trailing offset may change
 f = save._same_mark_base
 assert f('D-1', 'D-1(610)') and f('W(137)-16(1162)', 'W(137)-16(1467)') and f('W(137)-16', 'W(137)-16')
