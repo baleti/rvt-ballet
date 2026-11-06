@@ -49,7 +49,7 @@ async def one_class(c, models, k, src, cls, pr, ix):
             elif kind == 'set_field':
                 f = FIELD.get(cls) or next((v for k3, v in FIELD.items() if cls.startswith(k3)), None); nm = next((p[k5] for k5 in ('Name', 'View Name', 'Type Name') if isinstance(p.get(k5), str) and p[k5]), None)
                 if not f or not nm: continue
-                op = {'op': 'set_string', 'eid': eid, 'field': f, 'value': nm + ' c3x', 'match': nm, 'param': None}
+                op = {'op': 'set_string', 'eid': eid, 'field': f, 'value': nm + os.environ.get('CP_SUFFIX', ' c3x'), 'match': nm, 'param': None}
             else: op = {'op': 'move', 'eid': eid, 'dx': 1.0, 'dy': 0.0, 'dz': 0.0}
             tried += 1; st, j = await post(c, mid, op)
             if st == 200: applied.append(op); used.add(eid); break
