@@ -10,7 +10,7 @@ try {
   foreach (var s in ids) {
     var e = d.GetElement(new ElementId(long.Parse(s)));
     if (e == null) { log.AppendLine("RB " + s + " missing"); continue; }
-    var dm = e as Dimension; if (dm != null) { var o = dm.Origin; log.AppendLine("RB " + s + " loc=" + o.X.ToString("F6") + " " + o.Y.ToString("F6") + " " + o.Z.ToString("F6") + " rotdeg=0 group=" + e.GroupId + " mark=-"); continue; }
+    var dm = e as Dimension; if (dm != null) { XYZ o = null; try { o = dm.Origin; } catch (Exception) { try { o = dm.Segments.get_Item(0).Origin; } catch (Exception) { try { o = dm.Curve.GetEndPoint(0); } catch (Exception) { } } } if (o == null) { log.AppendLine("RB " + s + " noloc"); continue; } log.AppendLine("RB " + s + " loc=" + o.X.ToString("F6") + " " + o.Y.ToString("F6") + " " + o.Z.ToString("F6") + " rotdeg=0 group=" + e.GroupId + " mark=-"); continue; }
     var lp = e.Location as LocationPoint; var lc = e.Location as LocationCurve;
     string loc = lp != null ? lp.Point.X.ToString("F6") + " " + lp.Point.Y.ToString("F6") + " " + lp.Point.Z.ToString("F6") : (lc != null ? lc.Curve.GetEndPoint(0).X.ToString("F6") + " " + lc.Curve.GetEndPoint(0).Y.ToString("F6") + " " + lc.Curve.GetEndPoint(0).Z.ToString("F6") : "noloc");
     var li = e as RevitLinkInstance; string tfrot = null;
