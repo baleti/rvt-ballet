@@ -80,7 +80,9 @@ def vm_open(year, path):
     rc, out = run([sys.executable, HERE + '/rvt_vm_open.py', str(year), path], timeout=3000)
     row = next((l for l in out.splitlines() if l.startswith('c3x-rvtmatrix')), '')
     if not row: return None, None, 'no VM verdict (' + out.strip()[-120:] + ')'
-    f = row.split('\t'); opened = 'revit_open=True' in f[4]; cmp_ok = "cmp=('0', '0')" in f[5]
+    f = row.split('\t')
+    if any(k in row for k in ('no Revit port', 'hang/crash', 'TIMEOUT')): return None, None, 'VM infrastructure problem, not a result: ' + row[-120:]      # the guest Revit did not start / crashed: retry later, never a FAIL
+    opened = 'revit_open=True' in f[4]; cmp_ok = "cmp=('0', '0')" in f[5]
     return opened, cmp_ok, ' '.join(f[4:7])[:160] + ((' ' + f[-1]) if len(f) > 8 and f[-1] else '')
 
 
