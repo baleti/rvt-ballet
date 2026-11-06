@@ -16,10 +16,10 @@ async def save(src, scen, eid):
     async with TestClient(TestServer(server.make_app(models))) as c:
         import aiohttp; c.session._timeout = aiohttp.ClientTimeout(total=None)      # the test client's default 300 s total timeout is a harness artifact on big files
         await c.get('/api/m/m/saveinfo')
-        body = {'none': None, 'move': {'op': 'move', 'eid': eid, 'dx': float(os.environ.get('RVTSAVE_DX', '2.0'))}, 'param': {'op': 'set_string', 'eid': eid, 'param': os.environ.get('RVTSAVE_PARAM', 'Comments'), 'value': os.environ.get('RVTSAVE_VALUE', 'rvtsave')}, 'delete': {'op': 'delete', 'eid': eid}}['param' if op == 'both' else op]
+        body = {'none': None, 'move': {'op': 'move', 'eid': eid, 'dx': float(os.environ.get('RVTSAVE_DX', '2.0'))}, 'param': {'op': 'set_string', 'eid': eid, 'param': os.environ.get('RVTSAVE_PARAM', 'Comments'), 'value': os.environ.get('RVTSAVE_VALUE', 'rvtsave')}, 'delete': {'op': 'delete', 'eid': eid}, 'num': {'op': 'set_num', 'eid': eid, 'param': os.environ.get('RVTSAVE_PARAM', 'Unconnected Height'), 'value': float(os.environ.get('RVTSAVE_VALUE', '12.0'))}}['param' if op == 'both' else op]
         if body:
             r = await c.post('/api/m/m/edit', json=body)
-            if op in ('param', 'both'):      # first candidate instance that actually stores the string parameter
+            if op in ('param', 'both', 'num'):      # first candidate instance that actually stores the string parameter
                 for e in ([eid] + CANDS)[:int(os.environ.get("RVTSAVE_NCAND", "25"))]:
                     body['eid'] = e; r = await c.post('/api/m/m/edit', json=body)
                     if r.status == 200: eid = e; break
@@ -38,7 +38,9 @@ def pick(path):
     d = R.elements(open(path, 'rb').read())
     import json
     for e, v in d.items():
-        if v.startswith('FamilyInstance|') and e > 1000 and json.loads(v.split('|')[1])[2]: CANDS.append(e)
+        if os.environ.get('RVTSAVE_CLASS'):      # scenario num (resize through a stored Double): candidates of that class, e.g. SWall
+            if v.startswith(os.environ['RVTSAVE_CLASS'] + '|'): CANDS.append(e)
+        elif v.startswith('FamilyInstance|') and e > 1000 and json.loads(v.split('|')[1])[2]: CANDS.append(e)
     if os.environ.get('RVTSAVE_BOTH'):      # scenario both: only instances whose Comments is stored (empty string) so the set_string has a unique target
         from rvtballet import save as _s; pr = _s._read_params(open(path, 'rb').read()); CANDS[:] = [e for e in CANDS if pr.get(e, {}).get('params', pr.get(e, {})).get(os.environ.get('RVTSAVE_PARAM', 'Comments')) is not None]
     if CANDS: return CANDS[0]
