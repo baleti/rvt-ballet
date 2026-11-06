@@ -1,7 +1,7 @@
 """Edit coverage by element class for in-place save (c3x-rvtmatrix). For every requested class of a project: pick up to 3 elements (set_string / set_num / move), apply them through the
 rvt-ballet server API in ONE session, SAVE AS (element-level verify), then SAVE! in place on a private copy (gate opened in a temp file only), and check:
   verify n_unexpected == 0 / honest refusal; re-read params: only the declared params changed; SAVE! bytes == SAVE AS bytes; backup restores the original sha256; untouched elements % (tools/rvt_untouched_report).
-Aggregate output only (class names, counts, percentages; no element names or paths).   usage: tools/rvt_class_pass.py OUT.json FILE CLASS[,CLASS...]|ALL [KEEP_DIR]"""
+Aggregate output only (class names, counts, percentages; no element names or paths).   usage: tools/rvt_class_pass.py OUT.json FILE CLASS[,CLASS...]|ALL   (env KEEP_DIR=dir [KEEP_TAG=tag] keeps each SAVE AS output for Revit VM opens)"""
 import os, sys, asyncio, tempfile, time, json, hashlib, shutil
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 import atexit, shutil as _sh; atexit.register(_sh.rmtree, _T, True); os.environ.setdefault('RVT_BALLET_CACHE', _T + '/bc'); os.environ.setdefault('RVT_CORE_CACHE', _T + '/cc')      # temp dir and ALL caches die with the process (host disk emergency 2026-11-01)
