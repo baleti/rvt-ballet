@@ -25,7 +25,9 @@ async def main(out, src0):
         eid = None; skipped = 0
         for e in ([int(os.environ['EID'])] if os.environ.get('EID') else cand):
             r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': e, 'dx': 1.0})
-            if r.status != 200: continue
+            if r.status != 200:
+                if os.environ.get('DBG'): print('EDIT', e, r.status, str(await r.text())[:200])
+                continue
             eid = e; r = await c.post('/api/m/m/save', json={}); j = await r.json(); row['save_status'] = r.status
             if r.status == 409 and j.get('code') == 'group_or_option' and not os.environ.get('EID'):      # hosted/grouped candidate: the gate refused correctly, undo the pending edit and try the next one
                 skipped += 1; await c.post('/api/m/m/edit/undo', json={}); continue
