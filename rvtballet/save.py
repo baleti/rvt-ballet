@@ -764,7 +764,7 @@ def _readback(src_buf, nb, ops):
         if any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv): continue
         try: cl = _bbox_class(src_buf, o['eid'])
         except Exception: cl = ''
-        if cl and cl not in ('FamilyInstance', 'SWall', 'LinearDimString'): bad.append('moved element %d: class %s has no readable displacement witness, so the move cannot be verified (refused)' % (o['eid'], cl))
+        if cl and cl not in ('FamilyInstance', 'SWall', 'LinearDimString', 'RvtLinkInstance'): bad.append('moved element %d: class %s has no readable displacement witness, so the move cannot be verified (refused)' % (o['eid'], cl))
         elif cl in ('FamilyInstance', ''):      # '' = the class index does not list the element (older files): box or record origin must witness
             try: has_box = _bbox_of(src_buf, o['eid']) is not None
             except Exception: has_box = False
@@ -790,10 +790,11 @@ def _readback(src_buf, nb, ops):
     for o in [r for r in mv if r['op'] == 'move']:      # walls and linear dimensions: the placement origin in the record must move by exactly the requested displacement (the geometry reader has no mesh for a moved wall, and the box carries join extensions)
         if any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv): continue
         try:
-            if _bbox_class(src_buf, o['eid']) not in ('SWall', 'LinearDimString'): continue
+            if _bbox_class(src_buf, o['eid']) not in ('SWall', 'LinearDimString', 'RvtLinkInstance'): continue
             w0 = _trf_origin(src_buf, o['eid']); w1 = _trf_origin(nb, o['eid']) if w0 else None
-        except Exception: continue
+        except Exception: w0 = w1 = None
         d = (o['dx'], o['dy'], o['dz'])
+        if w0 is None and _bbox_class(src_buf, o['eid']) == 'RvtLinkInstance': bad.append('moved Revit link instance %d: no readable record origin (Trf.m_or), so the move cannot be verified (refused)' % o['eid']); continue
         if _bbox_class(src_buf, o['eid']) == 'SWall':      # the location line itself must move (the Trf origin alone is not a wall move)
             try: g0 = _wall_line_origin(src_buf, o['eid']); g1 = _wall_line_origin(nb, o['eid']) if g0 else None
             except Exception: g0 = g1 = None
