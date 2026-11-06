@@ -937,11 +937,21 @@ def recover_edits(ss, mid, src):
     return {'ok': True, 'n': len(e.ops), 'recovered': len(ops)}
 
 
+def _refuse_dim_moves(buf, ops):
+    """a LinearDimString move changes the record origin (the gate sees it) but Revit 2024 reads identical dimension segment origins afterwards (c2x-rvtmatrix, Snowdon Plumbing VM): the viewer must not promise it"""
+    from .edit import EditError
+    for o in ops:
+        if o.get('op') == 'move':
+            try: cl = _bbox_class(buf, o['eid'])
+            except Exception: cl = ''
+            if cl == 'LinearDimString': raise EditError('element %d is a dimension: Revit does not honour a moved dimension record, so the move is refused' % o['eid'])
+
+
 def add_edit(ss, mid, src, op):
     """record an edit after a trial replay on the loaded bytes (so an op the writer cannot apply is refused now, not at save time)"""
     from .edit import apply_full, validate_op
     op = validate_op(op)
-    try: d = ss.doc(mid, src); e = ss.edits(mid); _, deleted = apply_full(d.buf, e.ops + [op])
+    try: d = ss.doc(mid, src); _refuse_dim_moves(d.buf, [op]); e = ss.edits(mid); _, deleted = apply_full(d.buf, e.ops + [op])
     except ValueError as ex:      # the reader's own refusal of a damaged file ('file truncated: ...'): a clean 409, not a bare 500
         if 'truncated' in str(ex).lower() or 'corrupt' in str(ex).lower(): raise SourceDamaged('the model file is damaged (%s); nothing was written' % str(ex)[:160])
         raise
@@ -953,7 +963,7 @@ def add_edits(ss, mid, src, ops):
     """record several edits after ONE trial replay of the whole list (add_edit replays everything per call: about 20 s each on a 28 MB model). All or none: a refusal of any op leaves the recorded edits as they were."""
     from .edit import apply_full, validate_op
     ops = [validate_op(o) for o in ops]
-    try: d = ss.doc(mid, src); e = ss.edits(mid); _, deleted = apply_full(d.buf, e.ops + ops)
+    try: d = ss.doc(mid, src); _refuse_dim_moves(d.buf, ops); e = ss.edits(mid); _, deleted = apply_full(d.buf, e.ops + ops)
     except ValueError as ex:
         if 'truncated' in str(ex).lower() or 'corrupt' in str(ex).lower(): raise SourceDamaged('the model file is damaged (%s); nothing was written' % str(ex)[:160])
         raise
