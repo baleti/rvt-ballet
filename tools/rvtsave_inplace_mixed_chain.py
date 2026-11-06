@@ -31,6 +31,7 @@ async def run(orig, keep):
             print(row, flush=True)
         # backups are newest-first and a restore itself adds a backup, so restore the OLDEST chain backup once: must equal the original
         n = len(shas) - 2
+        if keep: shutil.copy(src, keep)      # final chained output (before the restore) for a Revit VM open
         rr = await c.post('/api/m/m/restore', json={'n': n, 'confirm': True}); print({'restore_oldest_n': n, 'status': rr.status, 'identical_to_original': sha(src) == h0}, flush=True)
     print('done'); sys.exit(0)
 asyncio.run(run(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None))
