@@ -26,6 +26,14 @@ async def run(orig, n):
             if r.status == 200:
                 ok += 1; cur = new; pr2 = save._read_params(open(src, 'rb').read()); row['only_target'] = [x for x in pr if pr[x] != pr2.get(x)] == [e] and pr2[e]['params']['Mark'] == new
             else: row['untouched'] = sha(src) == b; row['error'] = str(j.get('error'))[:200]
+            if os.environ.get('CH_TM'):
+                import tracemalloc, gc; gc.collect()
+                if not tracemalloc.is_tracing(): tracemalloc.start(8)
+                elif k == 4:
+                    snap = tracemalloc.take_snapshot(); [print('TM', st) for st in snap.statistics('lineno')[:8]]
+            if os.environ.get('CH_TRIM'):
+                import gc, ctypes; gc.collect(); ctypes.CDLL('libc.so.6').malloc_trim(0)
+            from rvtballet._vendor.rvtplat import mem as _mem; row['rss_mb'] = _mem.rss_bytes() >> 20      # process RSS per round: growth across rounds = leak that eventually trips the memory guard
             rows.append(row); print(row, flush=True)
             if r.status != 200: break
         if os.environ.get('KEEP_OUT') and ok: os.makedirs(os.environ['KEEP_OUT'], exist_ok=True); shutil.copy(src, os.path.join(os.environ['KEEP_OUT'], 'chain_last.rvt'))
