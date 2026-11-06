@@ -17,9 +17,9 @@ async def run(orig, keep):
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
         for L in [int(x) for x in os.environ['LENGTHS'].split(',')]:
-            val = ('Q' * L)
+            val = os.environ.get('VALUE') or ('Q' * L)
             r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': e, 'param': 'Mark', 'value': val, 'match': old}); row = {'L': L, 'edit': r.status}
-            if r.status != 200: print(row, flush=True); continue
+            if r.status != 200: row['body'] = (await r.text())[:200]; print(row, flush=True); continue
             b0 = sha(src); r = await c.post('/api/m/m/save', json={}, timeout=__import__('aiohttp').ClientTimeout(total=None)); j = await r.json(); row.update(save=r.status, code=j.get('code', 'ok'))
             if r.status == 200:
                 pr2 = save._read_params(open(src, 'rb').read()); row['only_target'] = [k for k in pr if pr[k] != pr2.get(k)] == [e] and pr2[e]['params']['Mark'] == val
