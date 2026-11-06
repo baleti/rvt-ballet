@@ -659,7 +659,7 @@ def _bbox_class(buf, eid):
         except Exception: pass
 
 
-def _trf_origin(buf, eid):
+def _trf_origin(buf, eid, field='Trf.m_or'):
     """first Trf.m_or (3 finite doubles) of one element record read with the edit-lab record tracer, or None. For an SWall this is the placement origin: a move by (dx,dy,dz) adds exactly that (measured on the 2024 cols2 wall: (0,0,0) -> (1,2,0.5))"""
     import sys, tempfile, struct, math
     for lib in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab'), os.path.expanduser('~/rvt-research/edit-lab')):
@@ -670,7 +670,7 @@ def _trf_origin(buf, eid):
         with open(p, 'wb') as f: f.write(buf)
         ed = rvtedit.Edit(p)
         for l in ed.g.e.trace(eid)[3]:
-            if l[1] == 'Trf.m_or' and l[3] - l[2] == 24:
+            if l[1] == field and l[3] - l[2] == 24:
                 v = struct.unpack_from('<3d', ed.g.bj, l[2])
                 return v if all(math.isfinite(x) and abs(x) < 1e7 for x in v) else None
         return None
@@ -678,10 +678,15 @@ def _trf_origin(buf, eid):
         import shutil; shutil.rmtree(d, True)
 
 
+def _origin_field(src_buf, eid):
+    """record field that witnesses a move of this class: TextNote carries TextElement.m_orig (no Trf)"""
+    return 'TextElement.m_orig' if _bbox_class(src_buf, eid) == 'TextNote' else 'Trf.m_or'
+
+
 def _origin_move_bad(src_buf, nb, o):
     """box not rebuilt by the writer: the record origin must shift by exactly the declared displacement (c2x-rvtsave: dx=7 bytes passed under declared dx=1). Returns a list of problems."""
     d = (o.get('dx', 0.0), o.get('dy', 0.0), o.get('dz', 0.0))
-    try: w0 = _trf_origin(src_buf, o['eid']); w1 = _trf_origin(nb, o['eid']) if w0 else None
+    try: fl_ = _origin_field(src_buf, o['eid']); w0 = _trf_origin(src_buf, o['eid'], fl_); w1 = _trf_origin(nb, o['eid'], fl_) if w0 else None
     except Exception: w0 = w1 = None
     if w0 is None or w1 is None: return ['moved element %d: box not rebuilt and no readable record origin, so the move cannot be verified (refused)' % o['eid']]
     if any(abs((w1[i] - w0[i]) - d[i]) > 1e-6 * max(1.0, abs(d[i])) + 1e-6 for i in range(3)): return ['moved element %d: record origin shifted by (%s), not the requested (%.4g, %.4g, %.4g)' % ((o['eid'], ', '.join('%.9g' % (w1[i] - w0[i]) for i in range(3))) + d)]
@@ -764,7 +769,7 @@ def _readback(src_buf, nb, ops):
         if any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv): continue
         try: cl = _bbox_class(src_buf, o['eid'])
         except Exception: cl = ''
-        if cl and cl not in ('FamilyInstance', 'SWall', 'LinearDimString', 'RvtLinkInstance'): bad.append('moved element %d: class %s has no readable displacement witness, so the move cannot be verified (refused)' % (o['eid'], cl))
+        if cl and cl not in ('FamilyInstance', 'SWall', 'LinearDimString', 'RvtLinkInstance', 'TextNote'): bad.append('moved element %d: class %s has no readable displacement witness, so the move cannot be verified (refused)' % (o['eid'], cl))
         elif cl in ('FamilyInstance', ''):      # '' = the class index does not list the element (older files): box or record origin must witness
             try: has_box = _bbox_of(src_buf, o['eid']) is not None
             except Exception: has_box = False
@@ -790,8 +795,8 @@ def _readback(src_buf, nb, ops):
     for o in [r for r in mv if r['op'] == 'move']:      # walls and linear dimensions: the placement origin in the record must move by exactly the requested displacement (the geometry reader has no mesh for a moved wall, and the box carries join extensions)
         if any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv): continue
         try:
-            if _bbox_class(src_buf, o['eid']) not in ('SWall', 'LinearDimString', 'RvtLinkInstance'): continue
-            w0 = _trf_origin(src_buf, o['eid']); w1 = _trf_origin(nb, o['eid']) if w0 else None
+            if _bbox_class(src_buf, o['eid']) not in ('SWall', 'LinearDimString', 'RvtLinkInstance', 'TextNote'): continue
+            fl_ = _origin_field(src_buf, o['eid']); w0 = _trf_origin(src_buf, o['eid'], fl_); w1 = _trf_origin(nb, o['eid'], fl_) if w0 else None
         except Exception: w0 = w1 = None
         d = (o['dx'], o['dy'], o['dz'])
         if w0 is None and _bbox_class(src_buf, o['eid']) == 'RvtLinkInstance': bad.append('moved Revit link instance %d: no readable record origin (Trf.m_or), so the move cannot be verified (refused)' % o['eid']); continue
@@ -799,8 +804,9 @@ def _readback(src_buf, nb, ops):
             try: g0 = _wall_line_origin(src_buf, o['eid']); g1 = _wall_line_origin(nb, o['eid']) if g0 else None
             except Exception: g0 = g1 = None
             if g0 is not None and (g1 is None or any(abs((g1[i] - g0[i]) - d[i]) > 1e-6 * max(1.0, abs(d[i])) + 1e-6 for i in range(3))): bad.append('moved wall %d: the wall location line in the output is not the source moved by (%.4g, %.4g, %.4g) (only a pattern origin moved)' % ((o['eid'],) + d)); continue
+        if w0 is None and _bbox_class(src_buf, o['eid']) == 'TextNote': bad.append('moved text note %d: no readable TextElement.m_orig, so the move cannot be verified (refused)' % o['eid']); continue
         if w0 is None: continue
-        if w1 is None or any(abs((w1[i] - w0[i]) - d[i]) > 1e-6 * max(1.0, abs(d[i])) + 1e-6 for i in range(3)): bad.append('moved wall %d: the placement origin in the output is not the source moved by (%.4g, %.4g, %.4g)' % ((o['eid'],) + d))
+        if w1 is None or any(abs((w1[i] - w0[i]) - d[i]) > 1e-6 * max(1.0, abs(d[i])) + 1e-6 for i in range(3)): bad.append('moved element %d: the placement origin in the output is not the source moved by (%.4g, %.4g, %.4g)' % ((o['eid'],) + d))
     for o in dl:      # a declared deletion must really have happened: the gate accepts a manifest that names a still-present element as deleted (tests/test_save_escape_delete.py)
         if o['eid'] in a and o['eid'] in b: bad.append('element %d was declared deleted but is still in the output' % o['eid'])
     for o in fl:

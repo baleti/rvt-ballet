@@ -253,7 +253,11 @@ def _rvtedit_pass(a, b, ops):
     for o in ops:
         try:
             if o['op'] == 'delete': deleted += _delete(ed, o['eid'])
-            elif o['op'] == 'move': ed.move(o['eid'], o['dx'], o['dy'], o['dz'])
+            elif o['op'] == 'move':
+                try: ed.move(o['eid'], o['dx'], o['dy'], o['dz'])
+                except NotImplementedError:      # view annotations (TextNote): origin in TextElement.m_orig, 2D in the view plane
+                    if o['dz']: raise NotImplementedError('annotation move needs dz = 0')
+                    ed.move_annotation(o['eid'], o['dx'], o['dy'])
             elif o['op'] == 'rotate': ed.rotate(o['eid'], o['deg'])
             elif o['op'] == 'change_type': _change_type(ed, o)
             elif o['op'] == 'set_num': _set_num_by_pid(ed, o)
