@@ -45,6 +45,8 @@ async def main(out, src0):
                 if kd: os.makedirs(kd, exist_ok=True); shutil.copy(o, os.path.join(kd, 'uni_saveas.rvt'))
             else: row['detail_saveas'] = str(j.get('error'))[:160]
             print(row); json.dump(row, open(out, 'w')); return
+        kd1 = os.environ.get('KEEP_OUT')
+        if kd1: os.makedirs(kd1, exist_ok=True); shutil.copy(work, os.path.join(kd1, 'save1.rvt'))
         p1 = rvt_params.params(work); row['roundtrip_ok'] = sum(g(p1.get(e)).get(nm) == v for e, nm, v in applied); row['unicode_edits_total'] = len(applied)
         row['others_changed_1'] = sum(1 for e in pr if e not in used and g(pr[e]) != g(p1.get(e)))
         second = None
@@ -64,7 +66,7 @@ async def main(out, src0):
                 kd = os.environ.get('KEEP_OUT')
                 if kd: os.makedirs(kd, exist_ok=True); shutil.copy(work, os.path.join(kd, 'dbl_final.rvt'))
             else: row['detail2'] = str(j.get('error'))[:200]
-        r = await c.post('/api/m/m/restore', json={'n': 0, 'confirm': True}); row['restore0'] = r.status; row['restore0_is_save1'] = h1 is not None and sha(work) == h1
+        r = await c.post('/api/m/m/restore', json={'n': 0, 'confirm': True}); row['restore0'] = r.status; row['restore0_is_save1'] = h1 is not None and sha(work) == (h1 if row.get('save2') == 200 else h0)      # one backup per successful save: if save 2 was refused, n=0 is the original
         r = await c.post('/api/m/m/restore', json={'n': 1, 'confirm': True}); row['restore1'] = r.status; row['restore1_is_orig'] = sha(work) == h0
     row['result'] = 'OK' if row.get('roundtrip_ok') == len(applied) and row.get('second_ok') and row.get('first_kept') == len(applied) and not row.get('others_changed_1') and not row.get('others_changed_2') and row['restore0_is_save1'] and row['restore1_is_orig'] else 'PROBLEM'
     print(row); json.dump(row, open(out, 'w'))
