@@ -9,6 +9,8 @@ import os, sys, re, json
 sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab/campaign')); sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import guest, rvt_diff
 
+def EXT(f): return os.path.splitext(f)[1] or '.rvt'
+
 def cs_for(ops, tag, file):
     body = []
     for o in [x for x in ops.split(';') if x and x != 'none']:
@@ -32,27 +34,27 @@ try {
   var d = app.OpenDocumentFile(ModelPathUtils.ConvertUserVisiblePathToModelPath(@"%(f)s"), op);
   Directory.CreateDirectory(@"C:\\wl\\out");
   var so = new SaveAsOptions(); so.OverwriteExistingFile = true;
-  d.SaveAs(@"C:\\wl\\out\\%(t)s_base.rvt", so); log.AppendLine("SAVED base");
+  d.SaveAs(@"C:\\wl\\out\\%(t)s_base%(ext)s", so); log.AppendLine("SAVED base");
   using (var t = new Transaction(d, "rvtdiff")) { t.Start();
     %(b)s
     t.Commit(); }
-  d.SaveAs(@"C:\\wl\\out\\%(t)s_after.rvt", so); log.AppendLine("SAVED after");
+  d.SaveAs(@"C:\\wl\\out\\%(t)s_after%(ext)s", so); log.AppendLine("SAVED after");
   d.Close(false);
 } catch (Exception ex) { log.AppendLine("RESULT fail " + ex.Message.Replace("\\n", " ")); }
 Console.WriteLine(log.ToString());
-''' % {'f': file.replace('\\', '\\\\'), 't': tag, 'b': '\n    '.join(body)}
+''' % {'f': file.replace('\\', '\\\\'), 't': tag, 'ext': os.path.splitext(file)[1] or '.rvt', 'b': '\n    '.join(body)}
 
 def one(year, port, src, tag, ops):
-    rem = 'C:/wl/diff_%s_src.rvt' % tag
+    rem = 'C:/wl/diff_%s_src%s' % (tag, os.path.splitext(src)[1] or '.rvt')
     guest.put(src, rem)
     out = guest.run_job(year, port, cs_for(ops, tag, rem), 'diff_' + tag, 900)
     print('[%s]' % tag, '\n'.join(l for l in out.replace('\r', '').splitlines() if l.startswith(('OP', 'SAVED', 'FAILURE', 'RESULT'))), flush=True)
     wd = os.path.expanduser('~/c2x-diff/%s' % tag); os.makedirs(wd, exist_ok=True)
-    ok = 'SAVED after' in out and all(guest.get('C:/wl/out/%s_%s.rvt' % (tag, k), os.path.join(wd, '%s.rvt' % k)) for k in ('base', 'after'))
+    ok = 'SAVED after' in out and all(guest.get('C:/wl/out/%s_%s%s' % (tag, k, EXT(src)), os.path.join(wd, '%s%s' % (k, EXT(src)))) for k in ('base', 'after'))
     return ok, wd
 
 def report(src, wd, nf):
-    for n, (x, y) in {'ORIG->BASE': (src, wd + '/base.rvt'), 'BASE->AFTER': (wd + '/base.rvt', wd + '/after.rvt'), 'ORIG->AFTER': (src, wd + '/after.rvt')}.items():
+    for n, (x, y) in {'ORIG->BASE': (src, wd + '/base' + EXT(src)), 'BASE->AFTER': (wd + '/base' + EXT(src), wd + '/after' + EXT(src)), 'ORIG->AFTER': (src, wd + '/after' + EXT(src))}.items():
         rep = rvt_diff.diff(x, y, not nf); json.dump(rep, open(wd + '/' + n.replace('->', '_') + '.json', 'w'), indent=1, default=str)
         print('=====', wd, n); print(rvt_diff.pretty(rep), flush=True)
 
