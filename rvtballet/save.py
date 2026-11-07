@@ -834,9 +834,10 @@ def _readback(src_buf, nb, ops):
         x, y = g(a.get(o['eid'])), g(b.get(o['eid'])); nm = o.get('param')
         if len(y) < len(x): bad.append('type %d lost parameters (%d -> %d)' % (o['eid'], len(x), len(y)))
         if nm is not None:
-            if not isinstance(y.get(nm), (int, float)) or abs(float(y[nm]) - o['value']) > 1e-9 * max(1.0, abs(o['value'])): bad.append('type %d: %s reads %r, not the requested %r' % (o['eid'], nm, y.get(nm), o['value']))
+            kk = nm if nm in y else (nm + '|Double' if nm + '|Double' in y else nm)      # type parameters are keyed 'Caption|Double' by the reader
+            if not isinstance(y.get(kk), (int, float)) or abs(float(y[kk]) - o['value']) > 1e-9 * max(1.0, abs(o['value'])): bad.append('type %d: %s reads %r, not the requested %r' % (o['eid'], nm, y.get(kk), o['value']))
             for k in set(x) | set(y):
-                if k != nm and x.get(k) != y.get(k): bad.append('type %d: untouched parameter %s changed (%r -> %r)' % (o['eid'], k, x.get(k), y.get(k)))
+                if k != kk and x.get(k) != y.get(k): bad.append('type %d: untouched parameter %s changed (%r -> %r)' % (o['eid'], k, x.get(k), y.get(k)))
     for o in ct:
         if o['eid'] not in b: bad.append('type-changed element %d missing in the output' % o['eid']); continue
         x, y = g(a.get(o['eid'])), g(b.get(o['eid']))

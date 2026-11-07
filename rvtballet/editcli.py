@@ -51,6 +51,7 @@ def _parser():
     ap.add_argument('--move', nargs=4, metavar=('EID', 'DX', 'DY', 'DZ'), action=_Op, kind='move')
     ap.add_argument('--rotate', nargs=2, metavar=('EID', 'DEG'), action=_Op, kind='rotate')
     ap.add_argument('--delete', nargs=1, metavar='EID', action=_Op, kind='delete')
+    ap.add_argument('--set-type-num', nargs=3, metavar=('TYPE_EID', 'PARAM', 'VALUE'), action=_Op, kind='set_type_num')
     ap.add_argument('--change-type', nargs=2, metavar=('EID', 'TYPE_EID'), action=_Op, kind='change_type')
     return ap
 
@@ -68,6 +69,7 @@ def build_op(kind, v):
     if kind == 'move': return {'op': 'move', 'eid': i(v[0], 'EID'), 'dx': f(v[1], 'DX'), 'dy': f(v[2], 'DY'), 'dz': f(v[3], 'DZ')}
     if kind == 'rotate': return {'op': 'rotate', 'eid': i(v[0], 'EID'), 'deg': f(v[1], 'DEG')}
     if kind == 'delete': return {'op': 'delete', 'eid': i(v[0], 'EID')}
+    if kind == 'set_type_num': return {'op': 'set_type_num', 'eid': i(v[0], 'TYPE_EID'), 'param': v[1], 'value': f(v[2], 'VALUE')}
     if kind == 'change_type': return {'op': 'change_type', 'eid': i(v[0], 'EID'), 'type_eid': i(v[1], 'TYPE_EID')}
     raise ValueError('unknown op ' + kind)
 
