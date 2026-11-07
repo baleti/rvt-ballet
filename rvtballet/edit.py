@@ -297,7 +297,9 @@ def _rvtedit_pass(a, b, ops):
             elif o['op'] == 'set_num': _set_num_by_pid(ed, o)
             elif o['op'] == 'set_string' and o.get('kind') == 'AString': _set_string_by_pid(ed, o)
             elif o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'], o['value'])
-            else: ed._str_edit(o['eid'], o['field'], o['value'], o['match'])
+            else:
+                if o['field'] == 'DatumPlane.m_text': _check_datum_name_unique(a, o)
+                ed._str_edit(o['eid'], o['field'], o['value'], o['match'])
         except (IndexError, KeyError, StopIteration, AssertionError, struct_error()) as e:
             hint = ' (the record layout of this kind of element, e.g. a group member, is not handled by the edit backend)' if o['op'] in ('move', 'rotate') else ''
             if o['op'] == 'rotate' and isinstance(e, KeyError): hint = ' (rotate is only supported for placed family instances such as columns, doors and furniture; walls, floors and annotations cannot be rotated here)'
@@ -332,6 +334,18 @@ def _set_num_by_pid(ed, o):
             if len(nb) != vn[3] - vn[2]: raise AssertionError('value size mismatch')
             ed._rec_edit(o['eid'], [(vn[2], vn[3] - vn[2], nb)]); return
     raise KeyError('param %d (%s) not stored on %d' % (pid, o['kind'], o['eid']))
+
+
+def _check_datum_name_unique(src, o):
+    """Revit does not allow two Levels (or two Grids) with the same name (case-insensitive): refuse a rename onto a sibling's name (c5x-rvtread; the writer used to save it and the file then holds a duplicate)"""
+    import rvt_entities
+    r = rvt_entities.extract(src, slim=lambda c: c in ('Level', 'Grid'))
+    mine = [k for k in r['recs'] if k[0] == o['eid'] and k[1] in ('Level', 'Grid')]
+    if not mine: return
+    new = o['value'].strip().casefold()
+    for k, v in r['recs'].items():
+        if k[1] == mine[0][1] and k[0] != o['eid'] and str(v.get('fields', {}).get('m_text', '')).strip().casefold() == new:
+            raise EditError('a %s named %r already exists (element %d): Revit does not allow duplicate names; nothing was changed' % (k[1], o['value'], k[0]))
 
 
 def _set_string_by_pid(ed, o):
