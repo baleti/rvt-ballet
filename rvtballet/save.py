@@ -328,12 +328,18 @@ def _ecc_bad_pages(d, rvtw):
 
 def source_damage(buf):
     """[(stream, member index)] of CRC-bad independent gzip members in the Partitions/* streams; [] when clean or when the check cannot run (a lower bound: gzcheck walks only the members it can frame; 0 false positives on 101 real partition streams of 77 corpus files)"""
+    out = []
+    try:
+        import struct
+        if len(buf) >= 28 and struct.unpack_from('<H', buf, 26)[0] not in (3, 4):      # c7x-rvtread 94: major-version high byte flipped; the reader loads it, Revit 2024 refuses (COleException 0x80030105)
+            out.append(('CFB header (major version)', 0))
+    except Exception:
+        pass
     try:
         from .edit import WL
         if WL not in sys.path: sys.path.insert(0, WL)
         import cfb, rvtw
         from .gzcheck import member_report
-        out = []
         for k, v in cfb.CFB(bytes(buf)).streams().items():
             if k.startswith('Partitions/'):
                 out.extend((k, i) for i in member_report(bytes(rvtw.Stream(v.data).payload))[1])
@@ -342,7 +348,7 @@ def source_damage(buf):
                 out.extend((k + ' (page ECC)', i) for i in _ecc_bad_pages(v.data, rvtw))
         return out
     except Exception:
-        return []
+        return out
 
 
 def _refuse_damaged(d):
