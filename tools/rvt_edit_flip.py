@@ -29,6 +29,15 @@ if os.environ.get('EDIT_FLIP_INMEMBER'):      # targeted: flip one byte of the D
             r = pt.mem[mi]['raw']; o = rnd.randrange(len(r)); r[o] ^= 1 << rnd.randrange(8); pt.mem[mi]['dirty'] = True
             c.streams()[pn].data = st_.build(pt.rebuild(), keep_spare=False)
             import io; tp = os.path.join(_T, 'rb.rvt'); cfb.write(c, tp); T['inmember_%s_%d_at%d' % (pn.split('/')[-1], mi, o)] = open(tp, 'rb').read()
+if os.environ.get('EDIT_FLIP_GLOBAL'):      # targeted: one byte flip in the stream data of every NON-partition stream the writer left unchanged (the gate tolerates Global/* when an edit is declared)
+    import cfb
+    sa_ = cfb.CFB(buf).streams()
+    for sn in sorted(sa_):
+        if sn.startswith('Partitions/'): continue
+        c = cfb.CFB(good); d = bytearray(c.streams()[sn].data)
+        if d != bytearray(sa_[sn].data) or not d: continue
+        o = rnd.randrange(len(d)); d[o] ^= 1 << rnd.randrange(8); c.streams()[sn].data = bytes(d)
+        tp = os.path.join(_T, 'gl.rvt'); cfb.write(c, tp); T['stream_%s_at%d' % (sn.replace('/', '_'), o)] = open(tp, 'rb').read()
 esc = []
 for k, nb in T.items():
     dest = os.path.join(_T, 'o_%s.rvt' % k)
