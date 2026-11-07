@@ -17,7 +17,9 @@ if not a.force:
     _c=_ed.g.e.trace(a.src)[2]['class']
     if _c != 'FamilyInstance': sys.exit('REFUSED: source %d is a %s; this tool moves FamilyInstance origins only (a %s copy would sit on the original and skip owner-view/host lists). Text notes: rvtedit.py tn:X:Y:TEXT; other classes need their own op.' % (a.src, _c, _c))
     print('dependents screen: none')
-g=rvtgen.Gen(a.seed); W=g.W; S=a.src; T=g.template(S); idS=struct.pack(g.IDF,S)
+g=rvtgen.Gen(a.seed)
+if g.nextid<=g.maxid and not a.force: raise SystemExit('refuse: ElemTable counter %d <= max element id %d (new id would collide); --force to override'%(g.counter,g.maxid))
+W=g.W; S=a.src; T=g.template(S); idS=struct.pack(g.IDF,S)
 L={n:(o,e) for n,o,e,_ in T['log']}
 et=g._et(); RW=g.RW; n_=struct.unpack_from('<I',et,2)[0]
 best=max(range(n_),key=lambda k:(struct.unpack_from('<I',et,6+RW*k+12)[0],struct.unpack_from('<I',et,6+RW*k+8)[0]))
