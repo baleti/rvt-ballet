@@ -9,4 +9,9 @@ class T(unittest.TestCase):
     def test_allowed(self):
         for n in ('Café', 'Café', 'Level 1 äöü', 'T.O. Slab'):
             edit._check_element_name(n)
+class N(unittest.TestCase):
+    def test_nfc_nfd_batch_duplicate(self):
+        mk = lambda e, v: {'op': 'set_string', 'eid': e, 'field': 'DatumPlane.m_text', 'value': v}
+        with self.assertRaises(edit.EditError): edit._check_batch_names([mk(1, 'Café'), mk(2, 'Café')])
+        edit._check_batch_names([mk(1, 'Cafe'), mk(2, 'Café')])
 if __name__ == '__main__': unittest.main()

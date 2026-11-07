@@ -376,6 +376,10 @@ def _set_num_by_pid(ed, o):
 NAME_FORBIDDEN = set('\\:{}[]|;<>?`~')
 
 
+def _nk(x):
+    return __import__('unicodedata').normalize('NFC', x.strip()).casefold()      # c5x-rvtread: NFC and NFD spellings of one name are duplicates
+
+
 def _check_element_name(v):
     """Revit refuses empty names and names with any of \\ : { } [ ] | ; < > ? ` ~ for levels, grids, views and types; the writer used to save them (c5x-rvtread)"""
     bad = sorted(set(v) & NAME_FORBIDDEN)
@@ -391,7 +395,7 @@ def _check_batch_names(ops):
     seen = {}
     for o in ops:
         if o.get('op') == 'set_string' and o.get('field') in ('DatumPlane.m_text', 'DBView.m_viewName') and o.get('pid') is None:
-            k = (o['field'], o['value'].strip().casefold())
+            k = (o['field'], _nk(o['value']))
             if k in seen and seen[k] != o['eid']: raise EditError('elements %d and %d would get the same name %r in one save: Revit does not allow duplicate names; nothing was changed' % (seen[k], o['eid'], o['value']))
             seen[k] = o['eid']
 
@@ -403,9 +407,9 @@ def _check_datum_name_unique(src, o):
     r = rvt_entities.extract(src, slim=lambda c: c.startswith(pre))
     mine = [k for k in r['recs'] if k[0] == o['eid'] and k[1].startswith(pre)]
     if not mine: return
-    new = o['value'].strip().casefold()
+    new = _nk(o['value'])
     for k, v in r['recs'].items():
-        if k[1] == mine[0][1] and k[0] != o['eid'] and str(v.get('fields', {}).get(fld, '')).strip().casefold() == new:
+        if k[1] == mine[0][1] and k[0] != o['eid'] and _nk(str(v.get('fields', {}).get(fld, ''))) == new:
             raise EditError('a %s named %r already exists (element %d): Revit does not allow duplicate names; nothing was changed' % (k[1], o['value'], k[0]))
 
 
