@@ -22,7 +22,7 @@ async def main(out, src, n):
             if r.status != 200: row['cases'].append('refused_edit:' + j.get('error', '')[:60]); continue
             dest = os.path.join(_T, 'o%d.rvt' % w); r = await c.post('/api/m/m/saveas', json={'dest': dest}); j = await r.json()
             if r.status != 200: row['cases'].append('refused_save:%s output_exists=%s' % (j.get('code'), os.path.exists(dest)))
-            else: row['cases'].append('SAVED verify_diffs=%s deleted=%s' % (j['verify']['n_unexpected'], len(j.get('manifest', {}).get('deleted', []) or [])) + ' manifest_keys=%s must_delete=%s' % (sorted(j.get('manifest', {}))[:8], len(j.get('manifest', {}).get('must_delete', []) or [])))
+            else: row['cases'].append('SAVED verify_diffs=%s objects %s->%s absent_expect=%s' % (j['verify']['n_unexpected'], j['verify'].get('objects_src'), j['verify'].get('objects_out'), sum(1 for x in j.get('expectations', []) if x.get('kind') == 'absent')) + ' manifest_keys=%s must_delete=%s' % (sorted(j.get('manifest', {}))[:8], len(j.get('manifest', {}).get('must_delete', []) or [])))
             await c.post('/api/m/m/edit/undo', json={})
     row['source_untouched'] = sha(src) == h0; print(row); json.dump(row, open(out, 'w'))
 asyncio.run(main(sys.argv[1], sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else 2))
