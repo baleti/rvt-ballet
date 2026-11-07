@@ -541,7 +541,10 @@ def _read_params(buf):
         d = tempfile.mkdtemp(prefix='rvtballet-rb-')
         try:
             f = os.path.join(d, 'x.rvt'); open(f, 'wb').write(buf); v = rvt_params.params(f)
-        finally: shutil.rmtree(d, ignore_errors=True)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+            g = sys.modules.get('rvt_geometry')      # its per-PATH caches (decoded records / docs) are never evicted and every read-back uses a fresh temp path: ~90 MB retained per save until the memory guard refused (found by c2x-rvtwrite2)
+            if g is not None: getattr(g, '_ctx', {}).clear(); getattr(g, '_docs', {}).clear()
         _rp_disk_put(k, v)
     _RB_MEMO.insert(0, (k, v)); del _RB_MEMO[2:]
     return v
@@ -794,6 +797,11 @@ def _readback(src_buf, nb, ops):
         try: q0 = _inst_trf(src_buf, o['eid']); q1 = _inst_trf(nb, o['eid']) if q0 else None
         except Exception: q0, q1 = None, None
         if q0 is not None and not _is_rotation(q0): q0 = None      # the tracer did not land on a real orientation matrix in this file (garbage / NaN / scaled): no witness
+        try: w0 = _trf_origin(src_buf, o['eid']); w1 = _trf_origin(nb, o['eid']) if w0 else None
+        except Exception: w0 = w1 = None
+        if w0 is not None and w1 is not None:      # rotation is about the instance origin: the origin must shift by exactly the declared moves of this element (none = zero); a hidden translation passed the mesh fit (c2x-rvtmove, tests/test_save_move_then_rotate.py)
+            dd = [sum(m.get(k, 0.0) for m in mv if m['op'] == 'move' and m['eid'] == o['eid']) for k in ('dx', 'dy', 'dz')]
+            if any(abs((w1[i] - w0[i]) - dd[i]) > 1e-6 * max(1.0, abs(dd[i])) + 1e-6 for i in range(3)): bad.append('rotated element %d: the instance origin moved by (%.4g, %.4g, %.4g) ft, declared (%.4g, %.4g, %.4g)' % ((o['eid'],) + tuple(w1[i] - w0[i] for i in range(3)) + tuple(dd))); continue
         if q0 is not None:      # the record's own orientation matrix: independent of what the geometry reader can show
             if q1 is None or _rotz_residual(q0, q1, o['deg']) > 1e-6: bad.append('rotated element %d: the orientation matrix in the output is not the source turned by %.4g deg about the vertical axis' % (o['eid'], o['deg'])); continue
         if not t0: continue
