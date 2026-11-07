@@ -278,6 +278,7 @@ def _move_datum(ed, o):
 def _rvtedit_pass(a, b, ops):
     import rvtedit
     ed = rvtedit.Edit(a); deleted = []
+    _check_batch_names(ops)
     for o in ops:
         try:
             if o['op'] == 'delete': deleted += _delete(ed, o['eid'])
@@ -347,6 +348,16 @@ def _check_element_name(v):
     if any(ord(ch) < 32 or ord(ch) == 127 for ch in v): raise EditError('a name must not contain control characters (newline, tab, ...); nothing was changed')
     if len(v) > 255: raise EditError('a name is limited to 255 characters here (conservative; Revit limits are not VM-verified above that); nothing was changed')
     if bad: raise EditError('name contains characters Revit does not allow in names (%s); nothing was changed' % ' '.join(bad))
+
+
+def _check_batch_names(ops):
+    """two renames of one batch onto the same name (same field, case-insensitive) would create a duplicate that the per-op check on the source cannot see (c5x-rvtread); conservative: also refuses a Level and a Grid sharing a name"""
+    seen = {}
+    for o in ops:
+        if o.get('op') == 'set_string' and o.get('field') in ('DatumPlane.m_text', 'DBView.m_viewName') and o.get('pid') is None:
+            k = (o['field'], o['value'].strip().casefold())
+            if k in seen and seen[k] != o['eid']: raise EditError('elements %d and %d would get the same name %r in one save: Revit does not allow duplicate names; nothing was changed' % (seen[k], o['eid'], o['value']))
+            seen[k] = o['eid']
 
 
 def _check_datum_name_unique(src, o):

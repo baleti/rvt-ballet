@@ -27,4 +27,9 @@ for v in ('', '  ', 'a:b', 'a|b', 'x{y}', 'a\\b', 'a<b>', 'q?', 'a;b', 'a`b', 'a
     except edit.EditError: pass
 edit._check_element_name('N' * 255)
 edit._check_element_name('Level 1 - ok (a) #2 &')
+os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
+mk = lambda e, v: edit.validate_op({'op': 'set_string', 'eid': e, 'field': 'DatumPlane.m_text', 'value': v, 'match': 'x'})
+try: edit._check_batch_names([mk(5877, 'Same X'), mk(5855, 'same x')]); raise SystemExit('batch duplicate accepted')
+except edit.EditError: pass
+edit._check_batch_names([mk(5877, 'Same X'), mk(5855, 'Other Y'), mk(5877, 'Same X')])
 print('ok duplicate level names refused')
