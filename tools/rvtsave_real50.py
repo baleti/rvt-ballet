@@ -46,7 +46,7 @@ async def one(src_orig, year, fid, op, work):
             cands = [e for e, v in sorted(pr.items()) if v['class'] == 'FamilyInstance']
             if not cands: row.update(outcome='no_candidate'); return row
             for e in cands[:40]:
-                r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': e, 'dx': 2.0}); 
+                r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': e, 'dx': 2.0} if op == 'move' else {'op': 'rotate', 'eid': e, 'deg': 30.0}); 
                 if r.status == 200: break
             else: row.update(outcome='edit_refused', detail=(await r.text())[:160]); return row
         row['eid'] = e; r = await c.post('/api/m/m/save', json={}); j = await r.json()
@@ -55,7 +55,7 @@ async def one(src_orig, year, fid, op, work):
             pr2 = save._read_params(open(src, 'rb').read()); diff = [x for x in pr if pr[x] != pr2.get(x)]
             bk = j.get('backup'); row['backup_equal'] = bool(bk and os.path.exists(bk) and sha(bk) == h0); row['n_diff'] = len(diff); row['unexpected'] = (j.get('verify') or {}).get('n_unexpected')
             if os.environ.get('R50_KEEP'): os.makedirs(os.environ['R50_KEEP'], exist_ok=True); shutil.copy(src, os.path.join(os.environ['R50_KEEP'], '%s_%s.rvt' % (fid, op))); shutil.copy(src_orig, os.path.join(os.environ['R50_KEEP'], '%s_ctl.rvt' % fid)) if not os.path.exists(os.path.join(os.environ['R50_KEEP'], '%s_ctl.rvt' % fid)) else None; row['eid'] = e
-            row['outcome'] = 'saved_ok' if (op == 'move' or diff == [e]) and row['backup_equal'] and not row['unexpected'] else ('FAIL_backup_differs' if not row['backup_equal'] else 'FAIL_not_only_target')
+            row['outcome'] = 'saved_ok' if (op in ('move', 'rotate') or diff == [e]) and row['backup_equal'] and not row['unexpected'] else ('FAIL_backup_differs' if not row['backup_equal'] else 'FAIL_not_only_target')
         if r.status != 200 and sha(src) != h0: row['outcome'] = 'FAIL_original_changed'
     row['s'] = round(time.time() - t0); return row
 
