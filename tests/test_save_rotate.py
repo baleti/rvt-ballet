@@ -17,7 +17,8 @@ async def run():
             r = await c.post('/api/m/m/edit', json=dict({'op': 'rotate', 'eid': T}, **bad)) if bad.get('deg') == bad.get('deg') else None
             if r is not None: assert r.status == 400, (bad, r.status)
         r = await c.post('/api/m/m/edit', json={'op': 'rotate', 'eid': T, 'deg': 30}); j = await r.json(); assert r.status == 200 and j['manifest'] == {'modified': ['el:%d' % T]}, (r.status, j)
-        out = os.path.join(_T, 'o.rvt'); r = await c.post('/api/m/m/saveas', json={'dest': out}); j = await r.json(); assert r.status == 200 and j['verify']['n_unexpected'] == 0, (r.status, j.get('error'), j.get('report', {}).get('unexpected'))
+        out = os.path.join(_T, 'o.rvt'); r = await c.post('/api/m/m/saveas', json={'dest': out}); j = await r.json(); import shutil as _sh; assert r.status == 200 and j['verify']['n_unexpected'] == 0, (r.status, j.get('error'), j.get('report', {}).get('unexpected'))
+        _sh.copy(out, os.environ.get('KEEP_OUT', _T + '/keep.rvt'))
     for name, f in (('src', src), ('out', out)):
         r = subprocess.run([os.path.join(HERE, 'rvt-ballet'), 'convert', f, os.path.join(_T, 'c_' + name)], capture_output=True, text=True, timeout=300); assert r.returncode == 0, r.stderr[-200:]
     a, b = bbs(_T + '/c_src'), bbs(_T + '/c_out'); moved = {i for i in a if i in b and a[i] != b[i]}
