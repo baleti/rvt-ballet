@@ -42,23 +42,43 @@ try {
 Console.WriteLine(log.ToString());
 ''' % {'f': file.replace('\\', '\\\\'), 't': tag, 'b': '\n    '.join(body)}
 
-def main():
-    a = [x for x in sys.argv[1:] if not x.startswith('--')]; year, src, tag, ops = int(a[0]), os.path.abspath(a[1]), a[2], a[3]
-    wd = os.path.expanduser('~/c2x-diff/%s' % tag); os.makedirs(wd, exist_ok=True)
+def one(year, port, src, tag, ops):
     rem = 'C:/wl/diff_%s_src.rvt' % tag
+    guest.put(src, rem)
+    out = guest.run_job(year, port, cs_for(ops, tag, rem), 'diff_' + tag, 900)
+    print('[%s]' % tag, '\n'.join(l for l in out.replace('\r', '').splitlines() if l.startswith(('OP', 'SAVED', 'FAILURE', 'RESULT'))), flush=True)
+    wd = os.path.expanduser('~/c2x-diff/%s' % tag); os.makedirs(wd, exist_ok=True)
+    ok = 'SAVED after' in out and all(guest.get('C:/wl/out/%s_%s.rvt' % (tag, k), os.path.join(wd, '%s.rvt' % k)) for k in ('base', 'after'))
+    return ok, wd
+
+def report(src, wd, nf):
+    for n, (x, y) in {'ORIG->BASE': (src, wd + '/base.rvt'), 'BASE->AFTER': (wd + '/base.rvt', wd + '/after.rvt'), 'ORIG->AFTER': (src, wd + '/after.rvt')}.items():
+        rep = rvt_diff.diff(x, y, not nf); json.dump(rep, open(wd + '/' + n.replace('->', '_') + '.json', 'w'), indent=1, default=str)
+        print('=====', wd, n); print(rvt_diff.pretty(rep), flush=True)
+
+def main():
+    """BATCH: rvt_diff_vm.py --batch FILE  (lines: YEAR SAMPLE TAG OPSPEC; one VM lock for the whole file, fresh Revit per line; diffs run after the VM is released)"""
+    nf = '--no-fields' in sys.argv
+    if '--batch' in sys.argv:
+        jobs = [l.split(None, 3) for l in open(sys.argv[sys.argv.index('--batch') + 1]) if l.strip() and not l.startswith('#')]
+        done = []
+        with guest.vmlock():
+            for y, src, tag, ops in jobs:
+                y = int(y); src = os.path.abspath(os.path.expanduser(src)); port = guest.fresh(y)
+                if not port: print('[%s] no Revit port' % tag); continue
+                try: ok, wd = one(y, port, src, tag, ops.strip())
+                finally: guest.down(y)
+                if ok: done.append((src, wd))
+                else: print('[%s] experiment failed' % tag)
+        for src, wd in done: report(src, wd, nf)
+        return
+    a = [x for x in sys.argv[1:] if not x.startswith('--')]; year, src, tag, ops = int(a[0]), os.path.abspath(a[1]), a[2], a[3]
     with guest.vmlock():
         port = guest.fresh(year)
         if not port: raise SystemExit('no Revit port')
-        try:
-            guest.put(src, rem)
-            out = guest.run_job(year, port, cs_for(ops, tag, rem), 'diff_' + tag, 900)
-            print('\n'.join(l for l in out.replace('\r', '').splitlines() if l.startswith(('OP', 'SAVED', 'FAILURE', 'RESULT'))))
-            ok = all(guest.get('C:/wl/out/%s_%s.rvt' % (tag, k), os.path.join(wd, '%s.rvt' % k)) for k in ('base', 'after'))
+        try: ok, wd = one(year, port, src, tag, ops)
         finally: guest.down(year)
-    if not ok or 'SAVED after' not in out: raise SystemExit('experiment failed:\n' + out[-1500:])
-    nf = '--no-fields' in sys.argv
-    for n, (x, y) in {'ORIG->BASE': (src, wd + '/base.rvt'), 'BASE->AFTER': (wd + '/base.rvt', wd + '/after.rvt'), 'ORIG->AFTER': (src, wd + '/after.rvt')}.items():
-        rep = rvt_diff.diff(x, y, not nf); json.dump(rep, open(wd + '/' + n.replace('->', '_') + '.json', 'w'), indent=1, default=str)
-        print('=====', n); print(rvt_diff.pretty(rep))
+    if not ok: raise SystemExit('experiment failed')
+    report(src, wd, nf)
 
 if __name__ == '__main__': main()
