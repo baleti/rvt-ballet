@@ -38,3 +38,11 @@ r = run(out2, dict(mf, member_span_max=2048)); assert any(f[0] == 'member_span' 
 def near(raw): raw[10] ^= 1; raw[200] ^= 1
 assert run(build(mut_raw={107: near}), dict(mf, member_span_max=2048)) == [], 'two edits within the window pass'
 print('member_span rule OK')
+# (3) framing bytes between members (found: every flip in frames/partition header was accepted)
+gap0 = P.mem[107]['end']
+fl = lambda off: build(mut_payload=lambda p: p.__setitem__(off, p[off] ^ 1))
+r = run(fl(gap0 + 0), {'dirty_members': {pn: [5]}}); assert any('frame after member 107' in f[1] for f in r), r      # byte 0 of an undeclared frame
+r = run(fl(gap0 + 20), {'dirty_members': {pn: [5]}}); assert any('frame after member 107' in f[1] for f in r), r     # a size field but neighbours 107/108 undeclared
+assert run(fl(gap0 + 20), {'dirty_members': {pn: [108]}}) == [], 'size field of a declared neighbour frame is allowed'
+r = run(fl(gap0 + 0), {'dirty_members': {pn: [108]}}); assert any('frame after member 107' in f[1] for f in r), r     # non-size byte even for a declared neighbour
+print('frame rule OK')

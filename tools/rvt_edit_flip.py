@@ -33,7 +33,7 @@ esc = []
 for k, nb in T.items():
     dest = os.path.join(_T, 'o_%s.rvt' % k)
     try: save.save_as(ss, 'm', src, dest, new_bytes=nb, manifest=man); acc = True; r = 'ACCEPTED'
-    except Exception as e: acc = False; r = type(e).__name__ + ' ' + str(e)[:90]
+    except Exception as e: acc = False; r = type(e).__name__ + ' ' + str(e)[:int(os.environ.get("EDIT_FLIP_MSG", "90"))]
     if acc and k != 'control_true_output': esc.append(k)
     if not acc and k != 'control_true_output': assert not os.path.exists(dest), k
     assert sha(src) == h0
