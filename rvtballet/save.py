@@ -147,7 +147,7 @@ def _cached_adapter():
             seen = getattr(self, '_seen', []); self._seen = []
             if len(seen) < 2: return inherited
             a, b = seen
-            return inherited + [('not_applied', k) for k in sorted(manifest.get('modified', ())) if k in a and k in b and a[k] == b[k]]
+            return inherited + [('not_applied', k) for k in sorted(manifest.get('modified', ())) if k != 'el:0' and k in a and k in b and a[k] == b[k]]      # el:0 is declared as tolerance (id-0 ghost bucket), not as an edit
 
         def _snapshot_core(self, buf):
             key = hashlib.sha256(buf).digest()
