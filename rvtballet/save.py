@@ -326,6 +326,49 @@ def _ecc_bad_pages(d, rvtw):
     return bad
 
 
+def _cfb_structure_bad(buf, ssz, nsec, nfat, dstart, ndif):
+    """c7x-rvtread 98/100: VM-refused (Revit 2024) CFB header/directory flips the reader tolerates: FAT sector count (0x2c), first directory sector (0x30), first mini-FAT sector (0x3c), root entry type, sibling/child index out of range. Only the plain single-header case (no DIFAT) is checked."""
+    import struct
+    out = []
+    try:
+        if ndif != 0: return out
+        if nfat > 109: return [('CFB header (FAT sector count)', 0)]
+        per = ssz // 4
+        fat = []
+        for i in range(nfat):
+            sec = struct.unpack_from('<I', buf, 76 + 4 * i)[0]
+            if sec >= nsec: return out
+            fat.extend(struct.unpack_from('<%dI' % per, buf, (sec + 1) * ssz))
+        if sum(1 for e in fat if e == 0xFFFFFFFD) != nfat: out.append(('CFB header (FAT sector count)', 0))
+        def chain(st):
+            c, seen = [], set()
+            while st < 0xFFFFFFFA:
+                if st in seen or st >= len(fat): return None
+                seen.add(st); c.append(st); st = fat[st]
+            return c if st == 0xFFFFFFFE else None
+        dch = chain(struct.unpack_from('<I', buf, 48)[0])
+        if dch is None: out.append(('CFB header (directory start sector)', 0)); return out
+        mstart, mcount = struct.unpack_from('<I', buf, 60)[0], struct.unpack_from('<I', buf, 64)[0]
+        mch = chain(mstart) if mstart != 0xFFFFFFFE else []
+        if mch is None or len(mch) != mcount: out.append(('CFB header (mini-FAT start sector)', 0))
+        raw = b''.join(buf[(c + 1) * ssz:(c + 2) * ssz] for c in dch)
+        n = len(raw) // 128
+        ent = [(raw[128 * i + 66], raw[128 * i + 67]) + struct.unpack_from('<III', raw, 128 * i + 68) for i in range(n)]      # type, color, left, right, child
+        if not ent or ent[0][0] != 5: out.append(('CFB directory (root entry type)', 0)); return out
+        if any(any(x != 0xFFFFFFFF and x >= n for x in (l, r, ch)) for t, c, l, r, ch in ent[1:]) or (ent[0][4] != 0xFFFFFFFF and ent[0][4] >= n):
+            out.append(('CFB directory (entry field)', 0)); return out      # VM: root left/right/color and any entry color are tolerated, so only child/sibling indices past the table are flagged
+        seen, stack = set(), [ent[0][4]]
+        while stack:
+            x = stack.pop()
+            if x == 0xFFFFFFFF: continue
+            if x in seen: out.append(('CFB directory (tree cycle)', 0)); break
+            seen.add(x); stack += [ent[x][2], ent[x][3]]
+            if ent[x][0] in (1, 5) and ent[x][4] != 0xFFFFFFFF: stack.append(ent[x][4])
+    except Exception:
+        pass
+    return out
+
+
 def source_damage(buf):
     """[(stream, member index)] of CRC-bad independent gzip members in the Partitions/* streams; [] when clean or when the check cannot run (a lower bound: gzcheck walks only the members it can frame; 0 false positives on 101 real partition streams of 77 corpus files)"""
     out = []
@@ -353,6 +396,7 @@ def source_damage(buf):
                 if any(e >= nsec or fatent(e) != 0xFFFFFFFD for e in dif): out.append(('CFB header (FAT sector index)', 0))
             if ndif == 0 and nfat <= 109 and any(struct.unpack_from('<I', buf, 76 + 4 * i)[0] != 0xFFFFFFFF for i in range(nfat, 109)):
                 out.append(('CFB header (unused DIFAT entry)', 0))
+            out.extend(_cfb_structure_bad(buf, ssz, nsec, nfat, dstart, ndif))
     except Exception:
         pass
     try:      # c7x-rvtread 96: BasicFileInfo has no checksum; a damaged '.' of the stored path extension makes Revit 2024 say 'not a valid .rte file' (0 of 78 corpus files lack the extension)

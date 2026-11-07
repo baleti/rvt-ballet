@@ -27,3 +27,36 @@ class T(unittest.TestCase):
             b = bytearray(open(S, 'rb').read()); b[off] ^= 0xFF
             self.assertEqual(save.source_damage(bytes(b)), [], hex(off))
 if __name__ == '__main__': unittest.main()
+
+class Struct(unittest.TestCase):
+    """c7x-rvtread 98/100: Revit 2024 REFUSED each of these (VM): FAT sector count 0x2c, first dir sector 0x30, mini-FAT start 0x3c, root entry type, sibling index past the table. Tolerated ones must stay unflagged."""
+    @classmethod
+    def setUpClass(cls):
+        cls.src = open(S, 'rb').read()
+    def _bad(self, edit):
+        import struct
+        b = bytearray(self.src); edit(b)
+        ssz = 1 << struct.unpack_from('<H', b, 30)[0]
+        return save._cfb_structure_bad(bytes(b), ssz, len(b) // ssz, struct.unpack_from('<I', b, 44)[0], 0, struct.unpack_from('<I', b, 72)[0])
+    def _dir0(self):
+        import struct
+        ssz = 1 << struct.unpack_from('<H', self.src, 30)[0]
+        return (struct.unpack_from('<I', self.src, 48)[0] + 1) * ssz
+    def test_clean(self): self.assertEqual(self._bad(lambda b: None), [])
+    def test_header_fields(self):
+        for off in (0x2c, 0x30, 0x3c):
+            def e(b, off=off): b[off] ^= 0xFF
+            self.assertTrue(self._bad(e), hex(off))
+    def test_root_type(self):
+        d = self._dir0()
+        def e(b): b[d + 66] ^= 0xFF
+        self.assertTrue(self._bad(e))
+    def test_sibling_out_of_range(self):
+        d = self._dir0()
+        def e(b): b[d + 128 + 75] = 0xFA
+        self.assertTrue(self._bad(e))
+    def test_tolerated_root_color_clsid(self):
+        d = self._dir0()
+        for o in (67, 80, 100):
+            def e(b, o=o): b[d + o] ^= 0xFF
+            self.assertEqual(self._bad(e), [], o)
