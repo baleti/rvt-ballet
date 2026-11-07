@@ -29,6 +29,7 @@ async def main(out, src0):
     if not pick: row['result'] = 'NO_CANDIDATE'; print(row); json.dump(row, open(out, 'w')); return
     eid, nm, v0 = pick; nv = (1 - int(v0)) if BOOL else round(v0 + 0.25, 6) if KIND == 'Double' else int(v0) % 3 + 1
     a = base[eid]
+    print('PICK', eid, nm, v0, nv, file=sys.stderr, flush=True)      # local log only (Autodesk sample ids): for the Revit API readback
     from aiohttp.test_utils import TestClient, TestServer
     import aiohttp
     models = server.Models(); md = os.path.join(_T, 'm'); os.makedirs(md); models.m['m'] = {'dir': md, 'name': 'f', 'src': src}
