@@ -13,6 +13,8 @@ F = sys.argv[1]; N = int(sys.argv[2]) if len(sys.argv) > 2 else 2
 buf = open(F, 'rb').read(); ix = G.file_geometry_index(F); by = collections.defaultdict(list)
 for e, v in ix.items(): by[str(v)].append(e)
 WANT = set(os.environ.get('CLASSES', 'FamilyInstance,SWall,Level,Grid,TextNote,Floor,LinearDimString,Viewport,DBDrawing').split(','))
+if os.environ.get("LIST"):
+    print({c: len(v) for c, v in sorted(by.items())}); sys.exit(0)
 for c in sorted(by):
     if c not in WANT: continue
     ok = 0; why = ''; ids = by[c][:N]
