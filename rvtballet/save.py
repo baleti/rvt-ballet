@@ -350,7 +350,8 @@ def _cfb_structure_bad(buf, ssz, nsec, nfat, dstart, ndif):
         if dch is None: out.append(('CFB header (directory start sector)', 0)); return out
         mstart, mcount = struct.unpack_from('<I', buf, 60)[0], struct.unpack_from('<I', buf, 64)[0]
         mch = chain(mstart) if mstart != 0xFFFFFFFE else []
-        if mch is None or len(mch) != mcount: out.append(('CFB header (mini-FAT start sector)', 0))
+        if mch is None or len(mch) > mcount:      # fewer than the header count is tolerated by Revit 2024 (VM, hdr3 0x40)
+            out.append(('CFB header (mini-FAT start sector)', 0))
         raw = b''.join(buf[(c + 1) * ssz:(c + 2) * ssz] for c in dch)
         n = len(raw) // 128
         ent = [(raw[128 * i + 66], raw[128 * i + 67]) + struct.unpack_from('<III', raw, 128 * i + 68) for i in range(n)]      # type, color, left, right, child
@@ -744,7 +745,7 @@ def _inst_trf(buf, eid):
         with open(p, 'wb') as f: f.write(buf)
         ed = rvtedit.Edit(p); log = ed.g.e.trace(eid)[3]
         for l in log:
-            if l[1] == 'Trf.m_3x3' and l[3] - l[2] == 72: return struct.unpack_from('<9d', ed.g.bj, l[2])
+            if l[1] == 'Trf.m_3x3' and l[3] - l[2] == 72: return struct.unpack_from('<9d', _own_body(ed, eid), l[2])
         return None
     finally:
         import shutil; shutil.rmtree(d, True)
@@ -781,6 +782,12 @@ def _bbox_class(buf, eid):
         except OSError: pass
         try: G._ctx.pop(tmp, None)
         except Exception: pass
+
+
+def _own_body(ed, eid):
+    """the element's own partition body (trace offsets index it; ed.g.bj is only the PART/first partition, c7x-rvtmove item 28)"""
+    try: return ed.g.e.m.parts[ed.g.e.trace(eid)[0]]['joined']
+    except Exception: return ed.g.bj
 
 
 def _trf_origin(buf, eid, field='Trf.m_or'):
@@ -832,7 +839,7 @@ def _wall_line_origin(buf, eid):
         ed = rvtedit.Edit(p)
         for l in ed.g.e.trace(eid)[3]:
             if l[1] == 'GLine.m_origin' and l[3] - l[2] == 24:
-                v = struct.unpack_from('<3d', ed.g.bj, l[2])
+                v = struct.unpack_from('<3d', _own_body(ed, eid), l[2])
                 return v if all(math.isfinite(x) and abs(x) < 1e7 for x in v) else None
         return None
     finally:
