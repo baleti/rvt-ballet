@@ -403,6 +403,15 @@ def _stage(ss, mid, text):
     p = ss.progress.setdefault(mid, {'t0': time.time()}); p['stage'] = text; p['t'] = time.time()
 
 
+def _drop_reader_caches():
+    """the reader libraries keep per-path state (decoded records) that a save never reuses: every apply / read-back works on a fresh temp path"""
+    for mn, names in (('rvt_geometry', ('_ctx', '_docs')), ('rvt_fast', ('_SHARED', '_G103', '_W'))):
+        m = sys.modules.get(mn)
+        for n in names:
+            c = getattr(m, n, None) if m else None
+            if isinstance(c, dict): c.clear()
+
+
 def _pending(ss, mid, d, new_bytes, manifest, light=False):
     """bytes + manifest of the recorded edits replayed on the loaded bytes (explicit new_bytes win). light=True (limited verification of models too big for the element dump): the full reader read-back and the derived-echo scan
     (two whole-model reader dumps, 10+ GB on a 64 MB project) are replaced by a record-level read-back of the edited elements only"""
@@ -416,6 +425,7 @@ def _pending(ss, mid, d, new_bytes, manifest, light=False):
     mf = m.manifest(deleted); echoes = [] if light else derived_echoes(d.buf, nb, cops)
     from .edit import last_dirty_members, BACKEND
     dm = last_dirty_members() if BACKEND() == 'rvtedit' and os.environ.get('RVTBALLET_DIRTY_MEMBERS', '1') == '1' else None
+    _drop_reader_caches()
     if dm: mf['dirty_members'] = dm      # savegate refuses any member outside this set that differs from the source
     if echoes: mf['modified'] = sorted(set(mf['modified']) | {'el:%d' % i for i in echoes}); ss.derived[mid] = len(echoes)
     else: ss.derived.pop(mid, None)
