@@ -358,6 +358,16 @@ def _cfb_structure_bad(buf, ssz, nsec, nfat, dstart, ndif):
         if not ent or ent[0][0] != 5: out.append(('CFB directory (root entry type)', 0)); return out
         if any(any(x != 0xFFFFFFFF and x >= n for x in (l, r, ch)) for t, c, l, r, ch in ent[1:]) or (ent[0][4] != 0xFFFFFFFF and ent[0][4] >= n):
             out.append(('CFB directory (entry field)', 0)); return out      # VM: root left/right/color and any entry color are tolerated, so only child/sibling indices past the table are flagged
+        owner = {}      # c7x-rvtread 102: cross-linked / short / overlong FAT chains of big streams that still parse
+        for i in range(n):
+            if raw[128 * i + 66] != 2: continue
+            st, sz = struct.unpack_from('<I', raw, 128 * i + 116)[0], struct.unpack_from('<Q', raw, 128 * i + 120)[0]
+            if sz < 4096: continue
+            ch = chain(st)
+            if ch is None or len(ch) * ssz < sz or (len(ch) - 1) * ssz >= sz or any(owner.setdefault(c, i) != i for c in ch):
+                out.append(('CFB FAT chain (stream %d)' % i, 0)); break
+        for c in dch + (mch or []):
+            if owner.setdefault(c, -1) != -1: out.append(('CFB FAT chain (directory overlaps stream)', 0)); break
         seen, stack = set(), [ent[0][4]]
         while stack:
             x = stack.pop()

@@ -69,3 +69,21 @@ class FatLoop(unittest.TestCase):
         off = (sec + 1) * ssz; e = struct.unpack_from('<I', b, off + 32)[0]
         struct.pack_into('<I', b, off + 32, 8)
         self.assertTrue(save.source_damage(bytes(b)))
+
+class CrossLink(unittest.TestCase):
+    def test_cross_linked_chain_flagged(self):
+        # c7x-rvtread 102: a stream's chain ends in another stream's sectors: parses, wrong data
+        import struct
+        b = bytearray(open(S, 'rb').read()); ssz = 1 << struct.unpack_from('<H', b, 30)[0]; per = ssz // 4
+        sec = struct.unpack_from('<I', b, 76)[0]; fat = struct.unpack_from('<%dI' % per, b, (sec + 1) * ssz)
+        dch = struct.unpack_from('<I', b, 48)[0]; raw = bytes(b[(dch + 1) * ssz:(dch + 2) * ssz])
+        big = [(struct.unpack_from('<I', raw, 128 * i + 116)[0], struct.unpack_from('<Q', raw, 128 * i + 120)[0]) for i in range(1, 32) if raw[128 * i + 66] == 2 and struct.unpack_from('<Q', raw, 128 * i + 120)[0] >= 4096]
+        self.assertGreaterEqual(len(big), 2)
+        (a, _), (c, _) = big[0], big[1]
+        struct.pack_into('<I', b, (sec + 1) * ssz + 4 * a, c)      # first stream's first sector now continues into the second stream
+        r = save._cfb_structure_bad(bytes(b), ssz, len(b) // ssz, struct.unpack_from('<I', b, 44)[0], 0, 0)
+        self.assertTrue(r, r)
+    def test_clean_chains_not_flagged(self):
+        import struct
+        b = open(S, 'rb').read(); ssz = 1 << struct.unpack_from('<H', b, 30)[0]
+        self.assertEqual(save._cfb_structure_bad(b, ssz, len(b) // ssz, struct.unpack_from('<I', b, 44)[0], 0, 0), [])
