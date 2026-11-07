@@ -14,7 +14,7 @@ src = os.path.join(_T, 'src.rvt'); shutil.copy(src0, src); h0 = sha(src); buf = 
 ops = [edit.validate_op(o) for o in ops]
 good, deleted = edit.apply_full(buf, ops); dm = edit.last_dirty_members(); m = edit.Edits(); m.ops = ops; man = m.manifest(deleted)
 if dm: man['dirty_members'] = dm
-if dm and len(ops) == 1 and ops[0].get('op') in ('move', 'rotate'): man['member_span_max'] = 2048      # mirrors save._pending
+if dm and len(ops) == 1 and ops[0].get('op') in ('move', 'rotate', 'set_num'): man['member_span_max'] = 2048      # mirrors save._pending
 ech = save.derived_echoes(buf, good, edit.compose(ops))      # same as save._pending: dependents whose derived readback echoes the edit (e.g. level rename -> 'Level' param of its elements)
 if ech: man['modified'] = sorted(set(man['modified']) | {'el:%d' % i for i in ech})
 if dm and ops and all(o.get('op') in ('move', 'rotate', 'set_string', 'delete') for o in ops):
