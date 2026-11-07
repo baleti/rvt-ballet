@@ -28,7 +28,7 @@ using System.Text;
 using System.IO;
 using System.Collections.Generic;
 var app = UIApp.Application; var log = new StringBuilder();
-EventHandler<Autodesk.Revit.DB.Events.FailuresProcessingEventArgs> fh = (s, e) => { foreach (var m in e.GetFailuresAccessor().GetFailureMessages()) log.AppendLine("FAILURE " + m.GetSeverity() + " " + m.GetDescriptionText()); };
+EventHandler<Autodesk.Revit.DB.Events.FailuresProcessingEventArgs> fh = (s, e) => { var fa = e.GetFailuresAccessor(); bool hasErr = false; foreach (var m in fa.GetFailureMessages()) { log.AppendLine("FAILURE " + m.GetSeverity() + " " + m.GetDescriptionText()); if (m.GetSeverity() == FailureSeverity.Warning) fa.DeleteWarning(m); else hasErr = true; } if (hasErr) e.SetProcessingResult(FailureProcessingResult.ProceedWithRollBack); };
 app.FailuresProcessing += fh;
 try {
   var op = new OpenOptions(); op.Audit = true;
