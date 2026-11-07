@@ -49,3 +49,11 @@ print('frame rule OK')
 # (4) exact own-size field: a size byte flipped in a frame whose neighbour IS declared passes the mask but not the exact value check
 r = run(fl(gap0 + 3), {'dirty_members': {pn: [108]}}); assert any('size field is not member length' in f[1] for f in r), r
 print('frame size exact OK')
+# (3) diff budget: far-apart patches pass only within the byte/run budget, a flood of flips is still reported
+def few(raw): raw[10] ^= 1; raw[len(raw) - 10] ^= 1
+def flood(raw):
+    for t in range(0, 4000, 8): raw[10 + t] ^= 1
+assert run(build(mut_raw={107: few}), dict(mf, member_span_max=2048, member_diff_bytes_max=16, member_diff_runs_max=4)) == [], 'two far patches inside the budget pass'
+r = run(build(mut_raw={107: flood}), dict(mf, member_span_max=2048, member_diff_bytes_max=16, member_diff_runs_max=4)); assert any(f[0] == 'member_span' for f in r), r
+r = run(build(mut_raw={107: few}), dict(mf, member_span_max=2048, member_diff_bytes_max=1, member_diff_runs_max=4)); assert any(f[0] == 'member_span' for f in r), r
+print('member diff budget OK')
