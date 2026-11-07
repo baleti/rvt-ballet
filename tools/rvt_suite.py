@@ -32,6 +32,7 @@ CASES = {
     (C_SAFE, 'opens in Revit with no repair dialog'): {'bundle': ('FamilyInstance', 'HVAC'), 'use': 'opens'},
     (C_SAFE, 'untouched elements identical'): {'bundle': ('FamilyInstance', 'HVAC'), 'use': 'untouched'},
     (C_TYPE, 'change instance type'): {'special': 'change_type'},
+    (C_TYPE, 'edit type geometry parameter'): {'static': ('PASS', 'verified 2026-11-07 (c3x-rvttype): HVAC 2024 FamilySymbol Slot Width 0.0833 -> 0.1 via set_type_num (opt-in RVTBALLET_ENABLE_TYPEPARAM=1); gate only that field differs; Revit 2024 opened clean cmp 0/0, API readback 0.100000; other years refuse (caption lookup)'), 'static_years': [2024]},
     # verified failures (Revit evidence), recorded without re-running
     (C_MOVE, 'text note'): {'static': ('PASS', 'verified 2026-11-07 (c7x-rvtmove): HVAC 2024 TextNote 1487557 (no leader) +1,+2 ft; Revit 2024 opened clean, API Coord = original + (1,2) to 6 dp; leader notes are refused; other years not run')},
     (C_TYPE, 'rename grid/level/view (dependents)'): {'static': ('PASS', 'verified 2026-11-07 (c5x-rvtmatrix): Structural 2024 (16571 elements) Grid, DBViewSection and Level renames via rvt_one_edit, dependents declared, SAVE AS + SAVE! in place verify_diffs 0, 99.68 to 99.994 pct untouched, Revit 2024 opened clean, cmp 0/0')},
@@ -200,7 +201,7 @@ def main():
             key = '%s|%s|%d' % (c, it, y); spec = CASES.get((c, it))
             try:
                 if spec is None: st, note = 'FAIL', 'not implemented'
-                elif 'static' in spec: st, note = spec['static']
+                elif 'static' in spec: st, note = spec['static'] if y in spec.get('static_years', [y]) else ('FAIL', 'not verified for %d (static case covers %s only)' % (y, spec['static_years']))
                 elif spec.get('special') == 'change_type': st, note = decide_change_type(y, workdir, not a.no_vm)
                 else: st, note = decide_class_case(y, spec, workdir, not a.no_vm)
             except Exception as e: st, note = 'ERROR', '%s: %s' % (type(e).__name__, e)
