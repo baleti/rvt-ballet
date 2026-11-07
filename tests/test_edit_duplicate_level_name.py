@@ -22,4 +22,8 @@ import rvt_entities
 vs = {k: v['fields'].get('m_viewName') for k, v in rvt_entities.extract(SRC, slim=lambda c: c == 'DBViewSection')['recs'].items() if k[1] == 'DBViewSection'}
 (a, na), (b, nb) = list(vs.items())[:2]
 assert tryview(a[0], nb.upper()) == 'refused' and tryview(a[0], na + ' c5x') == 'ok'
+for v in ('', '  ', 'a:b', 'a|b', 'x{y}', 'a\\b', 'a<b>', 'q?', 'a;b', 'a`b', 'a~b', 'a[1]'):
+    try: edit._check_element_name(v); raise SystemExit('accepted %r' % v)
+    except edit.EditError: pass
+edit._check_element_name('Level 1 - ok (a) #2 &')
 print('ok duplicate level names refused')

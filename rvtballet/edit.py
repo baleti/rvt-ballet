@@ -298,6 +298,7 @@ def _rvtedit_pass(a, b, ops):
             elif o['op'] == 'set_string' and o.get('kind') == 'AString': _set_string_by_pid(ed, o)
             elif o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'], o['value'])
             else:
+                if o['field'] in ('DatumPlane.m_text', 'DBView.m_viewName', 'SymbolInfo.m_name'): _check_element_name(o['value'])
                 if o['field'] in ('DatumPlane.m_text', 'DBView.m_viewName'): _check_datum_name_unique(a, o)
                 ed._str_edit(o['eid'], o['field'], o['value'], o['match'])
         except (IndexError, KeyError, StopIteration, AssertionError, struct_error()) as e:
@@ -334,6 +335,16 @@ def _set_num_by_pid(ed, o):
             if len(nb) != vn[3] - vn[2]: raise AssertionError('value size mismatch')
             ed._rec_edit(o['eid'], [(vn[2], vn[3] - vn[2], nb)]); return
     raise KeyError('param %d (%s) not stored on %d' % (pid, o['kind'], o['eid']))
+
+
+NAME_FORBIDDEN = set('\\:{}[]|;<>?`~')
+
+
+def _check_element_name(v):
+    """Revit refuses empty names and names with any of \\ : { } [ ] | ; < > ? ` ~ for levels, grids, views and types; the writer used to save them (c5x-rvtread)"""
+    bad = sorted(set(v) & NAME_FORBIDDEN)
+    if not v.strip(): raise EditError('a name must not be empty; nothing was changed')
+    if bad: raise EditError('name contains characters Revit does not allow in names (%s); nothing was changed' % ' '.join(bad))
 
 
 def _check_datum_name_unique(src, o):
