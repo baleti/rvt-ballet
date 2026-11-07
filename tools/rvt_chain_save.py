@@ -22,8 +22,10 @@ async def main(src, ops, keep):
         for o in ops:
             r = await c.post('/api/m/c0/edit', json=o); j = await r.json()
             if r.status != 200: row['steps'].append('edit_%d' % r.status); break
+            if os.environ.get('CHAIN_SAVEAS_FIRST'):
+                rr = await c.post('/api/m/c0/saveas', json={'dest': os.path.join(_T, 'sa%d.rvt' % len(hs))}); row['steps'].append('saveas_%d' % rr.status)
             r = await c.post('/api/m/c0/save', json={}); j = await r.json()
-            row['steps'].append('save_%d%s' % (r.status, '' if r.status == 200 else ' ' + str(j.get('code'))))
+            row['steps'].append('save_%d%s' % (r.status, '' if r.status == 200 else ' ' + str(j.get('code')) + ' ' + str(j.get('error'))[:300]))
             if r.status != 200: break
             hs.append(sha(work))
         row['distinct_states'] = len(set(hs)) == len(hs)
