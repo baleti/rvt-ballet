@@ -31,6 +31,7 @@ async def run(orig, n):
     ok = 0; cur = old; rows = []
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
+        if os.environ.get('RO_DIR'): os.chmod(os.path.dirname(src), 0o555); print('RO_DIR set (item 73), expect refusal and untouched original', flush=True)
         for k in range(1, n + 1):
             if os.environ.get('LINK_MODE') and not os.path.islink(src): print('LINK_BROKEN before save', k, flush=True)
             new = 'CH%d' % (k + int(os.environ.get('CH_OFF', '0')))
@@ -44,10 +45,10 @@ async def run(orig, n):
             else: row['untouched'] = sha(src) == b; row['error'] = str(j.get('error'))[:200]
             if os.environ.get('CH_TM'):
                 import tracemalloc, gc; gc.collect()
-                if not tracemalloc.is_tracing(): tracemalloc.start(1)
+                if not tracemalloc.is_tracing(): tracemalloc.start(int(os.environ.get('CH_TMF', '1')))
                 elif k == 2: _tm0 = tracemalloc.take_snapshot()
                 elif k == 4:
-                    snap = tracemalloc.take_snapshot(); [print('TM', st) for st in snap.compare_to(_tm0, 'lineno')[:8]]
+                    snap = tracemalloc.take_snapshot(); [print('TM', st) for st in snap.compare_to(_tm0, os.environ.get('CH_TMK', 'lineno'))[:int(os.environ.get('CH_TMN', '8'))]]
             if os.environ.get('CH_BIG'):      # live large buffers and who holds them (finds per-save retention without tracemalloc's slowdown)
                 import gc; gc.collect(); big = [o for o in gc.get_objects() if isinstance(o, (bytes, bytearray, memoryview)) and len(o) > (1 << 20)]
                 import collections; cn = collections.Counter(type(o).__name__ for o in gc.get_objects()); print('TYPES', k, len(gc.get_objects()), cn.most_common(8), flush=True)
@@ -57,9 +58,17 @@ async def run(orig, n):
                     for vn, v in list(vars(m).items()) if m else []:
                         if isinstance(v, (dict, list, set)) and len(v) >= 1 and not vn.startswith('__') and not mn.startswith(('typing', 'encodings', 'unicodedata', 'builtins', 'sys', '_')): print('MODS', k, mn, vn, len(v), flush=True)
             if os.environ.get('CH_REF'):      # live editor objects and what keeps them alive
-                import gc; gc.collect(); cl = collections.Counter(type(o).__module__ + '.' + type(o).__name__ for o in gc.get_objects() if type(o).__module__ in ('rvtedit', 'wledit', 'wlpart', 'wlrec', 'rvtw', 'cfb', 'rvtedit2') or type(o).__name__ in ('Edit', 'Editor', 'Part'))
-                print('REF', k, dict(cl), flush=True)
-                ob = [o for o in gc.get_objects() if type(o).__name__ in ('Edit', 'Editor')]
+                import gc; gc.collect(); cl = __import__('collections').Counter(type(o).__module__ + '.' + type(o).__name__ for o in gc.get_objects() if type(o).__module__ in ('rvtedit', 'wledit', 'wlpart', 'wlrec', 'rvtw', 'cfb', 'rvtedit2') or type(o).__name__ in ('Edit', 'Editor', 'Part'))
+                print('REF', k, dict(cl), 'blocks', sys.getallocatedblocks(), flush=True)
+                _bg = sorted(((len(o), type(o).__name__, str(list(o)[:2])[:90]) for o in gc.get_objects() if isinstance(o, (dict, list, set, tuple)) and len(o) > 500), reverse=True)[:6]
+                print('BIGCONT', k, _bg, flush=True)
+                ob = [o for o in gc.get_objects() if isinstance(o, list) and o and isinstance(o[0], dict) and 'gzhdr' in o[0]]; print('MEMLISTS', k, len(ob), flush=True)
+                def _chain(o, d=0):
+                    if d > 5: return
+                    for r in gc.get_referrers(o)[:3]:
+                        if r is ob or type(r).__name__ == 'frame': continue
+                        print('  ' * d + 'REFBY', type(r).__name__, (list(r.keys())[:5] if isinstance(r, dict) else str(r)[:100]), flush=True); _chain(r, d + 1)
+                for o in ob[:1]: _chain(o); ob = []
                 for o in ob[:2]:
                     for r in gc.get_referrers(o)[:4]: print('REFBY', k, type(o).__name__, type(r).__name__, (list(r.keys())[:6] if isinstance(r, dict) else str(r)[:120]), flush=True)
             if os.environ.get('CH_TRIM'):
@@ -70,4 +79,6 @@ async def run(orig, n):
         if os.environ.get('KEEP_OUT') and ok: os.makedirs(os.environ['KEEP_OUT'], exist_ok=True); shutil.copy(src, os.path.join(os.environ['KEEP_OUT'], 'chain_last.rvt'))
         bl = await (await c.get('/api/m/m/backups')).json()
         print({'link_kept': os.path.islink(src), 'real_changed': sha(_T + '/real.rvt') != h0} if os.environ.get('LINK_MODE') else '', end=' '); print({'saves_ok': ok, 'backups': len(bl), 'oldest_is_original': bool(bl) and sha(bl[-1]['path']) == h0})
-asyncio.run(run(sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 3))
+try: asyncio.run(run(sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 3))
+finally:
+    if os.environ.get('RO_DIR'): os.chmod(_T, 0o755)
