@@ -29,6 +29,7 @@ async def main(out, src):
             if r.status == 200: eid = e; break
             row.setdefault('refused', []).append(j.get('error', '')[:60])
         if eid is None: row['result'] = 'NO_MOVABLE_CANDIDATE'; row['refused'] = row.get('refused', [])[:3]; print(row); json.dump(row, open(out, 'w')); return
+        print('PICK', eid, file=sys.stderr, flush=True)      # local log only (Autodesk sample id): for the Revit position readback
         dest = os.path.join(_T, 'o.rvt'); r = await c.post('/api/m/m/saveas', json={'dest': dest}); j = await r.json()
         if r.status != 200: row['result'] = 'SAVE_%d %s' % (r.status, j.get('code')); row['n_unexpected'] = (j.get('report') or {}).get('n_unexpected'); print(row); json.dump(row, open(out, 'w')); return
         row['verify_diffs'] = j['verify']['n_unexpected']; row['warnings'] = bool(j.get('warnings')); row['warning_text'] = [str(x)[:140] for x in (j.get('warnings') or [])][:3]

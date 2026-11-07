@@ -455,7 +455,7 @@ def _pending(ss, mid, d, new_bytes, manifest, light=False):
     if dm and cops and all(c.get('op') in ('move', 'rotate', 'set_string', 'set_num', 'delete') for c in cops) and os.environ.get('RVTBALLET_FROZEN_STREAMS', '1') == '1':
         mf['frozen_streams'] = True
         if any(c.get('op') == 'delete' for c in cops): mf['frozen_except'] = ['Global/ElemTable']      # delete drops the element from the element table (measured: the only non-partition stream that changes)      # these ops never touch a non-partition stream (measured: ws_move, ws_mark, ws_level outputs identical in every Global/* stream, BasicFileInfo, Contents, Formats); the gate then requires them byte-identical (a flip in Global/DocumentIncrementTable was ACCEPTED before)
-    if dm and len(cops) == 1 and cops[0].get('op') == 'set_string' and os.environ.get('RVTBALLET_SPAN_RULE', '1') == '1': mf['member_span_max'] = 3000 + 2 * len(str(cops[0].get('value', '')))      # string edit re-lays the record out: measured prefix/suffix window 2352 (value 1 and 5 chars), 2422 (41 chars), 400 (same length) on 2024 HVAC Mark; one element only, a false refusal is the safe direction
+    if dm and len(cops) == 1 and cops[0].get('op') == 'set_string' and os.environ.get('RVTBALLET_SPAN_RULE', '1') == '1': mf['member_span_max'] = 8192 + 2 * len(str(cops[0].get('value', '')))      # string edit re-lays the record out: measured prefix/suffix windows: HVAC 1087-2422, Structural 2024 4794-6248 (25 elements in 3 files), 400 same length; widest 6248, a false refusal is the safe direction
     if echoes: mf['modified'] = sorted(set(mf['modified']) | {'el:%d' % i for i in echoes}); ss.derived[mid] = len(echoes)
     else: ss.derived.pop(mid, None)
     return nb, mf
@@ -810,12 +810,21 @@ def _readback(src_buf, nb, ops):
     fl = [o for o in ops if o.get('op') == 'set_string' and not o.get('param')]   # field (name) edits: not visible as a parameter, so only presence and untouched parameters are checked
     dl = [o for o in ops if o.get('op') == 'delete']
     ct = [o for o in ops if o.get('op') == 'change_type']      # type changes: the instance must report the requested type id afterwards
-    if not tg and not mv and not fl and not dl and not ct: return
+    tn = [o for o in ops if o.get('op') == 'set_type_num']      # type parameter edits: the type must report the new value, every other type parameter unchanged
+    if not tg and not mv and not fl and not dl and not ct and not tn: return
     g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
     sg = _import()
     try: a, b = _read_params(src_buf), _read_params(nb)
     except Exception as e: raise OutputUnreadable('the edited parameters could not be read back (%s: %s); nothing was written' % (type(e).__name__, e)) from e
     bad = []
+    for o in tn:
+        if o['eid'] not in b: bad.append('type %d missing in the output' % o['eid']); continue
+        x, y = g(a.get(o['eid'])), g(b.get(o['eid'])); nm = o.get('param')
+        if len(y) < len(x): bad.append('type %d lost parameters (%d -> %d)' % (o['eid'], len(x), len(y)))
+        if nm is not None:
+            if not isinstance(y.get(nm), (int, float)) or abs(float(y[nm]) - o['value']) > 1e-9 * max(1.0, abs(o['value'])): bad.append('type %d: %s reads %r, not the requested %r' % (o['eid'], nm, y.get(nm), o['value']))
+            for k in set(x) | set(y):
+                if k != nm and x.get(k) != y.get(k): bad.append('type %d: untouched parameter %s changed (%r -> %r)' % (o['eid'], k, x.get(k), y.get(k)))
     for o in ct:
         if o['eid'] not in b: bad.append('type-changed element %d missing in the output' % o['eid']); continue
         x, y = g(a.get(o['eid'])), g(b.get(o['eid']))
