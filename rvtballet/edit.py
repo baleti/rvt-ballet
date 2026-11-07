@@ -246,10 +246,16 @@ def _apply_rvtedit(a, b, ops):
         else: os.environ['PART'] = saved_part
 
 
+def _body(ed, eid):
+    """buffer that the trace offsets of element eid index: the element's own partition body (ed.g.bj is another buffer on some files, e.g. 2020 Hyperloop: reads there were garbage, c7x-rvtmove item 25)"""
+    try: return ed.g.e.m.parts[ed.g.e.trace(eid)[0]]['joined']
+    except Exception: return ed.g.bj
+
+
 def _field64(ed, eid, name):
     import struct
     for l in ed.g.e.trace(eid)[3]:
-        if l[1] == name and l[3] - l[2] == 8: return struct.unpack_from('<Q', ed.g.bj, l[2])[0]
+        if l[1] == name and l[3] - l[2] == 8: return struct.unpack_from('<Q', _body(ed, eid), l[2])[0]
     return None
 
 
@@ -273,7 +279,7 @@ def _move_datum(ed, o):
     org = [l for l in log if l[1] == 'Plane.m_origin' and l[3] - l[2] == 24]
     xv = [l for l in log if l[1] == 'Plane.m_xVec' and l[3] - l[2] == 24]; yv = [l for l in log if l[1] == 'Plane.m_yVec' and l[3] - l[2] == 24]
     if len(org) != 2 or len(xv) != 2 or len(yv) != 2: raise NotImplementedError('class datum: unexpected Plane layout (%d origins)' % len(org))
-    x = struct.unpack_from('<3d', g.bj, xv[0][2]); y = struct.unpack_from('<3d', g.bj, yv[0][2])
+    B = _body(ed, o['eid']); x = struct.unpack_from('<3d', B, xv[0][2]); y = struct.unpack_from('<3d', B, yv[0][2])
     n = (x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0]); L = math.sqrt(sum(c * c for c in n))
     if not 0.999 < L < 1.001: raise NotImplementedError('class datum: plane axes are not orthonormal')
     n = tuple(c / L for c in n); d = (o['dx'], o['dy'], o['dz']); dn = sum(d[i] * n[i] for i in range(3))
@@ -281,7 +287,7 @@ def _move_datum(ed, o):
     if inplane > 1e-9: raise EditError('element %d: only a move perpendicular to the %s (along its normal) is supported; the in-plane part (%.6g) was refused' % (o['eid'], 'level plane' if o['cls'] == 'Level' else 'grid plane', inplane))
     sh = tuple(dn * c for c in n); edits = []
     for l in org:
-        v = struct.unpack_from('<3d', g.bj, l[2]); edits.append((l[2], 24, struct.pack('<3d', *(v[i] + sh[i] for i in range(3)))))
+        v = struct.unpack_from('<3d', B, l[2]); edits.append((l[2], 24, struct.pack('<3d', *(v[i] + sh[i] for i in range(3)))))
     ed._rec_edit(o['eid'], edits)
 
 
@@ -301,7 +307,7 @@ def _rvtedit_pass(a, b, ops):
                     if os.environ.get('RVTBALLET_ENABLE_LEADERNOTEMOVE') != '1':      # active leader (Leader.m_type != 0): whether Revit moves the leader end with the note is not yet confirmed in the VM (opt-in until it is)
                         import struct
                         ld = {l[1]: l for l in ed.g.e.trace(o['eid'])[3]}
-                        if 'Leader.m_type' in ld and struct.unpack_from('<i', ed.g.bj, ld['Leader.m_type'][2])[0] != 0: raise NotImplementedError('text note with an active leader: moving the leader end is not verified in Revit yet, so the move is refused (opt-in RVTBALLET_ENABLE_LEADERNOTEMOVE=1)')
+                        if 'Leader.m_type' in ld and struct.unpack_from('<i', _body(ed, o['eid']), ld['Leader.m_type'][2])[0] != 0: raise NotImplementedError('text note with an active leader: moving the leader end is not verified in Revit yet, so the move is refused (opt-in RVTBALLET_ENABLE_LEADERNOTEMOVE=1)')
                     ed.move_annotation(o['eid'], o['dx'], o['dy'])
             elif o['op'] == 'rotate': ed.rotate(o['eid'], o['deg'])
             elif o['op'] == 'change_type': _change_type(ed, o)
