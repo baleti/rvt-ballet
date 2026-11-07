@@ -19,3 +19,14 @@ for label, out, ops in (('wrong amount', na, [b]), ('unmoved output', buf, [a]))
     try: save._readback(buf, out, ops); print('FAIL accepted:', label); sys.exit(1)
     except sg.VerifyFailed as x: print('refused', label + ':', str(x)[:100])
 print('level move readback OK')
+# grid (opt-in too): the plane origin shift along its normal is the witness
+G = 1363057; gm = lambda d: edit.validate_op({'op': 'move', 'eid': G, 'dx': d, 'dy': 0.0, 'dz': 0.0})
+ga, gb = gm(1.0), gm(2.0)
+try: ng = edit.apply_full(buf, [ga])[0]
+except edit.EditError as x: print('grid edit refused:', str(x)[:120]); sys.exit(0)
+try: save._readback(buf, ng, [ga])
+except sg.VerifyFailed as x: print('FAIL honest grid move refused:', str(x)[:200]); sys.exit(1)
+for label, out, ops in (('wrong amount (grid)', ng, [gb]), ('unmoved output (grid)', buf, [ga])):
+    try: save._readback(buf, out, ops); print('FAIL accepted:', label); sys.exit(1)
+    except sg.VerifyFailed as x: print('refused', label + ':', str(x)[:100])
+print('grid move readback OK')
