@@ -10,12 +10,12 @@ def main(path, offs):
     for d in ole.direntries:
         if d is None or d.entry_type != 2 or d.size < ole.minisectorcutoff: continue
         s = d.isectStart; i = 0
-        while s < 0xFFFFFFF0 and s not in owner and i < 10**6: owner[s] = (d.name, i); s = ole.fat[s]; i += 1
+        while s < 0xFFFFFFF0 and s not in owner and i < 10**6: owner[s] = (d.name, i, d.size); s = ole.fat[s]; i += 1
     for off in offs:
         if off < 512 and ss == 512 or off < ss: print(off, 'CFB header'); continue
         sec = (off - ss) // ss; ino = (off - ss) % ss
         if sec in owner:
-            name, k = owner[sec]; soff = k * ss + ino
-            print(off, 'sector', sec, 'stream', name, 'stream_off', soff, 'of', next(d.size for d in ole.direntries if d and d.name == name)); 
+            name, k, size = owner[sec]; soff = k * ss + ino
+            print(off, 'sector', sec, 'stream', name, 'stream_off', soff, 'of', size, 'SLACK(after stream end)' if soff >= size else 'DATA')
         else: print(off, 'sector', sec, 'FAT/DIFAT/dir/mini or free (no big-stream owner)')
 main(sys.argv[1], [int(x) for x in sys.argv[2:]])
