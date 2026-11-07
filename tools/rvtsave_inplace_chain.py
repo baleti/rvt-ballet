@@ -29,8 +29,13 @@ async def run(orig, n):
             if os.environ.get('CH_TM'):
                 import tracemalloc, gc; gc.collect()
                 if not tracemalloc.is_tracing(): tracemalloc.start(8)
-                elif k == 4:
-                    snap = tracemalloc.take_snapshot(); [print('TM', st) for st in snap.statistics('lineno')[:8]]
+                elif k == 3: _tm0 = tracemalloc.take_snapshot()
+                elif k == 7:
+                    snap = tracemalloc.take_snapshot(); [print('TM', st) for st in snap.compare_to(_tm0, 'traceback')[:6]]
+            if os.environ.get('CH_BIG'):      # live large buffers and who holds them (finds per-save retention without tracemalloc's slowdown)
+                import gc; gc.collect(); big = [o for o in gc.get_objects() if isinstance(o, (bytes, bytearray, memoryview)) and len(o) > (1 << 20)]
+                import collections; cn = collections.Counter(type(o).__name__ for o in gc.get_objects()); print('TYPES', k, len(gc.get_objects()), cn.most_common(8), flush=True)
+                print('BIG', k, len(big), sum(len(o) for o in big) >> 20, 'MB', [type(r).__name__ for o in big[:6] for r in gc.get_referrers(o)[:2]], flush=True)
             if os.environ.get('CH_TRIM'):
                 import gc, ctypes; gc.collect(); ctypes.CDLL('libc.so.6').malloc_trim(0)
             from rvtballet._vendor.rvtplat import mem as _mem; row['rss_mb'] = _mem.rss_bytes() >> 20      # process RSS per round: growth across rounds = leak that eventually trips the memory guard

@@ -287,6 +287,10 @@ def _rvtedit_pass(a, b, ops):
                     if ('class Level' in str(ne) or 'class Grid' in str(ne)) and os.environ.get('RVTBALLET_ENABLE_LEVELMOVE') == '1': _move_datum(ed, dict(o, cls='Level' if 'class Level' in str(ne) else 'Grid')); continue      # view annotations (TextNote): origin in TextElement.m_orig, 2D in the view plane
                     if 'class TextNote' not in str(ne): raise
                     if o['dz']: raise NotImplementedError('annotation move needs dz = 0')
+                    if os.environ.get('RVTBALLET_ENABLE_LEADERNOTEMOVE') != '1':      # active leader (Leader.m_type != 0): whether Revit moves the leader end with the note is not yet confirmed in the VM (opt-in until it is)
+                        import struct
+                        ld = {l[1]: l for l in ed.g.e.trace(o['eid'])[3]}
+                        if 'Leader.m_type' in ld and struct.unpack_from('<i', ed.g.bj, ld['Leader.m_type'][2])[0] != 0: raise NotImplementedError('text note with an active leader: moving the leader end is not verified in Revit yet, so the move is refused (opt-in RVTBALLET_ENABLE_LEADERNOTEMOVE=1)')
                     ed.move_annotation(o['eid'], o['dx'], o['dy'])
             elif o['op'] == 'rotate': ed.rotate(o['eid'], o['deg'])
             elif o['op'] == 'change_type': _change_type(ed, o)
