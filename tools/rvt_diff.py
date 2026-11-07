@@ -61,7 +61,9 @@ def diff(fa, fb, want_fields=True, maxrec=200):
     wa, sa = recwalk.walk(fa); wb, sb = recwalk.walk(fb)
     BIG = 1 << 48        # ids above this are walker artifacts (tail item / sentinel bytes read as an id), reported apart
     art = sorted(i for i in set(wa) ^ set(wb) if i >= BIG) + sorted(i for i in set(wa) & set(wb) if i >= BIG and wa[i] != wb[i])
-    wa = {k: v for k, v in wa.items() if k < BIG}; wb = {k: v for k, v in wb.items() if k < BIG}
+    # an entry without any header is not an element but an unparsed blob (e.g. 3.67 MB partition tail that shifts when an element is inserted before it)
+    art += [i for i in set(wa) & set(wb) if i < BIG and not wa[i]['h'] and not wb[i]['h'] and wa[i] != wb[i]]
+    wa = {k: v for k, v in wa.items() if k < BIG and k not in art}; wb = {k: v for k, v in wb.items() if k < BIG and k not in art}
     added = sorted(set(wb) - set(wa)); removed = sorted(set(wa) - set(wb))
     changed = sorted(i for i in set(wa) & set(wb) if wa[i] != wb[i])
     rep = {'streams_total': nstreams, 'streams_changed': sd, 'globals': gd, 'walk_stats_old': {k: list(v) for k, v in sa.items()}, 'walk_stats_new': {k: list(v) for k, v in sb.items()},
