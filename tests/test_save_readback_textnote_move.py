@@ -2,7 +2,7 @@
 Autodesk Snowdon HVAC 2024 sample (local copy); skipped when absent."""
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_ENABLE_LEADERNOTEMOVE'] = '1'
+os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 F = os.path.expanduser('~/c3x-rvtmatrix-work/keep/42_Snowdon_Towers_Sample_HVAC_FamilyInstance.rvt'); E = 1422186
 from rvtballet import edit, save
 if not os.path.exists(F) or not save._import(): print('skip'); sys.exit(0)
@@ -23,7 +23,7 @@ nc = edit.apply_full(buf, ops)[0]; save._readback(buf, nc, ops)
 try: save._readback(buf, nc, [c1]); print('FAIL accepted partial of composed move'); sys.exit(1)
 except sg.VerifyFailed: print('refused partial of composed move')
 print('textnote composed move OK')
-# without the opt-in, a note with an active leader is refused
-os.environ.pop('RVTBALLET_ENABLE_LEADERNOTEMOVE')
-try: edit.apply_full(buf, [a]); print('FAIL leader note moved without opt-in'); sys.exit(1)
-except edit.EditError as x: print('refused leader note without opt-in')
+# with the opt-out, a note with an active leader is refused
+os.environ['RVTBALLET_ENABLE_LEADERNOTEMOVE'] = '0'
+try: edit.apply_full(buf, [a]); print('FAIL leader note moved with the opt-out'); sys.exit(1)
+except edit.EditError as x: print('refused leader note with the opt-out')

@@ -10,7 +10,7 @@ import os, sys, json, argparse, asyncio, tempfile, shutil
 OPS = [
     ('set-string EID PARAM VALUE', 'supported', '2024 2026', 'string parameter (Mark, Comments, ...) on an element that already stores it; value <= 4096 chars, BMP only'),
     ('set-num EID PARAM VALUE', 'supported', '2024 2026', 'number parameter that is already stored as a Double (Revit internal units, feet for lengths)'),
-    ('move EID DX DY DZ', 'supported', '2024 2026', 'FamilyInstance (|d| <= 50000 ft). Level, Grid, TextNote moves: experimental (RVTBALLET_ENABLE_LEVELMOVE=1, RVTBALLET_ENABLE_LEADERNOTEMOVE=1). Wall move: refused by the gate (member span rule), under review'),
+    ('move EID DX DY DZ', 'supported', '2024 2026', 'FamilyInstance (|d| <= 50000 ft). Level and Grid moves: experimental (RVTBALLET_ENABLE_LEVELMOVE=1); TextNote moves (with leader) follow the note in Revit, on by default. Wall move: refused by the gate (member span rule), under review'),
     ('rotate EID DEG', 'supported', '2024 2026', 'placed FamilyInstance only (columns, doors, furniture); |deg| <= 360'),
     ('delete EID', 'experimental', '2024', 'needs RVTBALLET_ENABLE_DELETE=1 (and RVTBALLET_DELETE_ANY=1 outside the verified classes); FamilyInstance verified on HVAC 2024 only'),
     ('change-type EID TYPE_EID', 'experimental', '2024', 'same-family FamilySymbol only; needs RVTBALLET_ENABLE_CHANGETYPE=1; Revit verdict pending'),
