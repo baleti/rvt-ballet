@@ -4,6 +4,18 @@ import sys, struct, os; sys.path.insert(0, os.path.expanduser('~/rvt-research/wr
 os.environ['RVT_GEOM'] = '1'
 import rvtgen
 seed, out, tid, name = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+from rvtballet import edit as _ed
+_ed._check_element_name(name)          # Revit's name rules (empty, forbidden chars, control/format chars)
+sys.path[:0] = [os.path.expanduser('~/rvt-research')]
+import rvt_params, rvt_geometry as _G
+_pr = rvt_params.params(seed); _ix = _G.file_geometry_index(seed)
+_P = lambda e: _pr.get(e, {}).get('params', _pr.get(e, {}))
+_fam = _P(tid).get('Family Name')
+if _ix.get(tid) != 'FamilySymbol': sys.exit('element %d is not a FamilySymbol; nothing was written' % tid)
+for _e, _c in _ix.items():
+    if str(_c) == 'FamilySymbol' and _P(_e).get('Family Name') == _fam and _ed._nk(str(_P(_e).get('Type Name', ''))) == _ed._nk(name):
+        sys.exit('type %d of family %r is already named %r: Revit does not allow duplicate type names in a family; nothing was written' % (_e, _fam, name))
 g = rvtgen.Gen(seed); e = g.e; W = 8
 assert e.trace(tid)[2]['class'] == 'FamilySymbol'
 T = g.template(tid); L = {n: (o, z) for n, o, z, _ in T['log']}
