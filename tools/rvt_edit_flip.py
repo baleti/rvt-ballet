@@ -17,6 +17,7 @@ if dm: man['dirty_members'] = dm
 if dm and len(ops) == 1 and ops[0].get('op') in ('move', 'rotate'): man['member_span_max'] = 2048      # mirrors save._pending
 ech = save.derived_echoes(buf, good, edit.compose(ops))      # same as save._pending: dependents whose derived readback echoes the edit (e.g. level rename -> 'Level' param of its elements)
 if ech: man['modified'] = sorted(set(man['modified']) | {'el:%d' % i for i in ech})
+if dm and ops and all(o.get('op') in ('move', 'rotate', 'set_string') for o in ops): man['frozen_streams'] = True      # mirrors save._pending
 print('manifest modified=%d deleted=%d dirty_members=%s' % (len(man.get('modified', ())), len(man.get('deleted', ())), {k: len(v) for k, v in (dm or {}).items()}), flush=True)
 rnd = random.Random(seed); ss = save.SaveSessions(); T = {} if os.environ.get('EDIT_FLIP_SKIPCTL') else {'control_true_output': good}
 for k in range(n):
