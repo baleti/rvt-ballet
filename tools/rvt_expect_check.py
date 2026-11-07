@@ -6,7 +6,7 @@ year, orig, out, expf = sys.argv[1], os.path.abspath(sys.argv[2]), os.path.abspa
 exp = json.load(open(expf)); HERE = os.path.dirname(os.path.abspath(__file__))
 WL = os.path.expanduser('~/rvt-research/write-lab')
 def run(tool, ids, f):
-    r = subprocess.run(['python3', os.path.join(HERE, tool), year, ids, f], cwd=WL, capture_output=True, text=True, timeout=3600)
+    r = subprocess.run(['python3', os.path.join(HERE, tool), year, ids, f], cwd=WL, capture_output=True, text=True, timeout=int(os.environ.get('RVT_EXPECT_TIMEOUT', '43200')))      # the shared VM lock can make a run wait for hours
     return r.stdout
 def parse_loc(txt):
     d = {}
