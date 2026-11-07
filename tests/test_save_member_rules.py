@@ -46,3 +46,6 @@ r = run(fl(gap0 + 20), {'dirty_members': {pn: [5]}}); assert any('frame after me
 assert run(fl(gap0 + 20), {'dirty_members': {pn: [108]}}) == [], 'size field of a declared neighbour frame is allowed'
 r = run(fl(gap0 + 0), {'dirty_members': {pn: [108]}}); assert any('frame after member 107' in f[1] for f in r), r     # non-size byte even for a declared neighbour
 print('frame rule OK')
+# (4) exact own-size field: a size byte flipped in a frame whose neighbour IS declared passes the mask but not the exact value check
+r = run(fl(gap0 + 3), {'dirty_members': {pn: [108]}}); assert any('size field is not member length' in f[1] for f in r), r
+print('frame size exact OK')
