@@ -14,6 +14,8 @@ if not a.force:
     # classes with Revit evidence (HVAC 2024: source 1365188 owns 4 RbsHvacSystem + 2 IndependentTag, its clone opened clean, +1 equipment): tolerated; anything else refuses
     _OK=('RbsHvacSystem','IndependentTag'); _bad=[(d,_ed.g.e.trace(d)[2]['class']) for d in _deps]; _bad=[x for x in _bad if x[1] not in _OK]
     if _bad: sys.exit('REFUSED: source %d owns dependent element(s) %s (header deletion lists name it); copying it corrupts the model. Pick a childless source or --force.'%(a.src,_bad[:6]))
+    _c=_ed.g.e.trace(a.src)[2]['class']
+    if _c != 'FamilyInstance': sys.exit('REFUSED: source %d is a %s; this tool moves FamilyInstance origins only (a %s copy would sit on the original and skip owner-view/host lists). Text notes: rvtedit.py tn:X:Y:TEXT; other classes need their own op.' % (a.src, _c, _c))
     print('dependents screen: none')
 g=rvtgen.Gen(a.seed); W=g.W; S=a.src; T=g.template(S); idS=struct.pack(g.IDF,S)
 L={n:(o,e) for n,o,e,_ in T['log']}
