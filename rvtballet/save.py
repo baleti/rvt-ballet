@@ -455,6 +455,7 @@ def _pending(ss, mid, d, new_bytes, manifest, light=False):
     if dm and cops and all(c.get('op') in ('move', 'rotate', 'set_string', 'set_num', 'delete') for c in cops) and os.environ.get('RVTBALLET_FROZEN_STREAMS', '1') == '1':
         mf['frozen_streams'] = True
         if any(c.get('op') == 'delete' for c in cops): mf['frozen_except'] = ['Global/ElemTable']      # delete drops the element from the element table (measured: the only non-partition stream that changes)      # these ops never touch a non-partition stream (measured: ws_move, ws_mark, ws_level outputs identical in every Global/* stream, BasicFileInfo, Contents, Formats); the gate then requires them byte-identical (a flip in Global/DocumentIncrementTable was ACCEPTED before)
+    if dm and len(cops) == 1 and cops[0].get('op') == 'set_string' and os.environ.get('RVTBALLET_SPAN_RULE', '1') == '1': mf['member_span_max'] = 3000 + 2 * len(str(cops[0].get('value', '')))      # string edit re-lays the record out: measured prefix/suffix window 2352 (value 1 and 5 chars), 2422 (41 chars), 400 (same length) on 2024 HVAC Mark; one element only, a false refusal is the safe direction
     if echoes: mf['modified'] = sorted(set(mf['modified']) | {'el:%d' % i for i in echoes}); ss.derived[mid] = len(echoes)
     else: ss.derived.pop(mid, None)
     return nb, mf
@@ -736,9 +737,12 @@ def _trf_origin(buf, eid, field='Trf.m_or'):
     try:
         with open(p, 'wb') as f: f.write(buf)
         ed = rvtedit.Edit(p)
-        for l in ed.g.e.trace(eid)[3]:
+        tr = ed.g.e.trace(eid)
+        try: body = ed.g.e.m.parts[tr[0]]['joined']      # offsets are relative to the element's own partition (2020 files: ed.g.bj is another buffer and read garbage, c7x-rvtmove item 25)
+        except Exception: body = ed.g.bj
+        for l in tr[3]:
             if l[1] == field and l[3] - l[2] == 24:
-                v = struct.unpack_from('<3d', ed.g.bj, l[2])
+                v = struct.unpack_from('<3d', body, l[2])
                 return v if all(math.isfinite(x) and abs(x) < 1e7 for x in v) else None
         return None
     finally:
