@@ -15,7 +15,7 @@ def cs_for(ops, tag, file):
     body = []
     for o in [x for x in ops.split(';') if x and x != 'none']:
         p = o.split(':'); k = p[0]
-        if k == 'move': body.append('{ var e = d.GetElement(new ElementId(%sL)); ElementTransformUtils.MoveElement(d, e.Id, new XYZ(%s, %s, %s)); log.AppendLine("OP move " + e.Id); }' % (p[1], p[2], p[3], p[4]))
+        if k == 'move': body.append('{ var e = d.GetElement(new ElementId(%sL)); var bb0 = e.get_BoundingBox(null); ElementTransformUtils.MoveElement(d, e.Id, new XYZ(%s, %s, %s)); var bb1 = e.get_BoundingBox(null); log.AppendLine("OP move " + e.Id + " pinned=" + e.Pinned + " bbminx " + (bb0 != null ? bb0.Min.X.ToString("F6") : "null") + " -> " + (bb1 != null ? bb1.Min.X.ToString("F6") : "null")); }' % (p[1], p[2], p[3], p[4]))
         elif k == 'rotate': body.append('{ var e = d.GetElement(new ElementId(%sL)); var lpt = e.Location as LocationPoint; XYZ cp = lpt != null ? lpt.Point : ((LocationCurve)e.Location).Curve.Evaluate(0.5, true); ElementTransformUtils.RotateElement(d, e.Id, Line.CreateBound(cp, cp + XYZ.BasisZ), %s * Math.PI / 180.0); log.AppendLine("OP rotate " + e.Id); }' % (p[1], p[2]))
         elif k == 'wallend': body.append('{ var e = d.GetElement(new ElementId(%sL)); var lc = (LocationCurve)e.Location; var c0 = lc.Curve; XYZ a0 = c0.GetEndPoint(0), b0 = c0.GetEndPoint(1); XYZ u = (b0 - a0).Normalize(); lc.Curve = Line.CreateBound(a0, b0 + u * %s); log.AppendLine("OP wallend " + e.Id + " len " + lc.Curve.Length); }' % (p[1], p[2]))
         elif k == 'elev': body.append('{ var lv = (Level)d.GetElement(new ElementId(%sL)); lv.Elevation = lv.Elevation + %s; log.AppendLine("OP elev " + lv.Elevation); }' % (p[1], p[2]))
