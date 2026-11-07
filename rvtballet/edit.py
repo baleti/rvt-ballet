@@ -344,6 +344,7 @@ def _check_element_name(v):
     """Revit refuses empty names and names with any of \\ : { } [ ] | ; < > ? ` ~ for levels, grids, views and types; the writer used to save them (c5x-rvtread)"""
     bad = sorted(set(v) & NAME_FORBIDDEN)
     if not v.strip(): raise EditError('a name must not be empty; nothing was changed')
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in v): raise EditError('a name must not contain control characters (newline, tab, ...); nothing was changed')
     if bad: raise EditError('name contains characters Revit does not allow in names (%s); nothing was changed' % ' '.join(bad))
 
 
