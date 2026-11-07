@@ -381,6 +381,7 @@ def _check_element_name(v):
     bad = sorted(set(v) & NAME_FORBIDDEN)
     if not v.strip(): raise EditError('a name must not be empty; nothing was changed')
     if any(ord(ch) < 32 or ord(ch) == 127 for ch in v): raise EditError('a name must not contain control characters (newline, tab, ...); nothing was changed')
+    if any(__import__('unicodedata').category(ch) == 'Cf' for ch in v): raise EditError('a name must not contain invisible format characters (BOM, zero-width, bidi override); nothing was changed')      # c5x-rvtread: spoofing/duplicate-lookalike names; Revit VM verdict on these not taken, refusal is conservative
     if len(v) > 255: raise EditError('a name is limited to 255 characters here (conservative; Revit limits are not VM-verified above that); nothing was changed')
     if bad: raise EditError('name contains characters Revit does not allow in names (%s); nothing was changed' % ' '.join(bad))
 
