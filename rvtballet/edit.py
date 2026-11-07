@@ -89,7 +89,7 @@ def validate_op(op):
         if BACKEND() != 'rvtedit': raise EditError('editing a parameter by name or id needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
         pid, cands = _param_spec(op)
         _check_text(op['value'])
-        return {'op': 'set_string', 'eid': op['eid'], 'field': 'ParamValueAString.m_value', 'value': op['value'], 'match': None, 'pid': pid, 'pids': cands, 'param': op.get('param'), 'kind': 'AString'}
+        return {'op': 'set_string', 'eid': op['eid'], 'field': 'ParamValueAString.m_value', 'value': op['value'], 'match': None, 'pid': pid, 'pids': cands, 'param': op.get('param'), 'kind': 'AString', 'expect': op.get('match')}
     _check_text(op['value'])
     f = op.get('field') or DEFAULT_FIELD
     if f not in FIELDS: raise EditError('field %r is not writable (writable: %s)' % (f, ', '.join(FIELDS)))
@@ -306,7 +306,9 @@ def _rvtedit_pass(a, b, ops):
     _check_batch_names(ops)
     for o in ops:
         try:
-            if o['op'] == 'delete': deleted += _delete(ed, o['eid'])
+            if o['op'] == 'delete':
+                if o['eid'] in deleted: continue      # already removed by an earlier delete's cascade: no second removal
+                deleted += [i for i in _delete(ed, o['eid']) if i not in deleted]
             elif o['op'] == 'move':
                 _o0 = _trf_or(ed, o['eid'])
                 try:
@@ -435,6 +437,7 @@ def _set_string_by_pid(ed, o):
             # the value entry is the one whose bytes are CONTIGUOUS with this id entry (directly after, else directly before): never 'the nearest value' (that picked the neighbouring parameter)
             vn = _value_entry(log, 'AString', l)
             if vn is None: break
+            if o.get('expect') is not None and vn[4] != o['expect']: raise EditError('element %d parameter is %r, not the expected %r: nothing was changed' % (o['eid'], vn[4], o['expect']))      # stale expected value (c3x-rvttype)
             nb = struct.pack('<I', len(o['value'])) + o['value'].encode('utf-16le'); ed._rec_edit(o['eid'], [(vn[2], vn[3] - vn[2], nb)]); return
     raise KeyError('string parameter %d not stored on %d' % (pid, o['eid']))
 

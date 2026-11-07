@@ -13,5 +13,7 @@ out = edit.apply_full(buf, [op])[0]; save._readback(buf, out, [op])
 P2 = save._read_params(out)
 assert P2[E_]['params']['Type Mark'] == 'ZZ' + old
 assert [e for e in P if P[e] != P2.get(e)] == [E_], 'other elements changed'
-# note: by-name set_string drops 'match' (validate_op returns match None), so a stale expected value is NOT checked on this path (open item)
+bad = edit.validate_op({'op': 'set_string', 'eid': E_, 'param': 'Type Mark', 'value': 'QQ', 'match': old + 'x'})
+try: edit.apply_full(buf, [bad]); raise SystemExit('FAIL: stale match was accepted')
+except edit.EditError as ex: print('stale match refused:', str(ex)[:60])
 print('OK type string edit: only target changed')
