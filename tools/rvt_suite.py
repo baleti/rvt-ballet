@@ -34,6 +34,14 @@ CASES = {
     (C_TYPE, 'change instance type'): {'special': 'change_type'},
     (C_ADD, 'wall'): {'special': 'add_wall'},
     (C_TYPE, 'edit type geometry parameter'): {'static': ('PASS', 'verified 2026-11-07 (c3x-rvttype): HVAC 2024 FamilySymbol Slot Width 0.0833 -> 0.1 via set_type_num (opt-in RVTBALLET_ENABLE_TYPEPARAM=1); gate only that field differs; Revit 2024 opened clean cmp 0/0, API readback 0.100000; other years refuse (caption lookup)'), 'static_years': [2024]},
+    # rung 2 delete, evidence from c3x-rvtdel (Revit 2024 VM, Snowdon HVAC/Structural, opened clean, class-count dumps exact; 2024 only)
+    (C_DEL, 'wall'): {'static': ('PASS', 'Structural 2024 SWall delete cascaded 10 hosted FamilyInstances, opened clean in Revit, resave 0/0; regression tests/test_delete_wall_cascade.py'), 'static_years': [2024]},
+    (C_DEL, 'floor'): {'static': ('PASS', 'Structural 2024 Floor delete (cascade sketch/lines/dim/tag) opened clean in Revit, dump diff exact'), 'static_years': [2024]},
+    (C_DEL, 'family instance'): {'static': ('PASS', 'HVAC+Structural 2024 FamilyInstance delete opened clean in Revit, class counts exact'), 'static_years': [2024]},
+    (C_DEL, 'annotation'): {'static': ('PASS', 'HVAC 2024 TextNote/IndependentTag/RoomTag delete opened clean in Revit, class counts exact'), 'static_years': [2024]},
+    (C_DEL, 'view'): {'static': ('PASS', 'HVAC 2024 DBViewSchedule + ScheduleInstance delete opened clean in Revit'), 'static_years': [2024]},
+    (C_DEL, 'level'): {'static': ('FAIL', 'refused at save (verify_failed, dependents), nothing written; Structural 2024'), 'static_years': [2024]},
+    (C_DEL, 'grid'): {'static': ('FAIL', 'refused at save (verify_failed, dependents), nothing written; Structural 2024'), 'static_years': [2024]},
     # verified failures (Revit evidence), recorded without re-running
     (C_MOVE, 'text note'): {'static': ('PASS', 'verified 2026-11-07 (c7x-rvtmove): HVAC 2024 TextNote 1487557 (no leader) +1,+2 ft; Revit 2024 opened clean, API Coord = original + (1,2) to 6 dp; leader notes are refused; other years not run')},
     (C_TYPE, 'rename grid/level/view (dependents)'): {'static': ('PASS', 'verified 2026-11-07 (c5x-rvtmatrix): Structural 2024 (16571 elements) Grid, DBViewSection and Level renames via rvt_one_edit, dependents declared, SAVE AS + SAVE! in place verify_diffs 0, 99.68 to 99.994 pct untouched, Revit 2024 opened clean, cmp 0/0')},
