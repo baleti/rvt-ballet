@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """rvt_diff_vm.py YEAR SAMPLE.rvt TAG OPSPEC [--no-fields]   paired experiment in the OFFLINE Revit VM (Autodesk samples / synthetic only).
 OPSPEC (one string, ';' separates ops): move:ID:dx:dy:dz (feet) | rotate:ID:deg (about the instance origin, Z axis) | wallend:WALLID:dlen (extend the end point along the wall by dlen ft, unjoined walls only) | elev:LEVELID:dz (Level.Elevation += dz, feet) | delete:ID[,ID..] | param:ID:BuiltInParameterName:value (double, internal units)
-        | tparam:ID:NAME:NUM (LookupParameter(NAME).Set, ID may be a type) | type:ID:TYPEID | duptype:TYPEID:NEWNAME (ElementType.Duplicate) | none
+        | tparamstr:ID:NAME:TEXT | tparam:ID:NAME:NUM (LookupParameter(NAME).Set, ID may be a type) | type:ID:TYPEID | duptype:TYPEID:NEWNAME (ElementType.Duplicate) | none
 Opens SAMPLE with audit, SaveAs BASE (no edit: Revit's own rewrite, the noise floor) and then applies the ops in one transaction and SaveAs AFTER.
 Pulls both to work dir (default ~/c2x-diff/TAG/) and prints rvt_diff of  ORIG->BASE (what a plain Revit save changes),  BASE->AFTER (the edit pattern)  and  ORIG->AFTER.
 Needs the VM lock (guest.vmlock); one VM instance at a time."""
@@ -22,6 +22,7 @@ def cs_for(ops, tag, file):
         elif k == 'delete': body.append('{ var del = d.Delete(new List<ElementId>(new long[]{%s}.Select(x => new ElementId(x)))); log.AppendLine("OP delete cascade=" + string.Join(",", del.Select(x => x.ToString()))); }' % p[1])
         elif k == 'param': body.append('{ var e = d.GetElement(new ElementId(%sL)); var pr = e.get_Parameter(BuiltInParameter.%s); pr.Set(%s); log.AppendLine("OP param " + pr.Definition.Name); }' % (p[1], p[2], p[3]))
         elif k == 'tparam': body.append('{ var e = d.GetElement(new ElementId(%sL)); var pr = e.LookupParameter("%s"); if (pr == null) throw new Exception("no param"); if (%s) pr.Set((double)%s); else pr.Set((int)%s); log.AppendLine("OP tparam " + pr.Definition.Name + " = " + (pr.StorageType == StorageType.Double ? pr.AsDouble().ToString("R") : pr.AsInteger().ToString())); }' % (p[1], p[2], 'true', p[3], p[3]))
+        elif k == 'tparamstr': body.append('{ var e = d.GetElement(new ElementId(%sL)); var pr = e.LookupParameter("%s"); if (pr == null) throw new Exception("no param"); pr.Set("%s"); log.AppendLine("OP tparamstr " + pr.Definition.Name); }' % (p[1], p[2], p[3]))
         elif k == 'type': body.append('{ var e = d.GetElement(new ElementId(%sL)); e.ChangeTypeId(new ElementId(%sL)); log.AppendLine("OP type"); }' % (p[1], p[2]))
         elif k == 'duptype': body.append('{ var e = (ElementType)d.GetElement(new ElementId(%sL)); var nt = e.Duplicate("%s"); log.AppendLine("OP duptype new id " + nt.Id); }' % (p[1], p[2]))
         else: raise SystemExit('unknown op ' + o)
