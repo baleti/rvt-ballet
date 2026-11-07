@@ -1,3 +1,4 @@
 #!/bin/sh
-# rvt-ballet launcher (same as rvt-view): /full/path/FILE.rvt [--sheets] [--workspace N] [--no-browser] [--hide Cat1,Cat2]
-exec "$(dirname "$(readlink -f "$0")")/../rvt-ballet" open "$@"
+# rvt-ballet: view and (preliminarily) edit Revit files.   rvt-ballet FILE.rvt [FILE2.rvt ...] [--sheets] [--workspace N] [--no-browser] [--hide Cat1,Cat2] [--port N]
+#   rvt-ballet info FILE | rvt-ballet edit --list-ops | rvt-ballet edit FILE --move EID DX DY DZ -o OUT.rvt
+exec "$(dirname "$(readlink -f "$0")")/../rvt-ballet" "$@"

@@ -1,4 +1,4 @@
-# Corpus sweep: every corpus file converted as `rvt-view` does (tools/sweep.py)
+# Corpus sweep: every corpus file converted as `rvt-ballet` does (tools/sweep.py)
 
 ok 89 / 89 files; failures listed with their reason. Columns: true geometry / parametric matched / approximate / box only (building elements).
 

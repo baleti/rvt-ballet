@@ -1,4 +1,4 @@
-"""rvt-ballet open FILE.rvt | convert FILE.rvt OUTDIR | serve [DIRS...]"""
+"""rvt-ballet FILE.rvt [FILE2.rvt ...] | open FILES | convert FILE.rvt OUTDIR | serve [DIRS...] | info FILE | edit FILE OPS... -o OUT"""
 import urllib.parse, os, sys, argparse, hashlib, json, subprocess, shutil, time
 from . import reader, plat
 
@@ -121,9 +121,23 @@ def prepare(files):
     for l in summary: print('  %s: model %s (%s MB, %s elements) | sheets: %s' % (os.path.basename(l['file']), l.get('model'), l.get('size_mb'), l.get('elements'), l.get('sheets')))
     print('  sheets cache directory ~/.cache/rvt-sheets: %d entries' % nsc)
     for l in summary:
-        if l.get('model') != 'FAILED': print('\nREADY: %s %s --sheets' % (os.path.join(here, 'bin', 'rvt-view'), l['file']))
+        if l.get('model') != 'FAILED': print('\nREADY: %s %s --sheets' % (os.path.join(here, 'bin', 'rvt-ballet'), l['file']))
+
+SUBCOMMANDS = ('open', 'convert', 'serve', 'info', 'edit')
+
+
+def normalize_argv(argv):
+    """`rvt-ballet A.rvt B.rvt --sheets` is `rvt-ballet open A.rvt B.rvt --sheets`: anything that is not a subcommand (or -h/--help) opens"""
+    argv = list(argv)
+    if argv and argv[0] not in SUBCOMMANDS and argv[0] not in ('-h', '--help'): argv = ['open'] + argv
+    return argv
+
 
 def main(argv=None):
+    argv = normalize_argv(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] in ('info', 'edit'):
+        from . import editcli
+        sys.exit((editcli.info_main if argv[0] == 'info' else editcli.edit_main)(argv[1:]))
     ap = argparse.ArgumentParser(prog='rvt-ballet'); sub = ap.add_subparsers(dest='cmd', required=True)
     o = sub.add_parser('open'); o.add_argument('files', nargs='+'); o.add_argument('--port', type=int, default=0); o.add_argument('--no-browser', action='store_true'); o.add_argument('--workspace'); o.add_argument('--rebuild', action='store_true'); o.add_argument('--sheets', action='store_true', help='open directly on the sheets page'); o.add_argument('--hide', default='', help='comma list of categories hidden at start, e.g. Planting,Entourage (URL ?hide=...)'); o.add_argument('--prepare', action='store_true', help='demo prep: convert + cache the model(s), warm the sheets cache, print the exact demo command, do not serve')
     c = sub.add_parser('convert'); c.add_argument('file'); c.add_argument('out', nargs='?')
@@ -134,7 +148,7 @@ def main(argv=None):
         bad = [(f, check_input(f)) for f in (a.files if a.cmd == 'open' else [a.file])]
         bad = [(f, m) for f, m in bad if m]
         if bad:
-            for f, m in bad: print('rvt-view: ' + m, file=sys.stderr)
+            for f, m in bad: print('rvt-ballet: ' + m, file=sys.stderr)
             if a.cmd == 'convert' or len(bad) == len(a.files): sys.exit(2)
             a.files = [f for f in a.files if f not in {b[0] for b in bad}]
     if a.cmd == 'open' and a.prepare: return prepare(a.files)
@@ -149,7 +163,7 @@ def main(argv=None):
         out = a.out or model_dir(a.file)
         try: build.convert(a.file, out)
         except Exception as ex:
-            msg = friendly_error(ex); print('rvt-view: cannot convert %s: %s' % (os.path.basename(a.file), msg), file=sys.stderr)
+            msg = friendly_error(ex); print('rvt-ballet: cannot convert %s: %s' % (os.path.basename(a.file), msg), file=sys.stderr)
             try: json.dump({'stage': 'error', 'msg': 'Cannot open this file: ' + msg, 'pct': 0, 'stages': []}, open(os.path.join(out, 'progress.json'), 'w'))
             except OSError: pass
             sys.exit(1)

@@ -23,7 +23,7 @@ for r in R:
     t = r.get('true'); L.append('| %s | %s | %s | %s | %s | %s | %s | %s | %s (%s) | %s | %s | **%s** |' % (r['year'], r['file'], r['mb'], r['secs'], r.get('elements', ''), r.get('tris', ''), '' if t is None else '%d%%' % round(100 * t),
         mark(chk(r, 'glb')), r.get('mat_used', ''), r.get('swatches', ''), 'ok' if chk(r, 'inspector') and chk(r, 'search') else mark(chk(r, 'inspector')), sheets_cell(r), 'PASS' if ok else 'FAIL'))
 block = ['<!-- RESULTS -->', '', '## Functionality test over the whole corpus (%s, tools/sweep.py + tools/functest.py on remote-host)' % time.strftime('%Y-%m-%d'), '',
-         '**%d / %d files pass** (convert as `rvt-view` does, then through the real server: valid GLB, materials + swatch images, inspector, search, the sheets plug-in with one sheet SVG and one view SVG). "true geometry" = share of building elements drawn from the file\'s own geometry (saved graphics / rebar shapes / decoded B-rep); template (.rte) files have almost no model geometry.' % (npass, len(R)), ''] + L + ['', '<!-- /RESULTS -->']
+         '**%d / %d files pass** (convert as `rvt-ballet` does, then through the real server: valid GLB, materials + swatch images, inspector, search, the sheets plug-in with one sheet SVG and one view SVG). "true geometry" = share of building elements drawn from the file\'s own geometry (saved graphics / rebar shapes / decoded B-rep); template (.rte) files have almost no model geometry.' % (npass, len(R)), ''] + L + ['', '<!-- /RESULTS -->']
 p = os.path.join(ROOT, 'DEMO.md'); s = open(p).read()
 if '<!-- RESULTS -->' in s: s = s[:s.index('<!-- RESULTS -->')] + '\n'.join(block) + s[s.index('<!-- /RESULTS -->') + len('<!-- /RESULTS -->'):]
 else: s = s.rstrip('\n') + '\n\n' + '\n'.join(block) + '\n'

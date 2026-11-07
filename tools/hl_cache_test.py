@@ -3,7 +3,7 @@ import asyncio, sys, os, json, subprocess, urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import cdp
 async def main(f):
     port = 9400 + os.getpid() % 500
-    srv = subprocess.Popen([os.environ.get('RVT_VIEW') or os.path.dirname(os.path.abspath(__file__)) + '/../bin/rvt-view', f, '--no-browser', '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
+    srv = subprocess.Popen([os.environ.get('RVT_VIEW') or os.path.dirname(os.path.abspath(__file__)) + '/../bin/rvt-ballet', f, '--no-browser', '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
     base = 'http://127.0.0.1:%d' % port; b = None; ok = False
     try:
         cdp.wait_http(base + '/api/models', 600); mid = json.load(urllib.request.urlopen(base + '/api/models'))[0]['id']

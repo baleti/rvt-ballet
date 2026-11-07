@@ -1,4 +1,4 @@
 #!/bin/sh
-# rvt-ballet open FILE.rvt | convert FILE.rvt [OUT] | serve
+# rvt-ballet FILE.rvt [FILE2.rvt ...] | open | convert FILE.rvt [OUT] | serve | info FILE | edit FILE OPS (-o OUT)
 D="$(dirname "$(readlink -f "$0")")"
 exec "$D/.venv/bin/python" -c "import sys; sys.path.insert(0,'$D'); from rvtballet.cli import main; main()" "$@"

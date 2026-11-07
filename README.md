@@ -1,16 +1,26 @@
 # rvt-ballet
 
+
+## rvt-ballet (one command: view and preliminary editing)
+
+    rvt-ballet FILE.rvt [FILE2.rvt ...] [--sheets] [--hide A,B] [--workspace N] [--no-browser] [--port N]   # opens the viewer directly (`open` still works)
+    rvt-ballet info FILE.rvt                      # Revit year, worksharing, whether it can be edited/saved
+    rvt-ballet edit --list-ops                    # what passes today per Revit year (supported / experimental / refused)
+    rvt-ballet edit FILE.rvt --move EID 2 0 0 --set-string EID Mark X -o OUT.rvt   # writes a NEW file; the original is never touched
+    rvt-ballet edit FILE.rvt --rotate EID 30 --in-place   # savegate with backup + verify; needs RVTBALLET_ALLOW_OVERWRITE=1 (SAVE! policy)
+
+`rvt-view` is a deprecated shim that prints "rvt-view is now rvt-ballet" and runs `rvt-ballet`. Edits go through exactly the code of the viewer's //commands and SAVE!.
 > Note: dwg-ballet / rvt-ballet are standalone apps; they are separate from the in-app add-ins autocad-ballet and revit-ballet.
 
 Open a native Revit file (.rvt, 2020-2026) in a browser **without Revit**: orbit/pan/zoom, pick elements, inspector with stored parameters,
 model tree by category/level, search, visibility, section, measure. Pure Python backend (uses the sibling `~/rvt-research` reader), Three.js front-end, fully offline.
 
 ## Demo (one command, any .rvt / .rte)
-    ~/src/rvt-ballet/bin/rvt-view /full/path/FILE.rvt            # convert/load with the progressive "STILL PARSING" banner; app window on your CURRENT workspace, with focus
-    ~/src/rvt-ballet/bin/rvt-view /full/path/FILE.rvt --sheets   # same, opening directly on the Sheets page
-    ~/src/rvt-ballet/bin/rvt-view --prepare /full/path/A.rvt [B.rvt ...]   # demo prep: convert + cache, warm the sheets cache (rvt-sheets warm), print 'READY: <exact demo command>' and what is cached
-    ~/src/rvt-ballet/bin/rvt-view /full/path/FILE.rvt --hide Planting,Entourage   # start with categories hidden (URL ?hide=A,B)
-    alias rvt=~/src/rvt-ballet/bin/rvt-view                      # optional; ./rvt-ballet open FILE.rvt is the same command (agents: --workspace N --no-browser --port P)
+    ~/src/rvt-ballet/bin/rvt-ballet /full/path/FILE.rvt            # convert/load with the progressive "STILL PARSING" banner; app window on your CURRENT workspace, with focus
+    ~/src/rvt-ballet/bin/rvt-ballet /full/path/FILE.rvt --sheets   # same, opening directly on the Sheets page
+    ~/src/rvt-ballet/bin/rvt-ballet --prepare /full/path/A.rvt [B.rvt ...]   # demo prep: convert + cache, warm the sheets cache (rvt-sheets warm), print 'READY: <exact demo command>' and what is cached
+    ~/src/rvt-ballet/bin/rvt-ballet /full/path/FILE.rvt --hide Planting,Entourage   # start with categories hidden (URL ?hide=A,B)
+    alias rvt=~/src/rvt-ballet/bin/rvt-ballet                      # optional; ./rvt-ballet open FILE.rvt is the same command (agents: --workspace N --no-browser --port P)
 The toolbar has a **Sheets** button (and `drawing` links in the Views tab): it embeds the rvt-sheets page (sheet list, sheet render with viewports, click a viewport to open that view, pan/zoom) full size over the 3D view; **Model (3D)** goes back. Files without sheets say so ("This file has no sheets (N views only)"); if the optional modules are missing (`pip install shapely numba` in .venv) the button reads "Sheets (unavailable)" with the reason instead of crashing. Clicking an element in a drawing selects and frames it in 3D. `--prepare` converts and caches the model and calls `rvt-sheets warm FILE` when that command exists (until then it prints that the sheets are not pre-warmed; they render on first open). A small `model cached - sheets cached` badge next to the model selector shows what came from the caches. Plug-in interface: docs/PLUGINS.md.
 Verified end to end (tools/uitest10.py, headless; time to a usable first picture / complete model / sheets page ready): 2020 Residential (10 MB): 7.9 s / 27.9 s (Python path, before the Rust fast path) / 2 s, 4 sheets 41 views; 2024 Snowdon Structural (28 MB): 6.5 s / 57 s cold, 8.5 s / 15.5 s warm geometry / sheets page 5 s (its own progress card first), 12 sheets 104 views; 2026 Construction template (.rte): 2.4 s / 4.0 s, no sheets (39 views). With the Rust fast path the quick element table (levels + one box per element) appears within ~1-3 s of opening.
 

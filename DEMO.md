@@ -3,15 +3,15 @@
 Everything runs offline, no Revit, no Autodesk SDK. Prepare once before the interview, then every open is instant.
 
 ## Before (5-10 minutes, any time earlier the same day)
-    ~/src/rvt-ballet/bin/rvt-view --prepare ~/rvt-research/corpus/2020/20_Residential_Sample_Project.rvt ~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt ~/rvt-research/corpus/2026/58_Snowdon_Towers_Sample_Facades.rvt
+    ~/src/rvt-ballet/bin/rvt-ballet --prepare ~/rvt-research/corpus/2020/20_Residential_Sample_Project.rvt ~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt ~/rvt-research/corpus/2026/58_Snowdon_Towers_Sample_Facades.rvt
 It converts and caches each model, pre-renders all sheets and views, and prints `READY: <command>` per file. If a peer changes the reader afterwards, the prepared model still opens instantly (a small "newer reader available" chip appears bottom right; ignore it or hide it with x).
 
 ## 1. The house (2020 Residential, 10 MB): materials and real geometry
-    ~/src/rvt-ballet/bin/rvt-view ~/rvt-research/corpus/2020/20_Residential_Sample_Project.rvt --hide Planting,Entourage
+    ~/src/rvt-ballet/bin/rvt-ballet ~/rvt-research/corpus/2020/20_Residential_Sample_Project.rvt --hide Planting,Entourage
 * **Visual style**: models open in Revit's **Hidden line** style (white faces, black edges, faint hidden lines; header box `Style`). For the textured house switch the Style box to **Realistic** (or open `?style=realistic`); Shaded, Consistent colors and Wireframe are in the same box.
 * In Hidden line, model surface patterns (shingle courses, lap siding, brick bond) are drawn as hatch lines like Revit's; plan / section / elevation views open in a parallel (orthographic-looking) projection, e.g. Views tab, `South` elevation of the Residential house. (Models converted before 2026-10-18 need `--prepare` again to carry the pattern data.)
 * Section views in Hidden line fill cut faces with each material's cut pattern (concrete stipple, wall layer hatch) and draw an earth hatch under the terrain line, at the view's own scale (try `building section` of the Residential house). Patterns are skipped on models above 800k triangles and limited to 6 distinct patterns; the earth pattern is the reader's dash grid, not Revit's basket weave.
-* MEP-heavy 2024+ files (e.g. Snowdon Plumbing): the Rust fast path returned incomplete MEP records (inspector parameters ~55% exact instead of ~98%); c8-rust reports this FIXED on 2026-10-22 (rvt-core 7789ba6, binary cache key ignored the geometry flag). demo_smoke on 2024 Plumbing passes on remote-host (2026-10-22, loads, pages and sheets doc OK), parameter accuracy not re-measured in the viewer; if a MEP file shows wrong parameters, fall back to `RVT_NOFAST=1 bin/rvt-view FILE --sheets`. The three demo files are not MEP-heavy and are unaffected.
+* MEP-heavy 2024+ files (e.g. Snowdon Plumbing): the Rust fast path returned incomplete MEP records (inspector parameters ~55% exact instead of ~98%); c8-rust reports this FIXED on 2026-10-22 (rvt-core 7789ba6, binary cache key ignored the geometry flag). demo_smoke on 2024 Plumbing passes on remote-host (2026-10-22, loads, pages and sheets doc OK), parameter accuracy not re-measured in the viewer; if a MEP file shows wrong parameters, fall back to `RVT_NOFAST=1 bin/rvt-ballet FILE --sheets`. The three demo files are not MEP-heavy and are unaffected.
 * Opens in ~2 s. Say: "a native .rvt, read by our own parser: no Revit, no Autodesk SDK".
 * Navigation is Revit's: **Shift + middle-drag = orbit**, **middle-drag = pan**, **wheel = zoom at the cursor**, double middle-click = zoom to fit, click the ViewCube to snap to a view; left click selects, right button does nothing. Touchpad without a middle button: **Alt + left-drag = orbit**, **Alt + Shift + left-drag = pan**, two-finger scroll / pinch zooms, key F fits (the toolbar `Nav` box can switch to the classic left-drag orbit). `--hide Planting,Entourage` starts with the trees hidden so the house is visible at once (without it, untick **Planting** in the Model tree).
 * Point at the stone chimney, the shake roof, the lap siding, the red door, glass and white sash: per-face materials from the file (25/25 sampled elements match Revit's own face materials), texture bitmaps tiled at the material's real-world size.
@@ -23,13 +23,13 @@ It converts and caches each model, pre-renders all sheets and views, and prints 
 * **Shadows** (or key L) toggles sun shadows; the sun follows the view so shadows always fall visibly beside objects.
 
 ## 2. The building (2024 Snowdon Towers Structural, 28 MB): scale and structure
-    ~/src/rvt-ballet/bin/rvt-view ~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt --sheets
+    ~/src/rvt-ballet/bin/rvt-ballet ~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt --sheets
 * Opens directly on the **Sheets** page: 12 sheets, 104 views drawn from the file (plans, sections, elevations with annotations). Click a viewport to open that view; click an element in a drawing to select it in 3D.
 * **Model (3D)**: levels and grids labelled; Levels tab isolates a floor; search "W12" or "Concrete" (parameter values are searchable).
 * **Coverage** tab: honest numbers per class (true geometry / rebuilt / box only) and why.
 
 ## 3. Curved facade (2026 Snowdon Towers Facades, 53 MB): newest format version
-    ~/src/rvt-ballet/bin/rvt-view ~/rvt-research/corpus/2026/58_Snowdon_Towers_Sample_Facades.rvt
+    ~/src/rvt-ballet/bin/rvt-ballet ~/rvt-research/corpus/2026/58_Snowdon_Towers_Sample_Facades.rvt
 * Revit 2026 file; curtain walls, mullions and curved panels from cones, revolutions, ruled and Hermite surfaces decoded from the file.
 * Zoom to the street front: running and soldier-course brick, granite, quartz, stained wood frames and copper come from Revit's Advanced (Prism) appearances, textured at their real-world size.
 
@@ -44,7 +44,7 @@ It converts and caches each model, pre-renders all sheets and views, and prints 
 * All three demo files pass tools/demo_smoke.sh on master (main page, materials, sheets page and doc); tools/uitest12.py (Revit navigation with real input events) and tools/vctltest.py (annotation control) pass. Whole corpus: 89 / 89 files pass (re-swept 2026-10-23 after the latest reader changes, identical counts; table below, docs/SWEEP.md); speed per file: docs/SPEED.md; geometry accuracy per class and year: docs/FIDELITY-FINAL.md.
 
 ## Verified (2026-10-14)
-* `rvt-view FILE --sheets` end to end in headless Chromium (banner, 3D loads, Sheets page ready, Model button back, no JS exceptions): 2020 Residential (first picture 2.7 s, sheets page 2 s), 2024 Snowdon Structural (2.5 s, 12 sheets / 104 views), 2026 Snowdon Facades (3.1 s, 2 sheets / 47 model views, 28 of them drawable by the sheets page). The real app window (workspace 178, silent) opens too.
+* `rvt-ballet FILE --sheets` end to end in headless Chromium (banner, 3D loads, Sheets page ready, Model button back, no JS exceptions): 2020 Residential (first picture 2.7 s, sheets page 2 s), 2024 Snowdon Structural (2.5 s, 12 sheets / 104 views), 2026 Snowdon Facades (3.1 s, 2 sheets / 47 model views, 28 of them drawable by the sheets page). The real app window (workspace 178, silent) opens too.
 * Browser render check on one model per year 2017-2026 (tools/uisweep.py): 9 / 9 draw, pick and list materials. Feature tests: tools/uitest6.py (views, section, measure, isolate), uitest7.py (navigation), uitest11.py (materials).
 * Bad input: missing / empty / non-Revit / folder paths exit with a one-line reason, truncated files show the reason in the page.
 
@@ -52,7 +52,7 @@ It converts and caches each model, pre-renders all sheets and views, and prints 
 
 ## Functionality test over the whole corpus (2026-10-16, tools/sweep.py + tools/functest.py on remote-host, re-run 2026-10-16 after the Rust speed fixes)
 
-**89 / 89 files pass** (convert as `rvt-view` does, then through the real server: valid GLB, materials + swatch images, inspector, search, the sheets plug-in with one sheet SVG and one view SVG). "true geometry" = share of building elements drawn from the file's own geometry (saved graphics / rebar shapes / decoded B-rep); template (.rte) files have almost no model geometry.
+**89 / 89 files pass** (convert as `rvt-ballet` does, then through the real server: valid GLB, materials + swatch images, inspector, search, the sheets plug-in with one sheet SVG and one view SVG). "true geometry" = share of building elements drawn from the file's own geometry (saved graphics / rebar shapes / decoded B-rep); template (.rte) files have almost no model geometry.
 
 | year | file | MB | convert s | elements | triangles | true geometry | glb | materials used (swatches) | inspector+search | sheets / views drawn | result |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -152,4 +152,4 @@ It converts and caches each model, pre-renders all sheets and views, and prints 
 41 real project files converted: 41 ok (studyx-031 opens without element parameters until reader item 29 is fixed). Source: docs/QA-SWEEP.md, NEEDS-FROM-READER.md items 29/30.
 * First open of a large file is slow; a second open is fast. studyx-008 (66 MB): 1147 s cold, 27 s warm. After the material-id workaround (item 30), studyx-061/063/064 take 264 / 157 / 148 s cold (were 1029 / 1117 / 1620 s).
 * 8 files need more than 7 GB of memory (convert ok with a 16 GB cap: RVT_MEM_CAP=16G).
-* Do not demo a real-world file cold: run `rvt-view FILE --prepare` beforehand. The three demo models above are prepared.
+* Do not demo a real-world file cold: run `rvt-ballet FILE --prepare` beforehand. The three demo models above are prepared.

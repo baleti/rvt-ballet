@@ -1,7 +1,7 @@
 #!/bin/sh
-# demo smoke test: bin/rvt-view FILE --no-browser on a free port, wait until the model is complete, curl the main page, meta, materials and /sheets/. usage: tools/demo_smoke.sh FILE.rvt [PORT]
+# demo smoke test: bin/rvt-ballet FILE --no-browser on a free port, wait until the model is complete, curl the main page, meta, materials and /sheets/. usage: tools/demo_smoke.sh FILE.rvt [PORT]
 F="$1"; P="${2:-8893}"; D="$(dirname "$(readlink -f "$0")")/.."
-"$D/bin/rvt-view" "$F" --no-browser --port "$P" > /tmp/rvt-demo-smoke-$P.log 2>&1 &
+"$D/bin/rvt-ballet" "$F" --no-browser --port "$P" > /tmp/rvt-demo-smoke-$P.log 2>&1 &
 PID=$!; ok=1
 for i in $(seq 1 600); do curl -sf "http://127.0.0.1:$P/api/models" > /dev/null && break; sleep 1; done
 MID=$(curl -s "http://127.0.0.1:$P/api/models" | python3 -c "import json,sys,os; d=json.load(sys.stdin); m=[x for x in d if x['name'] == os.path.basename(sys.argv[1])]; print(m[0]['id'] if m else '')" "$F")
