@@ -48,7 +48,7 @@ Console.WriteLine(log.ToString());
 def one(year, port, src, tag, ops):
     rem = 'C:/wl/diff_%s_src%s' % (tag, os.path.splitext(src)[1] or '.rvt')
     guest.put(src, rem)
-    out = guest.run_job(year, port, cs_for(ops, tag, rem), 'diff_' + tag, 900)
+    out = guest.run_job(year, port, cs_for(ops, tag, rem), 'diff_' + tag, int(os.environ.get('RVTDIFF_TIMEOUT', '900')))
     print('[%s]' % tag, '\n'.join(l for l in out.replace('\r', '').splitlines() if l.startswith(('OP', 'SAVED', 'FAILURE', 'RESULT'))), flush=True)
     if not any(l.startswith(('OP', 'SAVED', 'FAILURE', 'RESULT')) for l in out.splitlines()): print('[%s] RAW guest output (no OP/SAVED/RESULT lines):' % tag, out[-1500:].replace('\r', ''), flush=True)
     wd = os.path.expanduser('~/c2x-diff/%s' % tag); os.makedirs(wd, exist_ok=True)
