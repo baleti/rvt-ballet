@@ -339,6 +339,18 @@ def source_damage(buf):
             if ms != 6: out.append(('CFB header (mini sector shift)', 0))
             if cut != 4096: out.append(('CFB header (mini stream cutoff)', 0))
             if ndif == 0 and dstart != 0xFFFFFFFE: out.append(('CFB header (DIFAT start)', 0))
+            ssz = 1 << struct.unpack_from('<H', buf, 30)[0] if struct.unpack_from('<H', buf, 30)[0] in (9, 12) else 512
+            nsec = max(1, len(buf) // ssz)
+            if ndif > nsec or (ndif and dstart >= nsec): out.append(('CFB header (DIFAT sector count)', 0))      # c5x-rvtread: offset 72 flip, Revit 2024 'docfile has been corrupted'
+            if nfat <= 109 and ndif == 0:      # c5x-rvtread: offset 76 flip, Revit 2024 'document can not be opened'; every listed FAT sector must be marked FATSECT (0xFFFFFFFD) inside the FAT itself
+                per = ssz // 4
+                dif = [struct.unpack_from('<I', buf, 76 + 4 * i)[0] for i in range(nfat)]
+                def fatent(e):
+                    k = e // per
+                    if k >= nfat or dif[k] >= nsec: return None
+                    off = (dif[k] + 1) * ssz + 4 * (e % per)
+                    return struct.unpack_from('<I', buf, off)[0] if off + 4 <= len(buf) else None
+                if any(e >= nsec or fatent(e) != 0xFFFFFFFD for e in dif): out.append(('CFB header (FAT sector index)', 0))
             if ndif == 0 and nfat <= 109 and any(struct.unpack_from('<I', buf, 76 + 4 * i)[0] != 0xFFFFFFFF for i in range(nfat, 109)):
                 out.append(('CFB header (unused DIFAT entry)', 0))
     except Exception:

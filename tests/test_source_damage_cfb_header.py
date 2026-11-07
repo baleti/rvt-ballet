@@ -19,11 +19,11 @@ class T(unittest.TestCase):
         self.assertTrue(save.source_damage(open(t, 'rb').read()))
     def test_vm_refused_header_flips_flagged(self):
         # c7x-rvtread 97: every one of these single-byte xor-0xFF flips was REFUSED by Revit 2024 in the VM while the reader loaded it
-        for off in (0x20, 0x38, 0x39, 0x3a, 0x3b, 0x44, 0x60, 0x64, 0x68, 0x6c, 0x70, 0x80, 0x100, 0x1f0):
+        for off in (0x20, 0x38, 0x39, 0x3a, 0x3b, 0x44, 0x60, 0x64, 0x68, 0x6c, 0x70, 0x80, 0x100, 0x1f0, 0x48, 0x4c):
             b = bytearray(open(S, 'rb').read()); b[off] ^= 0xFF
             self.assertTrue(save.source_damage(bytes(b)), hex(off))
     def test_vm_tolerated_header_flips_not_flagged(self):
-        for off in (0x10, 0x14, 0x18, 0x1c, 0x1d):     # Revit 2024 opened these clean
+        for off in (0x10, 0x14, 0x18, 0x1c, 0x1d, 0x08, 0x18, 0x22, 0x34):     # Revit 2024 opened these clean
             b = bytearray(open(S, 'rb').read()); b[off] ^= 0xFF
             self.assertEqual(save.source_damage(bytes(b)), [], hex(off))
 if __name__ == '__main__': unittest.main()
