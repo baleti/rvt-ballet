@@ -14,6 +14,8 @@ src = os.path.join(_T, 'src.rvt'); shutil.copy(src0, src); h0 = sha(src); buf = 
 ops = [edit.validate_op(o) for o in ops]
 good, deleted = edit.apply_full(buf, ops); dm = edit.last_dirty_members(); m = edit.Edits(); m.ops = ops; man = m.manifest(deleted)
 if dm: man['dirty_members'] = dm
+ech = save.derived_echoes(buf, good, edit.compose(ops))      # same as save._pending: dependents whose derived readback echoes the edit (e.g. level rename -> 'Level' param of its elements)
+if ech: man['modified'] = sorted(set(man['modified']) | {'el:%d' % i for i in ech})
 print('manifest modified=%d deleted=%d dirty_members=%s' % (len(man.get('modified', ())), len(man.get('deleted', ())), {k: len(v) for k, v in (dm or {}).items()}), flush=True)
 rnd = random.Random(seed); ss = save.SaveSessions(); T = {} if os.environ.get('EDIT_FLIP_SKIPCTL') else {'control_true_output': good}
 for k in range(n):
