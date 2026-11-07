@@ -452,7 +452,9 @@ def _pending(ss, mid, d, new_bytes, manifest, light=False):
     _drop_reader_caches()
     if dm: mf['dirty_members'] = dm      # savegate refuses any member outside this set that differs from the source
     if dm and len(cops) == 1 and cops[0].get('op') in ('move', 'rotate') and os.environ.get('RVTBALLET_SPAN_RULE', '1') == '1': mf['member_span_max'] = 2048      # one same-length placement edit: the changed bytes of a member stay in one small window (measured <= 531 B); a flip elsewhere in the member is refused
-    if dm and cops and all(c.get('op') in ('move', 'rotate', 'set_string') for c in cops) and os.environ.get('RVTBALLET_FROZEN_STREAMS', '1') == '1': mf['frozen_streams'] = True      # these ops never touch a non-partition stream (measured: ws_move, ws_mark, ws_level outputs identical in every Global/* stream, BasicFileInfo, Contents, Formats); the gate then requires them byte-identical (a flip in Global/DocumentIncrementTable was ACCEPTED before)
+    if dm and cops and all(c.get('op') in ('move', 'rotate', 'set_string', 'delete') for c in cops) and os.environ.get('RVTBALLET_FROZEN_STREAMS', '1') == '1':
+        mf['frozen_streams'] = True
+        if any(c.get('op') == 'delete' for c in cops): mf['frozen_except'] = ['Global/ElemTable']      # delete drops the element from the element table (measured: the only non-partition stream that changes)      # these ops never touch a non-partition stream (measured: ws_move, ws_mark, ws_level outputs identical in every Global/* stream, BasicFileInfo, Contents, Formats); the gate then requires them byte-identical (a flip in Global/DocumentIncrementTable was ACCEPTED before)
     if echoes: mf['modified'] = sorted(set(mf['modified']) | {'el:%d' % i for i in echoes}); ss.derived[mid] = len(echoes)
     else: ss.derived.pop(mid, None)
     return nb, mf
@@ -518,6 +520,14 @@ _ECHO_ALIAS = {'Name': ('View Name',), 'View Name': ('Name',)}
 
 
 _LEVELELEV_KEYS = {'Elevation from Level', 'Coefficient of Utilization', 'Offset From Attachment At Top'}
+
+
+def _offset_echo(n, x, y):
+    """{'Unconnected Height|Double'} when the edited parameter is Top Offset / Base Offset and that derived height changed by exactly +delta / -delta (strict, 1e-6); else empty"""
+    k = 'Unconnected Height|Double'
+    if n not in ('Top Offset', 'Base Offset') or not all(isinstance(v, float) for v in (x.get(n), y.get(n), x.get(k), y.get(k))): return set()
+    d = y[n] - x[n]
+    return {k} if abs((y[k] - x[k]) - (d if n == 'Top Offset' else -d)) < 1e-6 else set()
 
 
 def derived_echoes(src_buf, nb, ops):
@@ -892,7 +902,8 @@ def _readback(src_buf, nb, ops):
         if o['op'] == 'set_num' and isinstance(y.get(n), (int, float)) and isinstance(o.get('value'), (int, float)) and abs(float(y[n]) - float(o['value'])) > 1e-6 * max(1.0, abs(float(o['value']))):      # severity: a wrong NUMBER inside the declared element used to pass (c1x-rvtmatrix 2026-11-02)
             bad.append('element %d: %r reads back %r, not the requested %r' % (o['eid'], n, y.get(n), o['value']))
         sib = {q.get('param') for q in tg if q['eid'] == o['eid'] and q is not o}      # parameters the same save edits on this element: each is verified by its own iteration, so they are not 'other' changes (c6x-rvtmatrix item 8)
-        if [k for k in ch - {n} - sib if y.get(k) != y.get(n)]: bad.append('element %d: %d other parameter(s) changed (%s)' % (o['eid'], len(ch - {n} - sib), ', '.join('%s: %s -> %s' % (k, str(x.get(k))[:12], str(y.get(k))[:12]) for k in sorted(ch - {n} - sib, key=str)[:4])))
+        _d = _offset_echo(n, x, y)      # Top/Base Offset: the reader's derived 'Unconnected Height|Double' moves by exactly the offset delta (Revit-verified readback of the same quantity)
+        if [k for k in ch - {n} - sib - _d if y.get(k) != y.get(n)]: bad.append('element %d: %d other parameter(s) changed (%s)' % (o['eid'], len(ch - {n} - sib), ', '.join('%s: %s -> %s' % (k, str(x.get(k))[:12], str(y.get(k))[:12]) for k in sorted(ch - {n} - sib, key=str)[:4])))
     if bad: raise sg.VerifyFailed('read-back of the edited element(s) failed: %s' % '; '.join(bad[:3]), {'n_unexpected': len(bad), 'unexpected': bad[:20]})
 
 
