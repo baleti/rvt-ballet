@@ -360,9 +360,10 @@ def _cfb_structure_bad(buf, ssz, nsec, nfat, dstart, ndif):
             out.append(('CFB directory (entry field)', 0)); return out      # VM: root left/right/color and any entry color are tolerated, so only child/sibling indices past the table are flagged
         owner = {}      # c7x-rvtread 102: cross-linked / short / overlong FAT chains of big streams that still parse
         for i in range(n):
-            if raw[128 * i + 66] != 2: continue
+            if raw[128 * i + 66] not in (2, 5): continue      # 5 = root: its chain is the mini stream container
             st, sz = struct.unpack_from('<I', raw, 128 * i + 116)[0], struct.unpack_from('<Q', raw, 128 * i + 120)[0]
-            if sz < 4096: continue
+            if sz < 4096 and i != 0: continue
+            if i == 0 and sz == 0: continue
             ch = chain(st)
             if ch is None or len(ch) * ssz < sz or (len(ch) - 1) * ssz >= sz or any(owner.setdefault(c, i) != i for c in ch):
                 out.append(('CFB FAT chain (stream %d)' % i, 0)); break
