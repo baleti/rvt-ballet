@@ -195,7 +195,7 @@ def decide_add_wall(year, workdir, use_vm):
     sys.path.insert(0, os.path.dirname(HERE))
     from rvtballet import reader
     a = reader.load(src)['recs']; b = reader.load(out)['recs']
-    new = [k for k in b if k not in a]; gone = [k for k in a if k[0] != 0 and k not in b]; chg = [k for k in a if k[0] != 0 and k in b and a[k] != b[k]]      # id 0 = reader error placeholders (offsets shift, NaN != NaN), not elements
+    new = [k for k in b if k not in a]; gone = [k for k in a if k[0] != 0 and 'error' not in a[k] and k not in b]; chg = [k for k in a if k in b and not (k[0] == 0 or 'error' in a[k]) and a[k] != b[k]]      # records with an 'error' text (id 0 or low ids) are reader error placeholders: byte offsets shift, NaN != NaN
     if len(new) != 1 or new[0][1] != 'SWall' or gone or chg: return 'FAIL', 'record diff: new=%s gone=%d changed=%d' % (new[:3], len(gone), len(chg))
     nid = new[0][0]
     if not use_vm: return 'ERROR', 'VM checks disabled (--no-vm)'
