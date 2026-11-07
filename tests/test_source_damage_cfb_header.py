@@ -10,4 +10,11 @@ class T(unittest.TestCase):
     def test_major_version_flip_flagged(self):
         b = bytearray(open(S, 'rb').read()); b[27] ^= 0xFF
         self.assertTrue(save.source_damage(bytes(b)))
+    def test_basicfileinfo_extension_dot_flip_flagged(self):
+        import olefile, shutil, tempfile
+        t = tempfile.mkdtemp() + '/x.rte'; shutil.copy(S, t)
+        o = olefile.OleFileIO(t, write_mode=True); d = bytearray(o.openstream('BasicFileInfo').read())
+        j = bytes(d).find('.rte'.encode('utf-16le')); self.assertGreater(j, 0); d[j] ^= 0xFF
+        o.write_stream('BasicFileInfo', bytes(d)); o.close()
+        self.assertTrue(save.source_damage(open(t, 'rb').read()))
 if __name__ == '__main__': unittest.main()

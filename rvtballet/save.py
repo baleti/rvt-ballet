@@ -335,6 +335,16 @@ def source_damage(buf):
             out.append(('CFB header (major version)', 0))
     except Exception:
         pass
+    try:      # c7x-rvtread 96: BasicFileInfo has no checksum; a damaged '.' of the stored path extension makes Revit 2024 say 'not a valid .rte file' (0 of 78 corpus files lack the extension)
+        import re
+        from .edit import WL
+        if WL not in sys.path: sys.path.insert(0, WL)
+        import cfb
+        bfi = cfb.CFB(bytes(buf)).streams().get('BasicFileInfo')
+        if bfi is not None and not re.search(r'\.(rvt|rte|rfa|rft)', bytes(bfi.data).decode('utf-16le', 'ignore'), re.I):
+            out.append(('BasicFileInfo (path extension)', 0))
+    except Exception:
+        pass
     try:
         from .edit import WL
         if WL not in sys.path: sys.path.insert(0, WL)
