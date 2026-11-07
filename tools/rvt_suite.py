@@ -32,6 +32,7 @@ CASES = {
     (C_SAFE, 'opens in Revit with no repair dialog'): {'bundle': ('FamilyInstance', 'HVAC'), 'use': 'opens'},
     (C_SAFE, 'untouched elements identical'): {'bundle': ('FamilyInstance', 'HVAC'), 'use': 'untouched'},
     (C_TYPE, 'change instance type'): {'special': 'change_type'},
+    (C_ADD, 'wall'): {'special': 'add_wall'},
     (C_TYPE, 'edit type geometry parameter'): {'static': ('PASS', 'verified 2026-11-07 (c3x-rvttype): HVAC 2024 FamilySymbol Slot Width 0.0833 -> 0.1 via set_type_num (opt-in RVTBALLET_ENABLE_TYPEPARAM=1); gate only that field differs; Revit 2024 opened clean cmp 0/0, API readback 0.100000; other years refuse (caption lookup)'), 'static_years': [2024]},
     # verified failures (Revit evidence), recorded without re-running
     (C_MOVE, 'text note'): {'static': ('PASS', 'verified 2026-11-07 (c7x-rvtmove): HVAC 2024 TextNote 1487557 (no leader) +1,+2 ft; Revit 2024 opened clean, API Coord = original + (1,2) to 6 dp; leader notes are refused; other years not run')},
@@ -183,6 +184,35 @@ def decide_change_type(year, workdir, use_vm):
     if int(s0.group(1)) != t0 or int(s1.group(1)) != t1: return 'FAIL', 'Revit Symbol.Id %s -> %s, expected %d -> %d' % (s0.group(1), s1.group(1), t0, t1)
     return 'PASS', 'FamilyInstance %d type %d -> same-family %d; gate verify_diffs 0, only the target element differs, SAVE! in place == SAVE AS; Revit opens clean (%s) and Symbol.Id reads %d' % (inst, t0, t1, note, t1)
 
+def decide_add_wall(year, workdir, use_vm):
+    """ADD a straight wall (clone-and-patch, tools/rvt_aw_auto.py) on a Structural sample; reader-level +1 SWall only, then Revit open + API readback of the new wall"""
+    if year not in WRITABLE: return 'FAIL', 'ADD only built for 2024/2026 (2020-2023 need 4-byte ids and the Latest registry grammar)'
+    src = sample_for(year, 'Structural')
+    if not src: return 'ERROR', 'no sample'
+    out = workdir + '/aw_%d.rvt' % year
+    rc, o = run([sys.executable, HERE + '/rvt_aw_auto.py', src, out, '-250', '-100', '-240', '-88', '12', str(year)], timeout=3600)
+    if rc != 0 or not os.path.exists(out): return 'FAIL', 'writer: ' + o.strip()[-200:]
+    sys.path.insert(0, os.path.dirname(HERE))
+    from rvtballet import reader
+    a = reader.load(src)['recs']; b = reader.load(out)['recs']
+    new = [k for k in b if k not in a]; gone = [k for k in a if k[0] != 0 and k not in b]; chg = [k for k in a if k[0] != 0 and k in b and a[k] != b[k]]      # id 0 = reader error placeholders (offsets shift, NaN != NaN), not elements
+    if len(new) != 1 or new[0][1] != 'SWall' or gone or chg: return 'FAIL', 'record diff: new=%s gone=%d changed=%d' % (new[:3], len(gone), len(chg))
+    nid = new[0][0]
+    if not use_vm: return 'ERROR', 'VM checks disabled (--no-vm)'
+    if not vm_up(): return 'ERROR', 'Revit VM is down'
+    opened, cmp_ok, note = vm_open(year, out)
+    if opened is None: return 'ERROR', note
+    if not opened or not cmp_ok: return 'FAIL', 'Revit open/compare: ' + note
+    body = workdir + '/rb.cs'
+    open(body, 'w').write(open(HOME + '/rvt-research/edit-lab/oracle_rbwall.cs').read().replace('__NEWID__', str(nid)) if os.path.exists(HOME + '/rvt-research/edit-lab/oracle_rbwall.cs') else '')
+    if not os.path.getsize(body): return 'ERROR', 'readback body ~/rvt-research/edit-lab/oracle_rbwall.cs missing'
+    rc, o = run([sys.executable, HOME + '/rvt-research/edit-lab/oracle.py', str(year), out, 'suiteaw', body], timeout=3600)
+    m = re.search(r'RB newwall a=(-?[\d.]+),(-?[\d.]+) b=(-?[\d.]+),(-?[\d.]+) level=(\d+) type=(\d+) h=([\d.]+)', o)
+    if not m: return 'ERROR', 'no wall readback: ' + o.strip()[-160:]
+    x0, y0, x1, y1 = map(float, m.groups()[:4]); h = float(m.group(7))
+    if max(abs(x0 + 250), abs(y0 + 100), abs(x1 + 240), abs(y1 + 88), abs(h - 12)) > 1e-3: return 'FAIL', 'readback differs from request: ' + m.group(0)
+    return 'PASS', 'new SWall %d: reader diff +1 only (0 gone, 0 changed), Revit opens clean (%s), API endpoints/height equal request; untouched elements verified at reader level only' % (nid, note)
+
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--years'); ap.add_argument('--only'); ap.add_argument('--shard'); ap.add_argument('--run-id', default=time.strftime('%Y-%m-%d'))
@@ -206,6 +236,7 @@ def main():
                 if spec is None: st, note = 'FAIL', 'not implemented'
                 elif 'static' in spec: st, note = spec['static'] if y in spec.get('static_years', [y]) else ('FAIL', 'not verified for %d (static case covers %s only)' % (y, spec['static_years']))
                 elif spec.get('special') == 'change_type': st, note = decide_change_type(y, workdir, not a.no_vm)
+                elif spec.get('special') == 'add_wall': st, note = decide_add_wall(y, workdir, not a.no_vm)
                 else: st, note = decide_class_case(y, spec, workdir, not a.no_vm)
             except Exception as e: st, note = 'ERROR', '%s: %s' % (type(e).__name__, e)
             counts[st] += 1; log(st, key, '|', note[:160]); put_ledger(a.run_id, key, st, note)
