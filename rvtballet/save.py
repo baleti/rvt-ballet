@@ -451,7 +451,7 @@ def _pending(ss, mid, d, new_bytes, manifest, light=False):
     dm = last_dirty_members() if BACKEND() == 'rvtedit' and os.environ.get('RVTBALLET_DIRTY_MEMBERS', '1') == '1' else None
     _drop_reader_caches()
     if dm: mf['dirty_members'] = dm      # savegate refuses any member outside this set that differs from the source
-    if dm and len(cops) == 1 and cops[0].get('op') in ('move', 'rotate', 'set_num') and os.environ.get('RVTBALLET_SPAN_RULE', '1') == '1': mf['member_span_max'] = 2048      # one same-length placement edit: the changed bytes of a member stay in one small window (measured <= 531 B); a flip elsewhere in the member is refused
+    if dm and len(cops) == 1 and cops[0].get('op') in ('move', 'rotate', 'set_num') and os.environ.get('RVTBALLET_SPAN_RULE', '1') == '1': mf['member_span_max'] = 2048 if str(getattr(d, 'version', '2024')) in ('2024', '2025', '2026') else 8192      # one same-length placement edit: the changed bytes of a member stay in one small window (measured <= 531 B); a flip elsewhere in the member is refused
     if dm and cops and all(c.get('op') in ('move', 'rotate', 'set_string', 'set_num', 'delete') for c in cops) and os.environ.get('RVTBALLET_FROZEN_STREAMS', '1') == '1':
         mf['frozen_streams'] = True
         if any(c.get('op') == 'delete' for c in cops): mf['frozen_except'] = ['Global/ElemTable']      # delete drops the element from the element table (measured: the only non-partition stream that changes)      # these ops never touch a non-partition stream (measured: ws_move, ws_mark, ws_level outputs identical in every Global/* stream, BasicFileInfo, Contents, Formats); the gate then requires them byte-identical (a flip in Global/DocumentIncrementTable was ACCEPTED before)

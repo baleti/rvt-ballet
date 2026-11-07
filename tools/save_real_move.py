@@ -2,10 +2,14 @@
 that ONLY that element's bounding box changed, by exactly (1,0,0) ft. Aggregate output only (no names / ids). KEEP_DIR keeps the edited output locally for the Revit harness.
 usage: tools/save_real_move.py OUT.json FILE"""
 import os, sys, asyncio, tempfile, time, json, subprocess, sqlite3, shutil
-_T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
+_T = tempfile.mkdtemp()
+if os.environ.get('GATE_ALL'): json.dump({'rvt': {str(y): 'open' for y in range(2015, 2030)}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'      # experiment only: temp gate opened for every year inside this process; the real gate is never touched
+os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 import atexit, shutil as _sh; atexit.register(_sh.rmtree, _T, True); os.environ.setdefault('RVT_BALLET_CACHE', _T + '/bc'); os.environ.setdefault('RVT_CORE_CACHE', _T + '/cc')      # temp dir and ALL caches die with the process (host disk emergency 2026-11-01)
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)
 from rvtballet import server
+if os.environ.get('GATE_ALL'):      # experiment only (in this process): widen the writable-year policy constant to find out what the writer does on other years
+    sys.path.insert(0, os.path.expanduser('~/src/savegate')); import savegate.adapters as _sa; _sa.RVT_WRITABLE = tuple(str(y) for y in range(2015, 2030)); _sa._first_member_record_sizes = lambda s: None
 def bbs(d): return {r[0]: json.loads(r[1]) for r in sqlite3.connect(os.path.join(d, 'model.sqlite')).execute('select id, bb from el where bb is not null')}
 async def main(out, src):
     row = {'size_mb': round(os.path.getsize(src) / 2 ** 20, 1)}; t0 = time.time()
@@ -19,7 +23,7 @@ async def main(out, src):
     models = server.Models(); md = os.path.join(_T, 'm'); os.makedirs(md); models.m['m'] = {'dir': md, 'name': 'f', 'src': src}
     async with TestClient(TestServer(server.make_app(models)), timeout=aiohttp.ClientTimeout(total=None)) as c:
         info = await (await c.get('/api/m/m/saveinfo')).json()
-        if not info.get('open'): row['result'] = 'NOT_OPEN'; print(row); return
+        if not info.get('open'): row['result'] = 'NOT_OPEN'; row['error'] = str(info.get('error'))[:200]; print(row); return
         eid = None
         if os.environ.get('SKIP_WARNED'):      # research: drop candidates the writer warns about (group / design option / hosted), using the writer's own membership check on the source
             from rvtballet import save as _sv
@@ -31,7 +35,7 @@ async def main(out, src):
         if eid is None: row['result'] = 'NO_MOVABLE_CANDIDATE'; row['refused'] = row.get('refused', [])[:3]; print(row); json.dump(row, open(out, 'w')); return
         print('PICK', eid, file=sys.stderr, flush=True)      # local log only (Autodesk sample id): for the Revit position readback
         dest = os.path.join(_T, 'o.rvt'); r = await c.post('/api/m/m/saveas', json={'dest': dest}); j = await r.json()
-        if r.status != 200: row['result'] = 'SAVE_%d %s' % (r.status, j.get('code')); row['n_unexpected'] = (j.get('report') or {}).get('n_unexpected'); print(row); json.dump(row, open(out, 'w')); return
+        if r.status != 200: row['result'] = 'SAVE_%d %s' % (r.status, j.get('code')); row['n_unexpected'] = (j.get('report') or {}).get('n_unexpected'); print('REPORT', str(j.get('report'))[:900], file=sys.stderr, flush=True); print(row); json.dump(row, open(out, 'w')); return
         row['verify_diffs'] = j['verify']['n_unexpected']; row['warnings'] = bool(j.get('warnings')); row['warning_text'] = [str(x)[:140] for x in (j.get('warnings') or [])][:3]
     r = subprocess.run([os.path.join(HERE, 'rvt-ballet'), 'convert', dest, _T + '/c_out'], capture_output=True, text=True, timeout=3600)
     a, b = bbs(_T + '/c_src'), bbs(_T + '/c_out'); moved = {i for i in a if i in b and a[i] != b[i]}
