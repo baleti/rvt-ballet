@@ -41,7 +41,7 @@ def _check_text(v):
 
 
 def validate_op(op):
-    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate', 'change_type'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
+    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate', 'change_type', 'set_type_num'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
     if not isinstance(op.get('eid'), int) or isinstance(op.get('eid'), bool): raise EditError('eid (element id) must be an integer')
     if not 0 <= op['eid'] < 2 ** 63: raise EditError('eid (element id) is out of range')
     if op['op'] == 'move':
@@ -56,6 +56,15 @@ def validate_op(op):
         t = op.get('type_eid')
         if not isinstance(t, int) or isinstance(t, bool) or not 0 <= t < 2 ** 63: raise EditError('type_eid (the FamilySymbol element id) must be an integer')
         return {'op': 'change_type', 'eid': op['eid'], 'type_eid': t}
+    if op['op'] == 'set_type_num':
+        if os.environ.get('RVTBALLET_ENABLE_TYPEPARAM') != '1': raise EditError('set_type_num is disabled (opt-in: RVTBALLET_ENABLE_TYPEPARAM=1; no Revit evidence for it yet)')
+        if BACKEND() != 'rvtedit': raise EditError('set_type_num needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
+        v = op.get('value'); nm = op.get('param'); pid = op.get('pid')
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or abs(v) > 1e15: raise EditError('value must be a finite number (Revit internal units, feet for lengths)')
+        if (nm is None) == (pid is None): raise EditError('give exactly one of param (the type parameter caption) or pid (its parameter element id)')
+        if pid is not None and (not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0): raise EditError('pid must be a positive integer (family parameter element id)')
+        if nm is not None and (not isinstance(nm, str) or not nm): raise EditError('param must be a caption string')
+        return {'op': 'set_type_num', 'eid': op['eid'], 'pid': pid, 'param': nm, 'value': float(v)}
     if op['op'] == 'rotate':
         if BACKEND() != 'rvtedit': raise EditError('rotate needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
         d = op.get('deg')
@@ -120,6 +129,7 @@ def compose(ops):
         if o['op'] in ('set_string', 'set_num') and (o.get('param') is not None or o.get('pid') is not None): k = (o['op'], e, o.get('kind'), o.get('pid'), o.get('param'))
         elif o['op'] == 'move': k = ('move', e)
         elif o['op'] == 'rotate': k = ('rotate', e)
+        elif o['op'] == 'set_type_num': k = ('set_type_num', e, o.get('pid'), o.get('param'))
         elif o['op'] == 'change_type': k = ('change_type', e)      # the last type wins
         if k is None: out.append(o); continue
         if k in slot:
@@ -296,6 +306,7 @@ def _rvtedit_pass(a, b, ops):
             elif o['op'] == 'rotate': ed.rotate(o['eid'], o['deg'])
             elif o['op'] == 'change_type': _change_type(ed, o)
             elif o['op'] == 'set_num': _set_num_by_pid(ed, o)
+            elif o['op'] == 'set_type_num': _set_type_num(ed, a, o)
             elif o['op'] == 'set_string' and o.get('kind') == 'AString': _set_string_by_pid(ed, o)
             elif o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'], o['value'])
             else:
@@ -323,6 +334,23 @@ def _value_entry(log, kind, id_entry):
     vname = 'ParamValue%s.m_value' % kind
     after = next((x for x in log if x[1] == vname and x[2] == id_entry[3]), None); before = next((x for x in log if x[1] == vname and x[3] == id_entry[2]), None)
     return (before or after) if kind == 'Double' else (after or before)
+
+
+def _set_type_num(ed, src, o):
+    """overwrite the Double of ONE NamedParam (type parameter, keyed by the family parameter element id) of a FamilySymbol. Refused unless the element is a type with exactly one such entry and the parameter has no formula."""
+    pid = o.get('pid')
+    if pid is None:
+        rr = os.path.expanduser('~/rvt-research')
+        if rr not in sys.path: sys.path.insert(0, rr)
+        import rvt_xcache, rvt_famparams as F
+        cap = F.captions(rvt_xcache.get_x_ro(src)['recs']); hit = [i for i, c in cap.items() if c == o['param']]
+        stored = {_eid_val(l[4]) for l in ed.g.e.trace(o['eid'])[3] if l[1] == 'NamedParam.m_paramId'}
+        hit = [i for i in hit if i in stored]
+        if len(hit) != 1: raise EditError('type parameter %r: %d matching entries stored on element %d (need exactly 1; give pid)' % (o['param'], len(hit), o['eid']))
+        pid = hit[0]
+    log = ed.g.e.trace(o['eid'])[3]; n = [k for k, l in enumerate(log) if l[1] == 'NamedParam.m_paramId' and _eid_val(l[4]) == pid]
+    if len(n) != 1: raise EditError('element %d has %d NamedParam entries for parameter %d (need exactly 1; is it a type?)' % (o['eid'], len(n), pid))
+    ed.set_type_param(o['eid'], pid, o['value'])
 
 
 def _set_num_by_pid(ed, o):
