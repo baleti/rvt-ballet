@@ -16,6 +16,8 @@ try {
     var lp = e.Location as LocationPoint; var lc = e.Location as LocationCurve;
     string loc = lp != null ? lp.Point.X.ToString("F6") + " " + lp.Point.Y.ToString("F6") + " " + lp.Point.Z.ToString("F6") : (lc != null ? lc.Curve.GetEndPoint(0).X.ToString("F6") + " " + lc.Curve.GetEndPoint(0).Y.ToString("F6") + " " + lc.Curve.GetEndPoint(0).Z.ToString("F6") : "noloc");
     var mark = e.get_Parameter(BuiltInParameter.ALL_MODEL_MARK);
+    var rli = e as RevitLinkInstance;
+    if (rli != null) { var tt = rli.GetTotalTransform(); var lt = d.GetElement(rli.GetTypeId()) as RevitLinkType; log.AppendLine("LINK " + s + " origin=" + tt.Origin.X.ToString("F6") + " " + tt.Origin.Y.ToString("F6") + " " + tt.Origin.Z.ToString("F6") + " type=" + (lt != null ? lt.Name + " loaded=" + RevitLinkType.IsLoaded(d, lt.Id) : "none")); }
     var grp = e.GroupId != ElementId.InvalidElementId ? d.GetElement(e.GroupId) as Group : null;
     if (grp != null) {
       var gt = grp.GroupType; var mem = grp.GetMemberIds().ToList(); int idx = mem.FindIndex(x => x.ToString() == s);
