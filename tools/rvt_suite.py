@@ -37,6 +37,9 @@ CASES = {
     (C_MOVE, 'text note'): {'static': ('PASS', 'verified 2026-11-07 (c7x-rvtmove): HVAC 2024 TextNote 1487557 (no leader) +1,+2 ft; Revit 2024 opened clean, API Coord = original + (1,2) to 6 dp; leader notes are refused; other years not run')},
     (C_TYPE, 'rename grid/level/view (dependents)'): {'static': ('PASS', 'verified 2026-11-07 (c5x-rvtmatrix): Structural 2024 (16571 elements) Grid, DBViewSection and Level renames via rvt_one_edit, dependents declared, SAVE AS + SAVE! in place verify_diffs 0, 99.68 to 99.994 pct untouched, Revit 2024 opened clean, cmp 0/0')},
     (C_MOVE, 'dimension'): {'static': ('FAIL', 'verified failure: a record move of a LinearDimString is accepted by the gate but Revit reads identical segment origins before/after (shift 0,0,0); now refused at edit time (5f05c13)')},
+    ('6. Links', 'move link'): {'static': ('PASS', 'verified 2026-11-07 (c3x-rvtlink): HVAC 2024 RvtLinkInstance Trf.m_or +1 ft via set_field; savegate diff exactly 1 element; Revit 2024 opened clean, API origin (1,0,0); other years offline only'), 'static_years': [2024]},
+    ('6. Links', 'reload link path'): {'static': ('PASS', 'verified 2026-11-07 (c3x-rvtlink): HVAC 2024 RvtLinkSymbol path edited in 3 string spans (same length and +14 chars); 1 element differs; Revit 2024 opened clean, readback new link type name'), 'static_years': [2024]},
+    ('6. Links', 'unload/remove link'): {'static': ('FAIL', 'unload verified on 2024 (m_shouldLoadSource flag, IsLoaded True->False with target beside host); remove link is refused by the gate (dependents), so the item is only half done'), 'static_years': [2024]},
 }
 
 
