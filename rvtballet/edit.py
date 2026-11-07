@@ -284,15 +284,7 @@ def _rvtedit_pass(a, b, ops):
             elif o['op'] == 'move':
                 try: ed.move(o['eid'], o['dx'], o['dy'], o['dz'])
                 except NotImplementedError as ne:
-                    if 'class Level' in str(ne) or 'class Grid' in str(ne): _move_datum(ed, dict(o, cls='Level' if 'class Level' in str(ne) else 'Grid')); continue      # view annotations (TextNote): origin in TextElement.m_orig, 2D in the view plane
-                    if 'class Level' in str(ne) and os.environ.get('RVTBALLET_ENABLE_LEVELMOVE') == '1':      # opt-in, offline-verified only: Elevation = z of the two Plane.m_origin triples (no Revit evidence yet)
-                        if o['dx'] or o['dy']: raise NotImplementedError('a level can only move vertically (dz)')
-                        import struct
-                        pl = [l for l in ed.g.e.trace(o['eid'])[3] if l[1] == 'Plane.m_origin']
-                        if len(pl) != 2: raise NotImplementedError('level record has %d Plane.m_origin triples, expected 2' % len(pl))
-                        for k, l in enumerate(pl):
-                            x, y, z = struct.unpack_from('<3d', ed.g.bj, l[2]); ed.set_field(o['eid'], 'Plane.m_origin', (x, y, z + o['dz']), '<3d', occ=k)
-                        continue
+                    if ('class Level' in str(ne) or 'class Grid' in str(ne)) and os.environ.get('RVTBALLET_ENABLE_LEVELMOVE') == '1': _move_datum(ed, dict(o, cls='Level' if 'class Level' in str(ne) else 'Grid')); continue      # view annotations (TextNote): origin in TextElement.m_orig, 2D in the view plane
                     if 'class TextNote' not in str(ne): raise
                     if o['dz']: raise NotImplementedError('annotation move needs dz = 0')
                     ed.move_annotation(o['eid'], o['dx'], o['dy'])
