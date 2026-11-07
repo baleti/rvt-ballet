@@ -10,9 +10,15 @@ from rvtballet import save
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 src0, out, inst, n, seed = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5])
 src = os.path.join(_T, 'src.rvt'); shutil.copy(src0, src); h0 = sha(src); good = open(out, 'rb').read(); rnd = random.Random(seed); ss = save.SaveSessions(); man = {'modified': ['el:%d' % inst]}
+if os.environ.get('DM_JSON'): man['dirty_members'] = json.loads(os.environ['DM_JSON'])      # e.g. {"Partitions/21": [41]}: what the writer reports as rewritten (edit.last_dirty_members)
 T = {'control_true_output': good}
 for k in range(n):
     o = rnd.randrange(len(good)); x = bytearray(good); x[o] ^= 1 << rnd.randrange(8); T['flip_%d' % k] = bytes(x)
+if os.environ.get('ONLY'): T = {k: v for k, v in T.items() if k in ('control_true_output',) + tuple('flip_%s' % i for i in os.environ['ONLY'].split(','))} if os.environ.get('WITH_CONTROL') else {k: v for k, v in T.items() if k in tuple('flip_%s' % i for i in os.environ['ONLY'].split(','))}
+if os.environ.get('TRACE'):
+    from savegate.adapters import RvtAdapter as _R; _o = _R.extra_checks
+    def _t(self, manifest): r = _o(self, manifest); print('TRACE extra_checks dm=%s bufs=%s -> %s' % (manifest.get('dirty_members'), len(getattr(self, '_verify_bufs', None) or ()), str(r)[:200]), flush=True); return r
+    _R.extra_checks = _t
 res = {}; esc = []
 for k, nb in T.items():
     dest = os.path.join(_T, 'o_%s.rvt' % k)
