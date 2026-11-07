@@ -542,9 +542,17 @@ def _pending(ss, mid, d, new_bytes, manifest, light=False):
         mf['frozen_streams'] = True
         if any(c.get('op') == 'delete' for c in cops): mf['frozen_except'] = ['Global/ElemTable']      # delete drops the element from the element table (measured: the only non-partition stream that changes)      # these ops never touch a non-partition stream (measured: ws_move, ws_mark, ws_level outputs identical in every Global/* stream, BasicFileInfo, Contents, Formats); the gate then requires them byte-identical (a flip in Global/DocumentIncrementTable was ACCEPTED before)
     if dm and len(cops) == 1 and cops[0].get('op') == 'set_string' and os.environ.get('RVTBALLET_SPAN_RULE', '1') == '1': mf['member_span_max'] = 8192 + 2 * len(str(cops[0].get('value', '')))      # string edit re-lays the record out: measured prefix/suffix windows: HVAC 1087-2422, Structural 2024 4794-6248 (25 elements in 3 files), 400 same length; widest 6248, a false refusal is the safe direction
+    _declare_bucket0(mf)
     if echoes: mf['modified'] = sorted(set(mf['modified']) | {'el:%d' % i for i in echoes}); ss.derived[mid] = len(echoes)
     else: ss.derived.pop(mid, None)
     return nb, mf
+
+
+def _declare_bucket0(mf):
+    """id-0 bucket: records the reader decodes with id 0 are heuristic ghosts that overlap the writer's patched placement/field copies, so their decode flips whenever nearby bytes change (real 2024 file f31: el:0 changed on every
+    edit although Revit opens the output clean and reads it correctly). The byte-level bounds (dirty_members + member_span_max) stay the safety net for them, so the bucket is declared only when those bounds are active."""
+    if mf.get('member_span_max') and mf.get('dirty_members') and os.environ.get('RVTBALLET_BUCKET0', '1') == '1': mf['modified'] = sorted(set(mf.get('modified', ())) | {'el:0'})
+    return mf
 
 
 def _light_readback(src_buf, nb, ops):
