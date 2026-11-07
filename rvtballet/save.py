@@ -443,6 +443,7 @@ def _pending(ss, mid, d, new_bytes, manifest, light=False):
     dm = last_dirty_members() if BACKEND() == 'rvtedit' and os.environ.get('RVTBALLET_DIRTY_MEMBERS', '1') == '1' else None
     _drop_reader_caches()
     if dm: mf['dirty_members'] = dm      # savegate refuses any member outside this set that differs from the source
+    if dm and len(cops) == 1 and cops[0].get('op') in ('move', 'rotate') and os.environ.get('RVTBALLET_SPAN_RULE', '1') == '1': mf['member_span_max'] = 2048      # one same-length placement edit: the changed bytes of a member stay in one small window (measured <= 531 B); a flip elsewhere in the member is refused
     if echoes: mf['modified'] = sorted(set(mf['modified']) | {'el:%d' % i for i in echoes}); ss.derived[mid] = len(echoes)
     else: ss.derived.pop(mid, None)
     return nb, mf
