@@ -356,7 +356,8 @@ def _cfb_structure_bad(buf, ssz, nsec, nfat, dstart, ndif):
         n = len(raw) // 128
         ent = [(raw[128 * i + 66], raw[128 * i + 67]) + struct.unpack_from('<III', raw, 128 * i + 68) for i in range(n)]      # type, color, left, right, child
         if not ent or ent[0][0] != 5: out.append(('CFB directory (root entry type)', 0)); return out
-        if any(any(x != 0xFFFFFFFF and x >= n for x in (l, r, ch)) for t, c, l, r, ch in ent[1:]) or (ent[0][4] != 0xFFFFFFFF and ent[0][4] >= n):
+        bad_idx = any(any(x != 0xFFFFFFFF and x >= n for x in ((l, r, ch) if t != 2 else (l, r))) for t, c, l, r, ch in ent[1:]) or (ent[0][4] != 0xFFFFFFFF and ent[0][4] >= n)      # a stream's child field is unused: Revit 2024 opened dir_e2_child (VM)
+        if bad_idx:
             out.append(('CFB directory (entry field)', 0)); return out      # VM: root left/right/color and any entry color are tolerated, so only child/sibling indices past the table are flagged
         owner = {}      # c7x-rvtread 102: cross-linked / short / overlong FAT chains of big streams that still parse
         for i in range(n):
