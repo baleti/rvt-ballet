@@ -8,15 +8,15 @@ import os, sys, json, argparse, asyncio, tempfile, shutil
 # What passes today. Source of truth is the Revit-VM ledger (~/demo-state/rvt-edit/ledger.jsonl, dashboard); this table is the user-facing summary. Honest limits.
 # status: supported = PASS in the Revit VM (open without repair dialog + API readback) | experimental = needs an opt-in environment variable | refused = the gate refuses it
 OPS = [
-    ('set-string EID PARAM VALUE', 'supported', '2024 2026', 'string parameter (Mark, Comments, ...) on an element that already stores it; value <= 4096 chars, BMP only'),
-    ('set-num EID PARAM VALUE', 'supported', '2024 2026', 'number parameter that is already stored as a Double (Revit internal units, feet for lengths)'),
-    ('move EID DX DY DZ', 'supported', '2024 2026', 'FamilyInstance (|d| <= 50000 ft). Level and Grid moves: experimental (RVTBALLET_ENABLE_LEVELMOVE=1); TextNote moves (with leader) follow the note in Revit, on by default. Wall move: refused by the gate (member span rule), under review'),
-    ('rotate EID DEG', 'supported', '2024 2026', 'placed FamilyInstance only (columns, doors, furniture); |deg| <= 360'),
+    ('set-string EID PARAM VALUE', 'supported', '2024 2025 2026', 'string parameter (Mark, Comments, ...) on an element that already stores it; value <= 4096 chars, BMP only'),
+    ('set-num EID PARAM VALUE', 'supported', '2024 2025 2026', 'number parameter that is already stored as a Double (Revit internal units, feet for lengths)'),
+    ('move EID DX DY DZ', 'supported', '2024 2025 2026', 'FamilyInstance (|d| <= 50000 ft). Level and Grid moves: experimental (RVTBALLET_ENABLE_LEVELMOVE=1); TextNote moves (with leader) follow the note in Revit, on by default. Wall move: refused by the gate (member span rule), under review'),
+    ('rotate EID DEG', 'supported', '2024 2025 2026', 'placed FamilyInstance only (columns, doors, furniture); |deg| <= 360'),
     ('delete EID', 'experimental', '2024', 'needs RVTBALLET_ENABLE_DELETE=1 (and RVTBALLET_DELETE_ANY=1 outside the verified classes); FamilyInstance verified on HVAC 2024 only'),
     ('change-type EID TYPE_EID', 'experimental', '2024', 'same-family FamilySymbol only; needs RVTBALLET_ENABLE_CHANGETYPE=1; Revit verdict pending'),
     ('add (wall, floor, level, ...)', 'refused', '-', 'not available on arbitrary projects yet (the write lab adds to its seed project; generalisation in progress)'),
 ]
-YEARS = 'Revit years: 2024 and 2026 can be saved. 2025 passes the gate offline but has no Revit VM verdict; 2020-2023 files are refused (12-byte record layout not enabled). Worksharing, groups and design options are refused.'
+YEARS = 'Revit years: 2024, 2025 and 2026 can be saved (2025: move, rotate, Mark judged in Revit 2025). 2020-2023 files are refused (12-byte record layout not enabled). Worksharing, groups and design options are refused.'
 
 
 def _ledger_counts():
@@ -107,7 +107,7 @@ async def _run(src, ops, out, in_place, say):
             si = await (await c.get('/api/m/m/saveinfo')).json()
             if not si.get('available'): say('saving is not available here (savegate not installed)'); return 3
             if si.get('workshared'): say('refused: workshared (central/local) models cannot be saved; the file was not touched'); return 3
-            if not si.get('open'): say('refused: Revit %s files cannot be saved by this build (supported: 2024, 2026); the file was not touched' % si.get('version')); return 3
+            if not si.get('open'): say('refused: Revit %s files cannot be saved by this build (supported: 2024, 2025, 2026); the file was not touched' % si.get('version')); return 3
             for kind, v in ops:
                 op = build_op(kind, v); st = _status_of(kind)
                 r = await c.post('/api/m/m/edit', json=op); j = await r.json()
