@@ -298,7 +298,7 @@ def _rvtedit_pass(a, b, ops):
             elif o['op'] == 'set_string' and o.get('kind') == 'AString': _set_string_by_pid(ed, o)
             elif o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'], o['value'])
             else:
-                if o['field'] == 'DatumPlane.m_text': _check_datum_name_unique(a, o)
+                if o['field'] in ('DatumPlane.m_text', 'DBView.m_viewName'): _check_datum_name_unique(a, o)
                 ed._str_edit(o['eid'], o['field'], o['value'], o['match'])
         except (IndexError, KeyError, StopIteration, AssertionError, struct_error()) as e:
             hint = ' (the record layout of this kind of element, e.g. a group member, is not handled by the edit backend)' if o['op'] in ('move', 'rotate') else ''
@@ -337,14 +337,15 @@ def _set_num_by_pid(ed, o):
 
 
 def _check_datum_name_unique(src, o):
-    """Revit does not allow two Levels (or two Grids) with the same name (case-insensitive): refuse a rename onto a sibling's name (c5x-rvtread; the writer used to save it and the file then holds a duplicate)"""
+    """Revit does not allow two Levels, two Grids or two views of one kind with the same name (case-insensitive): refuse a rename onto a sibling's name (c5x-rvtread; the writer used to save it). Views: same class (DBViewPlan, DBViewSection, ...), conservative"""
     import rvt_entities
-    r = rvt_entities.extract(src, slim=lambda c: c in ('Level', 'Grid'))
-    mine = [k for k in r['recs'] if k[0] == o['eid'] and k[1] in ('Level', 'Grid')]
+    fld, pre = ('m_viewName', ('DBView',)) if o['field'] == 'DBView.m_viewName' else ('m_text', ('Level', 'Grid'))
+    r = rvt_entities.extract(src, slim=lambda c: c.startswith(pre))
+    mine = [k for k in r['recs'] if k[0] == o['eid'] and k[1].startswith(pre)]
     if not mine: return
     new = o['value'].strip().casefold()
     for k, v in r['recs'].items():
-        if k[1] == mine[0][1] and k[0] != o['eid'] and str(v.get('fields', {}).get('m_text', '')).strip().casefold() == new:
+        if k[1] == mine[0][1] and k[0] != o['eid'] and str(v.get('fields', {}).get(fld, '')).strip().casefold() == new:
             raise EditError('a %s named %r already exists (element %d): Revit does not allow duplicate names; nothing was changed' % (k[1], o['value'], k[0]))
 
 
