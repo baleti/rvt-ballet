@@ -12,7 +12,9 @@ import rvt_geometry as G
 F = sys.argv[1]; N = int(sys.argv[2]) if len(sys.argv) > 2 else 2
 buf = open(F, 'rb').read(); ix = G.file_geometry_index(F); by = collections.defaultdict(list)
 for e, v in ix.items(): by[str(v)].append(e)
+WANT = set(os.environ.get('CLASSES', 'FamilyInstance,SWall,Level,Grid,TextNote,Floor,LinearDimString,Viewport,DBDrawing').split(','))
 for c in sorted(by):
+    if c not in WANT: continue
     ok = 0; why = ''; ids = by[c][:N]
     for e in ids:
         try: edit.apply_full(buf, [edit.validate_op({'op': 'move', 'eid': e, 'dx': 1.0, 'dy': 0.0, 'dz': 0.0})]); ok += 1
