@@ -252,6 +252,15 @@ def _body(ed, eid):
     except Exception: return ed.g.bj
 
 
+def _trf_or(ed, eid):
+    """first Trf.m_or triple of the element record (own partition), or None"""
+    import struct
+    try:
+        l = [x for x in ed.g.e.trace(eid)[3] if x[1] == 'Trf.m_or']
+        return struct.unpack_from('<3d', _body(ed, eid), l[0][2]) if l else None
+    except Exception: return None
+
+
 def _field64(ed, eid, name):
     import struct
     for l in ed.g.e.trace(eid)[3]:
@@ -299,7 +308,10 @@ def _rvtedit_pass(a, b, ops):
         try:
             if o['op'] == 'delete': deleted += _delete(ed, o['eid'])
             elif o['op'] == 'move':
-                try: ed.move(o['eid'], o['dx'], o['dy'], o['dz'])
+                _o0 = _trf_or(ed, o['eid'])
+                try:
+                    if _o0 == (0.0, 0.0, 0.0) and not any(str(x[1]).startswith('GLine') for x in ed.g.e.trace(o['eid'])[3]): raise EditError('element %d: move refused, its placement origin Trf.m_or is exactly (0,0,0) (host-relative or unplaced), so a move would not change the record; nothing was changed' % o['eid'])
+                    ed.move(o['eid'], o['dx'], o['dy'], o['dz'])
                 except NotImplementedError as ne:
                     if ('class Level' in str(ne) or 'class Grid' in str(ne)) and os.environ.get('RVTBALLET_ENABLE_LEVELMOVE') == '1': _move_datum(ed, dict(o, cls='Level' if 'class Level' in str(ne) else 'Grid')); continue      # view annotations (TextNote): origin in TextElement.m_orig, 2D in the view plane
                     if 'class TextNote' not in str(ne): raise
