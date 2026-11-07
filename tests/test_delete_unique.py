@@ -13,6 +13,6 @@ print('regex check', [bool(edit.UNIQUE_CLASS.search(c)) for c in ('AllProjectRev
 assert not any(edit.UNIQUE_CLASS.search(c) for c in ('SWall', 'Floor', 'CategoryElem', 'BasePoint', 'DBViewPlan', 'FamilyInstance', 'BrowserOrganization'))
 os.environ.pop('RVTBALLET_DELETE_ANY')      # allowlist mode: a model class without a VM verdict is refused, a verified one is accepted at add_edit time
 ss2 = save.SaveSessions(); ss2.doc('m2', RTE)
-try: save.add_edit(ss2, 'm2', RTE, {'op': 'delete', 'eid': 301592}); raise SystemExit('ESCAPE: unverified class delete accepted')
+try: save.add_edit(ss2, 'm2', RTE, {'op': 'delete', 'eid': 301568}); raise SystemExit('ESCAPE: unverified class delete accepted')
 except edit.EditError as e: print('refused:', str(e)[:70])
 print('OK')
