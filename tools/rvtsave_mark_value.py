@@ -13,18 +13,21 @@ async def run(orig, n):
     pr = save._read_params(open(src, 'rb').read())
     c0 = [(e, v['params']['Mark']) for e, v in sorted(pr.items()) if e >= 1000 and isinstance(v.get('params', {}).get('Mark'), str)]
     if not c0: print('NO_CANDIDATE'); return
+    PAR = os.environ.get('PARAM', 'Mark')
+    if os.environ.get('TYPE_CLASS'):
+        c0 = [(e, v['params'][PAR]) for e, v in sorted(pr.items()) if v['class'] == os.environ['TYPE_CLASS'] and isinstance(v['params'].get(PAR), str) and v['params'][PAR]]
     e, old = c0[0]; md = tempfile.mkdtemp(dir=_T); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     ok = 0; cur = old; rows = []
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
         for k in range(1, n + 1):
-            new = os.environ['NEWVAL']
-            r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': e, 'param': 'Mark', 'value': new, 'match': cur}); assert r.status == 200, r.status
+            new = cur if os.environ.get('NEWVAL') == '=OLD' else os.environ['NEWVAL']
+            r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': e, 'param': PAR, 'value': new, 'match': cur}); assert r.status == 200, (r.status, (await r.text())[:200])
             b = sha(src); sz = os.path.getsize(src)
             r = await c.post('/api/m/m/save', json={}, timeout=aiohttp.ClientTimeout(total=None)); j = await r.json()
             row = {'k': k, 'status': r.status, 'code': j.get('code', 'ok'), 'size_before': sz, 'size_after': os.path.getsize(src)}
             if r.status == 200:
-                ok += 1; cur = new; pr2 = save._read_params(open(src, 'rb').read()); row['only_target'] = [x for x in pr if pr[x] != pr2.get(x)] == [e] and pr2[e]['params']['Mark'] == new
+                ok += 1; cur = new; pr2 = save._read_params(open(src, 'rb').read()); row['only_target'] = [x for x in pr if pr[x] != pr2.get(x)] == [e] and pr2[e]['params'][PAR] == new
             else: row['untouched'] = sha(src) == b; row['error'] = str(j.get('error'))[:200]
             if os.environ.get('CH_TM'):
                 import tracemalloc, gc; gc.collect()
