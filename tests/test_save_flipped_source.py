@@ -13,7 +13,7 @@ async def run():
     src = os.path.join(_T, 'src.rte'); shutil.copy(RTE, src)
     import random; random.seed(int(os.environ.get('SEED', '1'))); sz = os.path.getsize(src)
     with open(src, 'r+b') as f:
-        off = random.randrange(sz // 4, sz - 4096); f.seek(off); b = f.read(1); f.seek(off); f.write(bytes([b[0] ^ 0xFF])); print('flip at', off, 'of', sz)
+        off = random.randrange(int(sz * float(os.environ.get("LO", "0.25"))), sz - 4096); f.seek(off); b = f.read(1); f.seek(off); f.write(bytes([b[0] ^ 0xFF])); print('flip at', off, 'of', sz)
     orig = open(src, 'rb').read(); md = os.path.join(_T, 'm'); os.makedirs(md)
     models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models))) as c:
