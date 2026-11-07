@@ -15,7 +15,7 @@ sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
 EID = next(e for e, d in rvt_params.params(SRC).items() if g(d).get('Comments') == '')
 bad = 0
-CASES = (('cjk', '\u6f22\u5b57\u304b\u306a\ud55c\uae00'), ('emoji', 'x\U0001F600y'), ('umlaut', '\u00e4\u00f6\u00fc\u00df\u00e9'), ('long5000', 'A' * 5000), ('newline', 'a\nb\r\nc\td'), ('nul', 'a\x00b'), ('surrogate', 'a\ud800b'), ('quote', 'a"b\'c<>&\\'))
+CASES = (('cjk', '\u6f22\u5b57\u304b\u306a\ud55c\uae00'), ('emoji', 'x\U0001F600y'), ('umlaut', '\u00e4\u00f6\u00fc\u00df\u00e9'), ('long5000', 'A' * 5000), ('newline', 'a\nb\r\nc\td'), ('nul', 'a\x00b'), ('surrogate', 'a\ud800b'), ('quote', 'a"b\'c<>&\\'), ('nfd', 'e\u0301a\u0308'), ('bom_rlo', '\ufeffx\u202ey'), ('long70k', 'B' * 70000))
 for name, val in CASES:
     d = tempfile.mkdtemp(dir=_T); p = d + '/s.rvt'; shutil.copy(SRC, p); h0 = sha(p)
     try:
