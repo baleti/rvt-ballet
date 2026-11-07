@@ -87,3 +87,9 @@ class CrossLink(unittest.TestCase):
         import struct
         b = open(S, 'rb').read(); ssz = 1 << struct.unpack_from('<H', b, 30)[0]
         self.assertEqual(save._cfb_structure_bad(b, ssz, len(b) // ssz, struct.unpack_from('<I', b, 44)[0], 0, 0), [])
+
+class OutputGate(unittest.TestCase):
+    def test_refuse_bad_output(self):
+        b = bytearray(open(S, 'rb').read()); b[0x30] ^= 0xFF
+        with self.assertRaises(save.OutputUnreadable): save._refuse_bad_output(bytes(b))
+        save._refuse_bad_output(open(S, 'rb').read())

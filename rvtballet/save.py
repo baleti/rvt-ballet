@@ -509,6 +509,16 @@ def _drop_reader_caches():
             if isinstance(c, dict): c.clear()
 
 
+def _refuse_bad_output(nb):
+    """c7x-rvtread 107: the writer's own output must pass the same CFB header/directory/FAT-chain structure check as a source (5 ms); a broken container is never written"""
+    import struct
+    b = bytes(nb)
+    if len(b) < 512 or b[:8] != bytes.fromhex('d0cf11e0a1b11ae1'): return
+    ssz = 1 << struct.unpack_from('<H', b, 30)[0] if struct.unpack_from('<H', b, 30)[0] in (9, 12) else 512
+    bad = _cfb_structure_bad(b, ssz, max(1, len(b) // ssz), struct.unpack_from('<I', b, 44)[0], 0, struct.unpack_from('<I', b, 72)[0])
+    if bad: raise OutputUnreadable('the edited file has a damaged container structure (%s); nothing was written' % bad[0][0])
+
+
 def _pending(ss, mid, d, new_bytes, manifest, light=False):
     """bytes + manifest of the recorded edits replayed on the loaded bytes (explicit new_bytes win). light=True (limited verification of models too big for the element dump): the full reader read-back and the derived-echo scan
     (two whole-model reader dumps, 10+ GB on a 64 MB project) are replaced by a record-level read-back of the edited elements only"""
@@ -1034,7 +1044,7 @@ def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     check_memory(src, d.buf)      # TooBig (507) before any work; the UI then offers the labelled limited verification
     gw = group_warning(ss, mid, d.buf) if new_bytes is None else None
     explicit = new_bytes is not None
-    new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _stage(ss, mid, 'verifying and writing')
+    new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _refuse_bad_output(new_bytes); _stage(ss, mid, 'verifying and writing')
     exp = [] if explicit else expectations(ss.edits(mid).ops, [int(k[3:]) for k in manifest.get('deleted', ())])
     r = result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite))
     if exp: r['expectations'] = exp      # replayable by tools/rvt_expect_check.py through the Revit API
@@ -1050,7 +1060,7 @@ def save_as_light(ss, mid, src, dest, overwrite=False):
     """SAVE AS with LIMITED verification (rvtballet.lightverify) for models too large for the element-level verify. Explicit opt-in, SAVE AS only: never used for overwrite."""
     from .lightverify import light_verify
     _cloud_gate(src, dest); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src, precheck=False); _refuse_damaged(d)
-    new_bytes, manifest = _pending(ss, mid, d, None, None, light=True); n = len(ss.edits(mid).ops)
+    new_bytes, manifest = _pending(ss, mid, d, None, None, light=True); _refuse_bad_output(new_bytes); n = len(ss.edits(mid).ops)
     _stage(ss, mid, 'limited verification (structure only)'); rep = light_verify(d.buf, new_bytes, max(1, n))
     _stage(ss, mid, 'writing'); r = result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite, verify=False))
     r['verify'] = rep; r['limited_verification'] = True
@@ -1078,7 +1088,7 @@ def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
         if mem:
             e0 = sorted(mem)[0]
             raise GroupOrOption('overwrite refused: element %d is part of a group or design option, or is a hosted element being moved (%s); such edits can leave an inconsistent model that Revit still opens. Use SAVE AS and check the copy; the file was not touched.' % (e0, '; '.join(mem[e0])))
-    new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _stage(ss, mid, 'verifying and writing')
+    new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _refuse_bad_output(new_bytes); _stage(ss, mid, 'verifying and writing')
     lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
     if lc is None and os.environ.get('RVTBALLET_ALLOW_LAYOUT_CHANGE') != '1': raise LayoutChanged('overwrite refused: the page-layout check could not run, so the output is not known to keep the source layout. Use SAVE AS (override: RVTBALLET_ALLOW_LAYOUT_CHANGE=1).')
     if lc and os.environ.get('RVTBALLET_ALLOW_LAYOUT_CHANGE') != '1':
