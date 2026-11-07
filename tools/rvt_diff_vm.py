@@ -40,7 +40,7 @@ try {
   d.SaveAs(@"C:\\wl\\out\\%(t)s_base%(ext)s", so); log.AppendLine("SAVED base");
   using (var t = new Transaction(d, "rvtdiff")) { t.Start();
     %(b)s
-    var cst = t.Commit(); log.AppendLine("COMMIT " + cst); }
+    var cst = t.Commit(); log.AppendLine("OP commit " + cst); }
   d.SaveAs(@"C:\\wl\\out\\%(t)s_after%(ext)s", so); log.AppendLine("SAVED after");
   d.Close(false);
 } catch (Exception ex) { log.AppendLine("RESULT fail " + ex.Message.Replace("\\n", " ")); }
