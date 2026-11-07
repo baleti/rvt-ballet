@@ -33,6 +33,7 @@ CASES = {
     (C_SAFE, 'untouched elements identical'): {'bundle': ('FamilyInstance', 'HVAC'), 'use': 'untouched'},
     (C_TYPE, 'change instance type'): {'special': 'change_type'},
     # verified failures (Revit evidence), recorded without re-running
+    (C_MOVE, 'text note'): {'static': ('PASS', 'verified 2026-11-07 (c7x-rvtmove): HVAC 2024 TextNote 1487557 (no leader) +1,+2 ft; Revit 2024 opened clean, API Coord = original + (1,2) to 6 dp; leader notes are refused; other years not run')},
     (C_MOVE, 'dimension'): {'static': ('FAIL', 'verified failure: a record move of a LinearDimString is accepted by the gate but Revit reads identical segment origins before/after (shift 0,0,0); now refused at edit time (5f05c13)')},
 }
 
