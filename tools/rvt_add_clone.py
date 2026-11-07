@@ -10,8 +10,10 @@ a=ap.parse_args()
 if not a.force:
     sys.path.insert(0,os.path.expanduser('~/rvt-research/edit-lab')); sys.path.insert(0,os.path.expanduser('~/rvt-research'))
     import rvtedit
-    _deps=rvtedit.Edit(a.seed).dependents(a.src)
-    if _deps: sys.exit('REFUSED: source %d owns %d dependent element(s) %s (header deletion lists name it); copying it corrupts the model. Pick a childless source or --force.'%(a.src,len(_deps),_deps[:6]))
+    _ed=rvtedit.Edit(a.seed); _deps=_ed.dependents(a.src)
+    # classes with Revit evidence (HVAC 2024: source 1365188 owns 4 RbsHvacSystem + 2 IndependentTag, its clone opened clean, +1 equipment): tolerated; anything else refuses
+    _OK=('RbsHvacSystem','IndependentTag'); _bad=[(d,_ed.g.e.trace(d)[2]['class']) for d in _deps]; _bad=[x for x in _bad if x[1] not in _OK]
+    if _bad: sys.exit('REFUSED: source %d owns dependent element(s) %s (header deletion lists name it); copying it corrupts the model. Pick a childless source or --force.'%(a.src,_bad[:6]))
     print('dependents screen: none')
 g=rvtgen.Gen(a.seed); W=g.W; S=a.src; T=g.template(S); idS=struct.pack(g.IDF,S)
 L={n:(o,e) for n,o,e,_ in T['log']}
