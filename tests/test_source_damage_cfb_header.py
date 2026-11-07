@@ -60,3 +60,12 @@ class Struct(unittest.TestCase):
         for o in (67, 80, 100):
             def e(b, o=o): b[d + o] ^= 0xFF
             self.assertEqual(self._bad(e), [], o)
+
+class FatLoop(unittest.TestCase):
+    def test_fat_self_loop_flagged(self):
+        # c7x-rvtread 101: FAT entry 8 -> 8 (bit flip) made the CFB walk raise; source_damage used to answer [] (clean)
+        import struct
+        b = bytearray(open(S, 'rb').read()); sec = struct.unpack_from('<I', b, 76)[0]; ssz = 1 << struct.unpack_from('<H', b, 30)[0]
+        off = (sec + 1) * ssz; e = struct.unpack_from('<I', b, off + 32)[0]
+        struct.pack_into('<I', b, off + 32, 8)
+        self.assertTrue(save.source_damage(bytes(b)))

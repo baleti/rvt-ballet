@@ -415,7 +415,11 @@ def source_damage(buf):
         if WL not in sys.path: sys.path.insert(0, WL)
         import cfb, rvtw
         from .gzcheck import member_report
-        for k, v in cfb.CFB(bytes(buf)).streams().items():
+        try: _streams = cfb.CFB(bytes(buf)).streams()
+        except Exception:      # c7x-rvtread 101: a FAT chain loop/flip made the walk raise and source_damage reported [] (clean); an unparseable container is damage
+            if bytes(buf[:8]) == bytes.fromhex('d0cf11e0a1b11ae1'): out.append(('CFB (FAT chain unreadable)', 0))
+            return out
+        for k, v in _streams.items():
             if k.startswith('Partitions/'):
                 out.extend((k, i) for i in member_report(bytes(rvtw.Stream(v.data).payload))[1])
                 out.extend((k + ' (page ECC)', i) for i in _ecc_bad_pages(v.data, rvtw))      # c7x-rvtread 62: zeroed/flipped bytes that gzip does not see
