@@ -16,7 +16,7 @@ def cs_for(ops, tag, file):
     for o in [x for x in ops.split(';') if x and x != 'none']:
         p = o.split(':'); k = p[0]
         if k == 'move': body.append('{ var e = d.GetElement(new ElementId(%sL)); ElementTransformUtils.MoveElement(d, e.Id, new XYZ(%s, %s, %s)); log.AppendLine("OP move " + e.Id); }' % (p[1], p[2], p[3], p[4]))
-        elif k == 'rotate': body.append('{ var e = d.GetElement(new ElementId(%sL)); var lp = (LocationPoint)e.Location; ElementTransformUtils.RotateElement(d, e.Id, Line.CreateBound(lp.Point, lp.Point + XYZ.BasisZ), %s * Math.PI / 180.0); log.AppendLine("OP rotate " + e.Id); }' % (p[1], p[2]))
+        elif k == 'rotate': body.append('{ var e = d.GetElement(new ElementId(%sL)); var lpt = e.Location as LocationPoint; XYZ cp = lpt != null ? lpt.Point : ((LocationCurve)e.Location).Curve.Evaluate(0.5, true); ElementTransformUtils.RotateElement(d, e.Id, Line.CreateBound(cp, cp + XYZ.BasisZ), %s * Math.PI / 180.0); log.AppendLine("OP rotate " + e.Id); }' % (p[1], p[2]))
         elif k == 'delete': body.append('{ var del = d.Delete(new List<ElementId>(new long[]{%s}.Select(x => new ElementId(x)))); log.AppendLine("OP delete cascade=" + string.Join(",", del.Select(x => x.ToString()))); }' % p[1])
         elif k == 'param': body.append('{ var e = d.GetElement(new ElementId(%sL)); var pr = e.get_Parameter(BuiltInParameter.%s); pr.Set(%s); log.AppendLine("OP param " + pr.Definition.Name); }' % (p[1], p[2], p[3]))
         elif k == 'type': body.append('{ var e = d.GetElement(new ElementId(%sL)); e.ChangeTypeId(new ElementId(%sL)); log.AppendLine("OP type"); }' % (p[1], p[2]))
