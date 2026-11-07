@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """rvt_diff_vm.py YEAR SAMPLE.rvt TAG OPSPEC [--no-fields]   paired experiment in the OFFLINE Revit VM (Autodesk samples / synthetic only).
-OPSPEC (one string, ';' separates ops): move:ID:dx:dy:dz (feet) | rotate:ID:deg (about the instance origin, Z axis) | elev:LEVELID:dz (Level.Elevation += dz, feet) | delete:ID[,ID..] | param:ID:BuiltInParameterName:value (double, internal units)
+OPSPEC (one string, ';' separates ops): move:ID:dx:dy:dz (feet) | rotate:ID:deg (about the instance origin, Z axis) | wallend:WALLID:dlen (extend the end point along the wall by dlen ft, unjoined walls only) | elev:LEVELID:dz (Level.Elevation += dz, feet) | delete:ID[,ID..] | param:ID:BuiltInParameterName:value (double, internal units)
         | type:ID:TYPEID | duptype:TYPEID:NEWNAME (ElementType.Duplicate) | none
 Opens SAMPLE with audit, SaveAs BASE (no edit: Revit's own rewrite, the noise floor) and then applies the ops in one transaction and SaveAs AFTER.
 Pulls both to work dir (default ~/c2x-diff/TAG/) and prints rvt_diff of  ORIG->BASE (what a plain Revit save changes),  BASE->AFTER (the edit pattern)  and  ORIG->AFTER.
@@ -17,6 +17,7 @@ def cs_for(ops, tag, file):
         p = o.split(':'); k = p[0]
         if k == 'move': body.append('{ var e = d.GetElement(new ElementId(%sL)); ElementTransformUtils.MoveElement(d, e.Id, new XYZ(%s, %s, %s)); log.AppendLine("OP move " + e.Id); }' % (p[1], p[2], p[3], p[4]))
         elif k == 'rotate': body.append('{ var e = d.GetElement(new ElementId(%sL)); var lpt = e.Location as LocationPoint; XYZ cp = lpt != null ? lpt.Point : ((LocationCurve)e.Location).Curve.Evaluate(0.5, true); ElementTransformUtils.RotateElement(d, e.Id, Line.CreateBound(cp, cp + XYZ.BasisZ), %s * Math.PI / 180.0); log.AppendLine("OP rotate " + e.Id); }' % (p[1], p[2]))
+        elif k == 'wallend': body.append('{ var e = d.GetElement(new ElementId(%sL)); var lc = (LocationCurve)e.Location; var c0 = lc.Curve; XYZ a0 = c0.GetEndPoint(0), b0 = c0.GetEndPoint(1); XYZ u = (b0 - a0).Normalize(); lc.Curve = Line.CreateBound(a0, b0 + u * %s); log.AppendLine("OP wallend " + e.Id + " len " + lc.Curve.Length); }' % (p[1], p[2]))
         elif k == 'elev': body.append('{ var lv = (Level)d.GetElement(new ElementId(%sL)); lv.Elevation = lv.Elevation + %s; log.AppendLine("OP elev " + lv.Elevation); }' % (p[1], p[2]))
         elif k == 'delete': body.append('{ var del = d.Delete(new List<ElementId>(new long[]{%s}.Select(x => new ElementId(x)))); log.AppendLine("OP delete cascade=" + string.Join(",", del.Select(x => x.ToString()))); }' % p[1])
         elif k == 'param': body.append('{ var e = d.GetElement(new ElementId(%sL)); var pr = e.get_Parameter(BuiltInParameter.%s); pr.Set(%s); log.AppendLine("OP param " + pr.Definition.Name); }' % (p[1], p[2], p[3]))
