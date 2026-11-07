@@ -26,10 +26,10 @@ async def run():
         async with TestClient(TestServer(server.make_app(models))) as c:
             i = await (await c.get('/api/m/m/saveinfo')).json()
             r = await c.post('/api/m/m/saveas', json={'dest': dest}); j = await r.json()
-        w = str(year) in ('2024', '2026')
+        w = str(year) in ('2024', '2025', '2026')
         if w: assert r.status == 200 and i['open'] and i['version'] == str(year) and os.path.exists(dest), (year, r.status, j, i)
         else:
-            assert r.status == 415 and j['code'] == 'unsupported_version' and str(year) in j['error'] and '2024, 2026' in j['error'], (year, r.status, j)
+            assert r.status == 415 and j['code'] == 'unsupported_version' and str(year) in j['error'] and '2024, 2025, 2026' in j['error'], (year, r.status, j)
             assert i['open'] is False and str(year) in i['error'] and not os.path.exists(dest) and not any('sgtmp' in f for f in os.listdir(d)), (year, i)
         res[year] = r.status
     print('save versions OK', res)
