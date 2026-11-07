@@ -93,3 +93,13 @@ class OutputGate(unittest.TestCase):
         b = bytearray(open(S, 'rb').read()); b[0x30] ^= 0xFF
         with self.assertRaises(save.OutputUnreadable): save._refuse_bad_output(bytes(b))
         save._refuse_bad_output(open(S, 'rb').read())
+
+class BfiFlag(unittest.TestCase):
+    def test_bfi_flag_byte_flip_flagged(self):
+        # c7x-rvtread 110: Revit 2024 refused (InternalException) a BasicFileInfo with the byte before the 'Autodesk Revit' length flipped
+        import olefile, shutil, tempfile
+        t = tempfile.mkdtemp() + '/x.rte'; shutil.copy(S, t)
+        o = olefile.OleFileIO(t, write_mode=True); d = bytearray(o.openstream('BasicFileInfo').read())
+        j = bytes(d).find('Autodesk Revit'.encode('utf-16le')); self.assertGreater(j, 5); d[j - 5] ^= 0xFF
+        o.write_stream('BasicFileInfo', bytes(d)); o.close()
+        self.assertIn(('BasicFileInfo (structure)', 0), save.source_damage(open(t, 'rb').read()))

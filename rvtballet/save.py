@@ -420,6 +420,9 @@ def source_damage(buf):
         bfi = cfb.CFB(bytes(buf)).streams().get('BasicFileInfo')
         if bfi is not None and not re.search(r'\.(rvt|rte|rfa|rft)', bytes(bfi.data).decode('utf-16le', 'ignore'), re.I):
             out.append(('BasicFileInfo (path extension)', 0))
+        elif bfi is not None:      # c7x-rvtread 110: Revit 2024 'internal error' when the flag byte before the 'Autodesk Revit' string (offset j-5, always 0 in 117 files) is flipped; its u32 length (j-4) is 14..300
+            _d = bytes(bfi.data); _j = _d.find('Autodesk Revit'.encode('utf-16le'))
+            if _j >= 5 and (_d[_j - 5] != 0 or not 14 <= int.from_bytes(_d[_j - 4:_j], 'little') <= 300): out.append(('BasicFileInfo (structure)', 0))
     except Exception:
         pass
     try:
