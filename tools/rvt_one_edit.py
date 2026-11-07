@@ -19,7 +19,9 @@ async def main(src, op, keep):
         models.m['c0'] = {'dir': md, 'name': 'f', 'src': work}
         info = await (await c.get('/api/m/c0/saveinfo')).json()
         if not info.get('open'): print('NOT_OPEN', info.get('error')); return
-        r = await c.post('/api/m/c0/edit', json=op); j = await r.json(); row['edit'] = r.status
+        for o1 in (op if isinstance(op, list) else [op]):
+            r = await c.post('/api/m/c0/edit', json=o1); j = await r.json(); row['edit'] = r.status
+            if r.status != 200: break
         if r.status != 200: row['result'] = 'EDIT_REFUSED ' + str(j.get('error') or j.get('code'))[:120]; print('ONE-EDIT', row); return
         out = os.path.join(_T, 'o.rvt'); t0 = time.time(); r = await c.post('/api/m/c0/saveas', json={'dest': out}); j = await r.json(); row['saveas_s'] = round(time.time() - t0, 1)
         if r.status != 200: row['result'] = 'SAVEAS_REFUSED_%d %s' % (r.status, j.get('code')); row['detail'] = str(j.get('error'))[:200]; print('ONE-EDIT', row); return
