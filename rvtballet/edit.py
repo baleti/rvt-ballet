@@ -139,9 +139,17 @@ def compose(ops):
 def apply(buf, ops): return apply_full(buf, ops)[0]
 
 
+_DIRTY = __import__('threading').local()      # per thread: {partition stream: set(member idx)} the writer rewrote during the last apply_full (None = could not be determined)
+
+
+def last_dirty_members():
+    d = getattr(_DIRTY, 'd', None)
+    return None if d is None else {k: sorted(v) for k, v in d.items()}
+
+
 def apply_full(buf, ops):
     """replay ops on bytes -> new bytes (the source bytes are never modified). Backend: env RVTBALLET_EDIT_BACKEND = wledit (default) | rvtedit"""
-    ops = compose(ops)
+    ops = compose(ops); _DIRTY.d = {}
     if not ops: return buf, []
     d = tempfile.mkdtemp(prefix='rvtballet-edit-'); a = os.path.join(d, 'in.rvt'); b = os.path.join(d, 'out.rvt')
     try:
@@ -247,6 +255,26 @@ def _change_type(ed, o):
     ed.set_field(o['eid'], 'FamilyInstance.m_masterSymbolId', o['type_eid'], fmt='<Q')
 
 
+def _move_datum(ed, o):
+    """Level / Grid move: the datum's position is Plane.m_origin (stored twice in the element record; DatumPlane.m_freeEnd/m_bubbleEnd are constant defaults, measured on Autodesk HVAC 2024).
+    Level: only dz (a level is a horizontal plane; in-plane shifts are refused). Grid: only the component along the plane normal (shifting a grid along its own line changes extents that are not rewritten here: refused)."""
+    import struct, math
+    g = ed.g; log = g.e.trace(o['eid'])[3]
+    org = [l for l in log if l[1] == 'Plane.m_origin' and l[3] - l[2] == 24]
+    xv = [l for l in log if l[1] == 'Plane.m_xVec' and l[3] - l[2] == 24]; yv = [l for l in log if l[1] == 'Plane.m_yVec' and l[3] - l[2] == 24]
+    if len(org) != 2 or len(xv) != 2 or len(yv) != 2: raise NotImplementedError('class datum: unexpected Plane layout (%d origins)' % len(org))
+    x = struct.unpack_from('<3d', g.bj, xv[0][2]); y = struct.unpack_from('<3d', g.bj, yv[0][2])
+    n = (x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0]); L = math.sqrt(sum(c * c for c in n))
+    if not 0.999 < L < 1.001: raise NotImplementedError('class datum: plane axes are not orthonormal')
+    n = tuple(c / L for c in n); d = (o['dx'], o['dy'], o['dz']); dn = sum(d[i] * n[i] for i in range(3))
+    inplane = math.sqrt(max(0.0, sum(c * c for c in d) - dn * dn))
+    if inplane > 1e-9: raise EditError('element %d: only a move perpendicular to the %s (along its normal) is supported; the in-plane part (%.6g) was refused' % (o['eid'], 'level plane' if o['cls'] == 'Level' else 'grid plane', inplane))
+    sh = tuple(dn * c for c in n); edits = []
+    for l in org:
+        v = struct.unpack_from('<3d', g.bj, l[2]); edits.append((l[2], 24, struct.pack('<3d', *(v[i] + sh[i] for i in range(3)))))
+    ed._rec_edit(o['eid'], edits)
+
+
 def _rvtedit_pass(a, b, ops):
     import rvtedit
     ed = rvtedit.Edit(a); deleted = []
@@ -255,7 +283,16 @@ def _rvtedit_pass(a, b, ops):
             if o['op'] == 'delete': deleted += _delete(ed, o['eid'])
             elif o['op'] == 'move':
                 try: ed.move(o['eid'], o['dx'], o['dy'], o['dz'])
-                except NotImplementedError as ne:      # view annotations (TextNote): origin in TextElement.m_orig, 2D in the view plane
+                except NotImplementedError as ne:
+                    if 'class Level' in str(ne) or 'class Grid' in str(ne): _move_datum(ed, dict(o, cls='Level' if 'class Level' in str(ne) else 'Grid')); continue      # view annotations (TextNote): origin in TextElement.m_orig, 2D in the view plane
+                    if 'class Level' in str(ne) and os.environ.get('RVTBALLET_ENABLE_LEVELMOVE') == '1':      # opt-in, offline-verified only: Elevation = z of the two Plane.m_origin triples (no Revit evidence yet)
+                        if o['dx'] or o['dy']: raise NotImplementedError('a level can only move vertically (dz)')
+                        import struct
+                        pl = [l for l in ed.g.e.trace(o['eid'])[3] if l[1] == 'Plane.m_origin']
+                        if len(pl) != 2: raise NotImplementedError('level record has %d Plane.m_origin triples, expected 2' % len(pl))
+                        for k, l in enumerate(pl):
+                            x, y, z = struct.unpack_from('<3d', ed.g.bj, l[2]); ed.set_field(o['eid'], 'Plane.m_origin', (x, y, z + o['dz']), '<3d', occ=k)
+                        continue
                     if 'class TextNote' not in str(ne): raise
                     if o['dz']: raise NotImplementedError('annotation move needs dz = 0')
                     ed.move_annotation(o['eid'], o['dx'], o['dy'])
@@ -273,6 +310,9 @@ def _rvtedit_pass(a, b, ops):
             raise EditError('edit refused by the edit backend: %s' % e)
     try: ed.save(b)
     except RuntimeError as e: raise EditError('save refused by the edit backend: %s' % e)
+    try:      # the members this writer actually rewrote, declared to the gate (savegate dirty_members rule): a flip in any OTHER member of the partition is then refused
+        for pn, pt in ed.g.e.parts.items(): _DIRTY.d.setdefault(pn, set()).update(k for k, m in enumerate(pt.mem) if m.get('dirty'))
+    except Exception: _DIRTY.d = None      # unknown: declare nothing (the gate's other checks still apply)
     return deleted
 
 

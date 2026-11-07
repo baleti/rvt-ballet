@@ -143,10 +143,11 @@ def _cached_adapter():
         def extra_checks(self, manifest):
             """a DECLARED edit that left its element unchanged did not happen (savegate only fails on UNDECLARED changes; a declared-but-unchanged element is merely informational there). Found on a real project: two moves in
             different partitions of one multi-pass save returned 200 although the second element never moved. Refuse instead of reporting success."""
+            sup = getattr(super(), 'extra_checks', None); inherited = list(sup(manifest) or []) if sup else []      # savegate's own rule (dirty_members): it was SHADOWED by this override, so it never ran
             seen = getattr(self, '_seen', []); self._seen = []
-            if len(seen) < 2: return []
+            if len(seen) < 2: return inherited
             a, b = seen
-            return [('not_applied', k) for k in sorted(manifest.get('modified', ())) if k in a and k in b and a[k] == b[k]]
+            return inherited + [('not_applied', k) for k in sorted(manifest.get('modified', ())) if k in a and k in b and a[k] == b[k]]
 
         def _snapshot_core(self, buf):
             key = hashlib.sha256(buf).digest()
@@ -413,6 +414,9 @@ def _pending(ss, mid, d, new_bytes, manifest, light=False):
     if light: _light_readback(d.buf, nb, cops)
     else: _readback(d.buf, nb, cops)
     mf = m.manifest(deleted); echoes = [] if light else derived_echoes(d.buf, nb, cops)
+    from .edit import last_dirty_members, BACKEND
+    dm = last_dirty_members() if BACKEND() == 'rvtedit' and os.environ.get('RVTBALLET_DIRTY_MEMBERS', '1') == '1' else None
+    if dm: mf['dirty_members'] = dm      # savegate refuses any member outside this set that differs from the source
     if echoes: mf['modified'] = sorted(set(mf['modified']) | {'el:%d' % i for i in echoes}); ss.derived[mid] = len(echoes)
     else: ss.derived.pop(mid, None)
     return nb, mf
@@ -755,7 +759,12 @@ def _readback(src_buf, nb, ops):
             x, y = g(a.get(o['eid'])), g(b.get(o['eid']))
             # the column location mark is derived from the position ('D-1' -> 'D-1(610)' = offset from grid D-1): a move legitimately appends the offset (seen on 2017 columns)
             own = {t['param'] for t in tg if t['eid'] == o['eid']}      # parameters a set op on the SAME element changes on purpose are verified by the set-op check below, not here
-            ch = [k for k in set(x) | set(y) if k not in own and x.get(k) != y.get(k) and not (k.startswith('Column Location Mark') and isinstance(x.get(k), str) and _same_mark_base(x[k], y.get(k)))]
+            lvl = o['op'] == 'move' and _bbox_class(src_buf, o['eid']) == 'Level'      # a level move changes exactly its Elevation, by dz (checked below)
+            if lvl:
+                e0, e1 = x.get('Elevation'), y.get('Elevation'); dz = o.get('dz', 0.0)
+                if o.get('dx') or o.get('dy'): bad.append('moved level %d: only a vertical move (dz) is a level move' % o['eid'])
+                elif not isinstance(e0, (int, float)) or not isinstance(e1, (int, float)) or abs((e1 - e0) - dz) > 1e-6 * max(1.0, abs(dz)) + 1e-6: bad.append('moved level %d: Elevation %r -> %r, not the requested shift of %.6g ft' % (o['eid'], e0, e1, dz))
+            ch = [k for k in set(x) | set(y) if k not in own and not (lvl and k == 'Elevation') and x.get(k) != y.get(k) and not (k.startswith('Column Location Mark') and isinstance(x.get(k), str) and _same_mark_base(x[k], y.get(k)))]
             if ch: bad.append('moved element %d: parameters changed' % o['eid'])
             if o['op'] == 'move' and not any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv):      # the displacement itself: the element's bounding box must shift by exactly (dx, dy, dz) (feet); skipped only when the geometry reader has no box for the SOURCE element
                 try: b0 = _bbox_of(src_buf, o['eid']); b1 = _bbox_of(nb, o['eid']) if b0 else None
@@ -769,7 +778,7 @@ def _readback(src_buf, nb, ops):
         if any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv): continue
         try: cl = _bbox_class(src_buf, o['eid'])
         except Exception: cl = ''
-        if cl and cl not in ('FamilyInstance', 'SWall', 'LinearDimString', 'RvtLinkInstance', 'TextNote'): bad.append('moved element %d: class %s has no readable displacement witness, so the move cannot be verified (refused)' % (o['eid'], cl))
+        if cl and cl not in ('FamilyInstance', 'SWall', 'LinearDimString', 'RvtLinkInstance', 'TextNote', 'Level'): bad.append('moved element %d: class %s has no readable displacement witness, so the move cannot be verified (refused)' % (o['eid'], cl))
         elif cl in ('FamilyInstance', ''):      # '' = the class index does not list the element (older files): box or record origin must witness
             try: has_box = _bbox_of(src_buf, o['eid']) is not None
             except Exception: has_box = False
