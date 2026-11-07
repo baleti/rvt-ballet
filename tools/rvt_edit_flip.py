@@ -41,6 +41,16 @@ if os.environ.get('EDIT_FLIP_GLOBAL'):      # targeted: one byte flip in the str
         if d != bytearray(sa_[sn].data) or not d: continue
         o = rnd.randrange(len(d)); d[o] ^= 1 << rnd.randrange(8); c.streams()[sn].data = bytes(d)
         tp = os.path.join(_T, 'gl.rvt'); cfb.write(c, tp); T['stream_%s_at%d' % (sn.replace('/', '_'), o)] = open(tp, 'rb').read()
+if os.environ.get('EDIT_FLIP_CHANGEDGLOBAL'):      # targeted: byte flips (N per stream) inside every non-partition stream the writer DID change (e.g. Global/ElemTable on delete), where the frozen rule cannot help
+    import cfb
+    sa_ = cfb.CFB(buf).streams()
+    for sn in sorted(sa_):
+        if sn.startswith('Partitions/'): continue
+        c = cfb.CFB(good); d0 = bytes(c.streams()[sn].data)
+        if d0 == bytes(sa_[sn].data) or not d0: continue
+        for t in range(int(os.environ['EDIT_FLIP_CHANGEDGLOBAL'])):
+            c = cfb.CFB(good); d = bytearray(d0); o = rnd.randrange(len(d)); d[o] ^= 1 << rnd.randrange(8); c.streams()[sn].data = bytes(d)
+            tp = os.path.join(_T, 'gc.rvt'); cfb.write(c, tp); T['changed_%s_%d_at%d' % (sn.replace('/', '_'), t, o)] = open(tp, 'rb').read()
 esc = []
 for k, nb in T.items():
     dest = os.path.join(_T, 'o_%s.rvt' % k)
