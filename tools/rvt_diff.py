@@ -55,7 +55,21 @@ def fmt(v):
     return v if isinstance(v, (int, str, type(None))) else str(v)[:60]
 
 
-def diff(fa, fb, want_fields=True, maxrec=200):
+def joined_runs(fa, fb, pns, maxruns=12, ctx=0):
+    """byte runs that differ in the decompressed ('joined') partition bodies; catches changes the header/record walker cannot see (zone items, instance bodies)"""
+    out = {}
+    ma, mb = wledit.Editor(fa).m, wledit.Editor(fb).m
+    for pn in pns:
+        if pn not in ma.parts or pn not in mb.parts: continue
+        a, b = bytes(ma.parts[pn]['joined']), bytes(mb.parts[pn]['joined'])
+        runs = adiff.ops(a, b, maxda=3000, maxdb=20000)
+        out[pn] = {'len_old': len(a), 'len_new': len(b), 'n_runs': len(runs), 'runs': [
+            {'old_off': i0, 'old_len': (i1 - i0) if i1 else None, 'new_off': j0, 'new_len': (j1 - j0) if j1 else None,
+             'old': (a[i0:i1] if i1 else a[i0:i0 + 24]).hex()[:120], 'new': (b[j0:j1] if j1 else b[j0:j0 + 24]).hex()[:120]} for i0, i1, j0, j1 in runs[:maxruns]]}
+    return out
+
+
+def diff(fa, fb, want_fields=True, maxrec=200, ids=()):
     sd, nstreams = stream_diff(fa, fb)
     gd = global_diff(fa, fb, [r['stream'] for r in sd if r['status'] == 'changed'])
     wa, sa = recwalk.walk(fa); wb, sb = recwalk.walk(fb)
@@ -65,9 +79,10 @@ def diff(fa, fb, want_fields=True, maxrec=200):
     art += [i for i in set(wa) & set(wb) if i < BIG and not wa[i]['h'] and not wb[i]['h'] and wa[i] != wb[i]]
     wa = {k: v for k, v in wa.items() if k < BIG and k not in art}; wb = {k: v for k, v in wb.items() if k < BIG and k not in art}
     added = sorted(set(wb) - set(wa)); removed = sorted(set(wa) - set(wb))
-    changed = sorted(i for i in set(wa) & set(wb) if wa[i] != wb[i])
+    changed = sorted(set(i for i in set(wa) & set(wb) if wa[i] != wb[i]) | set(ids))   # --ids forces a field-level look at elements the walker cannot see changing
     rep = {'streams_total': nstreams, 'streams_changed': sd, 'globals': gd, 'walk_stats_old': {k: list(v) for k, v in sa.items()}, 'walk_stats_new': {k: list(v) for k, v in sb.items()},
            'elements_old': len(wa), 'elements_new': len(wb), 'added': added[:maxrec], 'n_added': len(added), 'removed': removed[:maxrec], 'n_removed': len(removed), 'n_changed': len(changed), 'walker_artifacts': art[:10], 'changed': []}
+    rep['joined'] = joined_runs(fa, fb, [r['stream'] for r in sd if r['status'] == 'changed' and r['stream'].startswith('Partitions/')])
     if want_fields:
         ma, mb = wledit.Editor(fa).m, wledit.Editor(fb).m
     for eid in changed[:maxrec]:
@@ -89,7 +104,10 @@ def pretty(rep):
     for n, g in rep['globals'].items():
         L.append(f"global {n}: len {g.get('len_old')}->{g.get('len_new')} runs {g.get('n_runs')}")
         for r in g.get('runs', [])[:8]: L.append(f"    @{r['old_off']} {r['old_len']}B {r['old']} => {r['new_len']}B {r['new']}")
-    L.append(f"elements: {rep['elements_old']} -> {rep['elements_new']}  added {rep['n_added']} {rep['added'][:10]}  removed {rep['n_removed']} {rep['removed'][:10]}  changed {rep['n_changed']}  (walker artifacts ignored: {len(rep['walker_artifacts'])})")
+    for pn, g in rep.get('joined', {}).items():
+        L.append(f"partition body {pn}: len {g['len_old']}->{g['len_new']}, {g['n_runs']} differing byte runs (walker-independent)")
+        for r in g['runs'][:8]: L.append(f"    @{r['old_off']} {r['old_len']}B {r['old']} => {r['new_len']}B {r['new']}")
+    L.append(f"elements: {rep['elements_old']} -> {rep['elements_new']}  added {rep['n_added']} {rep['added'][:10]}  removed {rep['n_removed']} {rep['removed'][:10]}  changed {rep['n_changed']} (walker header/record view; use --ids for others)  (walker artifacts ignored: {len(rep['walker_artifacts'])})")
     for c in rep['changed']:
         L.append(f"  id {c['id']} hdr_changed={c['header_changed']} reclen {c['rec_len']}")
         for f in c.get('fields', []): L.append(f"      {f['field']} @{f['off']}: {f['old']} => {f['new']}")
@@ -99,7 +117,7 @@ def pretty(rep):
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(); ap.add_argument('before'); ap.add_argument('after'); ap.add_argument('--max', type=int, default=200)
-    ap.add_argument('--json'); ap.add_argument('--nofields', action='store_true'); a = ap.parse_args()
-    rep = diff(a.before, a.after, not a.nofields, a.max)
+    ap.add_argument('--json'); ap.add_argument('--ids', default='', help='comma list of element ids to field-diff even when the header/record walker sees no change (zone-item bodies, e.g. rotated instances in 2026 files)'); ap.add_argument('--nofields', action='store_true'); a = ap.parse_args()
+    rep = diff(a.before, a.after, not a.nofields, a.max, [int(x) for x in a.ids.split(',') if x])
     if a.json: json.dump(rep, open(a.json, 'w'), indent=1, default=str)
     print(pretty(rep))
