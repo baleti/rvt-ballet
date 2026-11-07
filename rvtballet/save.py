@@ -508,17 +508,21 @@ _LEVELREF_KEYS = {'Work Plane|String', 'Host|String', 'Work Plane', 'Host'}
 _ECHO_ALIAS = {'Name': ('View Name',), 'View Name': ('Name',)}
 
 
+_LEVELELEV_KEYS = {'Elevation from Level', 'Coefficient of Utilization', 'Offset From Attachment At Top'}
+
+
 def derived_echoes(src_buf, nb, ops):
     """ids of UNEDITED elements whose reader view changed only because the reader shows the edited element's parameter on them too (a view's Detail Level on its viewports / elevation arrows, a family's Section Shape on its
     symbols; QUEUE 64). Strict rule: the element changed in exactly ONE parameter, the edited parameter name, from exactly the edited element's old value to exactly its new value. Anything else stays an undeclared
     change and is refused by the gate. Numeric / string parameter edits only."""
     tg = [o for o in ops if o.get('op') in ('set_string', 'set_num') and o.get('param')]
     rn = [o for o in ops if o.get('op') == 'set_string' and o.get('field') == 'DBView.m_viewName']
-    if not tg and not rn and not any(o.get('field') == 'DatumPlane.m_text' for o in ops): return []
+    lvmv = [o for o in ops if o.get('op') == 'move' and o.get('dz') and not o.get('dx') and not o.get('dy')]      # pure vertical move: may be a Level elevation edit
+    if not tg and not rn and not lvmv and not any(o.get('field') == 'DatumPlane.m_text' for o in ops): return []
     g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
     try: a, b = _read_params(src_buf), _read_params(nb)
     except Exception: return []
-    edited = {o['eid'] for o in tg + rn} | {o['eid'] for o in ops if o.get('op') == 'set_string' and o.get('field') == 'DatumPlane.m_text'}; out = set()
+    edited = {o['eid'] for o in tg + rn + lvmv} | {o['eid'] for o in ops if o.get('op') == 'set_string' and o.get('field') == 'DatumPlane.m_text'}; out = set()
     for o in rn:      # view rename: dependents (Viewer, Viewport, Sheet) show the name under these keys; EVERY changed key must be one of them and go exactly old -> new
         x, y = g(a.get(o['eid'])), g(b.get(o['eid'])); old, new = x.get('View Name'), y.get('View Name')
         if old is None or new is None or old == new: continue
@@ -537,6 +541,16 @@ def derived_echoes(src_buf, nb, ops):
             if ch and ch <= _LEVELREF_KEYS and all(p0.get(k) == 'Level : ' + old and p1.get(k) == 'Level : ' + new for k in ch): out.add(e)
             elif ch and ch <= _LEVELNAME_KEYS and all(p0.get(k) == old and p1.get(k) == new for k in ch): out.add(e)
             elif ch and ch <= _LOCMARK_KEYS and all(isinstance(p0.get(k), str) and isinstance(p1.get(k), str) and _re.sub(r'(^|-)' + _re.escape(old) + r'(?=$|-|\()', lambda m: m.group(1) + new, p0[k]) == p1[k] != p0[k] for k in ch): out.add(e)      # grid rename: column location mark 'A(610)-W1(-17678)' carries the grid name before '('
+    for o in lvmv:      # Level elevation +dz: instances placed on it keep their absolute Z, so the reader's 'Elevation from Level' falls by exactly dz (plus ~1e-14 rounding noise on two derived keys). Strict: ONLY those keys, that exact delta
+        x, y = g(a.get(o['eid'])), g(b.get(o['eid'])); dz = o['dz']
+        if (a.get(o['eid']) or {}).get('class') != 'Level' or not isinstance(x.get('Elevation'), float) or not isinstance(y.get('Elevation'), float) or abs(y['Elevation'] - x['Elevation'] - dz) > 1e-6: continue
+        for e, d0 in a.items():
+            if e in edited or e not in b: continue
+            p0, p1 = g(d0), g(b[e]); ch = {k for k in set(p0) | set(p1) if p0.get(k) != p1.get(k)}
+            if not ch or 'Elevation from Level' not in ch or not ch <= _LEVELELEV_KEYS: continue
+            v0, v1 = p0.get('Elevation from Level'), p1.get('Elevation from Level')
+            if not (isinstance(v0, float) and isinstance(v1, float) and abs(v1 - v0 + dz) < 1e-6): continue
+            if all(abs(p0.get(k) or 0) < 1e-9 and abs(p1.get(k) or 0) < 1e-9 for k in ch - {'Elevation from Level'}): out.add(e)
     for o in tg:
         n = o['param']; x, y = g(a.get(o['eid'])), g(b.get(o['eid']))
         if n not in x or n not in y or x[n] == y[n]: continue
