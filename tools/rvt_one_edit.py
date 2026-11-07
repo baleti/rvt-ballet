@@ -31,6 +31,6 @@ async def main(src, op, keep):
             else:
                 r = await c.post('/api/m/c0/restore', json={'confirm': True, 'n': 0})
                 if r.status != 200 or sha(work) != h0: bad.append('restore_not_original')
-        else: row['save_detail'] = str(j2.get('code'))
+        else: row['save_detail'] = str(j2.get('code')); row['save_msg'] = str(j2.get('error'))[:240]
         shutil.copy(out, keep); row['problems'] = bad; row['result'] = 'OK' if not bad and row['verify_diffs'] == 0 else 'PROBLEM'; print('ONE-EDIT', row)
 asyncio.run(main(sys.argv[1], json.loads(sys.argv[2]), sys.argv[3]))
