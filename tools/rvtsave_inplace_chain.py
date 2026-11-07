@@ -1,5 +1,5 @@
 """Chain of N in-place SAVE!s (Mark edit each time) on a PRIVATE copy of a real Autodesk .rvt. Per save: status/code, size, layout drift refusal (file must be byte-identical when refused), only the target Mark changed. At the end: backups, oldest == original. usage: rvtsave_inplace_chain.py SRC.rvt [N=3]"""
-import os, sys, asyncio, tempfile, json, shutil, hashlib
+import collections, os, sys, asyncio, tempfile, json, shutil, hashlib
 _T = tempfile.mkdtemp(dir=os.environ.get('TMPDIR')); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; os.environ['RVTBALLET_SNAPSHOT_CACHE'] = '0'
 json.dump({'rvt': {'2024': 'open', '2026': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
@@ -44,14 +44,24 @@ async def run(orig, n):
             else: row['untouched'] = sha(src) == b; row['error'] = str(j.get('error'))[:200]
             if os.environ.get('CH_TM'):
                 import tracemalloc, gc; gc.collect()
-                if not tracemalloc.is_tracing(): tracemalloc.start(8)
-                elif k == 3: _tm0 = tracemalloc.take_snapshot()
-                elif k == 7:
-                    snap = tracemalloc.take_snapshot(); [print('TM', st) for st in snap.compare_to(_tm0, 'traceback')[:6]]
+                if not tracemalloc.is_tracing(): tracemalloc.start(1)
+                elif k == 2: _tm0 = tracemalloc.take_snapshot()
+                elif k == 4:
+                    snap = tracemalloc.take_snapshot(); [print('TM', st) for st in snap.compare_to(_tm0, 'lineno')[:8]]
             if os.environ.get('CH_BIG'):      # live large buffers and who holds them (finds per-save retention without tracemalloc's slowdown)
                 import gc; gc.collect(); big = [o for o in gc.get_objects() if isinstance(o, (bytes, bytearray, memoryview)) and len(o) > (1 << 20)]
                 import collections; cn = collections.Counter(type(o).__name__ for o in gc.get_objects()); print('TYPES', k, len(gc.get_objects()), cn.most_common(8), flush=True)
                 print('BIG', k, len(big), sum(len(o) for o in big) >> 20, 'MB', [type(r).__name__ for o in big[:6] for r in gc.get_referrers(o)[:2]], flush=True)
+            if os.environ.get('CH_MODS'):      # module-level containers by size: path-keyed caches that grow every round show up here
+                for mn, m in sorted(sys.modules.items()):
+                    for vn, v in list(vars(m).items()) if m else []:
+                        if isinstance(v, (dict, list, set)) and len(v) >= 1 and not vn.startswith('__') and not mn.startswith(('typing', 'encodings', 'unicodedata', 'builtins', 'sys', '_')): print('MODS', k, mn, vn, len(v), flush=True)
+            if os.environ.get('CH_REF'):      # live editor objects and what keeps them alive
+                import gc; gc.collect(); cl = collections.Counter(type(o).__module__ + '.' + type(o).__name__ for o in gc.get_objects() if type(o).__module__ in ('rvtedit', 'wledit', 'wlpart', 'wlrec', 'rvtw', 'cfb', 'rvtedit2') or type(o).__name__ in ('Edit', 'Editor', 'Part'))
+                print('REF', k, dict(cl), flush=True)
+                ob = [o for o in gc.get_objects() if type(o).__name__ in ('Edit', 'Editor')]
+                for o in ob[:2]:
+                    for r in gc.get_referrers(o)[:4]: print('REFBY', k, type(o).__name__, type(r).__name__, (list(r.keys())[:6] if isinstance(r, dict) else str(r)[:120]), flush=True)
             if os.environ.get('CH_TRIM'):
                 import gc, ctypes; gc.collect(); ctypes.CDLL('libc.so.6').malloc_trim(0)
             from rvtballet._vendor.rvtplat import mem as _mem; row['rss_mb'] = _mem.rss_bytes() >> 20      # process RSS per round: growth across rounds = leak that eventually trips the memory guard
