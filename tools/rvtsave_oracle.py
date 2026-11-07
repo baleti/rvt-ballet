@@ -56,7 +56,9 @@ def main(src, year, scen, eid=0):
         keep = '%s/outs/%s_%s_%s_e%s_dx%s%s%s' % (W, os.path.basename(src)[:2], year, scen, eid, os.environ.get('RVTSAVE_DX', '2'), ('_' + os.environ['RVTSAVE_VALUE']) if scen == 'param' and 'RVTSAVE_VALUE' in os.environ else '', os.path.splitext(src)[1]); os.makedirs(os.path.dirname(keep), exist_ok=True); shutil.copy(out, keep)
         print('\t'.join(['c3x-rvtsave', os.path.basename(src)[:8], year, scen, 'saved', 'eid=%s' % eid, 'gate_accepted', 'out=' + keep, 'changed_vs_src=%s' % (sha(out) != h0)])); return
     sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab/campaign')); os.environ['STAGEB'] = '1'
+    if eid and scen != 'none': os.environ['PROBE_EIDS'] = str(eid)      # API readback of the edited element (location, Comments, Mark, wall height) in the VM, logged as PROBE lines
     import stages
     r = stages.api_stage(int(year), out, True, 'rs%s' % _T[-6:])
     print('\t'.join(['c3x-rvtsave', os.path.basename(src)[:8], year, scen, 'saved', 'eid=%s' % eid, 'revit_open=%s' % r['ok'], 'cmp=%s' % (r.get('cmp'),), 'dialogs=%s' % r.get('dialogs'), 'failures=%s' % r.get('failures'), (r.get('err') or '')[:100]]))
+    for pl in r.get('probe') or []: print('PROBE', pl)      # compare with the same probe on the unedited source (RVTSAVE control) to prove the edit landed
 if __name__ == '__main__': main(*sys.argv[1:])
