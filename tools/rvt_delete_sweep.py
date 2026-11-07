@@ -15,9 +15,10 @@ async def run(out, f, n, keep):
     bycls = collections.defaultdict(list)
     for e, d in pr.items(): bycls[(d.get('class') if isinstance(d, dict) and 'class' in d else 'el')].append(e)
     models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}; rows = []; k = 0
-    async with TestClient(TestServer(server.make_app(models))) as c:
+    async with TestClient(TestServer(server.make_app(models)), timeout=__import__('aiohttp').ClientTimeout(total=None)) as c:
         await c.get('/api/m/m/saveinfo')
         for cls, ids in sorted(bycls.items()):
+            if os.environ.get('SWEEP_CLASSES') and cls not in os.environ['SWEEP_CLASSES'].split(','): continue
             for eid in ids[:n]:
                 r = await c.post('/api/m/m/edit', json=dict({'op': 'delete'} if SWEEP_OP == 'delete' else {'op': 'rotate', 'deg': 90.0}, eid=eid))
                 if r.status != 200: rows.append({'class': cls, 'result': 'INPUT_REFUSED'}); continue
