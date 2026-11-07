@@ -51,6 +51,16 @@ if os.environ.get('EDIT_FLIP_CHANGEDGLOBAL'):      # targeted: byte flips (N per
         for t in range(int(os.environ['EDIT_FLIP_CHANGEDGLOBAL'])):
             c = cfb.CFB(good); d = bytearray(d0); o = rnd.randrange(len(d)); d[o] ^= 1 << rnd.randrange(8); c.streams()[sn].data = bytes(d)
             tp = os.path.join(_T, 'gc.rvt'); cfb.write(c, tp); T['changed_%s_%d_at%d' % (sn.replace('/', '_'), t, o)] = open(tp, 'rb').read()
+if os.environ.get('EDIT_FLIP_ELEMTABLE_RAW'):      # crafted: flip a byte of the DECODED Global/ElemTable of the output and re-deflate it validly (survives inflate, so only a content check can see it)
+    import cfb, zlib, rvtw
+    for t in range(int(os.environ['EDIT_FLIP_ELEMTABLE_RAW'])):
+        c = cfb.CFB(good); st_ = rvtw.Stream(c.streams()['Global/ElemTable'].data); P_ = bytes(st_.payload); i = P_.find(rvtw.GZ)
+        do_ = zlib.decompressobj(-15); raw = bytearray(do_.decompress(P_[i + 10:])); tail_ = do_.unused_data      # gzip trailer: CRC32 + ISIZE + 6 more bytes; keep them, recompute CRC (an earlier version dropped them: every result was then a malformed stream, not a gate verdict)
+        o = rnd.randrange(len(raw)); raw[o] ^= 1 << rnd.randrange(8)
+        co = zlib.compressobj(6, zlib.DEFLATED, -15); z = co.compress(bytes(raw)) + co.flush()
+        import struct; z += struct.pack('<II', zlib.crc32(bytes(raw)) & 0xffffffff, len(raw)) + tail_[8:]
+        c.streams()['Global/ElemTable'].data = st_.build(P_[:i + 10] + z, keep_spare=False)
+        tp = os.path.join(_T, 'et.rvt'); cfb.write(c, tp); T['elemtable_raw_%d_at%d_of%d' % (t, o, len(raw))] = open(tp, 'rb').read()
 esc = []
 for k, nb in T.items():
     dest = os.path.join(_T, 'o_%s.rvt' % k)
