@@ -337,7 +337,8 @@ def _rvtedit_pass(a, b, ops):
             if o['op'] == 'rotate' and isinstance(e, KeyError): hint = ' (rotate is only supported for placed family instances such as columns, doors and furniture; walls, floors and annotations cannot be rotated here)'
             raise EditError('element %d: %s could not be applied (%s)%s; nothing was changed' % (o['eid'], o.get('field') or o['op'] + (' parameter %s' % o['pid'] if o.get('pid') is not None else ''), type(e).__name__, hint))
         except RuntimeError as e:        # e.g. rvtedit: 'element N lives in Partitions/X but this save edits Partitions/Y' (one partition per save)
-            raise EditError('edit refused by the edit backend: %s' % e)
+            hint = ' (rotate is only supported for placed family instances such as columns, doors and furniture; walls, floors and annotations cannot be rotated here)' if o['op'] == 'rotate' and isinstance(e, NotImplementedError) else ''
+            raise EditError('edit refused by the edit backend: %s%s' % (e, hint))
     try: ed.save(b)
     except RuntimeError as e: raise EditError('save refused by the edit backend: %s' % e)
     try:      # the members this writer actually rewrote, declared to the gate (savegate dirty_members rule): a flip in any OTHER member of the partition is then refused
