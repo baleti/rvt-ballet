@@ -33,6 +33,10 @@ async def main(src, ops, keep):
         for i in range(len(hs) - 1):
             r = await c.post('/api/m/c0/restore', json={'confirm': True, 'n': 0}); row['steps'].append('restore_%d' % r.status)
             row.setdefault('after_restore_matches_state', []).append(hs.index(sha(work)) if sha(work) in hs else -1)
+        if os.environ.get('CHAIN_RESTORE_OLDEST'):
+            bl = await (await c.get('/api/m/c0/backups')).json(); nb = len(bl) if isinstance(bl, list) else len(bl.get('backups', []))
+            r = await c.post('/api/m/c0/restore', json={'confirm': True, 'n': nb - 1}); row['steps'].append('restore_oldest_%d_of_%d' % (r.status, nb))
+            row['oldest_restore_is_original'] = sha(work) == hs[0]
         row['final_is_original'] = sha(work) == hs[0]
         print('TWO-SAVE', row)
 asyncio.run(main(sys.argv[1], json.loads(sys.argv[2]), sys.argv[3]))
