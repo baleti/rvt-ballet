@@ -17,11 +17,11 @@ for e in ids:
     for kind in ('move', 'delete'):
         if done[kind] >= N: continue
         op = {'op': 'move', 'eid': e, 'dx': 1.0, 'dy': 0.0, 'dz': 0.0} if kind == 'move' else {'op': 'delete', 'eid': e}
-        try: out = edit.apply_full(buf, [edit.validate_op(op)])[0]
+        try: _r = edit.apply_full(buf, [edit.validate_op(op)]); out = _r[0]; owned = [int(x) for x in (_r[1] if len(_r) > 1 else [])]
         except Exception as x: continue
         done[kind] += 1; res[kind][0] += 1
         p = os.path.join(OUT, '%s_%d.rvt' % (kind, e)); open(p, 'wb').write(out)
-        r = subprocess.run([sys.executable, os.path.join(here, 'rvt_target_check.py'), F, p, '--target', str(e)] + (['--delete'] if kind == 'delete' else []), capture_output=True, text=True)
+        r = subprocess.run([sys.executable, os.path.join(here, 'rvt_target_check.py'), F, p, '--target', str(e)] + (['--delete', '--allow', ','.join(map(str, owned))] if kind == 'delete' else []), capture_output=True, text=True)
         res[kind][1 if r.returncode == 0 else 2] += 1
         print(kind, e, r.stdout.strip()[:160], flush=True)
 print('SUMMARY (accepted, clean, stray):', res)
