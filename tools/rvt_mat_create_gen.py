@@ -44,4 +44,14 @@ rec = g.stamp(bytes(rec))
 item = bytearray(sub(T['item'])); struct.pack_into('<I', item, 8, zlib.adler32(bytes(item[16:])) & 0xffffffff)
 g.itag = T['item'][W + 8:W + 10]
 g.new.append((sub(T['hdr']), rec, bytes(item), nid)); g.rows.append(sub(T['row']))
+# Revit also registers the new material in Global/Latest: u32 count + that many ascending 8-byte MaterialElem ids (+ ffff.. terminator); paired Revit experiment c5xmat: count 56 -> 57, new id appended at the end
+_mids = sorted(e for e, c in _ix.items() if str(c) == 'MaterialElem')
+def _latest_add(raw, _mids=_mids, nid=nid):
+    pat = struct.pack('<I', len(_mids)) + b''.join(struct.pack('<Q', m) for m in _mids) + b'\xff' * 8
+    k = raw.find(pat)
+    if k < 0 or raw.find(pat, k + 1) >= 0: raise SystemExit('REFUSED: the Global/Latest material registry was not found exactly once (found at %d); nothing was written' % k)
+    if nid <= _mids[-1]: raise SystemExit('REFUSED: new id is not above all material ids; nothing was written')
+    e = k + 4 + 8 * len(_mids)
+    return raw[:k] + struct.pack('<I', len(_mids) + 1) + raw[k + 4:e] + struct.pack('<Q', nid) + raw[e:]
+g.latest_edits = getattr(g, 'latest_edits', []) + [(0, _latest_add)]
 g.commit(out); print('ok', out)
