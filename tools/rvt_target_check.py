@@ -66,7 +66,11 @@ def _positional():
             ids = {int.from_bytes(ma.parts[pn]['joined'][i + 4:i + 4 + W], 'little'): i for i in hs}
             if a.target not in ids: return None
             spans = []
-            for t in ok:
+            for t in ok:      # an element is three blocks: header, record and the spatial-index 'zone' item(s), at different offsets; locate() reports all of them
+                try:
+                    L = ea.g.locate(t)
+                    if ea.g.pn == pn: spans += [(q[0], q[0] + q[1]) for q in [tuple(L['hdr']), tuple(L['rec'])] + [tuple(z) for z in L['zone']]]; continue
+                except Exception: pass
                 if t in ids: o = ids[t]; spans.append((o, min([h for h in hs if h > o] or [len(x)])))
             inside = np.zeros(len(diff), bool)
             for o, nx in spans: inside |= (diff >= o) & (diff < nx)
