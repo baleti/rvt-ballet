@@ -5,7 +5,7 @@ F = os.path.expanduser('~/rvt-research/write-lab/scenes/classtests/2024_writer_h
 from rvtballet import save
 if not os.path.exists(F): print('skip: scene not present'); sys.exit(0)
 m = save.membership(open(F, 'rb').read(), [301553, 301557, 301559])
-assert m == {301553: ['hosts 10 element(s)'], 301557: ['hosts 1 element(s)'], 301559: ['hosted on 301557']}, m
+assert m == {301553: ['dimensioned by 1 dimension(s)', 'hosts 10 element(s)'], 301557: ['hosts 1 element(s)'], 301559: ['hosted on 301557']}, m
 for op in ('move', 'rotate'): assert 301557 in save.risky_membership(m, [{'op': op, 'eid': 301557}])
 assert 301557 not in save.risky_membership(m, [{'op': 'set_string', 'eid': 301557}])
 print('host wall move/rotate flagged, parameter edit not: OK')

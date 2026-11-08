@@ -265,10 +265,17 @@ for (e, c), r in x['recs'].items():
     for v in h:
         for i in ids(v):
             if i < 2 ** 32 - 1 and i != e: hosting.setdefault(i, set()).add(e)
+dimmed = {}      # element id -> dimensions whose witness geomRef (m_elemId) names it (a moved wall leaves the dimension value stale until Revit regenerates)
+for (e, c), r in x['recs'].items():
+    if 'Dim' not in c: continue
+    t = []; find(r.get('fields'), 'm_elemId', t)
+    for v in t:
+        for i in ids(v):
+            if i < 2 ** 32 - 1 and i != e: dimmed.setdefault(i, set()).add(e)
 for (e, c), r in x['recs'].items():
     if e not in want: continue
     d = []; find(r.get('fields'), 'm_designOptionId', d); h = []; find(r.get('fields'), 'm_hostId', h)
-    out.setdefault(str(e), []).append({'cls': c, 'groups': sorted(members.get(e, ())), 'options': [i for v in d for i in ids(v) if i < 2 ** 31], 'hosts': [i for v in h for i in ids(v) if i < 2 ** 32 - 1], 'hosting': len(hosting.get(e, ()))})
+    out.setdefault(str(e), []).append({'cls': c, 'groups': sorted(members.get(e, ())), 'options': [i for v in d for i in ids(v) if i < 2 ** 31], 'hosts': [i for v in h for i in ids(v) if i < 2 ** 32 - 1], 'hosting': len(hosting.get(e, ())), 'dimmed': len(dimmed.get(e, ()))})
 print(json.dumps(out))
 """
 
@@ -287,7 +294,7 @@ def membership(buf, eids):
         if r.returncode: raise RuntimeError('group/design-option check failed: ' + (r.stderr.strip().splitlines() or ['?'])[-1][:150])
         res = {}
         for e, recs in json.loads(r.stdout.strip().splitlines()[-1]).items():
-            why = sorted({'group %d' % g for x in recs for g in x['groups']} | {'design option %d' % o for x in recs for o in x['options']} | {'hosted on %d' % h for x in recs for h in x.get('hosts', [])} | {'hosts %d element(s)' % n for x in recs for n in [x.get('hosting', 0)] if n})
+            why = sorted({'group %d' % g for x in recs for g in x['groups']} | {'design option %d' % o for x in recs for o in x['options']} | {'hosted on %d' % h for x in recs for h in x.get('hosts', [])} | {'hosts %d element(s)' % n for x in recs for n in [x.get('hosting', 0)] if n} | {'dimensioned by %d dimension(s)' % n for x in recs for n in [x.get('dimmed', 0)] if n})
             if why: res[int(e)] = why
         return res
     finally:
@@ -1039,7 +1046,7 @@ def risky_membership(mem, ops):
     """keep group / design-option reasons always; 'hosted on N' only for move/rotate ops on that element (a parameter edit of a hosted element does not change where it sits)"""
     moved = {o['eid'] for o in ops if o.get('op') in ('move', 'rotate')}; out = {}
     for e, why in mem.items():
-        w = [x for x in why if not x.startswith(('hosted on ', 'hosts ')) or e in moved]
+        w = [x for x in why if not x.startswith(('hosted on ', 'hosts ', 'dimensioned by ')) or e in moved]
         if w: out[e] = w
     return out
 
