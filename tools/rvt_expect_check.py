@@ -7,6 +7,8 @@ exp = json.load(open(expf)); HERE = os.path.dirname(os.path.abspath(__file__))
 WL = os.path.expanduser('~/rvt-research/write-lab')
 def run(tool, ids, f):
     r = subprocess.run(['python3', os.path.join(HERE, tool), year, ids, f], cwd=WL, capture_output=True, text=True, timeout=int(os.environ.get('RVT_EXPECT_TIMEOUT', '43200')))      # the shared VM lock can make a run wait for hours
+    if 'no Revit port' in (r.stdout + r.stderr):      # guest Revit did not start: infrastructure, NOT a verdict on the edit
+        print('INFRA no Revit port (no verdict; rerun when the VM lane is healthy)'); sys.exit(3)
     return r.stdout
 def parse_loc(txt):
     d = {}
