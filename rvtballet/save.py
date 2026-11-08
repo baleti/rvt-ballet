@@ -518,6 +518,8 @@ def user_message(exc, status=None):
     """refusal text for the user: the error plus a plain statement that no file was changed (unless it already says so). Not for 5xx after the write started."""
     m = str(exc).rstrip(". ")
     if "after rename" in m: return m + ". The file on disk WAS replaced and may be damaged; use RESTORE to bring back the previous version (the backup was made before the save)"      # found wrong after the replace: never claim it is untouched
+    if "'member_span'" in m and type(exc).__name__ == 'VerifyFailed':      # growing/shrinking a text value re-lays out the rest of its data block: the safety check treats that wide change as unexpected (a safe refusal, not damage)
+        return m + ". This edit changes the length of a stored value, which shifts other data in the same block, so it could not be proven safe and was refused; the model file was not touched. Try a replacement value of the same length"
     if any(w in m.lower() for w in _UNTOUCHED): return m
     return m + ("; the model file was not touched" if (status or 0) < 500 or type(exc).__name__ == "DiskError" else "")
 
