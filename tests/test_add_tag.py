@@ -20,4 +20,13 @@ class AddTag(unittest.TestCase):
             self.assertFalse([k for k in a if k[0] and 'error' not in a[k] and k not in b])
             self.assertFalse([k for k in a if k in b and k[0] and 'error' not in a[k] and a[k] != b[k]])
 
+    def test_bad_targets_refused(self):
+        f = glob.glob(CORPUS + '/2024/42_Snowdon_Towers_Sample_HVAC.rvt')
+        if not f or not os.path.exists(LAB): self.skipTest('no corpus/edit-lab')
+        for t in (1487400, 1487401, 99999999):      # itself, another tag, nonexistent
+            with tempfile.TemporaryDirectory() as d:
+                out = os.path.join(d, 't.rvt')
+                r = subprocess.run([sys.executable, LAB, f[0], out, 'at:1487400:%d:0:0' % t], capture_output=True, text=True, cwd=os.path.dirname(LAB))
+                self.assertNotEqual(r.returncode, 0, t); self.assertIn('REFUSED', r.stdout + r.stderr); self.assertFalse(os.path.exists(out))
+
 if __name__ == '__main__': unittest.main()
