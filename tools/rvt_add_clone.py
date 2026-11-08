@@ -111,5 +111,16 @@ if not os.environ.get('RVT_ADD_LAYOUT_FORCE'):
                 os.remove(a.out); sys.exit('REFUSED: %s first member was split (%d B no longer present as one member in the first 8; new first members start %s): Revit rejects this layout (CorruptModelException); output removed. RVT_ADD_LAYOUT_FORCE=1 to keep it for experiments' % (_pn, _o[1], _n[:4]))
     except SystemExit: raise
     except Exception as _e: os.remove(a.out); sys.exit('REFUSED: layout check failed (%s); output removed' % _e)
+try:      # the OUTPUT must itself be free of damaged gzip members / ECC-bad pages (a writer bug would otherwise ship a self-damaged file as ok)
+    import rvt_scan as _S2, rvt2text as _T2, rvt_entities as _E2
+    _o2 = _S2.load(a.out)[0]; _b2 = {}
+    for _pn2 in ['/'.join(e) for e in _o2.listdir(streams=True)]:
+        if _pn2.startswith('Partitions/'):
+            _n2 = _T2.damaged_members(_o2.openstream(_pn2).read())
+            if _n2: _b2[_pn2] = _n2
+    _e2 = _E2.ecc_bad_pages(_o2)
+    if _b2 or _e2: os.remove(a.out); sys.exit('REFUSED: the built output is damaged (gzip members %s, ECC-bad pages %d); output removed' % (_b2, len(_e2)))
+except SystemExit: raise
+except Exception as _x: os.remove(a.out); sys.exit('REFUSED: output integrity check failed (%s); output removed' % _x)
 os.replace(a.out, _final)
 print('ok',_final,'new id',nid)
