@@ -32,7 +32,7 @@ for label, f in (('orig', orig), ('out', out)):
 npass = nfail = 0
 for e in exp:
     k = e['kind']; ok = False; why = ''
-    if k == 'absent': ok = res['orig']['loc'].get(e['eid']) is not None and res['out']['loc'].get(e['eid'], 1) is None; why = 'present before, missing after'
+    if k == 'absent': ok = res['orig']['loc'].get(e['eid']) is not None and res['out']['loc'].get(e['eid'], 1) is None; why = 'present before, missing after (orig: %s, out: %s)' % ('missing' if res['orig']['loc'].get(e['eid']) is None else 'present', 'missing' if res['out']['loc'].get(e['eid'], 1) is None else 'present')
     elif k == 'move':
         a, b = res['orig']['loc'].get(e['eid']), res['out']['loc'].get(e['eid'])
         ok = bool(a and b and a['loc'] and b['loc']) and all(abs((b['loc'][i] - a['loc'][i]) - e['d'][i]) < 1e-6 for i in range(3)); why = 'shift %s' % ([round(b['loc'][i] - a['loc'][i], 6) for i in range(3)] if a and b and a['loc'] and b['loc'] else '?')
