@@ -11,7 +11,12 @@ for bad in (float('nan'), float('inf'), -float('inf'), 1e308, True, '1.0', None,
     for key in ('dx', 'dy', 'dz'):
         try:
             out, _ = edit.apply_full(buf, [edit.validate_op({'op': 'move', 'eid': 301595, key: bad})])
-        except Exception as e:
+        except edit.EditError:
             n += 1; continue
         raise SystemExit('FAIL accepted %s=%r' % (key, bad))
+for bad in (float('nan'), float('inf'), -float('inf'), True, '1.0', None):
+    for o in ({'op': 'rotate', 'eid': 301595, 'deg': bad}, {'op': 'set_num', 'eid': 301595, 'param': 'Mark', 'value': bad}, {'op': 'set_type_num', 'eid': 301595, 'param': 'Slot Width', 'value': bad}):
+        try: edit.apply_full(buf, [edit.validate_op(o)])
+        except edit.EditError: n += 1; continue
+        raise SystemExit('FAIL accepted %r' % (o,))
 print('OK: %d non-finite/odd move values refused' % n)
