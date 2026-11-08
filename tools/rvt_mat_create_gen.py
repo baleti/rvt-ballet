@@ -6,6 +6,12 @@ sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab')); sys.path[:0]
 os.environ['RVT_GEOM'] = '1'
 import rvtgen
 seed, out, mid, name = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
+def _refuse_crash(t, v, tb):   # only Revit 2024/2026 layouts are verified; any other file must fail cleanly with no output written
+    try:
+        if os.path.exists(out) and os.path.getsize(out) == 0: os.remove(out)
+    except OSError: pass
+    sys.exit('REFUSED: this file is not a layout the material-create writer supports (%s: %s); nothing was written' % (t.__name__, v))
+sys.excepthook = _refuse_crash
 if os.path.realpath(seed) == os.path.realpath(out): sys.exit('REFUSED: output path equals the input file; this tool writes a copy only')
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from rvtballet import edit as _ed
