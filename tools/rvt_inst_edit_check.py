@@ -10,7 +10,7 @@ sys.path.insert(0, E.WL); sys.path.insert(0, os.path.expanduser('~/rvt-research'
 import rvt_geometry as G
 F, OUT = sys.argv[1], sys.argv[2]; N = int(sys.argv[3]) if len(sys.argv) > 3 else 2
 os.makedirs(OUT, exist_ok=True); buf = open(F, 'rb').read()
-ids = [e for e, v in G.file_geometry_index(F).items() if str(v) == 'FamilyInstance'][:N * 6]
+ids = [e for e, v in G.file_geometry_index(F).items() if str(v) == 'FamilyInstance'][:int(os.environ.get("POOL", N * 6))]
 res = {'move': [0, 0, 0], 'delete': [0, 0, 0]}   # accepted, clean, stray
 done = {'move': 0, 'delete': 0}
 for e in ids:
