@@ -1238,6 +1238,8 @@ def check_dest(dest, src):
     if not os.path.isabs(dest): raise BadDest('destination must be an absolute path')
     if os.path.basename(dest) in ('', '.', '..') or dest.endswith(('/', os.sep)): raise BadDest('destination must name a file')
     if os.path.realpath(dest) != os.path.realpath(src) and os.path.splitext(dest)[1].lower() not in ('.rvt', '.rte', '.rfa', '.rft'): raise BadDest('destination must end in .rvt, .rte, .rfa or .rft')
+    _fam = lambda e: e in ('.rfa', '.rft')      # a project saved under a family extension (or the reverse) is a mislabeled file Revit may flag on open
+    if _fam(os.path.splitext(src)[1].lower()) != _fam(os.path.splitext(dest)[1].lower()): raise BadDest('destination extension must stay in the same kind as the source (project .rvt/.rte, family .rfa/.rft)')
     from . import plat
     _bn = plat.fsio.bad_filename(os.path.basename(dest))
     if _bn: raise BadDest(_bn)

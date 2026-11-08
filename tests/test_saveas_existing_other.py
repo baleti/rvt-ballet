@@ -16,6 +16,8 @@ async def run():
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
         os.makedirs(T + '/d/sub')
+        r = await c.post('/api/m/m/saveas', json={'dest': T + '/d/x.rfa'}); t = await r.text(); print('project->.rfa', r.status, t[:90], flush=True)
+        assert r.status == 400 and not os.path.exists(T + '/d/x.rfa'), (r.status, t[:200])
         for body in ({'dest': T + '/d/sub'}, {'dest': T + '/d/sub', 'overwrite': True, 'confirm': True}, {'dest': T + '/nope/x/y.rte'}, {'dest': ''}):
             r = await c.post('/api/m/m/saveas', json=body); t = await r.text(); print(body, r.status, t[:90], flush=True)
             assert r.status >= 400 and sha(p) == h0 and os.path.isdir(T + '/d/sub') and not os.path.exists(T + '/nope'), (body, r.status, t[:200])
