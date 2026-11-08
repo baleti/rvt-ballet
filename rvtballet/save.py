@@ -429,6 +429,15 @@ def source_damage(buf):
                     off = (dif[k] + 1) * ssz + 4 * (e % per)
                     return struct.unpack_from('<I', buf, off)[0] if off + 4 <= len(buf) else None
                 if any(e >= nsec or fatent(e) != 0xFFFFFFFD for e in dif): out.append(('CFB header (FAT sector index)', 0))
+                else:      # c1x-rvtsave 183: one-byte flips of 'number of directory sectors' (v4) and 'number of mini FAT sectors' were accepted; both must equal the chain length (678 of 678 local files do)
+                    def clen(s0):
+                        n, s = 0, s0
+                        while s < 0xFFFFFFFA and n <= nsec:
+                            n += 1; s = fatent(s)
+                            if s is None: return -1
+                        return n
+                    major, nd, ds, mst, nmini = struct.unpack_from('<H', buf, 26)[0], struct.unpack_from('<I', buf, 40)[0], struct.unpack_from('<I', buf, 48)[0], struct.unpack_from('<I', buf, 60)[0], struct.unpack_from('<I', buf, 64)[0]
+                    if (nd != (clen(ds) if major == 4 else 0)) or nmini != (clen(mst) if mst < 0xFFFFFFFA else 0): out.append(('CFB header (directory/mini FAT sector count)', 0))
             if ndif == 0 and nfat <= 109 and any(struct.unpack_from('<I', buf, 76 + 4 * i)[0] != 0xFFFFFFFF for i in range(nfat, 109)):
                 out.append(('CFB header (unused DIFAT entry)', 0))
             out.extend(_cfb_structure_bad(buf, ssz, nsec, nfat, dstart, ndif))
