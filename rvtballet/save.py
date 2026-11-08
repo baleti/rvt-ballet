@@ -924,6 +924,15 @@ def _bbox_of(buf, eid):
         except Exception: pass
 
 
+def _pair(fn, src_buf, nb, *a):
+    """(value in the source, value in the output). A reader failure on the SOURCE means no witness (None, None); a failure on the OUTPUT keeps the source value and returns None for the output, so the caller refuses instead of skipping the check (fail-closed, e.g. a full disk truncating the temp copy)"""
+    try: v0 = fn(src_buf, *a)
+    except Exception: return None, None
+    if not v0: return v0, None
+    try: return v0, fn(nb, *a)
+    except Exception: return v0, None
+
+
 def _readback(src_buf, nb, ops):
     """the gate declares an edited element 'modified', so ANY change inside it passes verify. Read the edited elements back from the produced bytes: the edited parameter must hold the requested value (strings: exactly;
     numbers: changed), no other parameter of the element may change (except reader aliases carrying the new value) and the parameter count must not shrink. Severity-1 found by c3x-rvtmatrix: an emoji value left the
@@ -967,8 +976,7 @@ def _readback(src_buf, nb, ops):
             ch = [k for k in set(x) | set(y) if k not in own and not (lvl and k == 'Elevation') and x.get(k) != y.get(k) and not (k.startswith('Column Location Mark') and isinstance(x.get(k), str) and _same_mark_base(x[k], y.get(k)))]
             if ch: bad.append('moved element %d: parameters changed' % o['eid'])
             if o['op'] == 'move' and not any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv):      # the displacement itself: the element's bounding box must shift by exactly (dx, dy, dz) (feet); skipped only when the geometry reader has no box for the SOURCE element
-                try: b0 = _bbox_of(src_buf, o['eid']); b1 = _bbox_of(nb, o['eid']) if b0 else None
-                except Exception as ex: b0, b1 = None, None
+                b0, b1 = _pair(_bbox_of, src_buf, nb, o['eid'])
                 if b0 is not None:
                     d = (o['dx'], o['dy'], o['dz'])
                     if b1 is None: bad.append('moved element %d: no geometry in the output' % o['eid'])
@@ -983,18 +991,16 @@ def _readback(src_buf, nb, ops):
             try: has_box = _bbox_of(src_buf, o['eid']) is not None
             except Exception: has_box = False
             if not has_box:
-                try: w0 = _trf_origin(src_buf, o['eid']); w1 = _trf_origin(nb, o['eid']) if w0 else None
-                except Exception: w0 = w1 = None
+                w0, w1 = _pair(_trf_origin, src_buf, nb, o['eid'])
                 d = (o.get('dx', 0.0), o.get('dy', 0.0), o.get('dz', 0.0))
                 if w0 is None or w1 is None or any(abs((w1[i] - w0[i]) - d[i]) > 1e-6 * max(1.0, abs(d[i])) + 1e-6 for i in range(3)): bad.append('moved element %d: no box and no readable record origin shift, so the move cannot be verified (refused)' % o['eid'])
     for o in [r for r in mv if r['op'] == 'rotate']:      # the rotation itself: the element's mesh must be turned by exactly o['deg'] about the vertical axis (rigid, z unchanged); FamilyInstance only, skipped when the geometry reader has no mesh for the SOURCE element
         try: t0 = _tris_of(src_buf, o['eid']); t1 = _tris_of(nb, o['eid']) if t0 else None
         except Exception: t0, t1 = None, None
-        try: q0 = _inst_trf(src_buf, o['eid']); q1 = _inst_trf(nb, o['eid']) if q0 else None
-        except Exception: q0, q1 = None, None
+        q0, q1 = _pair(_inst_trf, src_buf, nb, o['eid'])
         if q0 is not None and not _is_rotation(q0): q0 = None      # the tracer did not land on a real orientation matrix in this file (garbage / NaN / scaled): no witness
-        try: w0 = _trf_origin(src_buf, o['eid']); w1 = _trf_origin(nb, o['eid']) if w0 else None
-        except Exception: w0 = w1 = None
+        w0, w1 = _pair(_trf_origin, src_buf, nb, o['eid'])
+        if w0 is not None and w1 is None: bad.append('rotated element %d: the instance origin could not be read from the output, so the rotation cannot be verified (refused)' % o['eid'])
         if w0 is not None and w1 is not None:      # rotation is about the instance origin: the origin must shift by exactly the declared moves of this element (none = zero); a hidden translation passed the mesh fit (c2x-rvtmove, tests/test_save_move_then_rotate.py)
             dd = [sum(m.get(k, 0.0) for m in mv if m['op'] == 'move' and m['eid'] == o['eid']) for k in ('dx', 'dy', 'dz')]
             if any(abs((w1[i] - w0[i]) - dd[i]) > 1e-6 * max(1.0, abs(dd[i])) + 1e-6 for i in range(3)): bad.append('rotated element %d: the instance origin moved by (%.4g, %.4g, %.4g) ft, declared (%.4g, %.4g, %.4g)' % ((o['eid'],) + tuple(w1[i] - w0[i] for i in range(3)) + tuple(dd))); continue
@@ -1010,13 +1016,13 @@ def _readback(src_buf, nb, ops):
         if any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv): continue
         try:
             if _bbox_class(src_buf, o['eid']) not in ('SWall', 'LinearDimString', 'RvtLinkInstance', 'TextNote', 'Grid'): continue
-            fl_ = _origin_field(src_buf, o['eid']); w0 = _trf_origin(src_buf, o['eid'], fl_); w1 = _trf_origin(nb, o['eid'], fl_) if w0 else None
-        except Exception: w0 = w1 = None
+            fl_ = _origin_field(src_buf, o['eid'])
+        except Exception: fl_ = False
+        w0, w1 = _pair(_trf_origin, src_buf, nb, o['eid'], fl_) if fl_ is not False else (None, None)
         d = (o['dx'], o['dy'], o['dz'])
         if w0 is None and _bbox_class(src_buf, o['eid']) == 'RvtLinkInstance': bad.append('moved Revit link instance %d: no readable record origin (Trf.m_or), so the move cannot be verified (refused)' % o['eid']); continue
         if _bbox_class(src_buf, o['eid']) == 'SWall':      # the location line itself must move (the Trf origin alone is not a wall move)
-            try: g0 = _wall_line_origin(src_buf, o['eid']); g1 = _wall_line_origin(nb, o['eid']) if g0 else None
-            except Exception: g0 = g1 = None
+            g0, g1 = _pair(_wall_line_origin, src_buf, nb, o['eid'])
             if g0 is not None and (g1 is None or any(abs((g1[i] - g0[i]) - d[i]) > 1e-6 * max(1.0, abs(d[i])) + 1e-6 for i in range(3))): bad.append('moved wall %d: the wall location line in the output is not the source moved by (%.4g, %.4g, %.4g) (only a pattern origin moved)' % ((o['eid'],) + d)); continue
         if w0 is None and _bbox_class(src_buf, o['eid']) == 'TextNote': bad.append('moved text note %d: no readable TextElement.m_orig, so the move cannot be verified (refused)' % o['eid']); continue
         if w0 is None: continue
