@@ -308,6 +308,11 @@ def _set_link_path(ed, o):
 
 def _change_type(ed, o):
     """point a FamilyInstance at another FamilySymbol of the SAME family: overwrite FamilyInstance.m_masterSymbolId (8-byte ElementId) in the instance record. Refused unless the instance has that field, the target has FamilySymbol.m_familyId, and both families are equal (a symbol of another family would need a different geometry / host relation)"""
+    if os.environ.get('RVTBALLET_CHANGETYPE_ANY_YEAR') != '1':      # Revit-verified on 2024/2026 only (VM); other years were never gated
+        import re as _re, cfb as _cfb
+        try: fy = int(_re.search(r'(20[12]\d)', bytes(_cfb.CFB(open(ed.src, 'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le', 'ignore')).group(1))
+        except Exception: raise EditError('change_type refused: cannot read the Revit version of the file')
+        if fy not in (2024, 2026): raise EditError('change_type is only verified on Revit 2024/2026 files (this file is %d): refused' % fy)
     cur = _field64(ed, o['eid'], 'FamilyInstance.m_masterSymbolId')
     if cur is None: raise EditError('element %d is not a family instance (no FamilyInstance.m_masterSymbolId): change_type refused' % o['eid'])
     try: fam_new = _field64(ed, o['type_eid'], 'FamilySymbol.m_familyId')
