@@ -63,7 +63,7 @@ row=bytearray(T['row']); genlib.rep(row,idS,idN); struct.pack_into('<3I',row,8,*
 g.new.append((bytes(hdr),rec,bytes(item),nid)); g.rows.append(bytes(row))
 if not a.nolatest:
     def reg(raw):
-        out,Ls=idlist.add_to_lists(raw,S,nid); print('latest lists',[(l[2]) for l in Ls]); assert Ls,'no id-list found'; return out
+        out,Ls=idlist.add_to_lists(raw,S,nid,W); print('latest lists',[(l[2]) for l in Ls]); assert Ls,'no id-list found'; return out
     g.latest_edits=[('Latest',reg)]
 g.itag=T['item'][W+8:W+10]
 g.commit(a.out); print('ok',a.out,'new id',nid)
