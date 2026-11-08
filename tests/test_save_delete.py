@@ -27,7 +27,8 @@ async def run():
         # (wledit.Editor.delete of the same element changed no other element in an earlier offline scout: the two paths disagree - question to rvtedit2.)
         out = os.path.join(_T, 'o.rvt'); r = await c.post('/api/m/m/saveas', json={'dest': out}); j = await r.json()
         assert r.status == 422 and j['code'] == 'verify_failed' and not os.path.exists(out), (r.status, j.get('error'))
-        assert j['report']['unexpected'] == [['changed', 'el:301593']] and j['edits'][0]['op'] == 'delete', j['report']
+        u = j['report']['unexpected']      # refused either by savegate verify (['changed','el:301593']) or by save._readback survivor-drift check (string naming 301593)
+        assert (u == [['changed', 'el:301593']] or (len(u) == 1 and 'surviving' in str(u[0]) and '301593' in str(u[0]))) and j['edits'][0]['op'] == 'delete', j['report']
     print('save delete OK (documented refusal): delete of %d refused by verify, undeclared change on el 301593, nothing written' % TARGET)
 
 if not os.path.exists(RTE) or not save.SaveSessions().available: print('skip')
