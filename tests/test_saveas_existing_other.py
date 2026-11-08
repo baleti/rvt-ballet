@@ -1,4 +1,4 @@
-"""(SAVE AS onto an existing OTHER file) without overwrite, and with overwrite but no confirm, must be refused and leave the other file byte-identical; (old doc: onto the source) dest spelled as the source itself, as a symlink to it, as a hard link to it, via ./ and ../dir segments, with overwrite+confirm: every spelling is refused ('destination is the source file') and the source is byte-identical afterwards."""
+"""(SAVE AS onto a directory / missing parent / empty dest: refused, no files created) (SAVE AS onto an existing OTHER file) without overwrite, and with overwrite but no confirm, must be refused and leave the other file byte-identical; (old doc: onto the source) dest spelled as the source itself, as a symlink to it, as a hard link to it, via ./ and ../dir segments, with overwrite+confirm: every spelling is refused ('destination is the source file') and the source is byte-identical afterwards."""
 import os, sys, shutil, hashlib, tempfile, asyncio
 T = tempfile.mkdtemp(dir=os.environ.get('TMPDIR'))
 os.environ['SAVEGATE_JOURNAL'] = T + '/j'; os.environ['SAVEGATE_CACHE'] = T + '/c'; os.environ['RVTBALLET_SNAPSHOT_CACHE'] = '0'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'
@@ -15,6 +15,10 @@ async def run():
     md = tempfile.mkdtemp(dir=T); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': p}
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
+        os.makedirs(T + '/d/sub')
+        for body in ({'dest': T + '/d/sub'}, {'dest': T + '/d/sub', 'overwrite': True, 'confirm': True}, {'dest': T + '/nope/x/y.rte'}, {'dest': ''}):
+            r = await c.post('/api/m/m/saveas', json=body); t = await r.text(); print(body, r.status, t[:90], flush=True)
+            assert r.status >= 400 and sha(p) == h0 and os.path.isdir(T + '/d/sub') and not os.path.exists(T + '/nope'), (body, r.status, t[:200])
         for body in ({'dest': other}, {'dest': other, 'overwrite': False, 'confirm': True}, {'dest': other, 'overwrite': True}):
             r = await c.post('/api/m/m/saveas', json=body); t = await r.text()
             print(body, r.status, t[:90].replace('\n', ' '), flush=True)
