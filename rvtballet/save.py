@@ -1029,6 +1029,9 @@ def _readback(src_buf, nb, ops):
         if w1 is None or any(abs((w1[i] - w0[i]) - d[i]) > 1e-6 * max(1.0, abs(d[i])) + 1e-6 for i in range(3)): bad.append('moved element %d: the placement origin in the output is not the source moved by (%.4g, %.4g, %.4g)' % ((o['eid'],) + d))
     for o in dl:      # a declared deletion must really have happened: the gate accepts a manifest that names a still-present element as deleted (tests/test_save_escape_delete.py)
         if o['eid'] in a and o['eid'] in b: bad.append('element %d was declared deleted but is still in the output' % o['eid'])
+    if dl:      # a delete must not touch the elements that survive: every element present before and after reads back with identical parameters (measured 0 drift: 2024 Construction wall delete)
+        _drift = [e for e in a if e in b and g(a[e]) != g(b[e])]
+        if _drift: bad.append('delete changed the parameters of %d surviving element(s) (e.g. %s)' % (len(_drift), ', '.join(str(e) for e in _drift[:3])))
     for o in fl:
         if o['eid'] not in b: bad.append('field-edited element %d missing in the output' % o['eid'])
         else:
