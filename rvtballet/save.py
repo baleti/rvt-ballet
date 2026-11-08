@@ -523,6 +523,8 @@ def user_message(exc, status=None):
     if "after rename" in m: return m + ". The file on disk WAS replaced and may be damaged; use RESTORE to bring back the previous version (the backup was made before the save)"      # found wrong after the replace: never claim it is untouched
     if "'member_span'" in m and type(exc).__name__ == 'VerifyFailed':      # growing/shrinking a text value re-lays out the rest of its data block: the safety check treats that wide change as unexpected (a safe refusal, not damage)
         return m + ". This edit changes the length of a stored value, which shifts other data in the same block, so it could not be proven safe and was refused; the model file was not touched. Try a replacement value of the same length"
+    if 'delete changed the parameters of' in m and 'surviving element' in m:      # delete read-back guard: other elements refer to the deleted one
+        return m.rstrip('. ') + ". Other elements in the model depend on the element you tried to delete (for example views on a level), so deleting it would silently change them; nothing was changed. Remove or re-assign the dependent elements first"
     if any(w in m.lower() for w in _UNTOUCHED): return m
     return m + ("; the model file was not touched" if (status or 0) < 500 or type(exc).__name__ == "DiskError" else "")
 
