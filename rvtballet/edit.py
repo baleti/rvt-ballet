@@ -239,8 +239,17 @@ def _apply_rvtedit(a, b, ops):
             if len(groups) > 1 and any(o['op'] == 'delete' for o in ops): raise EditError('a delete cannot be saved together with edits in other partitions of this file (the order across partitions is not preserved): save the delete separately')
         else: groups[None] = list(ops)
         deleted = []; cur = a
-        for n, (pn, grp) in enumerate(groups.items()):
-            last = n == len(groups) - 1; out = b if last else os.path.join(os.path.dirname(b), 'pass%d.rvt' % n)
+        passes = []      # (partition, ops): the editor computes a move/rotate from the ORIGINAL record and refuses a second one on the same element in a session, so a move and a rotate of one element go to consecutive passes (pass 2 reads the output of pass 1, like two saves in a row)
+        for pn, grp in groups.items():
+            chunk, hit = [], set()
+            for o in grp:
+                if o['op'] in ('move', 'rotate'):
+                    if o['eid'] in hit: passes.append((pn, chunk)); chunk, hit = [], set()
+                    hit.add(o['eid'])
+                chunk.append(o)
+            passes.append((pn, chunk))
+        for n, (pn, grp) in enumerate(passes):
+            last = n == len(passes) - 1; out = b if last else os.path.join(os.path.dirname(b), 'pass%d.rvt' % n)
             if pn: os.environ['PART'] = str(pn)
             else: os.environ.pop('PART', None)
             if not last: tmps.append(out)
