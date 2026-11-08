@@ -14,6 +14,10 @@ class S(unittest.TestCase):
         for n in (' lead', 'trail ', ' both '):
             with self.assertRaises(edit.EditError): edit._check_element_name(n)
         edit._check_element_name('in ner')
+    def test_dots_only_refused(self):
+        for n in ('.', '..', '...'):
+            with self.assertRaises(edit.EditError): edit._check_element_name(n)
+        edit._check_element_name('T.O. Slab')
 class N(unittest.TestCase):
     def test_nfc_nfd_batch_duplicate(self):
         mk = lambda e, v: {'op': 'set_string', 'eid': e, 'field': 'DatumPlane.m_text', 'value': v}
