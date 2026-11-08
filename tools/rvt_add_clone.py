@@ -97,7 +97,7 @@ if not a.nolatest:
         return out
     g.latest_edits=[('Latest',reg)]
 g.itag=T['item'][W+8:W+10]
-_final = a.out; _b, _x = os.path.splitext(os.path.basename(_final)); a.out = os.path.join(os.path.dirname(os.path.abspath(_final)), '.' + _b + '.part' + _x)      # build beside the target, move into place only after every check passes: a refused/failed build must not destroy a previous output
+_final = a.out; _b, _x = os.path.splitext(os.path.basename(_final)); a.out = os.path.join(os.path.dirname(os.path.abspath(_final)), '.' + _b + '.%d.part' % os.getpid() + _x)      # build beside the target, move into place only after every check passes: a refused/failed build must not destroy a previous output
 import atexit; atexit.register(lambda: os.path.exists(a.out) and os.remove(a.out))
 g.commit(a.out)
 # fail-closed layout check (c1x-rvtadd 2026-11-08): Revit 2024 rejected two outputs whose first gzip member of the partition was split mid header region (insert did not fit LIMIT). Compare with the source.
