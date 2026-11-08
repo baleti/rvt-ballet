@@ -13,6 +13,17 @@ rep = rvt_diff.diff(a.src, a.out, False, maxrec=100000)
 bad = []
 def _i(r): return r if isinstance(r, int) else (r.get('id') if isinstance(r, dict) else r)
 real_added = [r for r in rep['added'] if _i(r) < 2**32]    # ids >= 2^32 are walker misalignment artifacts (no sample has them)
+def _et_ids(path):
+    """ids listed in Global/ElemTable (row stride 40 B with 8-byte ids, 28 B with 4-byte ids); None if unreadable"""
+    try:
+        import struct; sys.path.insert(0, os.path.expanduser('~/rvt-research/edit-lab')); sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab')); sys.path.insert(0, os.path.expanduser('~/rvt-research'))
+        import rvtedit; g = rvtedit.Edit(path).g; et = g._et(); n = struct.unpack_from('<I', et, 2)[0]
+        S = min((x for x in (40, 28, 32, 36, 44) if 0 <= len(et) - 6 - n * x < 256), default=40 if g.W == 8 else 28)
+        return {int.from_bytes(et[6 + S * k:6 + S * k + g.W], 'little') for k in range(n)}
+    except Exception: return None
+if real_added:       # an id the output ElemTable does not list (or the source already listed) is a walker misalignment id, not an added element
+    _ea, _eb = _et_ids(a.src), _et_ids(a.out)
+    if _ea is not None and _eb is not None: real_added = [r for r in real_added if _i(r) in _eb and _i(r) not in _ea]
 art_added = len(rep['added']) - len(real_added)
 if real_added: bad.append('%d elements added %s' % (len(real_added), real_added[:5]))
 rem = {r if isinstance(r, int) else (r.get('id') if isinstance(r, dict) else r) for r in rep['removed']}
