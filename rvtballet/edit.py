@@ -401,7 +401,9 @@ def _check_element_name(v):
     bad = sorted(set(v) & NAME_FORBIDDEN)
     if not v.strip(): raise EditError('a name must not be empty; nothing was changed')
     if any(ord(ch) < 32 or ord(ch) == 127 for ch in v): raise EditError('a name must not contain control characters (newline, tab, ...); nothing was changed')
+    if any(__import__('unicodedata').category(ch) in ('Cs', 'Zl', 'Zp', 'Co', 'Cn') for ch in v): raise EditError('a name must not contain lone surrogates, line/paragraph separators or unassigned/private-use characters; nothing was changed')      # lone surrogate cannot be encoded as UTF-16 at all
     if any(__import__('unicodedata').category(ch) == 'Cf' for ch in v): raise EditError('a name must not contain invisible format characters (BOM, zero-width, bidi override); nothing was changed')      # c5x-rvtread: spoofing/duplicate-lookalike names; Revit VM verdict on these not taken, refusal is conservative
+    if any(ord(ch) > 0xFFFF for ch in v): raise EditError('characters outside the Basic Multilingual Plane (emoji, rare CJK) are not supported in names yet (same rule as string values); nothing was changed')
     if len(v) > 255: raise EditError('a name is limited to 255 characters here (conservative; Revit limits are not VM-verified above that); nothing was changed')
     if bad: raise EditError('name contains characters Revit does not allow in names (%s); nothing was changed' % ' '.join(bad))
 
@@ -449,7 +451,7 @@ UNIQUE_CLASS = __import__('re').compile(r'(Tracker|Settings?(Elem|Element)?|Tabl
 DELETE_VM_VERIFIED = {'CategoryElem', 'BasePoint', 'BrowserOrganization', 'SWall', 'ColorFillSchema', 'Floor', 'CompoundCeilingType', 'DBViewPlan', 'AutoJoinTracker', 'AssemblyCodeTable', 'Viewport', 'DimensionStyle', 'RoomElem', 'FamilyInstance', 'TextNote', 'IndependentTag', 'RoomTag', 'ScheduleInstance', 'DBViewSchedule'}      # Revit 2024 VM, single-element delete on the cols2 scene: opens with no repair prompt (SWall: only Revit's own 'Room is not in a properly enclosed region' warning, the true consequence of removing a bounding wall) (c7x-rvtmatrix); RoomElem clean in VM too; FamilyInstance/TextNote/IndependentTag/RoomTag/ScheduleInstance/DBViewSchedule opened clean in the Revit 2024 VM on Snowdon HVAC and Structural (c1x-rvtdel, class-count dumps exact, FamilyInstance cascade took its tags); extend only with a VM verdict
 
 
-IN_USE_GUARD_CLASSES = {'DimensionStyle', 'CompoundCeilingType'}      # type-like classes whose users are not in the header deletion lists
+IN_USE_GUARD_CLASSES = {'DimensionStyle', 'CompoundCeilingType', 'AssemblyCodeTable'}      # type-like classes whose users are not in the header deletion lists
 IN_USE_GUARD_ALLOW = 5      # measured: an id occurs 5 times more in the file before delete than after (own record + lists), Structural 2024 DimensionStyle/CategoryElem/CompoundCeilingType
 
 

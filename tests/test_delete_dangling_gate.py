@@ -12,7 +12,7 @@ for e, d in a.items():
     if isinstance(d, dict) and d.get('class') in edit.DELETE_VM_VERIFIED: by[d['class']].append(e)
 src = os.path.join(_T, 's.rte'); shutil.copy(SRC, src); d = save.SaveSessions().doc('m', src)
 num = re.compile(r"(?<=: )(\d{2,12})(?=[,}\]])|(?<=, )(\d{2,12})(?=[,}\]])")      # numeric VALUES only (not digits inside GUIDs/names)
-bad = []; acc = ref = 0; WARN = {'AssemblyCodeTable'}      # open finding, see c3x-progress item 26
+bad = []; acc = ref = 0; WARN = set()
 for cls, ids in sorted(by.items()):
     for eid in ids[:2]:
         try: nb, dl = edit.apply_full(d.buf, [edit.validate_op({'op': 'delete', 'eid': eid})])
