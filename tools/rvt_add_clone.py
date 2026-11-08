@@ -19,7 +19,10 @@ if not a.force:
     print('dependents screen: none')
 g=rvtgen.Gen(a.seed)
 if g.nextid<=g.maxid and not a.force: raise SystemExit('refuse: ElemTable counter %d <= max element id %d (new id would collide); --force to override'%(g.counter,g.maxid))
-W=g.W; S=a.src; T=g.template(S); idS=struct.pack(g.IDF,S)
+W=g.W; S=a.src
+try: T=g.template(S)
+except IndexError: sys.exit('REFUSED: source %d has no element header in the first partition (%s); the writer only addresses the first partition of a multi-partition file. Pick a source stored there.'%(S,list(g.e.m.parts)[0]))
+idS=struct.pack(g.IDF,S)
 L={n:(o,e) for n,o,e,_ in T['log']}
 et=g._et(); RW=g.RW; n_=struct.unpack_from('<I',et,2)[0]
 best=max(range(n_),key=lambda k:(struct.unpack_from('<I',et,6+RW*k+12)[0],struct.unpack_from('<I',et,6+RW*k+8)[0]))
