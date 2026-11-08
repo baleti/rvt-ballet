@@ -416,6 +416,7 @@ def source_damage(buf):
             if buf[8:24] != bytes(16) or buf[34:40] != bytes(6) or struct.unpack_from('<I', buf, 52)[0] != 0 or struct.unpack_from('<H', buf, 28)[0] != 0xFFFE:      # c1x-rvtsave 182: single-byte flips here (CLSID, reserved, transaction signature, byte order) were accepted; 45 of 45 Revit-made corpus files have them zero / 0xFFFE
                 out.append(('CFB header (reserved/CLSID/byte order)', 0))
             if cut != 4096: out.append(('CFB header (mini stream cutoff)', 0))
+            if struct.unpack_from('<H', buf, 26)[0] == 4 and struct.unpack_from('<H', buf, 30)[0] == 12 and len(buf) >= 4096 and any(buf[512:4096]): out.append(('CFB header (v4 padding 512..4095 not zero)', 0))      # c1x-rvtsave 188: flips there were accepted as identity; 163 of 163 local CFB files have it zero (no Revit VM verdict)
             if ndif == 0 and dstart != 0xFFFFFFFE: out.append(('CFB header (DIFAT start)', 0))
             ssz = 1 << struct.unpack_from('<H', buf, 30)[0] if struct.unpack_from('<H', buf, 30)[0] in (9, 12) else 512
             nsec = max(1, len(buf) // ssz)
@@ -469,6 +470,8 @@ def source_damage(buf):
             if k.startswith('Partitions/'):
                 out.extend((k, i) for i in member_report(bytes(rvtw.Stream(v.data).payload))[1])
                 out.extend((k + ' (page ECC)', i) for i in _ecc_bad_pages(v.data, rvtw))      # c7x-rvtread 62: zeroed/flipped bytes that gzip does not see
+            elif k == 'Formats/Latest':      # c1x-rvtsave 188: not page-ECC'd, but a gzip stream; flips inside it were accepted as identity. 0 of 80 clean corpus/sample files fail the member CRC, 80 of 80 mid-stream flips detected
+                out.extend((k + ' (gzip CRC)', i) for i in member_report(bytes(rvtw.Stream(v.data).payload))[1])
             elif k not in rvtw.PLAIN and not k.startswith('\x05') and k != 'Formats/Latest':
                 if k.startswith('Global/'): out.extend((k + ' (gzip CRC)', i) for i in member_report(bytes(rvtw.Stream(v.data).payload))[1])      # c7x-rvtread 106: a flip inside Global/ElemTable etc. with the page ECC restamped passed every check; 0 of 360 clean Global streams (60 files) fail the member CRC      # c7x-rvtread 68: the other paged streams (Global/*, Contents..) carry page ECC too; the savegate gate checks them, SAVE AS did not
                 out.extend((k + ' (page ECC)', i) for i in _ecc_bad_pages(v.data, rvtw))
