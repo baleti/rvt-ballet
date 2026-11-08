@@ -66,7 +66,7 @@ def one(year, port, src, tag, ops):
     print('[%s]' % tag, '\n'.join(l for l in out.replace('\r', '').splitlines() if l.startswith(('OP', 'SAVED', 'FAILURE', 'RESULT'))), flush=True)
     if not any(l.startswith(('OP', 'SAVED', 'FAILURE', 'RESULT')) for l in out.splitlines()): print('[%s] RAW guest output (no OP/SAVED/RESULT lines):' % tag, out[-1500:].replace('\r', ''), flush=True)
     wd = os.path.expanduser('~/c2x-diff/%s' % tag); os.makedirs(wd, exist_ok=True)
-    ok = 'SAVED after' in out and all(guest.get('C:/wl/out/%s_%s%s' % (tag, k, EXT(src)), os.path.join(wd, '%s%s' % (k, EXT(src)))) for k in ('base', 'after'))
+    ok = 'SAVED after' in out and all(guest.get('C:/wl/out/%s_%s%s' % (tag, k, EXT(src)), os.path.join(wd, '%s%s' % (k, EXT(src))), int(os.environ.get('RVTDIFF_GET_TIMEOUT', '1200'))) for k in ('base', 'after'))
     return ok, wd
 
 def report(src, wd, nf):
