@@ -14,3 +14,10 @@ try:
 except edit.EditError as e: assert 'does not exist' in str(e), str(e); print('missing id refused:', str(e)[:80])
 except Exception as e: print('missing id raised', type(e).__name__, '(not EditError)'); raise SystemExit(1)
 print('OK')
+# delete result is a valid base for a second save: the deleted id is gone from the output, deleting it again is refused, and a different delete on top of it works
+import tempfile as _tf
+out = os.path.join(_T, 'out.rte'); open(out, 'wb').write(nb)
+d2 = save.SaveSessions().doc('m2', out)
+try:
+    edit.apply_full(d2.buf, [edit.validate_op({'op': 'delete', 'eid': EID})]); raise SystemExit('FAIL: re-delete accepted')
+except edit.EditError as e: assert 'does not exist' in str(e), str(e); print('re-delete refused')
