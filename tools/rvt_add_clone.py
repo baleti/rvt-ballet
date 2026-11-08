@@ -79,7 +79,9 @@ row=bytearray(T['row']); genlib.rep(row,idS,idN); struct.pack_into('<3I',row,8,*
 g.new.append((bytes(hdr),rec,bytes(item),nid)); g.rows.append(bytes(row))
 if not a.nolatest:
     def reg(raw):
-        out,Ls=idlist.add_to_lists(raw,S,nid,W); print('latest lists',[(l[2]) for l in Ls]); assert Ls,'no id-list found'; return out
+        out,Ls=idlist.add_to_lists(raw,S,nid,W); print('latest lists',[(l[2]) for l in Ls]);
+        if not Ls: sys.exit('REFUSED: source %d appears in no Global/Latest id-list of this project (nothing to register the clone in); pick another source; nothing written' % S)
+        return out
     g.latest_edits=[('Latest',reg)]
 g.itag=T['item'][W+8:W+10]
 _final = a.out; _b, _x = os.path.splitext(os.path.basename(_final)); a.out = os.path.join(os.path.dirname(os.path.abspath(_final)), '.' + _b + '.part' + _x)      # build beside the target, move into place only after every check passes: a refused/failed build must not destroy a previous output
