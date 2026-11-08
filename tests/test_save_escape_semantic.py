@@ -17,7 +17,9 @@ src = os.path.join(_T, 'src.rvt'); shutil.copy(RTE, src); h0 = sha(src)
 A = 301595
 ss = save.SaveSessions(); d = ss.doc('m', src)
 rp = save._read_params(d.buf); B = next(i for i in sorted(rp) if i != A and edit.validate_op({'op': 'move', 'eid': i, 'dx': 1.0}) if True) if False else None
-for i in sorted(rp):                      # a second element the backend accepts a move for
+_pin = os.environ.get('RVT_ESC_B')
+for i in ([int(_pin)] if _pin else sorted(rp, key=lambda e: (abs(e - A), e))):   # nearest eids first (columns sit together); RVT_ESC_B pins it
+    # a second element the backend accepts a move for
     if i == A: continue
     try: edit.validate_op({'op': 'move', 'eid': i, 'dx': 1.0}); nb, _ = edit.apply_full(d.buf, [edit.validate_op({'op': 'move', 'eid': A, 'dx': 1.0}), edit.validate_op({'op': 'move', 'eid': i, 'dx': 1.0})]); B = i; break
     except Exception: continue
