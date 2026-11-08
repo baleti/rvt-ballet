@@ -8,6 +8,7 @@ import rvt_geometry as G
 import rvtedit
 src, dst = sys.argv[1], sys.argv[2]; x0, y0, x1, y1 = sys.argv[3:7]
 h = sys.argv[7] if len(sys.argv) > 7 else '10'; year = sys.argv[8] if len(sys.argv) > 8 else '2024'
+if year not in ('2024', '2026'): sys.exit('REFUSED: wall ADD has fit tables for Revit 2024 and 2026 only (got %s)' % year)
 import math
 try: _v = [float(x) for x in (x0, y0, x1, y1, h)]
 except ValueError: sys.exit('REFUSED: wall coordinates and height must be numbers')

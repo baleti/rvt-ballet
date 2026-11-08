@@ -12,3 +12,12 @@ class AwGuard(unittest.TestCase):
                 self.assertNotEqual(r.returncode, 0, a); self.assertIn('REFUSED', r.stdout + r.stderr, a); self.assertFalse(os.path.exists(out))
 
 if __name__ == '__main__': unittest.main()
+
+
+class AwYear(unittest.TestCase):
+    def test_unsupported_year_refused(self):
+        for y in ('2020', '2023', '2025'):
+            with tempfile.TemporaryDirectory() as d:
+                out = os.path.join(d, 'o.rvt')
+                r = subprocess.run([sys.executable, TOOL, os.path.join(d, 'nosuch.rvt'), out, '0', '0', '5', '0', '10', y], capture_output=True, text=True)
+                self.assertNotEqual(r.returncode, 0); self.assertIn('REFUSED', r.stdout + r.stderr); self.assertFalse(os.path.exists(out))
