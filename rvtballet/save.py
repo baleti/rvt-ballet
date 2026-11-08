@@ -1090,8 +1090,9 @@ def _cloud_gate(*paths):
 def risky_membership(mem, ops):
     """keep group / design-option reasons always; 'hosted on N' only for move/rotate ops on that element (a parameter edit of a hosted element does not change where it sits)"""
     moved = {o['eid'] for o in ops if o.get('op') in ('move', 'rotate')}; out = {}
+    deleted = {o['eid'] for o in ops if o.get('op') == 'delete'}      # a deleted element still named by a dimension witness leaves 100+ raw mentions (Structural 2024 wall 585072); Revit's own cascade is unrecorded, so refuse until the paired VM run says
     for e, why in mem.items():
-        w = [x for x in why if not x.startswith(('hosted on ', 'hosts ', 'dimensioned by ', 'level constrains ')) or e in moved]
+        w = [x for x in why if not x.startswith(('hosted on ', 'hosts ', 'dimensioned by ', 'level constrains ')) or e in moved or (e in deleted and x.startswith('dimensioned by '))]
         if w: out[e] = w
     return out
 
