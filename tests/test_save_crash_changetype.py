@@ -5,7 +5,7 @@ import os, sys, tempfile, hashlib, shutil, subprocess, signal, json
 _T = tempfile.mkdtemp(); J = _T + '/j'; C = _T + '/c'
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)
 YEAR = os.environ.get('CRASH_YEAR', '2024')
-SRC = (lambda d: next((os.path.join(d, n) for n in sorted(os.listdir(d)) if n.endswith('HVAC.rvt')), '') if os.path.isdir(d) else '')(os.path.expanduser('~/rvt-research/corpus/2024')) if YEAR == '2024' else next(iter(sorted(__import__('glob').glob(os.path.expanduser('~/rvtfix/corpus/%s/*Construction-DefaultMetric.rte' % YEAR)))), '')
+SRC = (lambda d: next((os.path.join(d, n) for n in sorted(os.listdir(d)) if n.endswith('HVAC.rvt')), '') if os.path.isdir(d) else '')(os.path.expanduser('~/rvt-research/corpus/%s' % YEAR)) if YEAR in ('2024', '2026') else next(iter(sorted(__import__('glob').glob(os.path.expanduser('~/rvtfix/corpus/%s/*Construction-DefaultMetric.rte' % YEAR)))), '')
 if not os.path.exists(SRC): print('skip: no template'); sys.exit(0)
 for p in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab'), os.path.expanduser('~/rvt-research/edit-lab')): sys.path.insert(0, p)
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
