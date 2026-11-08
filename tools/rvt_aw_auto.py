@@ -7,6 +7,8 @@ for p in ('~/rvt-research/write-lab', '~/rvt-research/edit-lab', '~/rvt-research
 import rvt_geometry as G
 import rvtedit
 src, dst = sys.argv[1], sys.argv[2]; x0, y0, x1, y1 = sys.argv[3:7]
+if os.path.realpath(src) == os.path.realpath(dst): sys.exit('REFUSED: output path equals the input file')
+if os.path.exists(dst) and (os.path.samefile(src, dst) or os.stat(dst).st_nlink > 1): sys.exit('REFUSED: output {} is the input file or a hard link of some file (writing it would change the original in place); pick a fresh output path'.format(os.path.basename(dst)))
 h = sys.argv[7] if len(sys.argv) > 7 else '10'; year = sys.argv[8] if len(sys.argv) > 8 else '2024'
 if year not in ('2024', '2026'): sys.exit('REFUSED: wall ADD has fit tables for Revit 2024 and 2026 only (got %s)' % year)
 import math
