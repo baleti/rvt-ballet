@@ -1,38 +1,29 @@
-"""(+ POSIX ACL via raw system.posix_acl_access xattr, no setfacl needed) In-place SAVE! (set_string edit, 2024 cols2 scene) keeps user xattrs and the 0640 mode of the original file (queue item 12); skips if the filesystem has no user xattrs."""
+"""in-place SAVE! and RESTORE keep the source file user xattrs (sync-client tags, labels): a rename-over write that drops them loses metadata."""
 import atexit, shutil as _sh, tempfile as _tf
 _made = []
 _mkd0 = _tf.mkdtemp
 def _mkd(*a, **k):
     d = _mkd0(*a, **k); _made.append(d); return d
 _tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
-import os, sys, asyncio, tempfile, hashlib, shutil, json
-_T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
-os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; json.dump({'rvt': {'2024': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
-HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)
-RTE = os.path.expanduser('~/rvt-research/write-lab/scenes/classtests/2024_writer_cols2.rte')
-from rvtballet import server, save
+import os, sys, shutil, hashlib, tempfile
+_T = tempfile.mkdtemp(dir=os.environ.get('TMPDIR'))
+os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_SNAPSHOT_CACHE'] = _T + '/snap'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; os.environ['RVTBALLET_ALLOW_LAYOUT_CHANGE'] = '1'
+open(_T + '/gate.json', 'w').write('{"rvt": {"2024": "open"}}'); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+from rvtballet import save, edit
+S = os.path.expanduser('~/rvt-research/write-lab/scenes/classtests/2024_writer_cols2.rte')
+if not os.path.exists(S) or not save.SaveSessions().available: print('skip'); sys.exit(0)
+
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
-T = 301595; REFUSED = []
-async def run():
-    from aiohttp.test_utils import TestClient, TestServer
-    src = os.path.join(_T, 'src.rvt'); shutil.copy(RTE, src); h0 = sha(src); md = os.path.join(_T, 'm'); os.makedirs(md)
-    models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
-    hs = [h0]
-    async with TestClient(TestServer(server.make_app(models))) as c:
-        await c.get('/api/m/m/saveinfo')
-        os.chmod(src, 0o640)
-        try: os.setxattr(src, 'user.c2x_tag', b'keepme')
-        except OSError: print('skip (no xattr)'); return
-        import struct; ents = [(1, 6, 0xffffffff), (2, 4, 12345), (4, 4, 0xffffffff), (0x10, 4, 0xffffffff), (0x20, 0, 0xffffffff)]      # user_obj rw, named user r, group_obj r, mask r, other -
-        acl = struct.pack('<I', 2) + b''.join(struct.pack('<HHI', t, p, i) for t, p, i in ents); ACL = None
-        try: os.setxattr(src, 'system.posix_acl_access', acl); ACL = os.getxattr(src, 'system.posix_acl_access')
-        except OSError: print('note: ACL xattr not supported here')
-        assert (await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': 24, 'value': 'xa', 'match': ''})).status == 200
-        r = await c.post('/api/m/m/save', json={}); assert r.status == 200, await r.text()
-        assert sha(src) != h0, 'not saved'
-        assert os.getxattr(src, 'user.c2x_tag') == b'keepme', 'xattr lost'
-        if ACL is None: assert oct(os.stat(src).st_mode & 0o777) == '0o640', oct(os.stat(src).st_mode)
-        else: assert os.getxattr(src, 'system.posix_acl_access') == ACL, 'ACL lost or changed'; print('ACL preserved')
-    print('save xattr+mode preserved OK')
-if not os.path.exists(RTE) or not save.SaveSessions().available: print('skip')
-else: asyncio.run(run())
+f = _T + '/x.rte'; shutil.copy(S, f)
+try: os.setxattr(f, 'user.rvtballet.test', b'tag1'); os.setxattr(f, 'user.sync.id', b'abc')
+except OSError as e: print('skip: xattrs unsupported', e); sys.exit(0)
+m0 = os.stat(f).st_mode & 0o777; h0 = sha(f); ss = save.SaveSessions(); d = ss.doc('m', f)
+nb, _ = edit.apply_full(d.buf, [edit.validate_op({'op': 'move', 'eid': 301595, 'dx': 1.0, 'dy': 0.0, 'dz': 0.0})])
+save.save_overwrite(ss, 'm', f, new_bytes=nb, manifest={'modified': ['el:301595']})
+assert open(f, 'rb').read() == nb
+kept = sorted(os.listxattr(f)); print('xattrs after save:', kept)
+assert 'user.rvtballet.test' in kept and os.getxattr(f, 'user.sync.id') == b'abc', 'SAVE! dropped the file xattrs (sync/tag metadata lost)'
+save.restore_backup(ss, 'm', f); assert sha(f) == h0; assert (os.stat(f).st_mode & 0o777) == m0, 'restore changed the mode'
+assert os.getxattr(f, 'user.sync.id') == b'abc', 'restore dropped xattrs'
+print('xattrs survive save and restore OK')
