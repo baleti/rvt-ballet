@@ -1068,7 +1068,7 @@ def group_warning(ss, mid, buf):
     except Exception as e: return 'could not check whether the edited elements belong to a group or design option (%s): verify the copy in Revit' % e
     if not mem: return None
     e0 = sorted(mem)[0]
-    return 'element %d is part of a group or design option, or is a hosted element being moved (%s): Revit opens such a copy without complaint, but a group member then differs from the other instances of its group type and a moved window/door can end up off its host wall; check the copy in Revit before relying on it' % (e0, '; '.join(mem[e0]))
+    return 'element %d is part of a group or design option, or is a moved element with dependents (hosted doors/windows, dimensions, level-relative elements) (%s): Revit opens such a copy without complaint, but a group member then differs from the other instances of its group type, a moved window/door can end up off its host wall, and dimensions or level-relative elements are not updated; check the copy in Revit before relying on it' % (e0, '; '.join(mem[e0]))
 
 
 def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
@@ -1120,7 +1120,7 @@ def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
         except Exception as e: raise GroupOrOption('overwrite refused: could not check whether the edited elements belong to a group or design option (%s); the file was not touched. Use SAVE AS.' % e)
         if mem:
             e0 = sorted(mem)[0]
-            raise GroupOrOption('overwrite refused: element %d is part of a group or design option, or is a hosted element being moved (%s); such edits can leave an inconsistent model that Revit still opens. Use SAVE AS and check the copy; the file was not touched.' % (e0, '; '.join(mem[e0])))
+            raise GroupOrOption('overwrite refused: element %d is part of a group or design option, or is a moved element with dependents (hosted elements, dimensions, level-relative elements) (%s); such edits can leave an inconsistent model that Revit still opens. Use SAVE AS and check the copy; the file was not touched.' % (e0, '; '.join(mem[e0])))
     new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _refuse_bad_output(new_bytes); _stage(ss, mid, 'verifying and writing')
     lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
     if lc is None and os.environ.get('RVTBALLET_ALLOW_LAYOUT_CHANGE') != '1': raise LayoutChanged('overwrite refused: the page-layout check could not run, so the output is not known to keep the source layout. Use SAVE AS (override: RVTBALLET_ALLOW_LAYOUT_CHANGE=1).')
