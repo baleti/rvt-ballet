@@ -1,4 +1,9 @@
 """No-edit SAVE AS identity on Autodesk 2024 templates (local corpus): output sha256 equals the source, source untouched. YEAR env selects the corpus year (default 2024); years outside the writable set must be refused cleanly (415, nothing written). Skips absent files."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []; _mk = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mk(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, asyncio, tempfile, hashlib, shutil, glob
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ.setdefault('SAVEGATE_CACHE', _T + '/c')
