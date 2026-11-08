@@ -1069,6 +1069,7 @@ def _readback(src_buf, nb, ops):
         if o['eid'] not in b: bad.append('field-edited element %d missing in the output' % o['eid'])
         else:
             x, y = g(a.get(o['eid'])), g(b.get(o['eid'])); ch = [k for k in set(x) | set(y) if x.get(k) != y.get(k) and y.get(k) != o['value']]   # reader aliases (e.g. Type Name) may carry the new name
+            if o.get('pid') is not None and x == y: bad.append('element %d: the edit by parameter id %s is not visible in the reader view of the output, so the written value cannot be verified' % (o['eid'], o['pid']))
             if ch: bad.append('field-edited element %d: parameters changed (%s)' % (o['eid'], ', '.join('%s: %r -> %r' % (k, str(x.get(k))[:20], str(y.get(k))[:20]) for k in sorted(ch))[:200]))
     for o in tg:
         x, y = g(a.get(o['eid'])), g(b.get(o['eid'])); n = o['param']
