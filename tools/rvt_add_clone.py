@@ -25,6 +25,11 @@ import math
 for _n,_v in (('dx',a.dx),('dy',a.dy),('dz',a.dz)):
     if not math.isfinite(_v) or (abs(_v)>1e6 and not os.environ.get('RVTEDIT_ALLOW_FAR')): sys.exit('REFUSED: --%s=%r is not finite or is beyond 1e6 ft (same rule as rvtedit)'%(_n,_v))
 if os.path.realpath(a.seed)==os.path.realpath(a.out): sys.exit('REFUSED: output path equals the input file; ADD writes a copy only (in-place overwrite goes through the savegate path)')
+if not os.environ.get('RVT_ADD_WORKSHARED_FORCE'):      # workshared (central/local) models carry worksets + a central link the writer does not maintain: same rule as the in-place save (save.py Workshared)
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+    from rvtballet.save import worksharing_state
+    _ws = worksharing_state(open(a.seed, 'rb').read())
+    if not (_ws or '').startswith('Not enabled'): sys.exit('REFUSED: Worksharing state of %s is %r (not "Not enabled"): ADD would create elements without worksets / central bookkeeping. RVT_ADD_WORKSHARED_FORCE=1 for experiments' % (os.path.basename(a.seed), _ws))
 if not a.force:
     sys.path.insert(0,os.path.expanduser('~/rvt-research/edit-lab')); sys.path.insert(0,os.path.expanduser('~/rvt-research'))
     import rvtedit
