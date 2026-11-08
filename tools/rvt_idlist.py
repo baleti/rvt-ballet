@@ -6,7 +6,7 @@ def find_lists(a,src,maxn=200000,w=8):
         j=a.find(b,j+1)
         if j<0: break
         # src may be at index idx of list; walk back while ascending ids and check count
-        for idx in range(0,64):
+        for idx in range(0,20000):
             s=j-w*idx
             if s-4<0: break
             n=struct.unpack_from('<I',a,s-4)[0]
