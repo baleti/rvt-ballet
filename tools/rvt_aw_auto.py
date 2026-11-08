@@ -8,6 +8,12 @@ import rvt_geometry as G
 import rvtedit
 src, dst = sys.argv[1], sys.argv[2]; x0, y0, x1, y1 = sys.argv[3:7]
 h = sys.argv[7] if len(sys.argv) > 7 else '10'; year = sys.argv[8] if len(sys.argv) > 8 else '2024'
+import math
+try: _v = [float(x) for x in (x0, y0, x1, y1, h)]
+except ValueError: sys.exit('REFUSED: wall coordinates and height must be numbers')
+if not all(math.isfinite(v) for v in _v) or any(abs(v) > 1e6 for v in _v): sys.exit('REFUSED: non-finite or absurd (> 1e6 ft) wall coordinate/height')
+if math.hypot(_v[2] - _v[0], _v[3] - _v[1]) < 0.01: sys.exit('REFUSED: wall shorter than 0.01 ft (Revit minimum is ~0.0026 ft; zero length is a degenerate wall)')
+if _v[4] <= 0 or _v[4] > 3000: sys.exit('REFUSED: wall height must be in (0, 3000] ft')
 ix = G.file_geometry_index(src)
 walls = sorted(e for e, v in ix.items() if str(v) == 'SWall')
 if not walls: sys.exit('no existing wall to take type/level/phase from')
