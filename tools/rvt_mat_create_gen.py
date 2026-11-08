@@ -14,6 +14,12 @@ def _refuse_crash(t, v, tb):   # only Revit 2024/2026 layouts are verified; any 
 sys.excepthook = _refuse_crash
 if os.path.realpath(seed) == os.path.realpath(out): sys.exit('REFUSED: output path equals the input file; this tool writes a copy only')
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+import re as _re
+sys.path[:0] = [os.path.expanduser('~/rvt-research')]
+import cfb as _cfb
+try: _fy = int(_re.search(r'(20[12]\d)', bytes(_cfb.CFB(open(seed, 'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le', 'ignore')).group(1))
+except Exception: sys.exit('REFUSED: cannot read the Revit version of the file; nothing was written')
+if _fy not in (2024, 2026): sys.exit('REFUSED: material create is only built for Revit 2024/2026 files (this file is %d); nothing was written' % _fy)
 from rvtballet import edit as _ed
 _ed._check_element_name(name)
 import rvt_params, rvt_geometry as _G
