@@ -140,6 +140,7 @@ def compose(ops):
         else: slot[k] = len(out); out.append(dict(o))
     keep = []
     for o in out:
+        if o['op'] == 'move' and max(abs(o['dx']), abs(o['dy']), abs(o['dz'])) > 5e4: raise EditError('the moves of element %d add up beyond 50000 ft; nothing was changed' % o['eid'])
         if o['op'] == 'move' and max(abs(o['dx']), abs(o['dy']), abs(o['dz'])) < 1e-12: continue
         if o['op'] == 'rotate' and abs(math.remainder(o['deg'], 360.0)) < 1e-9: continue
         keep.append(o)
