@@ -15,6 +15,13 @@ except ValueError: sys.exit('REFUSED: wall coordinates and height must be number
 if not all(math.isfinite(v) for v in _v) or any(abs(v) > 1e6 for v in _v): sys.exit('REFUSED: non-finite or absurd (> 1e6 ft) wall coordinate/height')
 if math.hypot(_v[2] - _v[0], _v[3] - _v[1]) < 0.01: sys.exit('REFUSED: wall shorter than 0.01 ft (Revit minimum is ~0.0026 ft; zero length is a degenerate wall)')
 if _v[4] <= 0 or _v[4] > 3000: sys.exit('REFUSED: wall height must be in (0, 3000] ft')
+import cfb, re as _re
+try:      # the writer's wall template is year specific: a wrong year writes a structurally wrong record (c4x-rvtdiff: a 2025 file got the 2024 template and was saved)
+    _bfi = bytes(cfb.CFB(open(src, 'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le', 'ignore')
+    _fy = int(_re.search(r'(20[12]\d)', _bfi).group(1))
+except Exception: sys.exit('REFUSED: cannot read the Revit version of the file (BasicFileInfo); add-wall needs the file year to pick the wall template')
+if _fy != int(year): sys.exit('REFUSED: the file is a Revit %d file but year=%s was requested; the wall template is year specific, nothing written' % (_fy, year))
+if _fy not in (2024, 2026): sys.exit('REFUSED: add-wall has a verified wall template only for 2024 and 2026 (file is %d); nothing written' % _fy)
 ix = G.file_geometry_index(src)
 walls = sorted(e for e, v in ix.items() if str(v) == 'SWall')
 if not walls: sys.exit('no existing wall to take type/level/phase from')
