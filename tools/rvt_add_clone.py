@@ -97,7 +97,7 @@ if not a.nolatest:
         return out
     g.latest_edits=[('Latest',reg)]
 g.itag=T['item'][W+8:W+10]
-_final = a.out; _b, _x = os.path.splitext(os.path.basename(_final)); a.out = os.path.join(os.path.dirname(os.path.abspath(_final)), '.' + _b + '.%d.part' % os.getpid() + _x)      # build beside the target, move into place only after every check passes: a refused/failed build must not destroy a previous output
+_final = os.path.realpath(a.out); _b, _x = os.path.splitext(os.path.basename(_final)); a.out = os.path.join(os.path.dirname(os.path.abspath(_final)), '.' + _b + '.%d.part' % os.getpid() + _x)      # build beside the target, move into place only after every check passes: a refused/failed build must not destroy a previous output
 if os.path.exists(_final) and not os.access(_final, os.W_OK): sys.exit('REFUSED: the output file %s exists and is read-only; it was not overwritten (clear the read-only flag or pick another name)' % os.path.basename(_final))      # c1x-rvtsave 194: a read-only previous output was silently replaced (and made writable)
 import atexit; atexit.register(lambda: os.path.exists(a.out) and os.remove(a.out))
 g.commit(a.out)

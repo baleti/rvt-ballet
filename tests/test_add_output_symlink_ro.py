@@ -9,6 +9,7 @@ def run(out): return subprocess.run([sys.executable, TOOL, F, out, '--src', '512
 with tempfile.TemporaryDirectory() as d:
     tgt = d + '/target.rvt'; open(tgt, 'wb').write(OLD); lnk = d + '/o.rvt'; os.symlink(tgt, lnk)
     r = run(lnk); data = open(lnk, 'rb').read()
+    assert r.returncode == 0 and os.path.islink(lnk) and os.path.getsize(tgt) > 1000000 and open(tgt, 'rb').read() == data, 'ADD must write through a symlink output (link kept, target updated)'
     print('symlink: rc', r.returncode, 'link kept', os.path.islink(lnk), 'target size', os.path.getsize(tgt), 'out size', len(data))
     if r.returncode == 0: assert len(data) > 1000000 and data[:8] == bytes.fromhex('d0cf11e0a1b11ae1'), 'success but output not a CFB file'
     else: assert open(tgt, 'rb').read() == OLD, 'refused but target changed'
