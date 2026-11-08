@@ -65,9 +65,13 @@ def _positional():
             hs = sorted(int(i) for i in rvt_scan.header_candidates_tagged(ma.parts[pn]['joined'], ma.idarr, W, ma.etags))
             ids = {int.from_bytes(ma.parts[pn]['joined'][i + 4:i + 4 + W], 'little'): i for i in hs}
             if a.target not in ids: return None
-            o = ids[a.target]; nx = min([h for h in hs if h > o] or [len(x)])
-            out = diff[(diff < o) | (diff >= nx)]
-            if len(out): return (False, tot, '%d differing bytes outside the target record [%d,%d) in %s, first at %d' % (len(out), o, nx, pn, out[0]))
+            spans = []
+            for t in ok:
+                if t in ids: o = ids[t]; spans.append((o, min([h for h in hs if h > o] or [len(x)])))
+            inside = np.zeros(len(diff), bool)
+            for o, nx in spans: inside |= (diff >= o) & (diff < nx)
+            out = diff[~inside]
+            if len(out): return (False, tot, '%d differing bytes outside the target/allowed records %s in %s, first at %d' % (len(out), spans[:3], pn, out[0]))
         return (True, tot, '')
     except Exception: return None
 if not a.delete and not bad:
