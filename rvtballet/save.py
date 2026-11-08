@@ -1244,11 +1244,20 @@ def _refuse_dim_moves(buf, ops):
             if cl == 'LinearDimString': raise EditError('element %d is a dimension: Revit does not honour a moved dimension record, so the move is refused' % o['eid'])
 
 
+def _refuse_edit_of_deleted(prior, new_ops):
+    """an edit on an element that an earlier queued op deletes can never take effect (the delete wins); accepting it would report success for an edit that is silently dropped"""
+    from .edit import EditError
+    gone = {o.get('eid') for o in prior if o.get('op') == 'delete'}
+    for o in new_ops:
+        if o.get('op') != 'delete' and o.get('eid') in gone: raise EditError('element %s is already queued for deletion: edit it before deleting it, or undo the delete first; nothing was recorded' % o.get('eid'))
+        if o.get('op') == 'delete': gone.add(o.get('eid'))
+
+
 def add_edit(ss, mid, src, op):
     """record an edit after a trial replay on the loaded bytes (so an op the writer cannot apply is refused now, not at save time)"""
     from .edit import apply_full, validate_op
     op = validate_op(op)
-    try: d = ss.doc(mid, src); _refuse_dim_moves(d.buf, [op]); e = ss.edits(mid); _, deleted = apply_full(d.buf, e.ops + [op])
+    try: d = ss.doc(mid, src); _refuse_dim_moves(d.buf, [op]); e = ss.edits(mid); _refuse_edit_of_deleted(e.ops, [op]); _, deleted = apply_full(d.buf, e.ops + [op])
     except ValueError as ex:      # the reader's own refusal of a damaged file ('file truncated: ...'): a clean 409, not a bare 500
         if 'truncated' in str(ex).lower() or 'corrupt' in str(ex).lower(): raise SourceDamaged('the model file is damaged (%s); nothing was written' % str(ex)[:160])
         raise
@@ -1260,7 +1269,7 @@ def add_edits(ss, mid, src, ops):
     """record several edits after ONE trial replay of the whole list (add_edit replays everything per call: about 20 s each on a 28 MB model). All or none: a refusal of any op leaves the recorded edits as they were."""
     from .edit import apply_full, validate_op
     ops = [validate_op(o) for o in ops]
-    try: d = ss.doc(mid, src); _refuse_dim_moves(d.buf, ops); e = ss.edits(mid); _, deleted = apply_full(d.buf, e.ops + ops)
+    try: d = ss.doc(mid, src); _refuse_dim_moves(d.buf, ops); e = ss.edits(mid); _refuse_edit_of_deleted(e.ops, ops); _, deleted = apply_full(d.buf, e.ops + ops)
     except ValueError as ex:
         if 'truncated' in str(ex).lower() or 'corrupt' in str(ex).lower(): raise SourceDamaged('the model file is damaged (%s); nothing was written' % str(ex)[:160])
         raise
