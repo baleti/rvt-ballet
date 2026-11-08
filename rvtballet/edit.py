@@ -530,7 +530,7 @@ def _set_string_by_pid(ed, o):
     raise KeyError('string parameter %d not stored on %d' % (pid, o['eid']))
 
 
-UNIQUE_CLASS = __import__('re').compile(r'(Tracker|Settings?(Elem|Element)?|Table|Manager|Navigator|Library|Cache|Lock)$|^AllProject|^ProjectInfo|^Units')      # singleton-style classes; evidence: AllProjectRevisions delete -> Revit repair dialog (c7x-rvtmatrix, 2024 VM)
+UNIQUE_CLASS = __import__('re').compile(r'(Tracker|Tracking(Elem|Element)?|Settings?(Elem|Element)?|Table|Manager|Navigator|Library|Cache|Lock)$|^AllProject|^ProjectInfo|^Units')      # singleton-style classes; evidence: AllProjectRevisions delete -> Revit repair dialog (c7x-rvtmatrix, 2024 VM)
 
 
 MOVE_VM_VERIFIED = {'FamilyInstance', 'TextNote', 'Level', 'Grid'}      # classes whose move was opened in the Revit VM with a matching API readback (ledger rung 1); anything else with an origin field (groups, stairs, imports, masses ...) would move without its dependents: refused (opt-out for experiments RVTBALLET_MOVE_ANY=1)
