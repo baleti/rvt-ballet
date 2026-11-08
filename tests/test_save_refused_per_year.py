@@ -1,4 +1,10 @@
 """In-place SAVE! (overwrite gate wide open) on the smallest local corpus file of every Revit year 2017-2026: unsupported years give a non-200 with the 'writable years' message and the file stays byte-identical with no temp/lock leftovers; supported years with no edit stay byte-identical too. Skips years absent."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, asyncio, tempfile, hashlib, shutil, json
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'
 os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; os.environ['RVTBALLET_SNAPSHOT_CACHE'] = '0'

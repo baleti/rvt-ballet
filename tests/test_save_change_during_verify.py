@@ -1,5 +1,11 @@
 """c6x-rvtwrite items 24+25: (a) the source is changed by a foreign writer WHILE SAVE! is verifying (after the first check, before the rename): same-size flip with mtime restored, a size-changing append, and a byte change with new mtime. SAVE! must refuse (Conflict), keep the foreign bytes, leave no temp/backup debris.
 (b) Revit worksharing/backup sidecars (s.0001.rvt, s.rvt.lock, s.0001.rte) sit beside the file: SAVE! succeeds and the sidecars stay byte-identical."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, tempfile, shutil, hashlib
 _T = tempfile.mkdtemp(dir=os.environ.get('TMPDIR')); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)

@@ -1,4 +1,10 @@
 """Hosted elements: membership() reports 'hosted on N' for a real window (Autodesk 2024 Facades sample, 593207 on wall 593206); an in-place MOVE of it is refused (group_or_option code), an in-place parameter edit of it is not blocked by this check; a leaf element is not flagged. Revit evidence: a +2 ft move leaves the window 0.21875 ft off its wall line (readback), while Revit opens and regenerates the copy without complaint."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, asyncio, tempfile, shutil, hashlib, json
 T = tempfile.mkdtemp(dir=os.environ.get('TMPDIR')); os.environ['SAVEGATE_JOURNAL'] = T + '/j'; os.environ['SAVEGATE_CACHE'] = T + '/c'; os.environ['RVTBALLET_SNAPSHOT_CACHE'] = T + '/snap'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'
 json.dump({'rvt': {'2024': 'open'}}, open(T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = T + '/gate.json'

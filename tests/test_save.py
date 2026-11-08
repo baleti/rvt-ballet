@@ -1,4 +1,10 @@
 """rvtballet.save: import-optional, fingerprint at open, doc cached per model id."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, tempfile, hashlib
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from rvtballet import save

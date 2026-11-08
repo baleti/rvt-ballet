@@ -1,4 +1,10 @@
 """disk memo of the reader params (rvt_params.params) per source sha256 + reader stamp: second process-fresh call is equal and faster; damaged file / other stamp / SNAPSHOT_CACHE=0 = miss."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, tempfile, time, glob, hashlib
 _T = tempfile.mkdtemp(); os.environ['RVTBALLET_SNAPSHOT_CACHE'] = _T + '/snap'
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))

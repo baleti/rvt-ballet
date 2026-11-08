@@ -1,6 +1,12 @@
 """Corruption AFTER the in-memory verification (c7x-rvtmatrix): the savegate temp-file writer is wrapped so the bytes that reach the disk differ from the verified result
 (flip middle byte, flip tail byte, truncate 1, 4 KB of zeros). SAVE AS and SAVE! with a real edit and with identity. Invariant: every case refused, source bytes untouched,
 SAVE AS target absent. Without the read-back check in savegate this would be accepted (the wrapper sanity case with no corruption must succeed)."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, tempfile, shutil, hashlib
 _T = tempfile.mkdtemp(dir=os.environ.get('TMPDIR')); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)

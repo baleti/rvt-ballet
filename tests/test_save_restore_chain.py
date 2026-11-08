@@ -1,4 +1,10 @@
 """(restore chain) Three in-place SAVE!s in a row (each from a fresh load of the previous result); then RESTORE n=0..2 must each give exactly the bytes that existed before save (3-n)... i.e. every historic version is recoverable byte-exact, newest first."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, shutil, hashlib, tempfile
 T = tempfile.mkdtemp(dir=os.environ.get('TMPDIR'))
 os.environ['SAVEGATE_JOURNAL'] = T + '/j'; os.environ['SAVEGATE_CACHE'] = T + '/c'; os.environ['RVTBALLET_SNAPSHOT_CACHE'] = T + '/snap'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; os.environ['RVTBALLET_ALLOW_LAYOUT_CHANGE'] = '1'

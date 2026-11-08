@@ -1,4 +1,10 @@
 """(item 37) same as test_save_inplace_identity but the SAVEGATE_JOURNAL directory is read-only (POSIX non-root): the save either succeeds or is refused with a JSON error (never a 5xx stack trace, never a changed/damaged source, no temp left). Original doc: In-place SAVE (overwrite gate open, temp gate file) of an UNEDITED Autodesk 2024 sample: file byte-identical afterwards, a backup holding the original exists, no temp files left."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, asyncio, tempfile, hashlib, shutil, json
 _T = tempfile.mkdtemp(); os.makedirs(_T + '/j'); os.chmod(_T + '/j', 0o555); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'
 os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; json.dump({'rvt': {'2024': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'

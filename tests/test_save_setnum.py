@@ -1,5 +1,11 @@
 """set_num (rvtedit backend): numeric parameter edit by NAME on a Floor -> SAVE AS verify clean (only the edited element declared), re-convert: exactly one parameter row differs
 (Height Offset From Level 0.0 -> 1.0); element that does not store the parameter -> 400; wledit backend refuses set_num."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, asyncio, tempfile, shutil, subprocess, sqlite3, hashlib
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)

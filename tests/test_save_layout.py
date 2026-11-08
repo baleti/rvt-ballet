@@ -4,6 +4,12 @@ Second-generation edit (editing a file the writer already rewrote) re-pages the 
 Revit-written original keeps the layout: no warning. The gen-1 file is produced here by the viewer itself.
 VM VERDICT (2026-11-02, c4x-rvtmatrix items 23/24, CORRECTED): a layout-changed in-place output (move, 2024 cols2 and 2026 anno1 scenes, override on) OPENS in Revit 2024/2026 offline VM (revit_open=True cmp 0/0, no dialogs) when the file keeps its .rte extension. An earlier "rejected" verdict was a test artifact (these scenes are templates; renamed .rvt Revit says not a valid .rvt, unedited controls too). Refusal stays default because the layout is not otherwise proven.
 """
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, asyncio, tempfile, hashlib, shutil, json
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'
 os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; json.dump({'rvt': {'2024': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'

@@ -1,5 +1,11 @@
 """c7x-rvtmatrix: SAVE! and SAVE AS on file names a real office has: spaces, unicode (umlaut, CJK), leading dot, '#', '&', '%', quotes, 200-char name, name with two dots and no .rvt case.
 Invariant: accepted with the right bytes and a working backup restore, or refused with the source intact; never a stray file with a mangled name."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, tempfile, shutil, hashlib
 _T = tempfile.mkdtemp(dir=os.environ.get('TMPDIR')); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)

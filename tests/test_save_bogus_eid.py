@@ -1,5 +1,11 @@
 """Edit ops with element ids that cannot exist (negative, zero, 2**31, 2**63, 2**200) on an Autodesk 2024 template: each is either refused at /edit or,
 if queued, SAVE AS refuses; never a 500/raw exception, nothing written, source untouched."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, asyncio, tempfile, hashlib, json
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'
 os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'

@@ -1,4 +1,10 @@
 """c7x-rvtread 119: change_type and set_type_num through the real server + savegate gate (HVAC 2024 sample, new rules: frozen streams, ElemTable/Latest ids, gzip CRC): both SAVE AS must be accepted (200, output same size). Run: python3 tests/test_save_fullpath_typeops.py (slow, ~10 min)"""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, asyncio, tempfile, shutil, hashlib
 _T = tempfile.mkdtemp(); os.environ.update(SAVEGATE_JOURNAL=_T+'/j', SAVEGATE_CACHE=_T+'/c', RVTBALLET_EDIT_BACKEND='rvtedit', RVTBALLET_ENABLE_CHANGETYPE='1', RVTBALLET_ENABLE_TYPEPARAM='1')
 sys.path.insert(0, os.path.expanduser('~/src/rvt-viewer'))

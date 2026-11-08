@@ -1,6 +1,12 @@
 """In-place move of an SWall (Autodesk Structural 2024 sample, local copy) is refused by the savegate span rule
 (the wall move touches ~74 small runs over ~56 KB, the rule allows 2048 B for one move): 409/422 refusal, source sha unchanged, no temp leftovers.
 With RVTBALLET_SPAN_RULE=0 the same save is accepted (experiment only, not Revit-VM judged here). Skipped when the sample is absent."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, asyncio, tempfile, shutil, json, hashlib
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; os.environ['RVTBALLET_SNAPSHOT_CACHE'] = '0'

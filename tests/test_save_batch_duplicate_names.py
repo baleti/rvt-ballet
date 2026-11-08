@@ -1,4 +1,10 @@
 """c5x-rvtread: two Level renames onto one name in a single in-place save: refused, original byte-identical (Autodesk 2024 template; skips when absent)."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, tempfile, hashlib, shutil, json
 _T = tempfile.mkdtemp(); sys.path.insert(0, os.path.expanduser('~/src/rvt-viewer'))
 SRC = os.path.expanduser('~/rvtfix/corpus/2024/71_Construction-DefaultMetric.rte')

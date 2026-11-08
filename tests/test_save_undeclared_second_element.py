@@ -1,4 +1,10 @@
 """c2x-rvtmatrix item 5: the writer (edit.apply_full) leaks an UNDECLARED change into a second element (the way name-edit cascades leaked on SWall/Level/DBView): SAVE AS and SAVE! must both refuse (VerifyFailed -> 4xx), the source stays byte-identical and no output file appears. Control: the honest writer saves."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, asyncio, tempfile, shutil, hashlib, json
 _T = tempfile.mkdtemp(); os.environ.update(SAVEGATE_JOURNAL=_T + '/j', SAVEGATE_CACHE=_T + '/c', RVTBALLET_EDIT_BACKEND='rvtedit', RVTBALLET_ALLOW_OVERWRITE='1', SAVEGATE_GATE=_T + '/gate.json')
 json.dump({'rvt': {str(y): 'open' for y in range(2015, 2030)}}, open(_T + '/gate.json', 'w'))

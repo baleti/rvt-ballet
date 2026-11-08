@@ -1,5 +1,11 @@
 """in-place save of a WRITABLE file inside a directory that is not writable (chmod 555; atomic temp+rename impossible): must be refused (not 200, not a 500 traceback), source bytes unchanged, no temp leftovers; after chmod 755 the save works. Related: test_save_readonly (file flag). Original doc: overwrite of a source file that carries the read-only flag (chmod 444): refused up front with 409 code 'read_only' and the message that names the read-only state (it used to surface as a generic 500 'error'),
 source bytes unchanged, no temp leftovers; after clearing the flag the same save works."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, asyncio, tempfile, shutil, json, hashlib
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; json.dump({'rvt': {'2024': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'

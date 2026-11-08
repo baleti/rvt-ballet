@@ -1,6 +1,12 @@
 """string parameter edited by NAME (rvtedit backend): element 24 stores >= 8 string parameters that are all empty (Keynote, Model, Manufacturer, Comments, URL, Description x2, Mark...).
 Editing 'Comments' changes exactly the Comments row (Keynote stays empty: the old edit-by-text would have hit the first empty one); an ambiguous name ('Description', two ids on the element)
 is refused with 400; SAVE AS verify clean; wledit backend refuses name-addressed edits."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, asyncio, tempfile, shutil, subprocess, sqlite3
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)

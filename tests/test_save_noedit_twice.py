@@ -1,4 +1,10 @@
 """(save with no edit, twice) In-place SAVE! through the API with NO pending edit, twice in a row: each answers cleanly (200 or a refusal), the file stays a valid unchanged model (bytes equal to the original or only equal-semantics), and no backup chain pollution beyond one per accepted save."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, shutil, hashlib, tempfile, json, asyncio
 T = tempfile.mkdtemp(dir=os.environ.get('TMPDIR'))
 os.environ['SAVEGATE_JOURNAL'] = T + '/j'; os.environ['SAVEGATE_CACHE'] = T + '/c'; os.environ['RVTBALLET_SNAPSHOT_CACHE'] = '0'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'

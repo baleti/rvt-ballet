@@ -1,4 +1,10 @@
 """In-place SAVE! when writes fail part-way (RLIMIT_FSIZE below the file size, the same error path as a full disk): refused with a disk error, original byte-identical, no temp file, no partial backup left that RESTORE would take for a good one."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mkd0 = _tf.mkdtemp
+def _mkd(*a, **k):
+    d = _mkd0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, shutil, hashlib, tempfile, signal, resource
 base = tempfile.mkdtemp(dir=os.environ.get('TMPDIR'))
 os.environ['SAVEGATE_JOURNAL'] = base + '/j'; os.environ['SAVEGATE_CACHE'] = base + '/c'; os.environ['RVTBALLET_SNAPSHOT_CACHE'] = base + '/snap'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; os.environ['RVTBALLET_ALLOW_LAYOUT_CHANGE'] = '1'
