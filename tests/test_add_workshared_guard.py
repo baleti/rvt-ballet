@@ -2,6 +2,7 @@
 (no workshared Autodesk sample is on disk). Needs the 2020 rst_basic corpus file; fails without the guard (the tool builds the output)."""
 import os, sys, subprocess, tempfile, unittest
 F = os.path.expanduser('~/rvt-research/corpus/2020/18_rst_basic_sample_project.rvt')
+F24 = os.path.expanduser('~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt')
 TOOL = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'tools', 'rvt_add_clone.py')
 WRAP = "import sys,runpy; sys.path.insert(0,%r); import rvtballet.save as s; s.worksharing_state=lambda b: %r; sys.argv=[%r]+sys.argv[1:]; runpy.run_path(%r, run_name='__main__')"
 
@@ -16,4 +17,10 @@ class Workshared(unittest.TestCase):
         r, out = self.run_with('Central'); self.assertNotEqual(r.returncode, 0); self.assertIn('Worksharing', r.stdout + r.stderr); self.assertFalse(os.path.exists(out))
     def test_unreadable_refused(self):
         r, out = self.run_with(None); self.assertNotEqual(r.returncode, 0); self.assertFalse(os.path.exists(out))
+
+    def test_aw_auto_central_refused(self):
+        tool = os.path.join(os.path.dirname(TOOL), 'rvt_aw_auto.py'); d = tempfile.mkdtemp(); out = os.path.join(d, 'o.rvt')
+        code = WRAP % (os.path.join(os.path.dirname(TOOL), '..'), 'Central', tool, tool)
+        r = subprocess.run([sys.executable, '-c', code, F24, out, '0', '0', '10', '0', '10', '2024'], capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0); self.assertIn('Worksharing', r.stdout + r.stderr); self.assertFalse(os.path.exists(out))
 if __name__ == '__main__': unittest.main()

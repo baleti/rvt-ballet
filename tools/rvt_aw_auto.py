@@ -22,6 +22,11 @@ try:      # the writer's wall template is year specific: a wrong year writes a s
 except Exception: sys.exit('REFUSED: cannot read the Revit version of the file (BasicFileInfo); add-wall needs the file year to pick the wall template')
 if _fy != int(year): sys.exit('REFUSED: the file is a Revit %d file but year=%s was requested; the wall template is year specific, nothing written' % (_fy, year))
 if _fy not in (2024, 2026): sys.exit('REFUSED: add-wall has a verified wall template only for 2024 and 2026 (file is %d); nothing written' % _fy)
+if not os.environ.get('RVT_ADD_WORKSHARED_FORCE'):      # workshared models carry worksets + central link the writer does not maintain (same rule as rvt_add_clone and the in-place save)
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+    from rvtballet.save import worksharing_state
+    _ws = worksharing_state(open(src, 'rb').read())
+    if not (_ws or '').startswith('Not enabled'): sys.exit('REFUSED: Worksharing state is %r (not "Not enabled"): add-wall would create an element without worksets; nothing written' % (_ws,))
 ix = G.file_geometry_index(src)
 walls = sorted(e for e, v in ix.items() if str(v) == 'SWall')
 if not walls: sys.exit('no existing wall to take type/level/phase from')
