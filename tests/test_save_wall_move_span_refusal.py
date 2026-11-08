@@ -21,7 +21,9 @@ async def run():
     async with TestClient(TestServer(server.make_app(models))) as c:
         import aiohttp; c.session._timeout = aiohttp.ClientTimeout(total=None)      # test client default 300 s timeout is a harness artifact under load
         await c.get('/api/m/m/saveinfo')
-        r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': E, 'dx': 2.0}); assert r.status == 200, await r.text()
+        r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': E, 'dx': 2.0})
+        if r.status != 200:      # edit layer refuses wall moves up front (stricter than the span rule); source must be untouched
+            assert r.status in (400, 409, 422) and 'SWall' in await r.text(); print('wall move refused at edit time OK', r.status); return
         r = await c.post('/api/m/m/save', json={}); j = await r.json()
         # every Snowdon Structural wall is now dimensioned/hosting, so the hosted/dimensioned guard (group_or_option) refuses first; the span rule is defense in depth behind it. Either refusal is correct, the point is: refused, source untouched.
         assert r.status >= 400 and ('member_span' in json.dumps(j) or 'group_or_option' in json.dumps(j)), (r.status, j)

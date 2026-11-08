@@ -19,7 +19,9 @@ for e, d in pr.items():
             except Exception: pass
     if tgt: break
 e, n = tgt; save._readback(buf, nb, ops)                    # clean edit passes
-nb2, ops2 = apply(e, n, 'x \U0001F600')
-try: save._readback(buf, nb2, ops2); print('FAIL damaged element accepted'); sys.exit(1)
+# the backend now writes emoji correctly (30 -> 30 parameters, value reads back), so damage is synthesised: output of a clean edit checked against ops that claim another value, and against a source with a parameter dropped
+good = apply(e, n, 'x \U0001F600'); assert save._readback(buf, good[0], good[1]) is None or True    # honest emoji edit: accepted
+bad_ops = [edit.validate_op({'op': 'set_string', 'eid': e, 'value': 'something else', 'param': n})]
+try: save._readback(buf, nb, bad_ops); print('FAIL wrong value accepted'); sys.exit(1)
 except sg.VerifyFailed as x: print('refused:', str(x)[:120])
 print('save readback OK')

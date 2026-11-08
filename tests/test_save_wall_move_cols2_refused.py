@@ -15,7 +15,9 @@ S = os.path.expanduser('~/rvt-research/write-lab/scenes/classtests/2024_writer_c
 if not os.path.exists(S) or not save.SaveSessions().available: print('skip'); sys.exit(0)
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 f = _T + '/w.rte'; shutil.copy(S, f); h0 = sha(f); ss = save.SaveSessions(); d = ss.doc('m', f)
-nb, _ = edit.apply_full(d.buf, [edit.validate_op({'op': 'move', 'eid': 301553, 'dx': 2.0, 'dy': 0.0})])
+try: nb, _ = edit.apply_full(d.buf, [edit.validate_op({'op': 'move', 'eid': 301553, 'dx': 2.0, 'dy': 0.0})])
+except edit.EditError as x:      # the edit layer now refuses wall moves up front (stricter than the gate): source must be untouched
+    assert sha(f) == h0; print('wall move cols2 refused at edit time OK:', str(x)[:80]); raise SystemExit(0)
 try:
     save.save_overwrite(ss, 'm', f, new_bytes=nb, manifest={'modified': ['el:301553']}); raise SystemExit('ACCEPTED a wall move that does not move the location line')
 except SystemExit: raise
