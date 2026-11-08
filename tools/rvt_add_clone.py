@@ -25,6 +25,15 @@ import rvt_idlist as idlist
 ap=argparse.ArgumentParser(); ap.add_argument('seed'); ap.add_argument('out'); ap.add_argument('--src',type=int,required=True)
 ap.add_argument('--dx',type=float,default=3.0); ap.add_argument('--dy',type=float,default=4.0); ap.add_argument('--dz',type=float,default=0.0); ap.add_argument('--nolatest',action='store_true'); ap.add_argument('--force',action='store_true',help='skip the dependents screen (instances that own children corrupt the model when copied)')
 a=ap.parse_args()
+if not os.environ.get('RVT_ADD_DAMAGED_FORCE'):      # a damaged input (bad gzip member / ECC page) was silently cloned into an 'ok' output (64 flipped bytes, 3 of 3 positions); refuse before building
+    import rvt_scan as _S, rvt2text as _T, rvt_entities as _E
+    _o = _S.load(a.seed)[0]; _bad = {}
+    for _pn in ['/'.join(e) for e in _o.listdir(streams=True)]:
+        if _pn.startswith('Partitions/'):
+            _n = _T.damaged_members(_o.openstream(_pn).read())
+            if _n: _bad[_pn] = _n
+    _ecc = _E.ecc_bad_pages(_o)
+    if _bad or _ecc: sys.exit('REFUSED: input file is damaged (gzip members %s, ECC-bad pages %d); a clone of it would carry the damage; nothing written' % (_bad, len(_ecc)))
 import math
 for _n,_v in (('dx',a.dx),('dy',a.dy),('dz',a.dz)):
     if not math.isfinite(_v) or (abs(_v)>1e6 and not os.environ.get('RVTEDIT_ALLOW_FAR')): sys.exit('REFUSED: --%s=%r is not finite or is beyond 1e6 ft (same rule as rvtedit)'%(_n,_v))
