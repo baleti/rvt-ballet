@@ -50,5 +50,29 @@ if not a.delete and a.target not in ch: bad.append('UNVERIFIED: target not seen 
 if not a.delete:
     for pn, d in rep['joined'].items():
         if d['len_old'] != d['len_new']: bad.append('%s length %d -> %d' % (pn, d['len_old'], d['len_new']))
+def _positional():
+    """equal-length partitions: byte-by-byte compare (exact, unlike the alignment diff) and require every differing byte inside the target's record span; returns (ok, n_diff_bytes, msg) or None"""
+    try:
+        import numpy as np
+        sys.path.insert(0, os.path.expanduser('~/rvt-research/edit-lab')); sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab')); sys.path.insert(0, os.path.expanduser('~/rvt-research'))
+        import rvtedit, rvt_scan
+        ea, eb = rvtedit.Edit(a.src), rvtedit.Edit(a.out); ma, mb = ea.g.e.m, eb.g.e.m; W = ea.g.W; tot = 0
+        for pn, d in rep['joined'].items():
+            if d['len_old'] != d['len_new']: return None
+            x = np.frombuffer(ma.parts[pn]['joined'], np.uint8); y = np.frombuffer(mb.parts[pn]['joined'], np.uint8)
+            diff = np.nonzero(x != y)[0]; tot += len(diff)
+            if not len(diff): continue
+            hs = sorted(int(i) for i in rvt_scan.header_candidates_tagged(ma.parts[pn]['joined'], ma.idarr, W, ma.etags))
+            ids = {int.from_bytes(ma.parts[pn]['joined'][i + 4:i + 4 + W], 'little'): i for i in hs}
+            if a.target not in ids: return None
+            o = ids[a.target]; nx = min([h for h in hs if h > o] or [len(x)])
+            out = diff[(diff < o) | (diff >= nx)]
+            if len(out): return (False, tot, '%d differing bytes outside the target record [%d,%d) in %s, first at %d' % (len(out), o, nx, pn, out[0]))
+        return (True, tot, '')
+    except Exception: return None
+if not a.delete and not bad:
+    _pc = _positional()
+    if _pc and not _pc[0]: bad.append(_pc[2])
+    elif _pc: print('positional: %d differing bytes, all inside the target record' % _pc[1])
 print('STRAY' if bad else 'CLEAN', '; '.join(bad[:6]) or 'target-only (%d changed, %d walker-artifact ids ignored, %d runs)' % (len(ch), art_added, sum(d['n_runs'] for d in rep['joined'].values())))
 sys.exit(1 if bad else 0)
