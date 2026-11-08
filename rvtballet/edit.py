@@ -167,10 +167,28 @@ def last_dirty_members():
     return None if d is None else {k: sorted(v) for k, v in d.items()}
 
 
+def _sweep_stale_edit_dirs(max_age=6 * 3600):
+    """a SIGKILL/power loss in the middle of an edit leaves rvtballet-edit-* (a full copy of the user's model) in the temp dir; remove our own such dirs older than max_age (an edit takes minutes)"""
+    import time, shutil
+    td = tempfile.gettempdir(); now = time.time()
+    try: names = os.listdir(td)
+    except OSError: return 0
+    n = 0
+    for nm in names:
+        if not nm.startswith('rvtballet-edit-'): continue
+        p = os.path.join(td, nm)
+        try:
+            st = os.lstat(p)
+            if os.path.isdir(p) and not os.path.islink(p) and st.st_uid == os.getuid() and now - st.st_mtime > max_age: shutil.rmtree(p, ignore_errors=True); n += 1
+        except OSError: pass
+    return n
+
+
 def apply_full(buf, ops):
     """replay ops on bytes -> new bytes (the source bytes are never modified). Backend: env RVTBALLET_EDIT_BACKEND = wledit (default) | rvtedit"""
     ops = compose(ops); _DIRTY.d = {}
     if not ops: return buf, []
+    _sweep_stale_edit_dirs()
     d = tempfile.mkdtemp(prefix='rvtballet-edit-'); a = os.path.join(d, 'in.rvt'); b = os.path.join(d, 'out.rvt')
     try:
         with open(a, 'wb') as f: f.write(buf)
