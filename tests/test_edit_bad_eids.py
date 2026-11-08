@@ -12,4 +12,12 @@ for eid in (0, -1, 99999999, 2**31, 2**63, 'x', None, 1.5):
         try: edit.apply_full(buf, [edit.validate_op(dict(o, eid=eid))])
         except edit.EditError: n += 1; continue
         raise SystemExit('FAIL accepted %r on eid=%r' % (o['op'], eid))
+# real ids of the wrong kind: FamilySymbol 19014, SWall 301553, SketchPlane 301565, Viewer 5500, Viewport 5501, CategoryElem 142100, FontElem 142099
+m = 0
+for eid in (19014, 301565, 5500, 5501, 142100, 142099, 75944):
+    for o in ({'op': 'move', 'dx': 1.0}, {'op': 'rotate', 'deg': 10.0}, {'op': 'delete'}):
+        try: out, _ = edit.apply_full(buf, [edit.validate_op(dict(o, eid=eid))])
+        except edit.EditError: m += 1; continue
+        raise SystemExit('FAIL accepted %s on wrong-kind eid %d' % (o['op'], eid))
+print('wrong-kind refused:', m)
 print('OK: %d ops on bad ids refused with EditError' % n)
