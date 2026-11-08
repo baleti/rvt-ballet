@@ -1,4 +1,10 @@
 """duplicate-type generator refuses duplicate/invalid names and non-types, writes nothing (Autodesk HVAC sample derived file; skips if absent)."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mk0 = _tf.mkdtemp
+def _mk(*a, **k):
+    d = _mk0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mk; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, subprocess, sys, tempfile
 SEED = os.path.expanduser('~/c5x-rm/dup/dup_out.rvt')   # HVAC 2024 sample with type 1542917 'C5XDUP' already added
 if not os.path.exists(SEED): print('skip: seed absent'); sys.exit(0)

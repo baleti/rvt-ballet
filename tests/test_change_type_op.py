@@ -1,5 +1,11 @@
 """c5x-rvtmatrix RVT-EDIT rung 4: change_type op (FamilyInstance -> another FamilySymbol of the SAME family) on the Autodesk 2024 Snowdon HVAC sample.
 Checks: applied (same size, reader Type Id = new type, exactly one element's reader params differ), and refusals (other family, not an instance, same type, op disabled by default). Skipped if the sample is absent."""
+import atexit, shutil as _sh, tempfile as _tf
+_made = []
+_mk0 = _tf.mkdtemp
+def _mk(*a, **k):
+    d = _mk0(*a, **k); _made.append(d); return d
+_tf.mkdtemp = _mk; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, tempfile
 os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
