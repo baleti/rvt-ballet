@@ -3,7 +3,7 @@ Forbidden: accepted and output differs from input (writer silently 'repaired' or
 import os, sys, tempfile, shutil, hashlib, random
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-RTE = os.path.expanduser('~/rvt-research/write-lab/scenes/classtests/2024_writer_cols2.rte')
+RTE = os.path.expanduser(os.environ.get('FLIP_SRC', '~/rvt-research/write-lab/scenes/classtests/2024_writer_cols2.rte'))
 N = int(os.environ.get('BITFLIPS', '12'))
 from rvtballet import save
 save._import()
