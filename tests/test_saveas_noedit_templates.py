@@ -8,16 +8,16 @@ async def run(files):
     from aiohttp.test_utils import TestClient, TestServer
     bad = 0
     for f in files:
-        tmp = tempfile.mkdtemp(); src = tmp + '/a.rte'; shutil.copy(f, src); h0 = sha(src); md = tmp + '/m'; os.makedirs(md)
+        tmp = tempfile.mkdtemp(); src = tmp + '/a' + os.path.splitext(f)[1]; shutil.copy(f, src); h0 = sha(src); md = tmp + '/m'; os.makedirs(md)
         models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
         async with TestClient(TestServer(server.make_app(models))) as c:
             import aiohttp; c.session._timeout = aiohttp.ClientTimeout(total=None)
-            await c.get('/api/m/m/saveinfo'); d = tmp + '/b.rte'; r = await c.post('/api/m/m/saveas', json={'dest': d}); t = await r.text()
+            await c.get('/api/m/m/saveinfo'); d = tmp + '/b' + os.path.splitext(f)[1]; r = await c.post('/api/m/m/saveas', json={'dest': d}); t = await r.text()
             if r.status == 415 and 'unsupported_version' in t and sha(src) == h0 and not os.path.exists(d): print(os.path.basename(f)[:3], 'refused cleanly (year not writable), source untouched', flush=True); continue
             ok = r.status == 200 and os.path.exists(d) and sha(d) == h0 and sha(src) == h0
             print(os.path.basename(f)[:3], r.status, 'identical' if ok else 'DIFF ' + t[:120], flush=True); bad += not ok
     assert not bad, bad
     print('no-edit SAVE AS identity OK on', len(files))
-fs = sorted(glob.glob(os.path.expanduser('~/rvt-research/corpus/' + os.environ.get('YEAR', '2024') + '/*.rte')))
+fs = sorted(glob.glob(os.path.expanduser(os.environ.get('GLOB') or ('~/rvt-research/corpus/' + os.environ.get('YEAR', '2024') + '/*.rte'))))
 if not fs or not save.SaveSessions().available: print('skip')
 else: asyncio.run(run(fs))
