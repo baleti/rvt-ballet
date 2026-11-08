@@ -1,6 +1,10 @@
 """rvt-ballet ADD (clone-and-patch): clone an existing FamilyInstance (--src) in a project, new id, moved by dx,dy,dz; Latest id-lists containing src get the new id.
 Text notes etc: pass --nolatest."""
 import sys,struct,os,argparse; sys.path.insert(0,'~/rvt-research/write-lab'); sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
+def _refuse_hook(t, v, tb):      # any unexpected failure (truncated / unreadable / non-RVT input) is a plain refusal, never a traceback; the build goes to a .part file so nothing is left behind
+    if issubclass(t, (KeyboardInterrupt, SystemExit)): return sys.__excepthook__(t, v, tb)
+    sys.stderr.write('REFUSED: input could not be read or edited safely (%s: %s); nothing written\n' % (t.__name__, str(v)[:120])); sys.exit(2)
+sys.excepthook = _refuse_hook
 os.environ['RVT_GEOM']='1'
 import cfb as _cfb
 _ps=sorted((n for n in _cfb.CFB(open(sys.argv[1],'rb').read()).streams() if n.startswith('Partitions/')),key=lambda n:int(n.split('/')[1])) if len(sys.argv)>1 and os.path.exists(sys.argv[1]) else []
