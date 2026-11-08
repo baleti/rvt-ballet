@@ -456,7 +456,19 @@ def _delete(ed, eid):
     if os.environ.get('RVTBALLET_DELETE_ANY') != '1' and cls not in DELETE_VM_VERIFIED:
         raise EditError('element %d is a %s: delete is only enabled for classes whose output was opened in Revit without a repair prompt (%s); other classes are refused (override for experiments: RVTBALLET_DELETE_ANY=1)' % (eid, cls, ', '.join(sorted(DELETE_VM_VERIFIED))))
     if cls not in DELETE_VM_VERIFIED and UNIQUE_CLASS.search(cls): raise EditError('element %d is a %s: a project-wide settings / tracker / table element that Revit expects to exist exactly once (deleting AllProjectRevisions made Revit show "Repair Missing Unique Elements"); not deleted' % (eid, cls))
-    if cls == 'Floor': return list(ed.delete_floor(eid))
+    if cls == 'Floor':
+        # delete_floor looks up the class of every candidate id with a full record decode (about 60 s each on a big file, the same ids many times: 1590 s of a 1676 s two-delete save, profiled); cache those read-only lookups until the first real deletion
+        tr0 = ed.g.e.trace; memo = {}
+        def tr(x, *a, **k):
+            if a or k: return tr0(x, *a, **k)
+            if x not in memo: memo[x] = tr0(x)
+            return memo[x]
+        d0 = ed.delete
+        def dele(*ids):
+            ed.g.e.trace = tr0; ed.delete = d0; return d0(*ids)      # no cache once records change
+        ed.g.e.trace = tr; ed.delete = dele
+        try: return list(ed.delete_floor(eid))
+        finally: ed.g.e.trace = tr0; ed.delete = d0
     if cls.startswith('DBView') and cls not in ('DBViewType',): return list(ed.delete_view(eid))
     if cls == 'ViewSheet': return list(ed.delete_sheet(eid) or [eid])
     ids = ed.owned_set(eid); ed.delete(*ids); return list(ids)
