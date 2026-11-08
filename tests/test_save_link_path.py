@@ -3,7 +3,7 @@
 Each case must either be refused (edit time or save time, file byte-identical) or saved with verify_diffs 0, a backup equal to the original, and the link instance / link symbol records otherwise unchanged; RESTORE brings the original back byte-identical."""
 import os, sys, asyncio, tempfile, hashlib, shutil, json, sqlite3
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
-os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; os.environ['RVTBALLET_ENABLE_DELETE'] = '1'; json.dump({'rvt': {'2024': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
+os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; os.environ['RVTBALLET_ENABLE_DELETE'] = '1'; os.environ['RVTBALLET_ENABLE_LINKPATH'] = '1'; json.dump({'rvt': {'2024': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)
 SRC = os.path.expanduser('~/c5x-link/w/hvac24.rvt')
 from rvtballet import server, save
@@ -15,7 +15,8 @@ async def run():
     r = subprocess.run([os.path.join(HERE, 'rvt-ballet'), 'convert', src, _T + '/c0'], capture_output=True, text=True); assert r.returncode == 0, r.stderr[-300:]
     db = sqlite3.connect(_T + '/c0/model.sqlite')
     pi = db.execute("select id from el where cls='ProjectInfo'").fetchone()[0]; li = [x[0] for x in db.execute("select id from el where cls='RvtLinkInstance' order by id")]; assert li, li; ls = [x[0] for x in db.execute("select id from el where cls='RvtLinkSymbol' order by id")]; assert 1363937 in ls, ls
-    cases = [('sym_str_short', {'op': 'set_string', 'eid': 1363937, 'value': 'X', 'match': ''}), ('sym_str_long', {'op': 'set_string', 'eid': 1363937, 'value': 'L' * 300, 'match': ''}), ('sym_str_uni', {'op': 'set_string', 'eid': 1363937, 'value': 'caf\u00e9_\u4e2d\u6587_\U0001F600', 'match': ''})]
+
+    cases = [('path_longer', {'op': 'set_link_path', 'eid': 1363937, 'value': 'C:\\\\models\\\\sub\\\\linked_v2.rvt'}), ('path_uni', {'op': 'set_link_path', 'eid': 1363937, 'value': 'D:\\\\caf\u00e9_\u4e2d\u6587\\\\x.rvt'}), ('path_300', {'op': 'set_link_path', 'eid': 1363937, 'value': 'E:\\\\' + 'L' * 300 + '.rvt'}), ('path_empty', {'op': 'set_link_path', 'eid': 1363937, 'value': ''}), ('path_not_link', {'op': 'set_link_path', 'eid': li[0], 'value': 'F:\\\\a.rvt'})]
     models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models)), timeout=aiohttp.ClientTimeout(total=None)) as c:
         await c.get('/api/m/m/saveinfo')

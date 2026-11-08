@@ -41,7 +41,7 @@ def _check_text(v):
 
 
 def validate_op(op):
-    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate', 'change_type', 'set_type_num'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
+    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate', 'change_type', 'set_type_num', 'set_link_path'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
     if not isinstance(op.get('eid'), int) or isinstance(op.get('eid'), bool): raise EditError('eid (element id) must be an integer')
     if not 0 <= op['eid'] < 2 ** 63: raise EditError('eid (element id) is out of range')
     if op['op'] == 'move':
@@ -71,6 +71,13 @@ def validate_op(op):
         if isinstance(d, bool) or not isinstance(d, (int, float)) or d != d or abs(d) > 360: raise EditError('deg must be a finite number of degrees, |deg| <= 360')
         if d % 360 == 0: raise EditError('rotate by a multiple of 360 degrees changes nothing')
         return {'op': 'rotate', 'eid': op['eid'], 'deg': float(d)}
+    if op['op'] == 'set_link_path':
+        if os.environ.get('RVTBALLET_ENABLE_LINKPATH') != '1': raise EditError('link path edit is disabled (opt-in: RVTBALLET_ENABLE_LINKPATH=1; Revit-verified on 2024 only)')
+        if BACKEND() != 'rvtedit': raise EditError('link path edit needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
+        v = op.get('value')
+        if not isinstance(v, str) or not v.strip() or len(v) > 32000 or any(ord(c) < 32 for c in v): raise EditError('link path must be a non-empty string without control characters, at most 32000 chars')
+        _check_text(v)
+        return {'op': 'set_link_path', 'eid': op['eid'], 'value': v}
     if op['op'] == 'delete':
         if os.environ.get('RVTBALLET_ENABLE_DELETE') != '1': raise EditError('delete is disabled (opt-in: RVTBALLET_ENABLE_DELETE=1; no Revit evidence for it yet)')
         if BACKEND() != 'rvtedit': raise EditError('delete needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
@@ -131,6 +138,7 @@ def compose(ops):
         elif o['op'] == 'rotate': k = ('rotate', e)
         elif o['op'] == 'set_type_num': k = ('set_type_num', e, o.get('pid'), o.get('param'))
         elif o['op'] == 'change_type': k = ('change_type', e)      # the last type wins
+        elif o['op'] == 'set_link_path': k = ('set_link_path', e)      # the last path wins
         if k is None: out.append(o); continue
         if k in slot:
             i = slot[k]
@@ -269,6 +277,25 @@ def _field64(ed, eid, name):
     return None
 
 
+def _set_link_path(ed, o):
+    """RvtLinkSymbol path: rewrite ModelPath.m_path, the std::pair<AString,AString>.second copy and the old path inside ExternalResourceRef.m_displayPath (Revit 2024 VM: same length and +14 chars open clean, readback = new path). Refused unless the record has ModelPath.m_path."""
+    import struct
+    from rvtedit import _u16
+    log = ed.g.e.trace(o['eid'])[3]
+    olds = [l for l in log if l[1] == 'ModelPath.m_path']
+    if not olds: raise EditError('element %d is not a link type (no ModelPath.m_path): link path edit refused' % o['eid'])
+    old = olds[0][4]
+    if not isinstance(old, str) or not old: raise EditError('element %d: existing link path is empty or unreadable: refused' % o['eid'])
+    def full(l):
+        n = struct.unpack_from('<I', ed.g.bj, l[2])[0]; return bytes(ed.g.bj[l[2] + 4:l[2] + 4 + 2 * n]).decode('utf-16le')
+    edits = []
+    for l in log:
+        if l[1] in ('ModelPath.m_path', 'std::pair< AString, AString >.second') and l[4] == old: edits.append((l[2], l[3] - l[2], _u16(o['value'])))
+        if l[1] == 'ExternalResourceRef.m_displayPath': edits.append((l[2], l[3] - l[2], _u16(full(l).replace(old, o['value']))))
+    if len(edits) < 2: raise EditError('element %d: unexpected link record layout (%d path spans): refused' % (o['eid'], len(edits)))
+    ed._rec_edit(o['eid'], edits)
+
+
 def _change_type(ed, o):
     """point a FamilyInstance at another FamilySymbol of the SAME family: overwrite FamilyInstance.m_masterSymbolId (8-byte ElementId) in the instance record. Refused unless the instance has that field, the target has FamilySymbol.m_familyId, and both families are equal (a symbol of another family would need a different geometry / host relation)"""
     cur = _field64(ed, o['eid'], 'FamilyInstance.m_masterSymbolId')
@@ -317,6 +344,8 @@ def _rvtedit_pass(a, b, ops):
                     if _o0 == (0.0, 0.0, 0.0) and not any(str(x[1]).startswith('GLine') for x in ed.g.e.trace(o['eid'])[3]): raise EditError('element %d: move refused, its placement origin Trf.m_or is exactly (0,0,0) (host-relative or unplaced), so a move would not change the record; nothing was changed' % o['eid'])
                     if any(str(x[1]).startswith('FamInstCurveDriver.') for x in ed.g.e.trace(o['eid'])[3]): raise EditError('element %d: move refused, it is a curve-located family instance (beam / brace: FamInstCurveDriver with its own curve, end joins and cached extents); moving only its placement origin makes the box inconsistent (measured on Snowdon Structural 2024 and rst_basic 2023). Columns and point-located instances are supported' % o['eid'])
                     if any(str(x[1]).startswith('LinearDimString') for x in ed.g.e.trace(o['eid'])[3]) or ed.g.e.trace(o['eid'])[2].get('class') == 'LinearDimString': raise EditError('element %d is a dimension: Revit does not honour a moved dimension record, so the move is refused' % o['eid'])
+                    _cls = ed.g.e.trace(o['eid'])[2].get('class')
+                    if _cls not in MOVE_VM_VERIFIED and os.environ.get('RVTBALLET_MOVE_ANY') != '1': raise EditError('element %d is a %s: moving this class has no Revit-verified implementation (verified: %s), so the move is refused' % (o['eid'], _cls, ', '.join(sorted(MOVE_VM_VERIFIED))))
                     ed.move(o['eid'], o['dx'], o['dy'], o['dz'])
                 except NotImplementedError as ne:
                     if ('class Level' in str(ne) or 'class Grid' in str(ne)) and os.environ.get('RVTBALLET_ENABLE_LEVELMOVE') == '1': _move_datum(ed, dict(o, cls='Level' if 'class Level' in str(ne) else 'Grid')); continue      # view annotations (TextNote): origin in TextElement.m_orig, 2D in the view plane
@@ -331,6 +360,7 @@ def _rvtedit_pass(a, b, ops):
                 if any(str(x[1]).startswith('FamInstCurveDriver.') for x in ed.g.e.trace(o['eid'])[3]): raise EditError('element %d: rotate refused, it is a curve-located family instance (beam / brace: FamInstCurveDriver with its own curve, end joins and cached extents); rotating only its placement frame makes the record inconsistent. Columns and point-located instances are supported' % o['eid'])
                 ed.rotate(o['eid'], o['deg'])
             elif o['op'] == 'change_type': _change_type(ed, o)
+            elif o['op'] == 'set_link_path': _set_link_path(ed, o)
             elif o['op'] == 'set_num': _set_num_by_pid(ed, o)
             elif o['op'] == 'set_type_num': _set_type_num(ed, a, o)
             elif o['op'] == 'set_string' and o.get('kind') == 'AString': _set_string_by_pid(ed, o)
@@ -453,6 +483,7 @@ def _set_string_by_pid(ed, o):
 UNIQUE_CLASS = __import__('re').compile(r'(Tracker|Settings?(Elem|Element)?|Table|Manager|Navigator|Library|Cache|Lock)$|^AllProject|^ProjectInfo|^Units')      # singleton-style classes; evidence: AllProjectRevisions delete -> Revit repair dialog (c7x-rvtmatrix, 2024 VM)
 
 
+MOVE_VM_VERIFIED = {'FamilyInstance', 'TextNote', 'Level', 'Grid'}      # classes whose move was opened in the Revit VM with a matching API readback (ledger rung 1); anything else with an origin field (groups, stairs, imports, masses ...) would move without its dependents: refused (opt-out for experiments RVTBALLET_MOVE_ANY=1)
 DELETE_VM_VERIFIED = {'CategoryElem', 'BasePoint', 'BrowserOrganization', 'SWall', 'ColorFillSchema', 'Floor', 'CompoundCeilingType', 'DBViewPlan', 'AutoJoinTracker', 'AssemblyCodeTable', 'Viewport', 'DimensionStyle', 'RoomElem', 'FamilyInstance', 'TextNote', 'IndependentTag', 'RoomTag', 'ScheduleInstance', 'DBViewSchedule'}      # Revit 2024 VM, single-element delete on the cols2 scene: opens with no repair prompt (SWall: only Revit's own 'Room is not in a properly enclosed region' warning, the true consequence of removing a bounding wall) (c7x-rvtmatrix); RoomElem clean in VM too; FamilyInstance/TextNote/IndependentTag/RoomTag/ScheduleInstance/DBViewSchedule opened clean in the Revit 2024 VM on Snowdon HVAC and Structural (c1x-rvtdel, class-count dumps exact, FamilyInstance cascade took its tags); extend only with a VM verdict
 
 
