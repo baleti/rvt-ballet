@@ -34,6 +34,10 @@ CASES = {
     (C_TYPE, 'change instance type'): {'special': 'change_type'},
     (C_ADD, 'wall'): {'special': 'add_wall'},
     (C_ADD, 'family instance'): {'special': 'add_fi'},
+    (C_TYPE, 'material create'): {'static': ('FAIL', 'NOT VERIFIED: offline generator tools/rvt_mat_create_gen.py (+1 MaterialElem, stray check clean, tests/test_mat_create.py); Revit VM verdict still queued, no PASS claimed'), 'static_years': [2024, 2026]},
+    (C_TYPE, 'shared parameter add'): {'static': ('FAIL', 'NOT VERIFIED: offline generator only (HVAC 2024, +10 elements, duplicate-name guard); Revit VM verdict still queued'), 'static_years': [2024]},
+    (C_TYPE, 'project parameter add'): {'static': ('FAIL', 'NOT VERIFIED: offline generator only (HVAC 2024); Revit VM verdict still queued'), 'static_years': [2024]},
+    (C_TYPE, 'yes/no parameter'): {'static': ('FAIL', 'not implemented: set_num Int refuses cleanly on HVAC 1379030 (no stored Yes/No int); needs paired API diff (c3xyn queued)'), 'static_years': [2024]},
     (C_TYPE, 'duplicate type'): {'static': ('PASS', 'verified 2026-11-07 (c1x-rvttype): HVAC 2024 FamilySymbol 1379030 duplicated as C5XDUP via tools/rvt_dup_type_gen.py; Revit 2024 opened clean (baseline DocWarnDialog only), new symbol readback name C5XDUP same family, original unchanged; other years not tested'), 'static_years': [2024]},
     (C_TYPE, 'edit type geometry parameter'): {'static': ('PASS', 'verified 2026-11-07 (c3x-rvttype): HVAC 2024 FamilySymbol Slot Width 0.0833 -> 0.1 via set_type_num (opt-in RVTBALLET_ENABLE_TYPEPARAM=1); gate only that field differs; Revit 2024 opened clean cmp 0/0, API readback 0.100000; other years refuse (caption lookup)'), 'static_years': [2024]},
     # rung 2 delete, evidence from c3x-rvtdel (Revit 2024 VM, Snowdon HVAC/Structural, opened clean, class-count dumps exact; 2024 only)
