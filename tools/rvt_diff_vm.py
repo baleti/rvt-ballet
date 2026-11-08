@@ -32,6 +32,9 @@ def cs_for(ops, tag, file):
         elif k == 'tparamid': body.append('{ var e = d.GetElement(new ElementId(%sL)); var pr = e.LookupParameter("%s"); if (pr == null) throw new Exception("no param"); pr.Set(new ElementId(%sL)); log.AppendLine("OP tparamid " + pr.Definition.Name + " = " + pr.AsElementId()); }' % (p[1], p[2], p[3]))
         elif k == 'type': body.append('{ var e = d.GetElement(new ElementId(%sL)); e.ChangeTypeId(new ElementId(%sL)); log.AppendLine("OP type"); }' % (p[1], p[2]))
         elif k == 'duptype': body.append('{ var e = (ElementType)d.GetElement(new ElementId(%sL)); var nt = e.Duplicate("%s"); log.AppendLine("OP duptype new id " + nt.Id); }' % (p[1], p[2]))
+        elif k == 'addlevel': body.append('{ var nl = Level.Create(d, %s); log.AppendLine("OP addlevel new id " + nl.Id); }' % p[1])
+        elif k == 'addgrid': body.append('{ var ng = Grid.Create(d, Line.CreateBound(new XYZ(%s, %s, 0), new XYZ(%s, %s, 0))); log.AppendLine("OP addgrid new id " + ng.Id); }' % (p[1], p[2], p[3], p[4]))
+        elif k == 'addcol': body.append('{ var sym = new FilteredElementCollector(d).OfClass(typeof(FamilySymbol)).OfCategory(BuiltInCategory.OST_StructuralColumns).Cast<FamilySymbol>().First(); if (!sym.IsActive) sym.Activate(); var lv = new FilteredElementCollector(d).OfClass(typeof(Level)).Cast<Level>().OrderBy(l => l.Elevation).First(); var nc = d.Create.NewFamilyInstance(new XYZ(%s, %s, lv.Elevation), sym, lv, Autodesk.Revit.DB.Structure.StructuralType.Column); log.AppendLine("OP addcol new id " + nc.Id + " symbol " + sym.Id); }' % (p[1], p[2]))
         else: raise SystemExit('unknown op ' + o)
     return '''using Autodesk.Revit.DB;
 using System.Linq;
