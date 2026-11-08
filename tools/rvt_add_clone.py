@@ -2,7 +2,19 @@
 Text notes etc: pass --nolatest."""
 import sys,struct,os,argparse; sys.path.insert(0,'~/rvt-research/write-lab'); sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
 os.environ['RVT_GEOM']='1'
-import rvtgen,genlib
+import cfb as _cfb
+_ps=sorted((n for n in _cfb.CFB(open(sys.argv[1],'rb').read()).streams() if n.startswith('Partitions/')),key=lambda n:int(n.split('/')[1])) if len(sys.argv)>1 and os.path.exists(sys.argv[1]) else []
+if len(_ps)>1 or os.environ.get('RVT_ADD_EDITENGINE'):
+    # multi-partition: the edit-lab engine (what rvtedit cp/aw/tn use) puts new items after the first few of each list (index 0 is special in real projects) and builds in the LAST big partition; the write-lab engine inserts at index 0 of partition 1
+    sys.path.insert(0,os.path.expanduser('~/rvt-research/edit-lab'))
+    for _k in ('HDR_SKIP','REC_SKIP','ITEM_SKIP'): os.environ.setdefault(_k,'1')
+    _streams=_cfb.CFB(open(sys.argv[1],'rb').read()).streams()
+    _big=[n for n in _ps if len(_streams[n].data)>20000]
+    os.environ.setdefault('PART',(_big or _ps)[-1])
+    import rvtgen_e as rvtgen
+else:
+    import rvtgen
+import genlib
 import rvt_idlist as idlist
 ap=argparse.ArgumentParser(); ap.add_argument('seed'); ap.add_argument('out'); ap.add_argument('--src',type=int,required=True)
 ap.add_argument('--dx',type=float,default=3.0); ap.add_argument('--dy',type=float,default=4.0); ap.add_argument('--dz',type=float,default=0.0); ap.add_argument('--nolatest',action='store_true'); ap.add_argument('--force',action='store_true',help='skip the dependents screen (instances that own children corrupt the model when copied)')
