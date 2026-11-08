@@ -10,7 +10,7 @@ async def run():
     for f in fs:
         src = os.path.join(_T, 's.rvt'); shutil.copy(f, src); h0 = sha(src); md = tempfile.mkdtemp(dir=_T)
         models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
-        async with TestClient(TestServer(server.make_app(models))) as c:
+        async with TestClient(TestServer(server.make_app(models)), timeout=__import__("aiohttp").ClientTimeout(total=None)) as c:
             await c.get('/api/m/m/saveinfo')
             r = await c.post('/api/m/m/save', json={}); t = await r.text(); assert r.status != 200, 'in-place accepted'; a = t[:90]
             out = os.path.join(_T, 'o.rvt'); r2 = await c.post('/api/m/m/saveas', json={'dest': out}); b = r2.status
