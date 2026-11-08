@@ -82,6 +82,8 @@ if not a.nolatest:
         out,Ls=idlist.add_to_lists(raw,S,nid,W); print('latest lists',[(l[2]) for l in Ls]); assert Ls,'no id-list found'; return out
     g.latest_edits=[('Latest',reg)]
 g.itag=T['item'][W+8:W+10]
+_final = a.out; _b, _x = os.path.splitext(os.path.basename(_final)); a.out = os.path.join(os.path.dirname(os.path.abspath(_final)), '.' + _b + '.part' + _x)      # build beside the target, move into place only after every check passes: a refused/failed build must not destroy a previous output
+import atexit; atexit.register(lambda: os.path.exists(a.out) and os.remove(a.out))
 g.commit(a.out)
 # fail-closed layout check (c1x-rvtadd 2026-11-08): Revit 2024 rejected two outputs whose first gzip member of the partition was split mid header region (insert did not fit LIMIT). Compare with the source.
 if not os.environ.get('RVT_ADD_LAYOUT_FORCE'):
@@ -94,4 +96,5 @@ if not os.environ.get('RVT_ADD_LAYOUT_FORCE'):
                 os.remove(a.out); sys.exit('REFUSED: %s first member was split (%d B no longer present as one member in the first 8; new first members start %s): Revit rejects this layout (CorruptModelException); output removed. RVT_ADD_LAYOUT_FORCE=1 to keep it for experiments' % (_pn, _o[1], _n[:4]))
     except SystemExit: raise
     except Exception as _e: os.remove(a.out); sys.exit('REFUSED: layout check failed (%s); output removed' % _e)
-print('ok',a.out,'new id',nid)
+os.replace(a.out, _final)
+print('ok',_final,'new id',nid)
