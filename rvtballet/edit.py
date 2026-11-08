@@ -296,7 +296,12 @@ def _set_link_path(ed, o):
     edits = []
     for l in log:
         if l[1] in ('ModelPath.m_path', 'std::pair< AString, AString >.second') and full(l) == old: edits.append((l[2], l[3] - l[2], _u16(o['value'])))
-        if l[1] == 'ExternalResourceRef.m_displayPath': edits.append((l[2], l[3] - l[2], _u16(full(l).replace(old, o['value']))))
+        if l[1] == 'ExternalResourceRef.m_displayPath':
+            d = full(l)
+            if d.endswith(old): nd = d[:-len(old)] + o['value']      # the stored path is the display path's tail; replace only that, never an equal substring in a folder name
+            elif d.count(old) == 1: nd = d.replace(old, o['value'])
+            else: raise EditError('element %d: old link path occurs %d times in the display path and not at its end: refused' % (o['eid'], d.count(old)))
+            edits.append((l[2], l[3] - l[2], _u16(nd)))
     if len(edits) < 2: raise EditError('element %d: unexpected link record layout (%d path spans): refused' % (o['eid'], len(edits)))
     ed._rec_edit(o['eid'], edits)
 
@@ -400,6 +405,11 @@ def _value_entry(log, kind, id_entry):
 
 def _set_type_num(ed, src, o):
     """overwrite the Double of ONE NamedParam (type parameter, keyed by the family parameter element id) of a FamilySymbol. Refused unless the element is a type with exactly one such entry and the parameter has no formula."""
+    if os.environ.get('RVTBALLET_TYPENUM_ANY_YEAR') != '1':      # Revit-verified on 2024 only (VM probe 1379030 Slot Width); a 2022 file was accepted unchecked
+        import re as _re, cfb as _cfb
+        try: fy = int(_re.search(r'(20[12]\d)', bytes(_cfb.CFB(open(src, 'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le', 'ignore')).group(1))
+        except Exception: raise EditError('type parameter edit refused: cannot read the Revit version of the file')
+        if fy not in (2024, 2026): raise EditError('type parameter edit is only verified on Revit 2024/2026 files (this file is %d): refused' % fy)
     pid = o.get('pid')
     if pid is None:
         rr = os.path.expanduser('~/rvt-research')
