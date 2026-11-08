@@ -2,7 +2,7 @@
 import collections, os, sys, asyncio, tempfile, json, shutil, hashlib
 _T = tempfile.mkdtemp(dir=os.environ.get('TMPDIR')); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = os.environ.get('CACHE_OVERRIDE') or _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; os.environ['RVTBALLET_SNAPSHOT_CACHE'] = '0'
-json.dump({'rvt': {'2024': 'open', '2026': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
+json.dump({'rvt': {'2024': 'open', '2025': 'open', '2026': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
 sys.path[:0] = [os.path.expanduser('~/src/savegate'), os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')]
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 async def run(orig, n):
