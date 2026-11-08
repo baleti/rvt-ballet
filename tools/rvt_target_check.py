@@ -35,6 +35,17 @@ elif rep['n_removed']: bad.append('%d elements removed' % rep['n_removed'])
 ch = [c['id'] for c in rep['changed'] if c.get('id') is not None]
 stray = [i for i in ch if i not in ok]
 if stray: bad.append('changed outside allowed set: %s' % stray[:8])
+def _witness(path):
+    try:
+        sys.path.insert(0, os.path.expanduser('~/rvt-research/edit-lab')); sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab')); sys.path.insert(0, os.path.expanduser('~/rvt-research'))
+        import rvtedit
+        return {l[1]: str(l[4]) for l in rvtedit.Edit(path).g.e.trace(a.target)[3] if l[1] in ('FamilyInstance.m_instOrigin', 'Trf.m_or', 'Trf.m_3x3')}
+    except Exception: return None
+_wit = None
+if not a.delete and a.target not in ch:      # walker blind to the record (mesh-cached): fall back to the decoded origin/transform fields of the target
+    _w0, _w1 = _witness(a.src), _witness(a.out)
+    _wit = bool(_w0 and _w1 and _w0 != _w1)
+    if _wit: ch = ch + [a.target]; print('note: target seen changed via trace witness (walker blind)')
 if not a.delete and a.target not in ch: bad.append('UNVERIFIED: target not seen as changed (walker blind to this record or edit did not land)')
 if not a.delete:
     for pn, d in rep['joined'].items():
