@@ -25,6 +25,7 @@ async def run():
         out = os.path.join(_T, 'o.rvt'); r = await c.post('/api/m/m/saveas', json={'dest': out}); j = await r.json()
         assert r.status == 200 and os.path.exists(out), (r.status, j.get('error'), j.get('report'))
         assert os.path.getsize(out) > 0
+        if os.environ.get('RVT_KEEP_OUT'): shutil.copy(out, os.environ['RVT_KEEP_OUT'])      # for the Revit VM judge
     print('save delete latest OK: delete of %d saved as, gate accepted Global/Latest change' % TARGET)
 
 if not os.path.exists(RTE) or not save.SaveSessions().available: print('skip')
