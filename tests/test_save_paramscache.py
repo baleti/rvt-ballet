@@ -18,6 +18,8 @@ save._RB_MEMO.clear(); t = time.time(); v2 = save._read_params(buf); t2 = time.t
 assert v1 == v2 and (t2 < t1 / 3 or t1 < 0.5), (t1, t2)
 raw = open(f[0], 'rb').read(); open(f[0], 'wb').write(raw[:-5] + b'xxxxx'); assert save._rp_disk_get(k) is None
 save._RB_MEMO.clear(); assert save._read_params(buf) == v1 and save._rp_disk_get(k) is not None      # recomputed + rewritten
+open(f[0], 'wb').write(b''); assert save._rp_disk_get(k) is None; open(f[0], 'wb').write(raw[:32]); assert save._rp_disk_get(k) is None      # empty / checksum-only file = miss
+open(f[0], 'wb').write(raw); assert save._rp_disk_get(k) is not None
 real = save._reader_stamp; save._reader_stamp = lambda: 'other'; assert save._rp_disk_get(k) is None; save._reader_stamp = real
 os.environ['RVTBALLET_SNAPSHOT_CACHE'] = '0'; assert save._rp_disk_get(k) is None
 # content change = new key: a one-byte-different buffer never gets the cached params of the original (stale-cache escape), and a failed read leaves no entry
