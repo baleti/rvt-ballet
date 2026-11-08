@@ -449,6 +449,10 @@ UNIQUE_CLASS = __import__('re').compile(r'(Tracker|Settings?(Elem|Element)?|Tabl
 DELETE_VM_VERIFIED = {'CategoryElem', 'BasePoint', 'BrowserOrganization', 'SWall', 'ColorFillSchema', 'Floor', 'CompoundCeilingType', 'DBViewPlan', 'AutoJoinTracker', 'AssemblyCodeTable', 'Viewport', 'DimensionStyle', 'RoomElem', 'FamilyInstance', 'TextNote', 'IndependentTag', 'RoomTag', 'ScheduleInstance', 'DBViewSchedule'}      # Revit 2024 VM, single-element delete on the cols2 scene: opens with no repair prompt (SWall: only Revit's own 'Room is not in a properly enclosed region' warning, the true consequence of removing a bounding wall) (c7x-rvtmatrix); RoomElem clean in VM too; FamilyInstance/TextNote/IndependentTag/RoomTag/ScheduleInstance/DBViewSchedule opened clean in the Revit 2024 VM on Snowdon HVAC and Structural (c1x-rvtdel, class-count dumps exact, FamilyInstance cascade took its tags); extend only with a VM verdict
 
 
+IN_USE_GUARD_CLASSES = {'DimensionStyle', 'CompoundCeilingType'}      # type-like classes whose users are not in the header deletion lists
+IN_USE_GUARD_ALLOW = 5      # measured: an id occurs 5 times more in the file before delete than after (own record + lists), Structural 2024 DimensionStyle/CategoryElem/CompoundCeilingType
+
+
 def _delete(ed, eid):
     """delete with what Revit's Delete removes: class-specific paths of rvtedit (floor / view / sheet), else owned_set; returns every deleted id (they all go in the manifest)"""
     try: cls = ed.g.e.trace(eid)[2]['class']
@@ -456,6 +460,11 @@ def _delete(ed, eid):
     if os.environ.get('RVTBALLET_DELETE_ANY') != '1' and cls not in DELETE_VM_VERIFIED:
         raise EditError('element %d is a %s: delete is only enabled for classes whose output was opened in Revit without a repair prompt (%s); other classes are refused (override for experiments: RVTBALLET_DELETE_ANY=1)' % (eid, cls, ', '.join(sorted(DELETE_VM_VERIFIED))))
     if cls not in DELETE_VM_VERIFIED and UNIQUE_CLASS.search(cls): raise EditError('element %d is a %s: a project-wide settings / tracker / table element that Revit expects to exist exactly once (deleting AllProjectRevisions made Revit show "Repair Missing Unique Elements"); not deleted' % (eid, cls))
+    if cls in IN_USE_GUARD_CLASSES:
+        # a type/style that other elements still reference: Structural 2024 DimensionStyle 908160 is used by 12 dimensions, the old delete removed only its own record (1 id) and left 12 dangling type refs (escape). Revit refuses or cascades; we refuse.
+        import re as _re
+        w = ed.g.W; pat = _re.escape(int(eid).to_bytes(w, 'little')); n = sum(len(_re.findall(pat, p['joined'])) for p in ed.g.e.m.parts.values())
+        if n > IN_USE_GUARD_ALLOW: raise EditError('element %d is a %s still referenced by other elements (%d occurrences of its id in the element streams, own record and id lists account for at most %d): deleting it would leave dangling references; nothing was changed' % (eid, cls, n, IN_USE_GUARD_ALLOW))
     if cls == 'Floor':
         # delete_floor looks up the class of every candidate id with a full record decode (about 60 s each on a big file, the same ids many times: 1590 s of a 1676 s two-delete save, profiled); cache those read-only lookups until the first real deletion
         tr0 = ed.g.e.trace; memo = {}
