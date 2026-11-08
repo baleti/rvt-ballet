@@ -12,7 +12,7 @@ T = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'tools', 'rvt
 d = tempfile.mkdtemp(); out = d + '/o.rvt'
 def run(eid, name):
     r = subprocess.run([sys.executable, T, SEED, out, str(eid), name], capture_output=True, text=True); return r.returncode, os.path.exists(out)
-for eid, name in ((18435, 'c3xmat'), (18435, 'Default'), (18435, 'a:b'), (18435, ' '), (1379030, 'Fresh')):
+for eid, name in ((18435, 'c3xmat'), (18435, 'Default'), (18435, 'a:b'), (18435, ' '), (18435, ' lead'), (18435, 'trail '), (1379030, 'Fresh')):
     rc, ex = run(eid, name); assert rc != 0 and not ex, (eid, name, rc, ex)
 rc, ex = run(18435, 'Fresh Material'); assert rc == 0 and ex
 import glob
@@ -24,4 +24,4 @@ for y in ('2025', '2022'):   # unverified years must be refused with nothing wri
         import rvt_geometry as _G
         mats = [e for e, c in _G.file_geometry_index(fs[0]).items() if str(c) == 'MaterialElem']; assert mats, y
         r = subprocess.run([sys.executable, T, fs[0], out, str(mats[0]), 'ZZ'], capture_output=True, text=True); assert r.returncode != 0 and not os.path.exists(out), (y, r.stdout, r.stderr)
-print('ok: 5 refusals wrote nothing, fresh name accepted')
+print('ok: 7 refusals wrote nothing, fresh name accepted')
