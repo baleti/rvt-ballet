@@ -4,6 +4,8 @@ import sys, struct, os; sys.path.insert(0, os.path.expanduser('~/rvt-research/wr
 os.environ['RVT_GEOM'] = '1'
 import rvtgen
 seed, out, tid, name = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
+import os
+if os.path.realpath(seed)==os.path.realpath(out): sys.exit('REFUSED: output path equals the input file; this tool writes a copy only')
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from rvtballet import edit as _ed
 _ed._check_element_name(name)          # Revit's name rules (empty, forbidden chars, control/format chars)
