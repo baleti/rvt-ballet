@@ -36,8 +36,10 @@ W=g.W; S=a.src
 try: T=g.template(S)
 except IndexError:
     T=None
-    for _pn in list(g.e.m.parts)[1:]:
-        _g2=rvtgen.Gen(a.seed,part=_pn)
+    for _pn in [x for x in g.e.m.parts if x!=getattr(g,'pn',None)]:
+        try: _g2=rvtgen.Gen(a.seed,part=_pn)
+        except TypeError:      # edit-engine Gen (rvtgen_e) takes the partition from $PART
+            os.environ['PART']=_pn; _g2=rvtgen.Gen(a.seed)
         try: T=_g2.template(S); g=_g2; print('source %d lives in %s: building there'%(S,_pn)); break
         except IndexError: pass
 if T is None: sys.exit('REFUSED: source %d has no element header in the first partition (%s); the writer only addresses the first partition of a multi-partition file. Pick a source stored there.'%(S,list(g.e.m.parts)[0]))
