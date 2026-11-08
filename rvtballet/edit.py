@@ -273,7 +273,8 @@ def _change_type(ed, o):
     """point a FamilyInstance at another FamilySymbol of the SAME family: overwrite FamilyInstance.m_masterSymbolId (8-byte ElementId) in the instance record. Refused unless the instance has that field, the target has FamilySymbol.m_familyId, and both families are equal (a symbol of another family would need a different geometry / host relation)"""
     cur = _field64(ed, o['eid'], 'FamilyInstance.m_masterSymbolId')
     if cur is None: raise EditError('element %d is not a family instance (no FamilyInstance.m_masterSymbolId): change_type refused' % o['eid'])
-    fam_new = _field64(ed, o['type_eid'], 'FamilySymbol.m_familyId')
+    try: fam_new = _field64(ed, o['type_eid'], 'FamilySymbol.m_familyId')
+    except (IndexError, KeyError): raise EditError('element %d does not exist in this file: change_type refused' % o['type_eid'])
     if fam_new is None: raise EditError('element %d is not a family type (no FamilySymbol.m_familyId): change_type refused' % o['type_eid'])
     fam_old = _field64(ed, cur, 'FamilySymbol.m_familyId')
     if fam_old is None or fam_old != fam_new: raise EditError('type %d belongs to another family than the current type %d of element %d: change_type refused (same-family types only)' % (o['type_eid'], cur, o['eid']))

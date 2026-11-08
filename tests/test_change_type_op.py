@@ -29,4 +29,7 @@ print('applied: Type Id %s -> %s, only element %d differs' % (T_OLD, T_SIB, INST
 for label, o in (('other family', {'op': 'change_type', 'eid': INST, 'type_eid': T_OTHER}), ('not an instance', {'op': 'change_type', 'eid': T_OLD, 'type_eid': T_SIB}), ('same type', {'op': 'change_type', 'eid': INST, 'type_eid': T_OLD}), ('target not a type', {'op': 'change_type', 'eid': INST, 'type_eid': INST})):
     try: edit.apply_full(buf, [edit.validate_op(o)]); raise SystemExit('FAIL: accepted ' + label)
     except edit.EditError as e: print('refused', label + ':', str(e)[:80])
+for label, t in (('nonexistent type id', 99999999), ('zero', 0)):
+    try: edit.apply_full(buf, [edit.validate_op({'op': 'change_type', 'eid': INST, 'type_eid': t})]); raise SystemExit('FAIL: accepted ' + label)
+    except edit.EditError as e: print('refused', label + ':', str(e)[:80])
 print('OK')
