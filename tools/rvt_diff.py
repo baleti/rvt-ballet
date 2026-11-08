@@ -77,6 +77,7 @@ def diff(fa, fb, want_fields=True, maxrec=200, ids=()):
     art = sorted(i for i in set(wa) ^ set(wb) if i >= BIG) + sorted(i for i in set(wa) & set(wb) if i >= BIG and wa[i] != wb[i])
     # an entry without any header is not an element but an unparsed blob (e.g. 3.67 MB partition tail that shifts when an element is inserted before it)
     art += [i for i in set(wa) & set(wb) if i < BIG and not wa[i]['h'] and not wb[i]['h'] and wa[i] != wb[i]]
+    art += [i for i in set(wa) ^ set(wb) if i < BIG and not (wa.get(i) or wb.get(i))['h']]      # one-sided entry with no element header (ids 0 and 8192000 'removed' in 7 unrelated Revit-made pairs) is a blob, not an element
     wa = {k: v for k, v in wa.items() if k < BIG and k not in art}; wb = {k: v for k, v in wb.items() if k < BIG and k not in art}
     added = sorted(set(wb) - set(wa)); removed = sorted(set(wa) - set(wb))
     changed = sorted(set(i for i in set(wa) & set(wb) if wa[i] != wb[i]) | set(ids))   # --ids forces a field-level look at elements the walker cannot see changing
