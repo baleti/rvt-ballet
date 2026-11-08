@@ -439,7 +439,7 @@ def _set_string_by_pid(ed, o):
             vn = _value_entry(log, 'AString', l)
             if vn is None: break
             if o.get('expect') is not None and vn[4] != o['expect']: raise EditError('element %d parameter is %r, not the expected %r: nothing was changed' % (o['eid'], vn[4], o['expect']))      # stale expected value (c3x-rvttype)
-            nb = struct.pack('<I', len(o['value'])) + o['value'].encode('utf-16le'); ed._rec_edit(o['eid'], [(vn[2], vn[3] - vn[2], nb)]); return
+            nb = struct.pack('<I', len(o['value'].encode('utf-16le')) // 2) + o['value'].encode('utf-16le'); ed._rec_edit(o['eid'], [(vn[2], vn[3] - vn[2], nb)]); return
     raise KeyError('string parameter %d not stored on %d' % (pid, o['eid']))
 
 

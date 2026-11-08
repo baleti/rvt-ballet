@@ -32,7 +32,7 @@ def mk(Tm, new_id, is_sym):
     rec = bytearray(sub(Tm['rec']))
     if is_sym:
         o, z = L['SymbolInfo.m_name']        # old offsets valid: ids are same length, name edited last
-        nb = struct.pack('<I', len(name)) + name.encode('utf-16le'); rec[o:z] = nb
+        nb = struct.pack('<I', len(name.encode('utf-16le')) // 2) + name.encode('utf-16le'); rec[o:z] = nb
     rec = bytearray(g.stamp(bytes(rec)))
     hdr = sub(Tm['hdr']); item = bytearray(sub(Tm['item'])); struct.pack_into('<I', item, 8, __import__('zlib').adler32(bytes(item[16:])) & 0xffffffff); item = bytes(item); row = bytearray(sub(Tm['row']))
     et = g._et(); n_ = struct.unpack_from('<I', et, 2)[0]

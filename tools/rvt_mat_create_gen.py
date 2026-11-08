@@ -27,7 +27,7 @@ print('old', mid, 'new', nid)
 b = lambda x: struct.pack('<Q', x)
 sub = lambda buf: bytes(buf).replace(b(mid), b(nid))
 rec = bytearray(sub(T['rec'])); o, z = hits[0]
-rec[o:z] = struct.pack('<I', len(name)) + name.encode('utf-16le')
+rec[o:z] = struct.pack('<I', len(name.encode('utf-16le')) // 2) + name.encode('utf-16le')
 rec = g.stamp(bytes(rec))
 item = bytearray(sub(T['item'])); struct.pack_into('<I', item, 8, zlib.adler32(bytes(item[16:])) & 0xffffffff)
 g.itag = T['item'][W + 8:W + 10]
