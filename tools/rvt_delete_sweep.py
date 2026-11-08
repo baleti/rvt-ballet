@@ -26,7 +26,7 @@ async def run(out, f, n, keep):
                 dest = os.path.join(_T, 'o%d%s' % (k, os.path.splitext(f)[1])); k += 1
                 r = await c.post('/api/m/m/saveas', json={'dest': dest}); j = await r.json()
                 if r.status == 200: res = 'ACCEPTED verify_unexpected=%s' % j.get('verify', {}).get('n_unexpected'); assert os.path.exists(dest)
-                else: res = 'REFUSED_%d %s' % (r.status, j.get('code')); assert not os.path.exists(dest)
+                else: res = 'REFUSED_%d %s' % (r.status, j.get('code')); print('DETAIL', cls, eid, json.dumps(j)[:1500], flush=True); assert not os.path.exists(dest)
                 if r.status == 200 and keep: shutil.copy(dest, os.path.join(keep, '%s_%s_%d%s' % (SWEEP_OP[:3], cls, eid, os.path.splitext(f)[1])))
                 rows.append({'class': cls, 'result': res}); print('ROW', cls, res, flush=True); await c.post('/api/m/m/edit/undo')      # per-row log: a capped run still leaves its results
     assert sha(src) == h0; json.dump(rows, open(out, 'w'))
