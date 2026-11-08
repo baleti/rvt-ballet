@@ -281,6 +281,11 @@ def _set_link_path(ed, o):
     """RvtLinkSymbol path: rewrite ModelPath.m_path, the std::pair<AString,AString>.second copy and the old path inside ExternalResourceRef.m_displayPath (Revit 2024 VM: same length and +14 chars open clean, readback = new path). Refused unless the record has ModelPath.m_path."""
     import struct
     from rvtedit import _u16
+    if os.environ.get('RVTBALLET_LINKPATH_ANY_YEAR') != '1':      # Revit-verified on 2024 only (VM); other years: layout not confirmed
+        import re as _re, cfb as _cfb
+        try: fy = int(_re.search(r'(20[12]\d)', bytes(_cfb.CFB(open(ed.src, 'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le', 'ignore')).group(1))
+        except Exception: raise EditError('link path edit refused: cannot read the Revit version of the file')
+        if fy != 2024: raise EditError('link path edit is only verified on Revit 2024 files (this file is %d): refused' % fy)
     log = ed.g.e.trace(o['eid'])[3]
     olds = [l for l in log if l[1] == 'ModelPath.m_path']
     if not olds: raise EditError('element %d is not a link type (no ModelPath.m_path): link path edit refused' % o['eid'])
