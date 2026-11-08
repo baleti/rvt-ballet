@@ -15,7 +15,7 @@ async def run(files):
             await c.get('/api/m/m/saveinfo'); d = tmp + '/b' + os.path.splitext(f)[1]; r = await c.post('/api/m/m/saveas', json={'dest': d}); t = await r.text()
             if r.status == 415 and 'unsupported_version' in t and sha(src) == h0 and not os.path.exists(d): print(os.path.basename(f)[:3], 'refused cleanly (year not writable), source untouched', flush=True); continue
             ok = r.status == 200 and os.path.exists(d) and sha(d) == h0 and sha(src) == h0
-            print(os.path.basename(f)[:3], r.status, 'identical' if ok else 'DIFF ' + t[:120], flush=True); bad += not ok
+            print(os.path.basename(f)[:3], r.status, 'identical' if ok else 'DIFF ' + str(r.status) + ' ' + t[:600], flush=True); bad += not ok
     assert not bad, bad
     print('no-edit SAVE AS identity OK on', len(files))
 fs = sorted(glob.glob(os.path.expanduser(os.environ.get('GLOB') or ('~/rvt-research/corpus/' + os.environ.get('YEAR', '2024') + '/*.rte'))))
