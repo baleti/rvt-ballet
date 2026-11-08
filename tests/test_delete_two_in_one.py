@@ -15,5 +15,5 @@ print('two deletes in one save OK', len(deleted))
 # duplicate / overlapping: deleting a hosted instance already cascaded by the wall must fail cleanly or be a no-op, never corrupt
 hosted = [i for i in deleted if i not in (W, F)][0]
 try:
-    nb2, del2 = edit.apply_full(d.buf, ops + [edit.validate_op({'op': 'delete', 'eid': hosted})]); print('overlap accepted', len(del2)); assert len(del2) == len(set(del2)); save._readback(d.buf, nb2, ops + [edit.validate_op({'op': 'delete', 'eid': hosted})])
+    nb2, del2 = edit.apply_full(d.buf, ops + [edit.validate_op({'op': 'delete', 'eid': hosted})]); print('overlap accepted', len(del2)); assert len(del2) == len(set(del2)) and len(del2) == len(deleted); save._readback(d.buf, nb2, ops + [edit.validate_op({'op': 'delete', 'eid': hosted})])
 except edit.EditError as e: print('overlap refused cleanly:', str(e)[:80])
