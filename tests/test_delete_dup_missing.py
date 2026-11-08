@@ -11,6 +11,6 @@ nb, dl = edit.apply_full(d.buf, ops); assert len(dl) == len(set(dl)) and EID in 
 save._readback(d.buf, nb, ops); print('duplicate delete OK', len(dl))
 try:
     edit.apply_full(d.buf, [edit.validate_op({'op': 'delete', 'eid': 987654321})]); raise SystemExit('FAIL: nonexistent id accepted')
-except edit.EditError as e: print('missing id refused:', str(e)[:80])
+except edit.EditError as e: assert 'does not exist' in str(e), str(e); print('missing id refused:', str(e)[:80])
 except Exception as e: print('missing id raised', type(e).__name__, '(not EditError)'); raise SystemExit(1)
 print('OK')
