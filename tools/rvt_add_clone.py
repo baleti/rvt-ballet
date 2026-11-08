@@ -21,7 +21,13 @@ g=rvtgen.Gen(a.seed)
 if g.nextid<=g.maxid and not a.force: raise SystemExit('refuse: ElemTable counter %d <= max element id %d (new id would collide); --force to override'%(g.counter,g.maxid))
 W=g.W; S=a.src
 try: T=g.template(S)
-except IndexError: sys.exit('REFUSED: source %d has no element header in the first partition (%s); the writer only addresses the first partition of a multi-partition file. Pick a source stored there.'%(S,list(g.e.m.parts)[0]))
+except IndexError:
+    T=None
+    for _pn in list(g.e.m.parts)[1:]:
+        _g2=rvtgen.Gen(a.seed,part=_pn)
+        try: T=_g2.template(S); g=_g2; print('source %d lives in %s: building there'%(S,_pn)); break
+        except IndexError: pass
+if T is None: sys.exit('REFUSED: source %d has no element header in the first partition (%s); the writer only addresses the first partition of a multi-partition file. Pick a source stored there.'%(S,list(g.e.m.parts)[0]))
 idS=struct.pack(g.IDF,S)
 L={n:(o,e) for n,o,e,_ in T['log']}
 et=g._et(); RW=g.RW; n_=struct.unpack_from('<I',et,2)[0]
