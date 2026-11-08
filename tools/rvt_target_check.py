@@ -23,7 +23,6 @@ stray = [i for i in ch if i not in ok]
 if stray: bad.append('changed outside allowed set: %s' % stray[:8])
 if not a.delete:
     for pn, d in rep['joined'].items():
-        for r in d['runs']:
-            if r['old_len'] != r.get('new_len', r['old_len']): bad.append('%s @%d length change' % (pn, r['old_off'])); break
+        if d['len_old'] != d['len_new']: bad.append('%s length %d -> %d' % (pn, d['len_old'], d['len_new']))
 print('STRAY' if bad else 'CLEAN', '; '.join(bad[:6]) or 'target-only (%d changed, %d runs)' % (len(ch), sum(d['n_runs'] for d in rep['joined'].values())))
 sys.exit(1 if bad else 0)
