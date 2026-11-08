@@ -6,10 +6,10 @@ import rvt_params
 a = rvt_params.params(sys.argv[1]); b = rvt_params.params(sys.argv[2])
 gone = set(a) - set(b)
 if not gone: print('no ids removed'); sys.exit(0)
-num = re.compile(r'(?<![\d.])(\d{1,12})(?![\d.])')
+num = re.compile(r"(?<=: )(\d{2,12})(?=[,}\]])|(?<=, )(\d{2,12})(?=[,}\]])")      # numeric VALUES only (not digits inside GUIDs/names)
 cl = collections.Counter(); hits = 0
 for e, d in b.items():
-    for m in set(num.findall(repr(d))):
+    for m in set(x for t in num.findall(repr(d)) for x in t if x):
         v = int(m)
         if v in gone and v != e: hits += 1; cl[(a[v].get('class') if isinstance(a[v], dict) else '?', d.get('class') if isinstance(d, dict) else '?')] += 1
 print('removed ids', len(gone), 'dangling mentions', hits, 'by (removed class, holder class):', dict(cl.most_common(8)))
