@@ -283,6 +283,6 @@ def bad_filename(name):
         return 'the file name may not end with a dot or a space (Windows would drop it and write a different file)'
     if name.split('.')[0].rstrip(' ').upper() in _RESERVED:
         return 'the file name is a reserved Windows device name (%s)' % name.split('.')[0].upper()
-    if len(name.encode('utf-8')) > 255:
+    if len(name.encode('utf-8', 'surrogateescape')) > 255:      # a Linux name with non-UTF-8 bytes arrives as lone surrogates
         return 'the file name is longer than 255 bytes'
     return ''
