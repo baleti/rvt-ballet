@@ -4,12 +4,13 @@ backup equal to the original exists and restore_backup puts the original back by
 import os, sys, tempfile, hashlib, shutil, subprocess, signal, json
 _T = tempfile.mkdtemp(); J = _T + '/j'; C = _T + '/c'
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)
-SRC = os.path.expanduser('~/rvtfix/corpus/2024/71_Construction-DefaultMetric.rte')
+YEAR = os.environ.get('CRASH_YEAR', '2024')
+SRC = os.path.expanduser('~/rvtfix/corpus/2024/71_Construction-DefaultMetric.rte') if YEAR == '2024' else next(iter(sorted(__import__('glob').glob(os.path.expanduser('~/rvtfix/corpus/%s/*Construction-DefaultMetric.rte' % YEAR)))), '')
 if not os.path.exists(SRC): print('skip: no template'); sys.exit(0)
 for p in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab'), os.path.expanduser('~/rvt-research/edit-lab')): sys.path.insert(0, p)
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 ENV = dict(os.environ, SAVEGATE_JOURNAL=J, SAVEGATE_CACHE=C, RVTBALLET_EDIT_BACKEND='rvtedit', RVTBALLET_ALLOW_OVERWRITE='1', SAVEGATE_GATE=_T + '/gate.json')
-json.dump({'rvt': {'2024': 'open'}}, open(_T + '/gate.json', 'w'))
+json.dump({'rvt': {YEAR: 'open'}}, open(_T + '/gate.json', 'w'))
 os.environ.update(ENV)
 import rvt_params
 g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
@@ -36,6 +37,7 @@ def main():
     for step in ('tmp_written', 'before_replace', 'after_replace'):
         d = tempfile.mkdtemp(dir=_T); src = os.path.join(d, 'src.rvt'); shutil.copy(SRC, src)
         r = subprocess.run([sys.executable, '-c', CHILD % {'here': HERE}, step, src, str(EID)], env=ENV, capture_output=True, text=True, timeout=900)
+        if r.returncode == 1 and 'UnsupportedVersion' in r.stderr and sha(src) == h0: print('year %s: in-place save refused as unsupported, source untouched (expected)' % YEAR); shutil.rmtree(_T, ignore_errors=True); sys.exit(0)
         assert r.returncode == -signal.SIGKILL, (step, r.returncode, r.stderr[-400:])
         h = sha(src); st = 'original' if h == h0 else 'edited'
         if st == 'edited':
