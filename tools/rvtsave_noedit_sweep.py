@@ -16,7 +16,7 @@ async def one(c, models, f, k):
 async def run(fs):
     from aiohttp.test_utils import TestClient, TestServer
     models = server.Models(); bad = 0
-    async with TestClient(TestServer(server.make_app(models))) as c:
+    async with TestClient(TestServer(server.make_app(models)), timeout=__import__("aiohttp").ClientTimeout(total=7200)) as c:
         for k, f in enumerate(fs): bad += not await one(c, models, f, k)
     print('SWEEP files=%d bad=%d' % (len(fs), bad))
 asyncio.run(run(sys.argv[1:]))
