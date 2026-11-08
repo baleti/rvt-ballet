@@ -289,13 +289,13 @@ def _set_link_path(ed, o):
     log = ed.g.e.trace(o['eid'])[3]
     olds = [l for l in log if l[1] == 'ModelPath.m_path']
     if not olds: raise EditError('element %d is not a link type (no ModelPath.m_path): link path edit refused' % o['eid'])
-    old = olds[0][4]
-    if not isinstance(old, str) or not old: raise EditError('element %d: existing link path is empty or unreadable: refused' % o['eid'])
     def full(l):
         n = struct.unpack_from('<I', ed.g.bj, l[2])[0]; return bytes(ed.g.bj[l[2] + 4:l[2] + 4 + 2 * n]).decode('utf-16le')
+    old = full(olds[0])      # the reader's l[4] is display-truncated (60 chars): using it duplicated the tail of long paths inside the display path
+    if not isinstance(old, str) or not old: raise EditError('element %d: existing link path is empty or unreadable: refused' % o['eid'])
     edits = []
     for l in log:
-        if l[1] in ('ModelPath.m_path', 'std::pair< AString, AString >.second') and l[4] == old: edits.append((l[2], l[3] - l[2], _u16(o['value'])))
+        if l[1] in ('ModelPath.m_path', 'std::pair< AString, AString >.second') and full(l) == old: edits.append((l[2], l[3] - l[2], _u16(o['value'])))
         if l[1] == 'ExternalResourceRef.m_displayPath': edits.append((l[2], l[3] - l[2], _u16(full(l).replace(old, o['value']))))
     if len(edits) < 2: raise EditError('element %d: unexpected link record layout (%d path spans): refused' % (o['eid'], len(edits)))
     ed._rec_edit(o['eid'], edits)
