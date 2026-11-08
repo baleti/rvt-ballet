@@ -41,7 +41,7 @@ def _check_text(v):
 
 
 def validate_op(op):
-    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate', 'change_type', 'set_type_num', 'set_link_path'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
+    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate', 'change_type', 'set_type_num', 'set_type_eid', 'set_link_path'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
     if not isinstance(op.get('eid'), int) or isinstance(op.get('eid'), bool): raise EditError('eid (element id) must be an integer')
     if not 0 <= op['eid'] < 2 ** 63: raise EditError('eid (element id) is out of range')
     if op['op'] == 'move':
@@ -66,6 +66,13 @@ def validate_op(op):
         if pid is not None and (not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0): raise EditError('pid must be a positive integer (family parameter element id)')
         if nm is not None and (not isinstance(nm, str) or not nm): raise EditError('param must be a caption string')
         return {'op': 'set_type_num', 'eid': op['eid'], 'pid': pid, 'param': nm, 'value': float(v)}
+    if op['op'] == 'set_type_eid':
+        if os.environ.get('RVTBALLET_ENABLE_TYPEEID') != '1': raise EditError('set_type_eid is disabled (opt-in: RVTBALLET_ENABLE_TYPEEID=1; no Revit evidence for it yet)')
+        if BACKEND() != 'rvtedit': raise EditError('set_type_eid needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
+        pid, tgt = op.get('pid'), op.get('target')
+        if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0: raise EditError('pid must be a positive integer (family parameter element id)')
+        if not isinstance(tgt, int) or isinstance(tgt, bool) or tgt <= 0: raise EditError('target must be a positive element id')
+        return {'op': 'set_type_eid', 'eid': op['eid'], 'pid': pid, 'target': tgt}
     if op['op'] == 'rotate':
         if BACKEND() != 'rvtedit': raise EditError('rotate needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
         d = op.get('deg')
@@ -138,6 +145,7 @@ def compose(ops):
         elif o['op'] == 'move': k = ('move', e)
         elif o['op'] == 'rotate': k = ('rotate', e)
         elif o['op'] == 'set_type_num': k = ('set_type_num', e, o.get('pid'), o.get('param'))
+        elif o['op'] == 'set_type_eid': k = ('set_type_eid', e, o.get('pid'))
         elif o['op'] == 'change_type': k = ('change_type', e)      # the last type wins
         elif o['op'] == 'set_link_path': k = ('set_link_path', e)      # the last path wins
         if k is None: out.append(o); continue
@@ -406,6 +414,7 @@ def _rvtedit_pass(a, b, ops):
             elif o['op'] == 'set_link_path': _set_link_path(ed, o)
             elif o['op'] == 'set_num': _set_num_by_pid(ed, o)
             elif o['op'] == 'set_type_num': _set_type_num(ed, a, o)
+            elif o['op'] == 'set_type_eid': _set_type_eid(ed, a, o)
             elif o['op'] == 'set_string' and o.get('kind') == 'AString': _set_string_by_pid(ed, o)
             elif o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'], o['value'])
             else:
@@ -456,6 +465,33 @@ def _set_type_num(ed, src, o):
     log = ed.g.e.trace(o['eid'])[3]; n = [k for k, l in enumerate(log) if l[1] == 'NamedParam.m_paramId' and _eid_val(l[4]) == pid]
     if len(n) != 1: raise EditError('element %d has %d NamedParam entries for parameter %d (need exactly 1; is it a type?)' % (o['eid'], len(n), pid))
     ed.set_type_param(o['eid'], pid, o['value'])
+
+
+def _set_type_eid(ed, src, o):
+    """re-point ONE element-id type parameter (NamedParam.m_elemId) of a FamilySymbol to another element of the same class. Spec from the Revit pair c1xeid (HVAC 2024, 'Arrow Type' 579117 -> 579118): every 8-byte id field of the record that carries the old id (the NamedParam value and the sub-instance descriptor copies) is rewritten; the writer restamps the record checksum. Refused unless exactly one NamedParam holds the pid."""
+    import re as _re, cfb as _cfb, struct
+    try: fy = int(_re.search(r'(20[12]\d)', bytes(_cfb.CFB(open(src, 'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le', 'ignore')).group(1))
+    except Exception: raise EditError('type parameter edit refused: cannot read the Revit version of the file')
+    if fy not in (2024, 2026): raise EditError('type parameter edit is only verified on Revit 2024/2026 files (this file is %d): refused' % fy)
+    tr = ed.g.e.trace(o['eid']); log = tr[3]
+    if tr[2].get('class') != 'FamilySymbol': raise EditError('element %d is not a FamilySymbol (type); nothing was changed' % o['eid'])
+    n = [k for k, l in enumerate(log) if l[1] == 'NamedParam.m_paramId' and _eid_val(l[4]) == o['pid']]
+    if len(n) != 1: raise EditError('element %d has %d NamedParam entries for parameter %d (need exactly 1)' % (o['eid'], len(n), o['pid']))
+    k = n[0]; ev = [log[j] for j in range(max(k - 12, 0), min(k + 12, len(log))) if log[j][1] == 'NamedParam.m_elemId']
+    if len(ev) != 1: raise EditError('parameter %d of element %d is not a plain element-id value; nothing was changed' % (o['pid'], o['eid']))
+    old = _eid_val(ev[0][4])
+    if old is None or old <= 0: raise EditError('the current value of parameter %d is not a valid element id (%r); nothing was changed' % (o['pid'], ev[0][4]))
+    if old == o['target']: raise EditError('parameter %d of element %d already points at %d' % (o['pid'], o['eid'], old))
+    try: t_new, t_old = ed.g.e.trace(o['target'])[2].get('class'), ed.g.e.trace(old)[2].get('class')
+    except Exception: raise EditError('target element %d does not exist (or the old one is not in this file); nothing was changed' % o['target'])
+    if t_new != t_old: raise EditError('target %d is a %s but the parameter currently points at a %s: refused' % (o['target'], t_new, t_old))
+    nb = struct.pack('<Q', o['target']); offs = {}
+    for l in log:
+        if l[1] in ('NamedParam.m_elemId', 'Identifier.m_id64') and l[3] - l[2] == 8:
+            v = _eid_val(l[4]) if l[1] == 'NamedParam.m_elemId' else int(str(l[4]))
+            if v == old: offs[l[2]] = nb
+    if ev[0][2] not in offs: raise EditError('internal: the parameter value field was not located; nothing was changed')
+    ed._rec_edit(o['eid'], [(off, 8, b) for off, b in sorted(offs.items())])
 
 
 def _set_num_by_pid(ed, o):
