@@ -1322,3 +1322,16 @@ def layout_changes(src_bytes, out_bytes):
         return out
     except Exception:
         return None
+
+
+def _gc_after(fn):
+    """item 49: the reader contexts a read-back builds are reference cycles; collecting once the call has returned (its locals gone) keeps rss flat over chained in-place saves (without it ~200 MB per save stayed allocated until the memory guard refused)"""
+    import functools, gc
+    @functools.wraps(fn)
+    def w(*a, **k):
+        try: return fn(*a, **k)
+        finally: gc.collect()
+    return w
+
+
+_read_params = _gc_after(_read_params); _readback = _gc_after(_readback)

@@ -15,9 +15,9 @@ async def run(orig, n):
             f = getattr(mod, name)
             @functools.wraps(f)
             def w(*a, **k):
-                r0 = _mw.rss_bytes() >> 20
+                r0 = _mw.rss_bytes() >> 20; import gc as _g; _b0 = sys.getallocatedblocks()
                 try: return f(*a, **k)
-                finally: print('WRAP', name, (_mw.rss_bytes() >> 20) - r0, 'MB', flush=True)
+                finally: _g.collect(); print('WRAP', name, (_mw.rss_bytes() >> 20) - r0, 'MB', 'blocks', sys.getallocatedblocks() - _b0, flush=True)
             setattr(mod, name, w)
         import rvtballet.edit as _ed
         for _n in os.environ['CH_WRAP'].split(','): _wrap(_ed if _n.startswith('edit.') else save, _n[5:] if _n.startswith('edit.') else _n)
@@ -27,7 +27,7 @@ async def run(orig, n):
     pr = save._read_params(open(src, 'rb').read())
     c0 = [(e, v['params']['Mark']) for e, v in sorted(pr.items()) if e >= 1000 and isinstance(v.get('params', {}).get('Mark'), str)]
     if not c0: print('NO_CANDIDATE'); return
-    e, old = c0[0]; md = tempfile.mkdtemp(dir=_T); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
+    e, old = (([x for x in c0 if x[1]] or c0)[0] if os.environ.get('CH_NONEMPTY') else c0[int(os.environ.get('CH_IDX', '0')) % len(c0)]); print('CAND', e, repr(old), flush=True); md = tempfile.mkdtemp(dir=_T); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     ok = 0; cur = old; rows = []
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
