@@ -18,6 +18,7 @@ async def run(out, f, n, keep):
     async with TestClient(TestServer(server.make_app(models)), timeout=__import__('aiohttp').ClientTimeout(total=None)) as c:
         await c.get('/api/m/m/saveinfo')
         for cls, ids in sorted(bycls.items()):
+            if os.environ.get('SWEEP_FROM') and cls < os.environ['SWEEP_FROM']: continue      # resume a capped sweep at this class (sorted order)
             if os.environ.get('SWEEP_CLASSES') and cls not in os.environ['SWEEP_CLASSES'].split(','): continue
             for eid in ids[:n]:
                 r = await c.post('/api/m/m/edit', json=dict({'op': 'delete'} if SWEEP_OP == 'delete' else {'op': 'rotate', 'deg': 90.0}, eid=eid))
@@ -27,7 +28,7 @@ async def run(out, f, n, keep):
                 if r.status == 200: res = 'ACCEPTED verify_unexpected=%s' % j.get('verify', {}).get('n_unexpected'); assert os.path.exists(dest)
                 else: res = 'REFUSED_%d %s' % (r.status, j.get('code')); assert not os.path.exists(dest)
                 if r.status == 200 and keep: shutil.copy(dest, os.path.join(keep, '%s_%s_%d%s' % (SWEEP_OP[:3], cls, eid, os.path.splitext(f)[1])))
-                rows.append({'class': cls, 'result': res}); await c.post('/api/m/m/edit/undo')
+                rows.append({'class': cls, 'result': res}); print('ROW', cls, res, flush=True); await c.post('/api/m/m/edit/undo')      # per-row log: a capped run still leaves its results
     assert sha(src) == h0; json.dump(rows, open(out, 'w'))
     print(collections.Counter((r['class'], r['result'].split()[0]) for r in rows))
 if __name__ == '__main__':
