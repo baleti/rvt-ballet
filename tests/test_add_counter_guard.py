@@ -18,4 +18,16 @@ class CounterGuard(unittest.TestCase):
             r = subprocess.run([sys.executable, TOOL, low, os.path.join(d, 'o.rvt'), '--src', SRC], capture_output=True, text=True)
             self.assertNotEqual(r.returncode, 0); self.assertIn('counter', r.stdout + r.stderr)
             self.assertFalse(os.path.exists(os.path.join(d, 'o.rvt')))
+
+
+@unittest.skipUnless(SAMPLE and os.path.exists(SAMPLE), 'RVT_ADD_SAMPLE not set')
+class SamePathGuard(unittest.TestCase):
+    def test_refuses_output_equal_input(self):
+        import shutil, filecmp
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, 'x.rvt'); shutil.copy(SAMPLE, p)
+            r = subprocess.run([sys.executable, TOOL, p, p, '--src', SRC], capture_output=True, text=True)
+            self.assertNotEqual(r.returncode, 0); self.assertIn('REFUSED', r.stdout + r.stderr)
+            self.assertTrue(filecmp.cmp(SAMPLE, p, shallow=False))
+
 if __name__ == '__main__': unittest.main()
