@@ -325,7 +325,9 @@ def _rvtedit_pass(a, b, ops):
                         ld = {l[1]: l for l in ed.g.e.trace(o['eid'])[3]}
                         if 'Leader.m_type' in ld and struct.unpack_from('<i', _body(ed, o['eid']), ld['Leader.m_type'][2])[0] != 0: raise NotImplementedError('text note with an active leader: moving it is switched off (RVTBALLET_ENABLE_LEADERNOTEMOVE=0)')
                     ed.move_annotation(o['eid'], o['dx'], o['dy'])
-            elif o['op'] == 'rotate': ed.rotate(o['eid'], o['deg'])
+            elif o['op'] == 'rotate':
+                if any(str(x[1]).startswith('FamInstCurveDriver.') for x in ed.g.e.trace(o['eid'])[3]): raise EditError('element %d: rotate refused, it is a curve-located family instance (beam / brace: FamInstCurveDriver with its own curve, end joins and cached extents); rotating only its placement frame makes the record inconsistent. Columns and point-located instances are supported' % o['eid'])
+                ed.rotate(o['eid'], o['deg'])
             elif o['op'] == 'change_type': _change_type(ed, o)
             elif o['op'] == 'set_num': _set_num_by_pid(ed, o)
             elif o['op'] == 'set_type_num': _set_type_num(ed, a, o)

@@ -14,6 +14,8 @@ def main():
             print(eid, 'accepted' if ok else 'refused', msg[:90])
             assert ok == want_ok, (eid, msg)
             if not want_ok: assert 'curve-located' in msg
+        try: edit.apply(open(SRC,'rb').read(), [edit.validate_op({'op': 'rotate', 'eid': 606873, 'deg': 30.0})]); raise SystemExit('beam rotate ACCEPTED (ESCAPE)')
+        except edit.EditError as e: assert 'curve-located' in str(e); print('beam rotate refused')
     finally: shutil.rmtree(wd, True)
     print('OK')
 main()
