@@ -20,6 +20,6 @@ async def run():
         # every Snowdon Structural wall is now dimensioned/hosting, so the hosted/dimensioned guard (group_or_option) refuses first; the span rule is defense in depth behind it. Either refusal is correct, the point is: refused, source untouched.
         assert r.status >= 400 and ('member_span' in json.dumps(j) or 'group_or_option' in json.dumps(j)), (r.status, j)
         assert sha(src) == h0 and not [f for f in os.listdir(_T) if 'sgtmp' in f or f.endswith('.part')], 'source changed or temp left'
-    print('wall move span refusal OK: refused', r.status, 'source untouched')
+    print('wall move span refusal OK: refused', r.status, 'by', 'member_span' if 'member_span' in json.dumps(j) else 'group_or_option', 'source untouched')
 if not os.path.exists(F) or not save.SaveSessions().available: print('skip')
 else: asyncio.run(run())
