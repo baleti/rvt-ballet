@@ -18,7 +18,8 @@ try:
             if sha(src) == h: res['identity'] += 1
             else: bad.append((o, 'accepted and output differs'))
         except Exception as e:
-            if sha(src) == h: res['refused'] += 1
+            if isinstance(e, ImportError): bad.append((o, 'environment error, not a refusal: %s' % e))
+            elif sha(src) == h: res['refused'] += 1
             else: bad.append((o, 'refused but source changed: %s' % type(e).__name__))
     print(res, 'offsets', offs[:6], '...'); assert not bad, bad; print('OK')
 finally: shutil.rmtree(_T, ignore_errors=True)
