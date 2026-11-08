@@ -413,6 +413,8 @@ def source_damage(buf):
         if len(buf) >= 512 and buf[:8] == bytes.fromhex('d0cf11e0a1b11ae1'):
             ms, cut, nfat, dstart, ndif = struct.unpack_from('<H', buf, 32)[0], struct.unpack_from('<I', buf, 56)[0], struct.unpack_from('<I', buf, 44)[0], struct.unpack_from('<I', buf, 68)[0], struct.unpack_from('<I', buf, 72)[0]
             if ms != 6: out.append(('CFB header (mini sector shift)', 0))
+            if buf[8:24] != bytes(16) or buf[34:40] != bytes(6) or struct.unpack_from('<I', buf, 52)[0] != 0 or struct.unpack_from('<H', buf, 28)[0] != 0xFFFE:      # c1x-rvtsave 182: single-byte flips here (CLSID, reserved, transaction signature, byte order) were accepted; 45 of 45 Revit-made corpus files have them zero / 0xFFFE
+                out.append(('CFB header (reserved/CLSID/byte order)', 0))
             if cut != 4096: out.append(('CFB header (mini stream cutoff)', 0))
             if ndif == 0 and dstart != 0xFFFFFFFE: out.append(('CFB header (DIFAT start)', 0))
             ssz = 1 << struct.unpack_from('<H', buf, 30)[0] if struct.unpack_from('<H', buf, 30)[0] in (9, 12) else 512
