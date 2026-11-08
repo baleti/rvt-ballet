@@ -478,7 +478,10 @@ def _delete(ed, eid):
         ed.g.e.trace = tr; ed.delete = dele
         try: return list(ed.delete_floor(eid))
         finally: ed.g.e.trace = tr0; ed.delete = d0
-    if cls.startswith('DBView') and cls not in ('DBViewType',): return list(ed.delete_view(eid))
+    if cls.startswith('DBView') and cls not in ('DBViewType',):
+        if any(l[1] == 'DBView.m_isTemplate' and str(l[4]).strip() in ('1', 'True') for l in ed.g.e.trace(eid)[3]):      # Structural 2024 template 780021 was deleted (2 ids) while dozens of views carry DBView.m_viewTemplateId = 780021: dangling template refs (escape)
+            raise EditError('element %d is a view template: views may still use it (DBView.m_viewTemplateId) and deleting it would leave dangling references; nothing was changed' % eid)
+        return list(ed.delete_view(eid))
     if cls == 'ViewSheet': return list(ed.delete_sheet(eid) or [eid])
     ids = ed.owned_set(eid); ed.delete(*ids); return list(ids)
 
