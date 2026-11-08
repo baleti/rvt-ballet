@@ -19,6 +19,9 @@ import rvt_idlist as idlist
 ap=argparse.ArgumentParser(); ap.add_argument('seed'); ap.add_argument('out'); ap.add_argument('--src',type=int,required=True)
 ap.add_argument('--dx',type=float,default=3.0); ap.add_argument('--dy',type=float,default=4.0); ap.add_argument('--dz',type=float,default=0.0); ap.add_argument('--nolatest',action='store_true'); ap.add_argument('--force',action='store_true',help='skip the dependents screen (instances that own children corrupt the model when copied)')
 a=ap.parse_args()
+import math
+for _n,_v in (('dx',a.dx),('dy',a.dy),('dz',a.dz)):
+    if not math.isfinite(_v) or (abs(_v)>1e6 and not os.environ.get('RVTEDIT_ALLOW_FAR')): sys.exit('REFUSED: --%s=%r is not finite or is beyond 1e6 ft (same rule as rvtedit)'%(_n,_v))
 if os.path.realpath(a.seed)==os.path.realpath(a.out): sys.exit('REFUSED: output path equals the input file; ADD writes a copy only (in-place overwrite goes through the savegate path)')
 if not a.force:
     sys.path.insert(0,os.path.expanduser('~/rvt-research/edit-lab')); sys.path.insert(0,os.path.expanduser('~/rvt-research'))

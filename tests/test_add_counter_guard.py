@@ -30,4 +30,15 @@ class SamePathGuard(unittest.TestCase):
             self.assertNotEqual(r.returncode, 0); self.assertIn('REFUSED', r.stdout + r.stderr)
             self.assertTrue(filecmp.cmp(SAMPLE, p, shallow=False))
 
+@unittest.skipUnless(SAMPLE and os.path.exists(SAMPLE), 'RVT_ADD_SAMPLE not set')
+class OffsetGuard(unittest.TestCase):
+    def test_refuses_nonfinite_or_absurd_offsets(self):
+        with tempfile.TemporaryDirectory() as d:
+            for v in ('nan', 'inf', '1e30', '-1e7'):
+                out = os.path.join(d, 'o.rvt')
+                r = subprocess.run([sys.executable, TOOL, SAMPLE, out, '--src', SRC, '--dx=' + v], capture_output=True, text=True)
+                self.assertNotEqual(r.returncode, 0, v); self.assertIn('REFUSED', r.stdout + r.stderr, v)
+                self.assertFalse(os.path.exists(out), v)
+
+
 if __name__ == '__main__': unittest.main()
