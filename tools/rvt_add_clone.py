@@ -26,7 +26,9 @@ if os.path.realpath(a.seed)==os.path.realpath(a.out): sys.exit('REFUSED: output 
 if not a.force:
     sys.path.insert(0,os.path.expanduser('~/rvt-research/edit-lab')); sys.path.insert(0,os.path.expanduser('~/rvt-research'))
     import rvtedit
-    _ed=rvtedit.Edit(a.seed); _deps=_ed.dependents(a.src)
+    _ed=rvtedit.Edit(a.seed)
+    if a.src<=0 or a.src not in _ed.g.e.m.ids: sys.exit('REFUSED: no element with id %d in %s'%(a.src,a.seed))
+    _deps=_ed.dependents(a.src)
     # classes with Revit evidence (HVAC 2024: source 1365188 owns 4 RbsHvacSystem + 2 IndependentTag, its clone opened clean, +1 equipment): tolerated; anything else refuses
     _OK=('RbsHvacSystem','IndependentTag'); _bad=[(d,_ed.g.e.trace(d)[2]['class']) for d in _deps]; _bad=[x for x in _bad if x[1] not in _OK]
     if _bad: sys.exit('REFUSED: source %d owns dependent element(s) %s (header deletion lists name it); copying it corrupts the model. Pick a childless source or --force.'%(a.src,_bad[:6]))
@@ -34,6 +36,7 @@ if not a.force:
     if _c != 'FamilyInstance': sys.exit('REFUSED: source %d is a %s; this tool moves FamilyInstance origins only (a %s copy would sit on the original and skip owner-view/host lists). Text notes: rvtedit.py tn:X:Y:TEXT; other classes need their own op.' % (a.src, _c, _c))
     print('dependents screen: none')
 g=rvtgen.Gen(a.seed)
+if a.src not in g.e.m.ids or a.src<=0: sys.exit('REFUSED: no element with id %d in %s'%(a.src,a.seed))
 if g.nextid<=g.maxid and not a.force: raise SystemExit('refuse: ElemTable counter %d <= max element id %d (new id would collide); --force to override'%(g.counter,g.maxid))
 W=g.W; S=a.src
 try: T=g.template(S)
