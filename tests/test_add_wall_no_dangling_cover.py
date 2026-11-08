@@ -22,3 +22,5 @@ def test_new_wall_param_element_ids_exist():
         for v in refs:
             i = int(str(v).split('(')[1].rstrip(')')) if 'EID(' in str(v) else int(v)
             assert i == NONE or i in wb, 'dangling element id %d in new wall' % i
+        d2 = {k: v for k, v, s, e in fl}
+        assert d2['VWall.m_wallKeyRef#1'] == '2' and float(d2['VWall.m_keyRefOffset#1']) > 0, 'Location Line key ref must be (2, +half thickness) like Revit-made unflipped walls'
