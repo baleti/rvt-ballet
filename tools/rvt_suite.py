@@ -209,7 +209,7 @@ def decide_add_fi(year, workdir, use_vm):
     src = sample_for(year, 'HVAC')
     if not src: return 'ERROR', 'no sample'
     out = workdir + '/addfi_%d.rvt' % year
-    env = dict(os.environ, RVT_ADD_EDITENGINE='1')
+    env = {k: v for k, v in os.environ.items() if not k.startswith('RVT_ADD_EDITENGINE')}      # single-partition HVAC: the edit engine is rejected by Revit (CorruptModelException), default engine only
     r = subprocess.run([sys.executable, HERE + '/rvt_add_clone.py', src, out, '--src', '1365188'], capture_output=True, text=True, env=env, timeout=3600)
     if r.returncode != 0 or not os.path.exists(out): return 'FAIL', 'writer: ' + (r.stdout + r.stderr).strip()[-200:]
     sys.path.insert(0, os.path.dirname(HERE))
