@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """rvt_layout_check.py SRC.rvt OUT.rvt: exit 1 when an ADD output split a partition's original first gzip member (layout Revit 2024 rejected with
-CorruptModelException on HVAC clones, 2026-11-08). Necessary, not sufficient: a pass does not prove Revit opens the file."""
+CorruptModelException on HVAC clones, 2026-11-08). Necessary, not sufficient: a pass does not prove Revit opens the file.
+COUNTEREXAMPLE (c3x-rvtadd 2026-11-08): the multi-partition Snowdon Structural 2024 wall ADD (new wall 1028040, Revit VM PASS recorded) is reported SPLIT (Partitions/20 members 0,157,398,...), so SPLIT is a conservative warning, not a proven Revit rejection; only the single-partition HVAC clones are rejected so far."""
 import sys, os
 sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab'))
 import rvtgen
