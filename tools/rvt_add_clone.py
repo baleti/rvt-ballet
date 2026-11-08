@@ -4,12 +4,12 @@ import sys,struct,os,argparse; sys.path.insert(0,'~/rvt-research/write-lab'); sy
 os.environ['RVT_GEOM']='1'
 import cfb as _cfb
 _ps=sorted((n for n in _cfb.CFB(open(sys.argv[1],'rb').read()).streams() if n.startswith('Partitions/')),key=lambda n:int(n.split('/')[1])) if len(sys.argv)>1 and os.path.exists(sys.argv[1]) else []
-if len(_ps)<=1 and os.environ.get('RVT_ADD_EDITENGINE') and not os.environ.get('RVT_ADD_EDITENGINE_FORCE'):
+if len(_ps)<=1 and os.environ.get('RVT_ADD_EDITENGINE') and any(os.environ.get(_k)=='1' for _k in ('HDR_SKIP','REC_SKIP','ITEM_SKIP')) and not os.environ.get('RVT_ADD_EDITENGINE_FORCE'):
     sys.exit('REFUSED: the edit engine on a single-partition project produced a file Revit 2024 rejects (CorruptModelException, HVAC 2024 2026-11-08); the default write-lab engine is the one with a Revit PASS. RVT_ADD_EDITENGINE_FORCE=1 overrides for experiments only')
 if len(_ps)>1 or os.environ.get('RVT_ADD_EDITENGINE'):
     # multi-partition: the edit-lab engine (what rvtedit cp/aw/tn use) puts new items after the first few of each list (index 0 is special in real projects) and builds in the LAST big partition; the write-lab engine inserts at index 0 of partition 1
     sys.path.insert(0,os.path.expanduser('~/rvt-research/edit-lab'))
-    for _k in ('HDR_SKIP','REC_SKIP','ITEM_SKIP'): os.environ.setdefault(_k,'1')
+    for _k in ('HDR_SKIP','REC_SKIP','ITEM_SKIP'): os.environ.setdefault(_k,'1' if len(_ps)>1 else '0')      # single-partition: skip 0 reproduces the Revit-PASS write-lab bytes (HVAC 2024 a1, byte-identical, 2026-11-08); skip 1 = the rejected hvac_e/c12 layout
     _streams=_cfb.CFB(open(sys.argv[1],'rb').read()).streams()
     _big=[n for n in _ps if len(_streams[n].data)>20000]
     os.environ.setdefault('PART',(_big or _ps)[-1])
