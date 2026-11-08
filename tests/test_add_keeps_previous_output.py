@@ -31,4 +31,20 @@ class Keep(unittest.TestCase):
                 signal.signal(signal.SIGXFSZ, signal.SIG_IGN); resource.setrlimit(resource.RLIMIT_FSIZE, (4 << 20, 4 << 20))
             r = subprocess.run([sys.executable, TOOL, f, out, '--src', '512451'], capture_output=True, text=True, preexec_fn=lim)
             self.assertNotEqual(r.returncode, 0); self.assertEqual(open(out, 'rb').read(), b'previous good output'); self.assertEqual(os.listdir(d), ['o.rvt'])
+    def test_sigkill_during_build_keeps_previous_output(self):
+        """c1x-rvtsave 193: SIGKILL as soon as the hidden .part file appears (mid-build): the previous output is byte-identical; only a hidden .part may be left (never the output name)."""
+        import time, signal
+        f = C + '/2020/18_rst_basic_sample_project.rvt'
+        if not os.path.exists(f): self.skipTest('no corpus')
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, 'o.rvt'); open(out, 'wb').write(b'previous good output')
+            p = subprocess.Popen([sys.executable, TOOL, f, out, '--src', '512451'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            t = time.time(); seen = False
+            while p.poll() is None and time.time() - t < 600:
+                if any(n.endswith('.part.rvt') or '.part' in n for n in os.listdir(d)): seen = True; p.send_signal(signal.SIGKILL); break
+                time.sleep(0.01)
+            p.wait()
+            if not seen: self.skipTest('finished before a .part was seen')
+            self.assertEqual(open(out, 'rb').read(), b'previous good output')
+            self.assertEqual([n for n in os.listdir(d) if n != 'o.rvt' and not (n.startswith('.') and '.part' in n)], [])
 if __name__ == '__main__': unittest.main()
