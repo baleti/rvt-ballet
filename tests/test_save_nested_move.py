@@ -6,6 +6,6 @@ for eid in (593273, 593274):
     out = os.path.join(tempfile.mkdtemp(), 'n.rvt')
     p = subprocess.run([sys.executable, os.path.join(H, '..', 'tools', 'rvt_one_edit.py'), F, json.dumps({'op': 'move', 'eid': eid, 'dx': 1.0, 'dy': 0.5, 'dz': 0.0}), out], capture_output=True, text=True)
     row = eval(re.search(r'ONE-EDIT (\{.*\})', p.stdout).group(1))
-    assert row['edit'] == 200 and row['verify_diffs'] == 0 and row['elements_changed'] == 1, row
+    assert row.get('edit') == 200 and row.get('verify_diffs') == 0 and row.get('elements_changed') == 1, ('early refusal or divergence', row)
     assert row['save_status'] == 409 and row['save_detail'] == 'group_or_option', row
     print('ok', eid)
