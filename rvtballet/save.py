@@ -1043,6 +1043,18 @@ def _readback(src_buf, nb, ops):
     if dl:      # a delete must not touch the elements that survive: every element present before and after reads back with identical parameters (measured 0 drift: 2024 Construction wall delete)
         _drift = [e for e in a if e in b and g(a[e]) != g(b[e])]
         if _drift: bad.append('delete changed the parameters of %d surviving element(s) (e.g. %s)' % (len(_drift), ', '.join(str(e) for e in _drift[:3])))
+        _gone = set(a) - set(b)      # dangling references: no survivor may mention a removed id as a numeric value unless it already did before (2025 Snowdon: a LegendComponent referenced the deleted CompoundCeilingType, which the in-use count guard missed)
+        if _gone:
+            import re as _re
+            _num = _re.compile(r"(?<=: )(\d{2,12})(?=[,}\]])|(?<=, )(\d{2,12})(?=[,}\]])")
+            _dang = []
+            for e, d in b.items():
+                if e not in a: continue
+                _was = {int(x) for t in _num.findall(repr(a[e])) for x in t if x}
+                for t in _num.findall(repr(d)):
+                    for x in t:
+                        if x and int(x) in _gone and int(x) != e and int(x) not in _was: _dang.append((e, int(x)))
+            if _dang: bad.append('delete leaves %d dangling reference(s) to removed elements (e.g. element %d mentions removed %d)' % (len(_dang), _dang[0][0], _dang[0][1]))
     for o in fl:
         if o['eid'] not in b: bad.append('field-edited element %d missing in the output' % o['eid'])
         else:

@@ -20,5 +20,19 @@ try:
     save._read_params = fake
     try: save._readback(d.buf, nb, ops); raise SystemExit('FAIL: survivor drift accepted')
     except save.sg.VerifyFailed if hasattr(save, 'sg') else Exception as e: assert 'surviving' in str(e), str(e); print('drift refused:', str(e)[:90])
+
+    # dangling reference: a survivor that newly mentions a removed id must be refused
+    gone_id = EID
+    def fake2(buf):
+        r = real(buf)
+        if buf is nb:
+            r = dict(r); v = dict(r[victim]); pp = dict(v.get('params', v)); pp['Zz Ref'] = '{x: %d, y: 1}' % gone_id
+            r[victim] = dict(v, params=pp) if 'params' in v else pp
+        return r
+    save._read_params = real; save._read_params = fake2
+    try: save._readback(d.buf, nb, ops); raise SystemExit('FAIL: dangling reference accepted')
+    except Exception as e:
+        if isinstance(e, SystemExit): raise
+        assert 'dangling' in str(e), str(e); print('dangling refused')
     print('OK')
 finally: shutil.rmtree(_T, ignore_errors=True)
