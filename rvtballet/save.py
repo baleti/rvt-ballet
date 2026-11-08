@@ -537,7 +537,7 @@ def _stage(ss, mid, text):
 
 def _drop_reader_caches():
     """the reader libraries keep per-path state (decoded records) that a save never reuses: every apply / read-back works on a fresh temp path"""
-    for mn, names in (('rvt_geometry', ('_ctx', '_docs')), ('rvt_fast', ('_SHARED', '_G103', '_W'))):
+    for mn, names in (('rvt_geometry', ('_ctx', '_docs', '_DO_CACHE')), ('rvt_fast', ('_SHARED', '_G103', '_W'))):
         m = sys.modules.get(mn)
         for n in names:
             c = getattr(m, n, None) if m else None
@@ -732,7 +732,7 @@ def _read_params(buf):
         finally:
             shutil.rmtree(d, ignore_errors=True)
             g = sys.modules.get('rvt_geometry')      # its per-PATH caches (decoded records / docs) are never evicted and every read-back uses a fresh temp path: ~90 MB retained per save until the memory guard refused (found by c2x-rvtwrite2)
-            if g is not None: getattr(g, '_ctx', {}).clear(); getattr(g, '_docs', {}).clear()
+            if g is not None: getattr(g, '_ctx', {}).clear(); getattr(g, '_docs', {}).clear(); getattr(g, '_DO_CACHE', {}).clear()
         _rp_disk_put(k, v)
     _RB_MEMO.insert(0, (k, v)); del _RB_MEMO[2:]
     return v
@@ -1043,6 +1043,9 @@ def _readback(src_buf, nb, ops):
     if dl:      # a delete must not touch the elements that survive: every element present before and after reads back with identical parameters (measured 0 drift: 2024 Construction wall delete)
         _drift = [e for e in a if e in b and g(a[e]) != g(b[e])]
         if _drift: bad.append('delete changed the parameters of %d surviving element(s) (e.g. %s)' % (len(_drift), ', '.join(str(e) for e in _drift[:3])))
+        _gm = {e: w for e, w in membership(src_buf, set(a) - set(b)).items() if any(x.startswith('group') or x.startswith('design option') for x in w)}
+        if _gm:      # HVAC 2024: deleting group member 1421734 was accepted and left it in ElementGroup 1421744's member set (a stale id); Revit semantics for deleting a group member are not reproduced, so refuse
+            e0 = sorted(_gm)[0]; bad.append('delete would remove element %d which belongs to a group or design option (%s): the group keeps a stale member id; ungroup/edit in Revit instead' % (e0, '; '.join(_gm[e0])))
         _gone = set(a) - set(b)      # dangling references: no survivor may mention a removed id as a numeric value unless it already did before (2025 Snowdon: a LegendComponent referenced the deleted CompoundCeilingType, which the in-use count guard missed)
         if _gone:
             import re as _re
