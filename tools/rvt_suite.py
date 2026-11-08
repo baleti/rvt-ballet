@@ -33,6 +33,7 @@ CASES = {
     (C_SAFE, 'untouched elements identical'): {'bundle': ('FamilyInstance', 'HVAC'), 'use': 'untouched'},
     (C_TYPE, 'change instance type'): {'special': 'change_type'},
     (C_ADD, 'wall'): {'special': 'add_wall'},
+    (C_ADD, 'family instance'): {'special': 'add_fi'},
     (C_TYPE, 'duplicate type'): {'static': ('PASS', 'verified 2026-11-07 (c1x-rvttype): HVAC 2024 FamilySymbol 1379030 duplicated as C5XDUP via tools/rvt_dup_type_gen.py; Revit 2024 opened clean (baseline DocWarnDialog only), new symbol readback name C5XDUP same family, original unchanged; other years not tested'), 'static_years': [2024]},
     (C_TYPE, 'edit type geometry parameter'): {'static': ('PASS', 'verified 2026-11-07 (c3x-rvttype): HVAC 2024 FamilySymbol Slot Width 0.0833 -> 0.1 via set_type_num (opt-in RVTBALLET_ENABLE_TYPEPARAM=1); gate only that field differs; Revit 2024 opened clean cmp 0/0, API readback 0.100000; other years refuse (caption lookup)'), 'static_years': [2024]},
     # rung 2 delete, evidence from c3x-rvtdel (Revit 2024 VM, Snowdon HVAC/Structural, opened clean, class-count dumps exact; 2024 only)
@@ -194,6 +195,28 @@ def decide_change_type(year, workdir, use_vm):
     if int(s0.group(1)) != t0 or int(s1.group(1)) != t1: return 'FAIL', 'Revit Symbol.Id %s -> %s, expected %d -> %d' % (s0.group(1), s1.group(1), t0, t1)
     return 'PASS', 'FamilyInstance %d type %d -> same-family %d; gate verify_diffs 0, only the target element differs, SAVE! in place == SAVE AS; Revit opens clean (%s) and Symbol.Id reads %d' % (inst, t0, t1, note, t1)
 
+def decide_add_fi(year, workdir, use_vm):
+    """ADD a FamilyInstance by clone-and-patch (tools/rvt_add_clone.py, edit engine) on the HVAC sample; reader diff must be +1 FamilyInstance only, then Revit open"""
+    if year != 2024: return 'FAIL', 'ADD family instance verified path is HVAC 2024 only (2025: multi-partition build offline-clean, Revit verdict pending; other years not built)'
+    src = sample_for(year, 'HVAC')
+    if not src: return 'ERROR', 'no sample'
+    out = workdir + '/addfi_%d.rvt' % year
+    env = dict(os.environ, RVT_ADD_EDITENGINE='1')
+    r = subprocess.run([sys.executable, HERE + '/rvt_add_clone.py', src, out, '--src', '1365188'], capture_output=True, text=True, env=env, timeout=3600)
+    if r.returncode != 0 or not os.path.exists(out): return 'FAIL', 'writer: ' + (r.stdout + r.stderr).strip()[-200:]
+    sys.path.insert(0, os.path.dirname(HERE))
+    from rvtballet import reader
+    a = reader.load(src)['recs']; b = reader.load(out)['recs']
+    new = [k for k in b if k not in a]; gone = [k for k in a if k[0] != 0 and 'error' not in a[k] and k not in b]; chg = [k for k in a if k in b and not (k[0] == 0 or 'error' in a[k]) and a[k] != b[k]]
+    if len(new) != 1 or new[0][1] != 'FamilyInstance' or gone or chg: return 'FAIL', 'record diff: new=%s gone=%d changed=%d' % (new[:3], len(gone), len(chg))
+    if not use_vm: return 'ERROR', 'VM checks disabled (--no-vm)'
+    if not vm_up(): return 'ERROR', 'Revit VM is down'
+    opened, cmp_ok, note = vm_open(year, out)
+    if opened is None: return 'ERROR', note
+    if not opened or not cmp_ok: return 'FAIL', 'Revit open/compare: ' + note
+    return 'PASS', 'new FamilyInstance %d: reader diff +1 only, Revit opens clean (%s); API position readback not yet automated' % (new[0][0], note)
+
+
 def decide_add_wall(year, workdir, use_vm):
     """ADD a straight wall (clone-and-patch, tools/rvt_aw_auto.py) on a Structural sample; reader-level +1 SWall only, then Revit open + API readback of the new wall"""
     if year not in WRITABLE: return 'FAIL', 'ADD only built for 2024/2026 (2020-2023 need 4-byte ids and the Latest registry grammar)'
@@ -247,6 +270,7 @@ def main():
                 elif 'static' in spec: st, note = spec['static'] if y in spec.get('static_years', [y]) else ('FAIL', 'not verified for %d (static case covers %s only)' % (y, spec['static_years']))
                 elif spec.get('special') == 'change_type': st, note = decide_change_type(y, workdir, not a.no_vm)
                 elif spec.get('special') == 'add_wall': st, note = decide_add_wall(y, workdir, not a.no_vm)
+                elif spec.get('special') == 'add_fi': st, note = decide_add_fi(y, workdir, not a.no_vm)
                 else: st, note = decide_class_case(y, spec, workdir, not a.no_vm)
             except Exception as e: st, note = 'ERROR', '%s: %s' % (type(e).__name__, e)
             counts[st] += 1; log(st, key, '|', note[:160]); put_ledger(a.run_id, key, st, note)
