@@ -76,4 +76,16 @@ if not a.nolatest:
         out,Ls=idlist.add_to_lists(raw,S,nid,W); print('latest lists',[(l[2]) for l in Ls]); assert Ls,'no id-list found'; return out
     g.latest_edits=[('Latest',reg)]
 g.itag=T['item'][W+8:W+10]
-g.commit(a.out); print('ok',a.out,'new id',nid)
+g.commit(a.out)
+# fail-closed layout check (c1x-rvtadd 2026-11-08): Revit 2024 rejected two outputs whose first gzip member of the partition was split mid header region (insert did not fit LIMIT). Compare with the source.
+if not os.environ.get('RVT_ADD_LAYOUT_FORCE'):
+    try:
+        import rvtgen as _rg
+        _src = _rg.Gen(a.seed); _dst = _rg.Gen(a.out)
+        for _pn in sorted(n for n in _src.e.m.parts if n.startswith('Partitions/')):
+            _o = _src.e.part(_pn).offs(); _n = _dst.e.part(_pn).offs()
+            if len(_o) > 2 and len(_n) > 2 and _o[1] > 20000 and not (_n[1] - _n[0] >= _o[1] - _o[0] or _n[2] - _n[1] == _o[1] - _o[0]):      # the original first member must survive whole (grown in place or pushed back intact)
+                os.remove(a.out); sys.exit('REFUSED: %s first member was split (%d B no longer present as one member in the first 8; new first members start %s): Revit rejects this layout (CorruptModelException); output removed. RVT_ADD_LAYOUT_FORCE=1 to keep it for experiments' % (_pn, _o[1], _n[:4]))
+    except SystemExit: raise
+    except Exception as _e: os.remove(a.out); sys.exit('REFUSED: layout check failed (%s); output removed' % _e)
+print('ok',a.out,'new id',nid)
