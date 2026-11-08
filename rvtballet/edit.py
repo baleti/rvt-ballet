@@ -483,6 +483,7 @@ def _check_element_name(v):
     """Revit refuses empty names and names with any of \\ : { } [ ] | ; < > ? ` ~ for levels, grids, views and types; the writer used to save them (c5x-rvtread)"""
     bad = sorted(set(v) & NAME_FORBIDDEN)
     if not v.strip(): raise EditError('a name must not be empty; nothing was changed')
+    if v != v.strip(): raise EditError('a name must not start or end with a space (Revit trims or rejects it, not VM-verified); nothing was changed')
     if any(ord(ch) < 32 or ord(ch) == 127 for ch in v): raise EditError('a name must not contain control characters (newline, tab, ...); nothing was changed')
     if any(__import__('unicodedata').category(ch) in ('Cs', 'Zl', 'Zp', 'Co', 'Cn') for ch in v): raise EditError('a name must not contain lone surrogates, line/paragraph separators or unassigned/private-use characters; nothing was changed')      # lone surrogate cannot be encoded as UTF-16 at all
     if any(__import__('unicodedata').category(ch) == 'Cf' for ch in v): raise EditError('a name must not contain invisible format characters (BOM, zero-width, bidi override); nothing was changed')      # c5x-rvtread: spoofing/duplicate-lookalike names; Revit VM verdict on these not taken, refusal is conservative

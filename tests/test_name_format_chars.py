@@ -9,6 +9,11 @@ class T(unittest.TestCase):
     def test_allowed(self):
         for n in ('Café', 'Café', 'Level 1 äöü', 'T.O. Slab'):
             edit._check_element_name(n)
+class S(unittest.TestCase):
+    def test_edge_spaces_refused(self):
+        for n in (' lead', 'trail ', ' both '):
+            with self.assertRaises(edit.EditError): edit._check_element_name(n)
+        edit._check_element_name('in ner')
 class N(unittest.TestCase):
     def test_nfc_nfd_batch_duplicate(self):
         mk = lambda e, v: {'op': 'set_string', 'eid': e, 'field': 'DatumPlane.m_text', 'value': v}
