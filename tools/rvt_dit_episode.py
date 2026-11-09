@@ -4,34 +4,49 @@
 (timestamp word excluded). Offline model only; not wired into any save path."""
 import struct, sys
 U = struct.Struct('<I')
+def _name_words(n): return 1 + (2 * n + 2 + 3) // 4
+def _rec_len(n): return 4 * (3 + _name_words(n) + 18) + 1
 def _recs(x):
-    """offsets of 'User' episode records that are in the 'count 1' shape: 1, ffffffff, id, 4, 'User\\0'(12B), epA, epB, 0, time, save, id, 10 counters, ffffffff, last"""
+    """offsets of 'count 1' episode records (1, ffffffff, id, nchars, name UTF-16, epA, epB, 0, time, save, id, 10 counters, ffffffff, last + 1 B):
+    the saving user's name is arbitrary ('User' in later saves, e.g. a login name in an ORIGINAL file)"""
     out = []
     pat = b'\x01\x00\x00\x00\xff\xff\xff\xff'
     i = x.find(pat)
     while i >= 0:
-        if x[i+12:i+16] == b'\x04\x00\x00\x00' and x[i+16:i+24] == 'User'.encode('utf-16le'):
-            out.append(i)
+        n = U.unpack_from(x, i + 12)[0] if i + 16 <= len(x) else 0
+        if 1 <= n <= 40 and i + _rec_len(n) + 4 <= len(x):
+            nm = x[i+16:i+16+2*n]
+            try: ok = nm.decode('utf-16le').isprintable() and x[i+16+2*n:i+16+2*n+2] == b'\0\0'
+            except Exception: ok = False
+            if ok: out.append(i)
         i = x.find(pat, i+1)
     return out
-RECLEN = 101
-def dit_next(x, now, drows=0):
+def _name_block(name):
+    nb = struct.pack('<I', len(name)) + name.encode('utf-16le') + b'\0\0'
+    return nb + b'\0' * (-len(nb) % 4)
+def dit_next(x, now, drows=0, newname=None):
+    """newname: name of the saving user for the NEW record; default = the superseded record's own name (Revit-saved files: 'User').
+    ORIGINAL files: pass the saving user's name (Revit wrote 'User' in the VM)."""
     recs = _recs(x)
-    best = max(U.unpack_from(x, r+32)[0] for r in recs)           # newest epB
-    tops = [r for r in recs if U.unpack_from(x, r+32)[0] == best]
+    nwords = lambda r: _name_words(U.unpack_from(x, r+12)[0])
+    epb = lambda r: U.unpack_from(x, r + 12 + 4 * nwords(r) + 4)[0]
+    best = max(epb(r) for r in recs)           # newest epB
+    tops = [r for r in recs if epb(r) == best]
     assert len(tops) == 2, 'expected the mirrored pair, got %d' % len(tops)
     y = bytearray(x); y[2] = (y[2] + 1) & 255
     for r in sorted(tops, reverse=True):
-        old = bytes(x[r:r+RECLEN]); T = U.unpack_from(x, r+RECLEN)[0]       # record = 25 words + 1 byte, then a u32 trailer (save counter)
-        w = list(struct.unpack('<25I', old[:100])); tail = old[100:]
-        n = w[:]
-        n[7] = w[8]; n[8] = w[8] + 1; n[10] = now; n[11] = w[11] + 1; n[2] += drows; n[12] += drows      # ids = ElemTable row count (delta == row delta, 28/28 pairs)
-        for k in range(13, 23): n[k] += 1
-        n[24] += 1
-        nb = struct.pack('<25I', *n) + tail
-        o = w[:]; o[0] += 1; o[12] = 0      # the superseded record loses its trailing user-id word
-        ob = struct.pack('<3I', *o[:3]) + struct.pack('<2I', w[11], 0) + struct.pack('<22I', *o[3:]) + tail
-        y[r:r+RECLEN+4] = ob + nb + U.pack(T + 1 if r == min(tops) else T)      # only the first copy's trailer is the save counter
+        nw = nwords(r); L = _rec_len(U.unpack_from(x, r+12)[0]); T = U.unpack_from(x, r+L)[0]
+        hdr = list(struct.unpack_from('<3I', x, r)); nameb = bytes(x[r+12:r+12+4*nw])
+        rest = list(struct.unpack_from('<18I', x, r+12+4*nw)); tail = bytes(x[r+L-1:r+L])
+        # new record
+        nr = rest[:]; nr[0] = rest[1]; nr[1] = rest[1] + 1; nr[3] = now; nr[4] = rest[4] + 1; nr[5] += drows
+        for k in range(6, 16): nr[k] += 1
+        nr[17] += 1
+        nb = struct.pack('<3I', 1, 0xffffffff, hdr[2] + drows) + (_name_block(newname) if newname else nameb) + struct.pack('<18I', *nr) + tail
+        # superseded record: count+1, (save,0) inserted after the id, its trailing id word zeroed
+        orr = rest[:]; orr[5] = 0
+        ob = struct.pack('<3I', hdr[0] + 1, hdr[1], hdr[2]) + struct.pack('<2I', rest[4], 0) + nameb + struct.pack('<18I', *orr) + tail
+        y[r:r+L+4] = ob + nb + U.pack(T + 1 if r == min(tops) else T)      # only the first copy's trailer is the save counter
     return bytes(y)
 if __name__ == '__main__':
     sys.path[:0] = ['~/rvt-research/write-lab', '~/rvt-research']
