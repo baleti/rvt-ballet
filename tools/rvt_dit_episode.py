@@ -22,7 +22,7 @@ def _recs(x):
         i = x.find(pat, i+1)
     return out
 def _name_block(name):
-    nb = struct.pack('<I', len(name)) + name.encode('utf-16le') + b'\0\0'
+    nb = struct.pack('<I', len(name.encode('utf-16le')) // 2) + name.encode('utf-16le') + b'\0\0'
     return nb + b'\0' * (-len(nb) % 4)
 def top_epb(x):
     """newest epB among the episode records (the file's current episode EP)"""
