@@ -24,6 +24,9 @@ def _pid_for(name):
     return ids          # several categories can share a name: the one stored on the element is chosen when the op is applied
 
 
+DERIVED_NUM = frozenset(['Unit weight'] + [a + ' ' + b for a in ('Young modulus', 'Poisson ratio', 'Shear modulus', 'Thermal expansion coefficient') for b in 'XYZ'])   # rvt_params.py: placeholder 0.0 on materials, Unit weight derived from Density on property sets (measured 2024/2026 e1_level: 23/23 such edits accepted then refused VerifyFailed)
+
+
 def _param_spec(op):
     """(pid, candidate pids) of a parameter addressed by id or by NAME (resolved against the element when the op is applied)"""
     pid = op.get('pid')
@@ -96,6 +99,7 @@ def validate_op(op):
         v = op.get('value')
         if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or abs(v) > 1e15: raise EditError('value must be a finite number')
         if kind == 'Int' and (not isinstance(v, int) or abs(v) >= 2 ** 31): raise EditError('Int value must be a 32-bit integer')
+        if op.get('param') in DERIVED_NUM: raise EditError('parameter %r is a structural-asset value that this reader shows as a derived or placeholder value (not the stored field), so an edit cannot be verified; nothing was changed. Edit it in Revit.' % op.get('param'))
         pid, cands = _param_spec(op)
         if BACKEND() != 'rvtedit': raise EditError('set_num needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
         return {'op': 'set_num', 'eid': op['eid'], 'pid': pid, 'pids': cands, 'param': op.get('param'), 'value': float(v) if kind == 'Double' else int(v), 'kind': kind}
