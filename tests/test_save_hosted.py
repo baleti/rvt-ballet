@@ -15,8 +15,8 @@ sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 async def run():
     from aiohttp.test_utils import TestClient, TestServer
     src = T + '/f.rvt'; shutil.copy(SRC, src); h0 = sha(src); md = T + '/m'; os.makedirs(md)
-    m = save.membership(open(src, 'rb').read(), [593207, 593206]); assert m == {593207: ['hosted on 593206'], 593206: ['hosts 2 element(s)']}, m      # the host wall is flagged too: moving it would leave the window behind
-    assert save.risky_membership(m, [{'op': 'move', 'eid': 593206}]).get(593206) == ['hosts 2 element(s)'] and 593206 not in save.risky_membership(m, [{'op': 'set_string', 'eid': 593206}])
+    m = save.membership(open(src, 'rb').read(), [593207, 593206]); assert m == {593207: ['hosted on 593206'], 593206: ['hosts 2 element(s)', 'joined to 1 element(s)']}, m      # the host wall is flagged too: moving it would leave the window behind
+    assert save.risky_membership(m, [{'op': 'move', 'eid': 593206}]).get(593206) == ['hosts 2 element(s)', 'joined to 1 element(s)'] and 593206 not in save.risky_membership(m, [{'op': 'set_string', 'eid': 593206}])
     models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
