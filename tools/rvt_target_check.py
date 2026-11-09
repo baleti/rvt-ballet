@@ -7,6 +7,7 @@ import sys, os, argparse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rvt_diff
 ap = argparse.ArgumentParser(); ap.add_argument('src'); ap.add_argument('out'); ap.add_argument('--target', type=int, required=True)
+ap.add_argument('--delta', default='', help='dx,dy,dz of the move: out-of-span changes that are exactly these shifts of doubles in a record carrying the target id are position-cache copies, not strays')
 ap.add_argument('--allow', default=''); ap.add_argument('--delete', action='store_true'); a = ap.parse_args()
 ok = {a.target} | {int(x) for x in a.allow.split(',') if x}
 rep = rvt_diff.diff(a.src, a.out, False, maxrec=100000)
@@ -50,6 +51,17 @@ if not a.delete and a.target not in ch: bad.append('UNVERIFIED: target not seen 
 if not a.delete:
     for pn, d in rep['joined'].items():
         if d['len_old'] != d['len_new']: bad.append('%s length %d -> %d' % (pn, d['len_old'], d['len_new']))
+def _explain_cache(x, y, out, dl, target, W):
+    """drop diff bytes explained by a double whose new-old equals one of the move deltas exactly, inside a 512-byte window that holds the target id; returns the unexplained bytes"""
+    import struct
+    x, y = bytes(x), bytes(y); tid = target.to_bytes(W, 'little'); left = []
+    for i in (int(v) for v in out):
+        okb = False
+        for k in range(max(0, i - 7), min(i, len(x) - 8) + 1):
+            va, vb = struct.unpack_from('<d', x, k)[0], struct.unpack_from('<d', y, k)[0]
+            if va != vb and abs(va) < 1e7 and any(abs((vb - va) - d) < 1e-9 for d in dl if d) and tid in x[max(0, k - 512):k + 512]: okb = True; break
+        if not okb: left.append(i)
+    return left
 def _positional():
     """equal-length partitions: byte-by-byte compare (exact, unlike the alignment diff) and require every differing byte inside the target's record span; returns (ok, n_diff_bytes, msg) or None"""
     try:
@@ -75,6 +87,8 @@ def _positional():
             inside = np.zeros(len(diff), bool)
             for o, nx in spans: inside |= (diff >= o) & (diff < nx)
             out = diff[~inside]
+            if len(out) and a.delta:
+                out = _explain_cache(x, y, out, [float(v) for v in a.delta.split(',')], a.target, W)
             if len(out): return (False, tot, '%d differing bytes outside the target/allowed records %s in %s, first at %d' % (len(out), spans[:3], pn, out[0]))
         return (True, tot, '')
     except Exception: return None
