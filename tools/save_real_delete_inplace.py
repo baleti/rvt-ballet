@@ -39,9 +39,9 @@ async def main(out, src0):
     async with TestClient(TestServer(server.make_app(models)), timeout=aiohttp.ClientTimeout(total=None)) as c:
         info = await (await c.get('/api/m/m/saveinfo')).json(); row['overwrite_enabled'] = bool(info.get('allow_overwrite') and info.get('gate_open'))
         r = await c.post('/api/m/m/edit', json={'op': 'delete', 'eid': pick}); j = await r.json(); row['edit_status'] = r.status
-        if r.status != 200: row['result'] = 'EDIT_REFUSED'; row['detail'] = str(j.get('error'))[:160]; row['original_untouched'] = sha(src) == h0; print(row); json.dump(row, open(out, 'w')); return
+        if r.status != 200: row['result'] = 'EDIT_REFUSED'; row['detail'] = str(j.get('error'))[:1500]; row['original_untouched'] = sha(src) == h0; print(row); json.dump(row, open(out, 'w')); return
         r = await c.post('/api/m/m/save', json={}); j = await r.json(); row['save_status'] = r.status
-        if r.status != 200: row['result'] = 'SAVE_%d %s' % (r.status, j.get('code')); row['detail'] = str(j.get('error'))[:160]; row['original_untouched'] = sha(src) == h0; print(row); json.dump(row, open(out, 'w')); return
+        if r.status != 200: row['result'] = 'SAVE_%d %s' % (r.status, j.get('code')); row['detail'] = str(j.get('error'))[:1500]; row['original_untouched'] = sha(src) == h0; print(row); json.dump(row, open(out, 'w')); return
         row['verify_diffs'] = j['verify']['n_unexpected']; row['backup_is_original'] = bool(j.get('backup')) and sha(j['backup']) == h0; row['file_changed'] = sha(src) != h0
         b = rvt_params.params(src); row['element_gone'] = pick not in b; row['other_elements_changed'] = len({e for e in pr if e != pick and (e not in b or pr[e] != b[e])})
         if os.environ.get('KEEP_OUT'): shutil.copy(src, os.environ['KEEP_OUT'])
