@@ -9,7 +9,7 @@ class Deep(unittest.TestCase):
         import adiff
         a = adiff.graw(F, 'Global/Latest'); src = struct.unpack_from('<Q', a, 153703 + 4 + 8 * 800)[0]
         with tempfile.TemporaryDirectory() as d:
-            o = os.path.join(d, 'o.rvt'); r = subprocess.run([sys.executable, TOOL, '--src', str(src), '--dx', '1', F, o], capture_output=True, text=True)
+            o = os.path.join(d, 'o.rvt'); r = subprocess.run([sys.executable, TOOL, F, o, '--src', str(src), '--dx', '1'], capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr); self.assertIn('latest lists [942, 1191]', r.stdout)
             b = adiff.graw(o, 'Global/Latest'); nid = int(re.search(r'new id (\d+)', r.stdout).group(1))
             self.assertEqual(len(re.findall(re.escape(struct.pack('<Q', nid)), b)), 2)
