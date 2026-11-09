@@ -1,7 +1,7 @@
 """regression: a wall MOVE whose output carries a different displacement (or none) must be refused by save._readback; the honest move passes. The wall's placement origin (Trf.m_or) is the witness (the geometry reader has no mesh for a moved wall)."""
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
+os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_MOVE_ANY'] = '1'      # wall move has no Revit-verified implementation (policy refuses it at edit time); this test exercises the readback witness, offline
 F = os.path.expanduser('~/rvt-research/write-lab/scenes/classtests/2024_writer_cols2.rte')
 from rvtballet import edit, save
 if not os.path.exists(F) or not save._import(): print('skip'); sys.exit(0)
@@ -28,10 +28,8 @@ import rvt_geometry as G
 dim = next((e for e, v in G.file_geometry_index(F).items() if str(v) == 'LinearDimString'), None)
 if dim is None: print('no LinearDimString in the scene: dimension part skipped')
 else:
-    da, db = [edit.validate_op({'op': 'move', 'eid': dim, 'dx': x, 'dy': 2.0, 'dz': 0.5}) for x in (1.0, 2.0)]
-    nd = edit.apply_full(buf, [da])[0]
-    save._readback(buf, nd, [da])
-    for label, out, ops in (('wrong amount (dim)', nd, [db]), ('unmoved output (dim)', buf, [da])):
-        try: save._readback(buf, out, ops); print('FAIL accepted:', label); sys.exit(1)
-        except sg.VerifyFailed as x: print('refused', label + ':', str(x)[:90])
-    print('save readback dim move OK')
+    # policy (edit.py): a moved dimension record is not honoured by Revit, so the move is refused at edit time (the old readback-witness part of this test can no longer be reached)
+    da = edit.validate_op({'op': 'move', 'eid': dim, 'dx': 1.0, 'dy': 2.0, 'dz': 0.5})
+    try: edit.apply_full(buf, [da]); print('FAIL dimension move was not refused'); sys.exit(1)
+    except edit.EditError as x: assert 'dimension' in str(x); print('dimension move refused at edit time:', str(x)[:80])
+    print('save readback dim move OK (refusal)')
