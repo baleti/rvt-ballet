@@ -22,10 +22,11 @@ class T(unittest.TestCase):
         for off in (0x20, 0x38, 0x39, 0x3a, 0x3b, 0x44, 0x60, 0x64, 0x68, 0x6c, 0x70, 0x80, 0x100, 0x1f0, 0x48, 0x4c):
             b = bytearray(open(S, 'rb').read()); b[off] ^= 0xFF
             self.assertTrue(save.source_damage(bytes(b)), hex(off))
-    def test_vm_tolerated_header_flips_not_flagged(self):
-        for off in (0x10, 0x14, 0x18, 0x1c, 0x1d, 0x08, 0x18, 0x22, 0x34):     # Revit 2024 opened these clean
+    def test_vm_tolerated_header_flips_now_flagged_by_policy(self):
+        # Revit 2024 opened these single-byte flips clean, but 21f790a (c1x-rvtsave 182/187) refuses sources whose CLSID/reserved/transaction-signature/byte-order/minor-version bytes deviate from the fixed values of 369/369 Revit-made files: stricter on purpose, never a false refusal on a real file (test_source_damage_clean)
+        for off in (0x10, 0x14, 0x18, 0x1c, 0x1d, 0x08, 0x22, 0x34):
             b = bytearray(open(S, 'rb').read()); b[off] ^= 0xFF
-            self.assertEqual(save.source_damage(bytes(b)), [], hex(off))
+            self.assertTrue(save.source_damage(bytes(b)), hex(off))
 if __name__ == '__main__': unittest.main()
 
 class Struct(unittest.TestCase):
