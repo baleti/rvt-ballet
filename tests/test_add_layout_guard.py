@@ -16,14 +16,14 @@ class LayoutGuard(unittest.TestCase):
             self.assertNotEqual(r.returncode, 0); self.assertIn('first member was split', r.stdout + r.stderr); self.assertFalse(os.path.exists(out))
 
     def test_single_partition_editengine_default_equals_writelab(self):
-        """single-partition default for the edit engine is skip 0: output byte-identical to the write-lab engine (the build Revit 2024 opened clean). Fails with the old default skip 1 (split layout, refused)."""
+        """single-partition default for the edit engine is skip 0: output byte-identical to the write-lab engine (the former write-lab layout; NOTE Revit 2024 later rejected it, so the tool default is now profile B and this equality is checked with RVT_ADD_PROFILE=A). Fails with the old default skip 1 (split layout, refused)."""
         import hashlib
         f = glob.glob(CORPUS + '/2024/42_Snowdon_Towers_Sample_HVAC.rvt')
         if not f: self.skipTest('no corpus')
         with tempfile.TemporaryDirectory() as d:
             h = []
             for k, extra in enumerate(({}, {'RVT_ADD_EDITENGINE': '1'})):
-                out = os.path.join(d, 'o%d.rvt' % k); env = dict(os.environ, **extra)
+                out = os.path.join(d, 'o%d.rvt' % k); env = dict(os.environ, RVT_ADD_PROFILE='A', **extra)
                 for _k in ('HDR_SKIP', 'REC_SKIP', 'ITEM_SKIP', 'RVT_ADD_LAYOUT_FORCE'): env.pop(_k, None)
                 r = subprocess.run([sys.executable, TOOL, f[0], out, '--src', '1365188'], capture_output=True, text=True, env=env)
                 self.assertEqual(r.returncode, 0, r.stdout + r.stderr); h.append(hashlib.sha1(open(out, 'rb').read()).hexdigest())
