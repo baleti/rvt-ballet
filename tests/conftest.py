@@ -14,11 +14,6 @@ def _is_script(path):
     except OSError: return False
 
 
-def pytest_ignore_collect(collection_path, config):
-    p = str(collection_path)
-    return p.endswith('.py') and os.path.basename(p).startswith('test_') and _is_script(p) or None
-
-
 class ScriptItem(pytest.Item):
     def runtest(self):
         r = subprocess.run([sys.executable, str(self.path)], capture_output=True, text=True, timeout=int(os.environ.get('RVT_SCRIPT_TEST_TIMEOUT', '900')))
@@ -31,5 +26,5 @@ class ScriptFile(pytest.File):
     def collect(self): yield ScriptItem.from_parent(self, name=self.path.stem)
 
 
-def pytest_collect_file(parent, file_path):
-    if file_path.suffix == '.py' and file_path.name.startswith('test_') and _is_script(file_path): return ScriptFile.from_parent(parent, path=file_path)
+def pytest_pycollect_makemodule(module_path, parent):
+    if module_path.name.startswith('test_') and _is_script(module_path): return ScriptFile.from_parent(parent, path=module_path)
