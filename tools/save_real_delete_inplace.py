@@ -16,16 +16,18 @@ cls = sys.argv[3] if len(sys.argv) > 3 else 'FamilyInstance'
 async def main(out, src0):
     t0 = time.time(); src = os.path.join(_T, 'copy.rvt'); shutil.copy(src0, src); h0 = sha(src); row = {'size_mb': round(os.path.getsize(src) / 2 ** 20, 1), 'class': cls}
     pr = rvt_params.params(src); ed = rvtedit.Edit(src); pick = None
-    for eid in list(pr)[:3000]:
+    if os.environ.get('CATID'):
+        import rvt_xcache; _x = rvt_xcache.get_x(src); _eh = _x['eh']; _W = _x['W']
+    for eid in list(pr)[:int(os.environ.get('SCAN_N', '3000'))]:
         try: pn, i, r, log, q = ed.g.e.trace(eid)
         except Exception: continue
         if r['class'] != cls or ed.latest_partition(eid) != pn: continue
         if os.environ.get('SKIP_VIEW_OWNED') == '1':      # the editor refuses view-owned FamilyInstance (title block etc.); pick a model instance instead
             import re as _re
             if any(l[1] == 'Element.m_ownerDBViewId' and (_re.search(r'(\d+)', str(l[4])) or [0, 0]) and int((_re.search(r'(\d+)', str(l[4])) or _re.search(r'(0)', '0')).group(1)) < 2 ** 62 for l in log): continue
-        if os.environ.get('CATID'):      # keep only instances of one category (e.g. -2001330 Structural Columns); header field m_categroryId
-            _c = [l for l in log if 'm_categroryId' in str(l[1])]
-            if not _c or str(os.environ['CATID']) not in str(_c[0][4]): continue
+        if os.environ.get('CATID'):      # keep only instances of one category (e.g. -2001330 Structural Columns); element header m_categroryId (signed)
+            _v = int((_eh.get(eid) or {}).get('m_categroryId', 0)); _v = _v - (1 << 8 * _W) if _v >= 1 << (8 * _W - 1) else _v
+            if _v != int(os.environ['CATID']): continue
         try:
             if ed.cascade(eid) == [eid]: pick = eid; break
         except Exception: continue
