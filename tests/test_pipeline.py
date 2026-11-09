@@ -1,4 +1,5 @@
 """unit tests: packing, loop nesting, matching metric, B-rep closedness, cache versioning (run: .venv/bin/python -m pytest tests  or  python tests/test_pipeline.py)"""
+import pytest
 import os, sys, tempfile, time, json
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -25,6 +26,7 @@ def test_glb_has_eidx_and_indices_in_range():
     assert js['accessors'][0]['count'] == 8 and js['accessors'][2]['count'] == 36
 
 def test_group_loops_nesting():
+    pytest.importorskip("matplotlib")      # build.group_loops needs matplotlib.path; absent on this host python
     sq = lambda x, y, s: np.array([[x, y], [x + s, y], [x + s, y + s], [x, y + s]], float)
     groups = build.group_loops([sq(0, 0, 10), sq(2, 2, 2), sq(20, 0, 5), sq(3, 3, 0.5)])     # outer + hole (holding an island) + a separate outer
     outers = sorted(len(h) for o, h in groups); assert len(groups) == 3 and outers == [0, 0, 1]
