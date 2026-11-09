@@ -26,9 +26,14 @@ if _fy != int(year): sys.exit('REFUSED: the file is a Revit %d file but year=%s 
 if _fy not in (2024, 2026): sys.exit('REFUSED: add-wall has a verified wall template only for 2024 and 2026 (file is %d); nothing written' % _fy)
 if _fy == 2026 and os.environ.get('RVT_ADD26_SAVED') and not os.environ.get('RVT_ADD26_EXPERIMENT'):      # opt-in: Revit-SAVED 2026 base (single merged partition) + in-place member layout verified once (Electrical, VM 2026, readback exact); originals (4 partitions) stay refused
     _np = sum(1 for k in cfb.CFB(open(src, 'rb').read()).streams() if k.startswith('Partitions/'))
+    _st = _re.findall(r'(20\d{6})_\d{4}\(x\d+\)', _bfi); _need = {2026: 20250519}[_fy]
+    if not _st or int(_st[0]) < _need: sys.exit('REFUSED: file was not saved by the Revit build the VM verified (BasicFileInfo build stamp %s, need >= %d); originals and synthetic files corrupt on open; nothing written' % (_st[:1], _need))
     if _np != 1: sys.exit('REFUSED: 2026 add-wall is only allowed on a Revit-saved file (1 partition stream); this file has %d (original, Revit 2026 rejects our add on those); nothing written' % _np)
     os.environ['RVTGEN_INPLACE'] = '1'; os.environ['RVT_ADD26_EXPERIMENT'] = '1'
 if _fy == 2026 and not os.environ.get('RVT_ADD26_EXPERIMENT'): sys.exit('REFUSED: 2026 add-wall output was refused by Revit 2026 on the original Snowdon Structural sample (CorruptModel / ModificationForbidden, sev1 open); disabled until a Revit-verified fix. Set RVT_ADD26_EXPERIMENT=1 for lab use only; nothing written')
+if _fy == 2024 and os.environ.get('RVTGEN_INPLACE'):      # in-place layout opened only on a 2024 file saved by Revit (build stamp 20231029); all 3 originals (stamp 20230206) were CorruptModel
+    _st = _re.findall(r'(20\d{6})_\d{4}\(x\d+\)', _bfi)
+    if not _st or int(_st[0]) < 20231029: sys.exit('REFUSED: in-place add needs a 2024 file saved by Revit build >= 20231029 (BasicFileInfo stamp %s); originals were CorruptModel in the VM; nothing written' % (_st[:1],))
 if not os.environ.get('RVT_ADD_WORKSHARED_FORCE'):      # workshared models carry worksets + central link the writer does not maintain (same rule as rvt_add_clone and the in-place save)
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
     from rvtballet.save import worksharing_state
