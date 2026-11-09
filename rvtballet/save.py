@@ -273,6 +273,25 @@ for (e, c), r in x['recs'].items():
         for v in t:
             for i in ids(v):
                 if i < 2 ** 32 - 1 and i != e: leveled.setdefault(i, set()).add(e)
+nested = {}      # child id -> parent FamilyInstances listing it in m_subInstTable (nested sub-component): deleting the child alone leaves the parent's raw sub list dangling
+for (e, c), r in x['recs'].items():
+    t = []; find(r.get('fields'), 'm_subInstTable', t)
+    for v in t:
+        f = []; find(v, 'first', f)
+        for w in f:
+            for i in ids(w):
+                if i < 2 ** 32 - 1 and i != e: nested.setdefault(i, set()).add(e)
+parent_of = {}   # parent id -> child ids; Revit 2024 VM (rbnest1): a parent-only move leaves the nested children where they were (not re-derived on open)
+for c_, ps in nested.items():
+    for p_ in ps: parent_of.setdefault(p_, set()).add(c_)
+joined = {}      # element id -> other elements named in its own m_affectedEdgesTags (joined walls: Revit rewrites the neighbours' end params / envelopes on a move, the writer moves only the wall; Site 2024 wall 1139388 touched 7 neighbours)
+for (e, c), r in x['recs'].items():
+    t = []; find(r.get('fields'), 'm_affectedEdgesTags', t)
+    for v in t:
+        f = []; find(v, 'first', f)
+        for w in f:
+            for i in ids(w):
+                if i < 2 ** 32 - 1 and i != e: joined.setdefault(e, set()).add(i); joined.setdefault(i, set()).add(e)
 dimmed = {}      # element id -> dimensions whose witness geomRef (m_elemId) names it (a moved wall leaves the dimension value stale until Revit regenerates)
 for (e, c), r in x['recs'].items():
     if 'Dim' not in c: continue
@@ -283,7 +302,7 @@ for (e, c), r in x['recs'].items():
 for (e, c), r in x['recs'].items():
     if e not in want: continue
     d = []; find(r.get('fields'), 'm_designOptionId', d); h = []; find(r.get('fields'), 'm_hostId', h)
-    out.setdefault(str(e), []).append({'cls': c, 'groups': sorted(members.get(e, ())), 'options': [i for v in d for i in ids(v) if i < 2 ** 31], 'hosts': [i for v in h for i in ids(v) if i < 2 ** 32 - 1], 'hosting': len(hosting.get(e, ())), 'dimmed': len(dimmed.get(e, ())), 'leveled': len(leveled.get(e, ()))})
+    out.setdefault(str(e), []).append({'cls': c, 'groups': sorted(members.get(e, ())), 'options': [i for v in d for i in ids(v) if i < 2 ** 31], 'hosts': [i for v in h for i in ids(v) if i < 2 ** 32 - 1], 'hosting': len(hosting.get(e, ())), 'nested': sorted(nested.get(e, ())), 'children': sorted(parent_of.get(e, ())), 'joined': len(joined.get(e, ())), 'dimmed': len(dimmed.get(e, ())), 'leveled': len(leveled.get(e, ()))})
 print(json.dumps(out))
 """
 
@@ -302,7 +321,7 @@ def membership(buf, eids):
         if r.returncode: raise RuntimeError('group/design-option check failed: ' + (r.stderr.strip().splitlines() or ['?'])[-1][:150])
         res = {}
         for e, recs in json.loads(r.stdout.strip().splitlines()[-1]).items():
-            why = sorted({'group %d' % g for x in recs for g in x['groups']} | {'design option %d' % o for x in recs for o in x['options']} | {'hosted on %d' % h for x in recs for h in x.get('hosts', [])} | {'hosts %d element(s)' % n for x in recs for n in [x.get('hosting', 0)] if n} | {'dimensioned by %d dimension(s)' % n for x in recs for n in [x.get('dimmed', 0)] if n} | {'level constrains %d element(s)' % n for x in recs for n in [x.get('leveled', 0)] if n and x.get('cls') == 'Level'})
+            why = sorted({'group %d' % g for x in recs for g in x['groups']} | {'design option %d' % o for x in recs for o in x['options']} | {'hosted on %d' % h for x in recs for h in x.get('hosts', [])} | {'nested in %d parent(s): %s' % (len(n), ','.join(str(i) for i in n)) for x in recs for n in [x.get('nested', [])] if n} | {'nesting parent of %d sub-component(s)' % len(n) for x in recs for n in [x.get('children', [])] if n} | {'joined to %d element(s)' % n for x in recs for n in [x.get('joined', 0)] if n} | {'hosts %d element(s)' % n for x in recs for n in [x.get('hosting', 0)] if n} | {'dimensioned by %d dimension(s)' % n for x in recs for n in [x.get('dimmed', 0)] if n} | {'level constrains %d element(s)' % n for x in recs for n in [x.get('leveled', 0)] if n and x.get('cls') == 'Level'})
             if why: res[int(e)] = why
         return res
     finally:
@@ -1057,6 +1076,11 @@ def _readback(src_buf, nb, ops):
         _gm = {e: w for e, w in membership(src_buf, set(a) - set(b)).items() if any(x.startswith('group') or x.startswith('design option') for x in w)}
         if _gm:      # HVAC 2024: deleting group member 1421734 was accepted and left it in ElementGroup 1421744's member set (a stale id); Revit semantics for deleting a group member are not reproduced, so refuse
             e0 = sorted(_gm)[0]; bad.append('delete would remove element %d which belongs to a group or design option (%s): the group keeps a stale member id; ungroup/edit in Revit instead' % (e0, '; '.join(_gm[e0])))
+        _nest = {e: [int(i) for i in x.split(': ')[1].split(',')] for e, w in membership(src_buf, set(a) - set(b)).items() for x in w if x.startswith('nested in ')}
+        _nest = {e: [i for i in ps if i not in set(a) - set(b)] for e, ps in _nest.items()}
+        _nest = {e: ps for e, ps in _nest.items() if ps}
+        if _nest:      # Facades 2024: child 593274 listed in parent 593273's m_subInstTable; deleting it alone leaves the parent's raw sub list dangling (no parameter shows it)
+            e0 = sorted(_nest)[0]; bad.append('delete would remove element %d, a nested sub-component of surviving element(s) %s: the parent keeps a stale sub-component entry; delete the parent instead' % (e0, ','.join(str(i) for i in _nest[e0])))
         _gone = set(a) - set(b)      # dangling references: no survivor may mention a removed id as a numeric value unless it already did before (2025 Snowdon: a LegendComponent referenced the deleted CompoundCeilingType, which the in-use count guard missed)
         if _gone:
             import re as _re
@@ -1102,7 +1126,7 @@ def risky_membership(mem, ops):
     moved = {o['eid'] for o in ops if o.get('op') in ('move', 'rotate')}; out = {}
     deleted = {o['eid'] for o in ops if o.get('op') == 'delete'}      # a deleted element still named by a dimension witness leaves 100+ raw mentions (Structural 2024 wall 585072); Revit's own cascade is unrecorded, so refuse until the paired VM run says
     for e, why in mem.items():
-        w = [x for x in why if not x.startswith(('hosted on ', 'hosts ', 'dimensioned by ', 'level constrains ')) or e in moved or (e in deleted and x.startswith('dimensioned by '))]
+        w = [x for x in why if not x.startswith(('hosted on ', 'hosts ', 'joined to ', 'dimensioned by ', 'level constrains ', 'nested in ', 'nesting parent of ')) or e in moved or (e in deleted and x.startswith(('dimensioned by ', 'nested in ')))]
         if w: out[e] = w
     return out
 
