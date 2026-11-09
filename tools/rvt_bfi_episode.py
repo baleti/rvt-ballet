@@ -5,12 +5,13 @@ bfi_next(x, new_guid): (1) every occurrence of the document GUID (36-char UTF-16
 Self-test: python3 rvt_bfi_episode.py BASE.rvt AFTER.rvt. Offline model only; not wired into any save path."""
 import re, struct, sys
 GUID = re.compile(rb'(?:[0-9a-f]\x00){8}-\x00(?:(?:[0-9a-f]\x00){4}-\x00){3}(?:[0-9a-f]\x00){12}')
+ZERO = '00000000-0000-0000-0000-000000000000'.encode('utf-16le')
 def bfi_next(x, new_guids):
     """new_guids: list of fresh GUID strings, one per DISTINCT old GUID in order of first appearance (Revit has 2: 8 occurrences, 2 distinct)."""
     x = bytes(x)
     x = bytes(x); order = []
     for m in GUID.finditer(x):
-        if m.group(0) not in order: order.append(m.group(0))
+        if m.group(0) not in order and m.group(0) != ZERO: order.append(m.group(0))   # the all-zero GUID is kept by Revit (c4x 2026-11-09)
     assert len(order) == len(new_guids), 'distinct GUIDs %d != %d new' % (len(order), len(new_guids))
     y = x
     for g, n in zip(order, new_guids): y = y.replace(g, n.encode('utf-16le'))

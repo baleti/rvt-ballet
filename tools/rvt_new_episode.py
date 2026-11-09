@@ -42,7 +42,7 @@ def main(before, edited, out):
         ed.global_edit('Global/ElemTable', et)
         drows[0] = st['rows'] - n0
         ed.global_edit('Global/History', hist)
-        ed.global_edit('Global/DocumentIncrementTable', lambda x: D.dit_next(x, int(time.time()), drows[0]))
+        ed.global_edit('Global/DocumentIncrementTable', lambda x: D.dit_next(x, int(os.environ.get('EP_TIME') or time.time()), drows[0]))
     parts = [n for n in S if n.startswith('Partitions/')]
     if len(parts) == 1 and not os.environ.get('EP_NO_RENAME'):      # Revit renames the single partition stream to old+1 on every save (42->43, 21->22; = DIT save counter)
         e = S[parts[0]]; new = str(int(parts[0].split('/')[1]) + 1)
@@ -52,7 +52,7 @@ def main(before, edited, out):
     if only_rename: ed.save(out); print('OK (rename only)'); return
     bfi = bytes(S['BasicFileInfo'].data); order = []
     for m in B.GUID.finditer(bfi):
-        if m.group(0) not in order: order.append(m.group(0))
+        if m.group(0) not in order and m.group(0) != B.ZERO: order.append(m.group(0))
     S['BasicFileInfo'].data, _ = B.bfi_next(bfi, [str(uuid.uuid4()) for _ in order])
     S['Contents'].data = C.contents_next(bytes(S['Contents'].data), D.top_counters(dit0))
     ed.save(out)
