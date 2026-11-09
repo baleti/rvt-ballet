@@ -380,6 +380,18 @@ def _move_datum(ed, o):
     ed._rec_edit(o['eid'], edits)
 
 
+def _move_viewport(ed, o):
+    """Viewport (a view placed on a sheet): the placement is Viewport.m_offset (sheet coordinates, ft) and the label origin Viewport.m_labelOrigin moves with it. Measured in the Revit 2024 VM (Snowdon Structural, API SetBoxCenter +0.25,+0.125): exactly these two fields shifted by (dx,dy,0), nothing else of the Viewport/Viewer/sheet records changed. Opt-in (RVTBALLET_ENABLE_VIEWPORTMOVE=1) until our own output is VM-verified."""
+    import struct
+    if o['dz']: raise EditError('element %d: a viewport moves in the sheet plane only (dz must be 0)' % o['eid'])
+    log = ed.g.e.trace(o['eid'])[3]; B = _body(ed, o['eid']); edits = []
+    for nm in ('Viewport.m_offset', 'Viewport.m_labelOrigin'):
+        f = [l for l in log if l[1] == nm and l[3] - l[2] == 24]
+        if len(f) != 1: raise EditError('element %d: unexpected Viewport layout (%d x %s), move refused' % (o['eid'], len(f), nm))
+        v = struct.unpack_from('<3d', B, f[0][2]); edits.append((f[0][2], 24, struct.pack('<3d', v[0] + o['dx'], v[1] + o['dy'], v[2])))
+    ed._rec_edit(o['eid'], edits)
+
+
 def _rvtedit_pass(a, b, ops):
     import rvtedit
     ed = rvtedit.Edit(a); deleted = []
@@ -396,6 +408,7 @@ def _rvtedit_pass(a, b, ops):
                     if any(str(x[1]).startswith('FamInstCurveDriver.') for x in ed.g.e.trace(o['eid'])[3]): raise EditError('element %d: move refused, it is a curve-located family instance (beam / brace: FamInstCurveDriver with its own curve, end joins and cached extents); moving only its placement origin makes the box inconsistent (measured on Snowdon Structural 2024 and rst_basic 2023). Columns and point-located instances are supported' % o['eid'])
                     if any(str(x[1]).startswith('LinearDimString') for x in ed.g.e.trace(o['eid'])[3]) or ed.g.e.trace(o['eid'])[2].get('class') == 'LinearDimString': raise EditError('element %d is a dimension: Revit does not honour a moved dimension record, so the move is refused' % o['eid'])
                     _cls = ed.g.e.trace(o['eid'])[2].get('class')
+                    if _cls == 'Viewport' and os.environ.get('RVTBALLET_ENABLE_VIEWPORTMOVE') == '1': _move_viewport(ed, o); continue
                     if _cls not in MOVE_VM_VERIFIED and os.environ.get('RVTBALLET_MOVE_ANY') != '1': raise EditError('element %d is a %s: moving this class has no Revit-verified implementation (verified: %s), so the move is refused' % (o['eid'], _cls, ', '.join(sorted(MOVE_VM_VERIFIED))))
                     ed.move(o['eid'], o['dx'], o['dy'], o['dz'])
                 except NotImplementedError as ne:

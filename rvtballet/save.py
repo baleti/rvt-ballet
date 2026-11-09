@@ -892,7 +892,7 @@ def _trf_origin(buf, eid, field='Trf.m_or'):
 def _origin_field(src_buf, eid):
     """record field that witnesses a move of this class: TextNote carries TextElement.m_orig (no Trf)"""
     c = _bbox_class(src_buf, eid)
-    return 'TextElement.m_orig' if c == 'TextNote' else 'Plane.m_origin' if c == 'Grid' else 'Trf.m_or'
+    return 'Viewport.m_offset' if c == 'Viewport' else 'TextElement.m_orig' if c == 'TextNote' else 'Plane.m_origin' if c == 'Grid' else 'Trf.m_or'
 
 
 def _origin_move_bad(src_buf, nb, o):
@@ -1004,7 +1004,7 @@ def _readback(src_buf, nb, ops):
         if any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv): continue
         try: cl = _bbox_class(src_buf, o['eid'])
         except Exception: cl = ''
-        if cl and cl not in ('FamilyInstance', 'SWall', 'LinearDimString', 'RvtLinkInstance', 'TextNote', 'Level', 'Grid'): bad.append('moved element %d: class %s has no readable displacement witness, so the move cannot be verified (refused)' % (o['eid'], cl))
+        if cl and cl not in ('FamilyInstance', 'SWall', 'LinearDimString', 'RvtLinkInstance', 'TextNote', 'Level', 'Grid', 'Viewport'): bad.append('moved element %d: class %s has no readable displacement witness, so the move cannot be verified (refused)' % (o['eid'], cl))
         elif cl in ('FamilyInstance', ''):      # '' = the class index does not list the element (older files): box or record origin must witness
             try: has_box = _bbox_of(src_buf, o['eid']) is not None
             except Exception: has_box = False
@@ -1033,7 +1033,7 @@ def _readback(src_buf, nb, ops):
     for o in [r for r in mv if r['op'] == 'move']:      # walls and linear dimensions: the placement origin in the record must move by exactly the requested displacement (the geometry reader has no mesh for a moved wall, and the box carries join extensions)
         if any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv): continue
         try:
-            if _bbox_class(src_buf, o['eid']) not in ('SWall', 'LinearDimString', 'RvtLinkInstance', 'TextNote', 'Grid'): continue
+            if _bbox_class(src_buf, o['eid']) not in ('SWall', 'LinearDimString', 'RvtLinkInstance', 'TextNote', 'Grid', 'Viewport'): continue
             fl_ = _origin_field(src_buf, o['eid'])
         except Exception: fl_ = False
         w0, w1 = _pair(_trf_origin, src_buf, nb, o['eid'], fl_) if fl_ is not False else (None, None)
@@ -1042,6 +1042,9 @@ def _readback(src_buf, nb, ops):
         if _bbox_class(src_buf, o['eid']) == 'SWall':      # the location line itself must move (the Trf origin alone is not a wall move)
             g0, g1 = _pair(_wall_line_origin, src_buf, nb, o['eid'])
             if g0 is not None and (g1 is None or any(abs((g1[i] - g0[i]) - d[i]) > 1e-6 * max(1.0, abs(d[i])) + 1e-6 for i in range(3))): bad.append('moved wall %d: the wall location line in the output is not the source moved by (%.4g, %.4g, %.4g) (only a pattern origin moved)' % ((o['eid'],) + d)); continue
+        if _bbox_class(src_buf, o['eid']) == 'Viewport':      # the label origin must move with the placement offset
+            l0, l1 = _pair(_trf_origin, src_buf, nb, o['eid'], 'Viewport.m_labelOrigin')
+            if w0 is None or l0 is None or l1 is None or any(abs((l1[i] - l0[i]) - d[i]) > 1e-6 * max(1.0, abs(d[i])) + 1e-6 for i in range(3)): bad.append('moved viewport %d: placement offset or label origin in the output is not the source moved by (%.4g, %.4g, %.4g)' % ((o['eid'],) + d)); continue
         if w0 is None and _bbox_class(src_buf, o['eid']) == 'TextNote': bad.append('moved text note %d: no readable TextElement.m_orig, so the move cannot be verified (refused)' % o['eid']); continue
         if w0 is None: continue
         if w1 is None or any(abs((w1[i] - w0[i]) - d[i]) > 1e-6 * max(1.0, abs(d[i])) + 1e-6 for i in range(3)): bad.append('moved element %d: the placement origin in the output is not the source moved by (%.4g, %.4g, %.4g)' % ((o['eid'],) + d))
