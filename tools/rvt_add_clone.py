@@ -10,6 +10,11 @@ import cfb as _cfb
 _ps=sorted((n for n in _cfb.CFB(open(sys.argv[1],'rb').read()).streams() if n.startswith('Partitions/')),key=lambda n:int(n.split('/')[1])) if len(sys.argv)>1 and os.path.exists(sys.argv[1]) else []
 if len(_ps)<=1 and os.environ.get('RVT_ADD_EDITENGINE') and any(os.environ.get(_k)=='1' for _k in ('HDR_SKIP','REC_SKIP','ITEM_SKIP')) and not os.environ.get('RVT_ADD_EDITENGINE_FORCE'):
     sys.exit('REFUSED: the edit engine on a single-partition project produced a file Revit 2024 rejects (CorruptModelException, HVAC 2024 2026-11-08); the default write-lab engine is the one with a Revit PASS. RVT_ADD_EDITENGINE_FORCE=1 overrides for experiments only')
+_PROFILE_B = os.environ.get('RVT_ADD_PROFILE') == 'B' and len(_ps) <= 1      # opt-in (c1x-rvtadd 2026-11-09): the only HVAC 2024 FI ADD layout Revit opened (bis/B_nomerge, x2): edit engine, header cut in at 259, insert NOT merged; readback of the new element still pending, so not the default
+if _PROFILE_B:
+    os.environ['RVT_ADD_EDITENGINE'] = '1'; os.environ['RVT_ADD_EDITENGINE_FORCE'] = '1'
+    for _k in ('HDR_SKIP', 'REC_SKIP', 'ITEM_SKIP'): os.environ[_k] = '1'
+    os.environ['INS_MERGE'] = '0'
 if len(_ps)>1 or os.environ.get('RVT_ADD_EDITENGINE'):
     # multi-partition: the edit-lab engine (what rvtedit cp/aw/tn use) puts new items after the first few of each list (index 0 is special in real projects) and builds in the LAST big partition; the write-lab engine inserts at index 0 of partition 1
     sys.path.insert(0,os.path.expanduser('~/rvt-research/edit-lab'))
@@ -108,7 +113,7 @@ if not os.environ.get('RVT_ADD_LAYOUT_FORCE'):
         _src = _rg.Gen(a.seed); _dst = _rg.Gen(a.out)
         for _pn in sorted(n for n in _src.e.m.parts if n.startswith('Partitions/')):
             _o = _src.e.part(_pn).offs(); _n = _dst.e.part(_pn).offs()
-            if len(_o) > 2 and len(_n) > 2 and _o[1] > 20000 and not (_n[1] - _n[0] >= _o[1] - _o[0] or _n[2] - _n[1] == _o[1] - _o[0]):      # the original first member must survive whole (grown in place or pushed back intact)
+            if len(_o) > 2 and len(_n) > 2 and _o[1] > 20000 and not (_n[1] - _n[0] >= _o[1] - _o[0] or _n[2] - _n[1] == _o[1] - _o[0] or (_PROFILE_B and len(_n) > 3 and (_n[1] - _n[0]) + (_n[3] - _n[2]) == _o[1] - _o[0])):      # the original first member must survive whole (grown in place or pushed back intact)
                 os.remove(a.out); sys.exit('REFUSED: %s first member was split (%d B no longer present as one member in the first 8; new first members start %s): Revit rejects this layout (CorruptModelException); output removed. RVT_ADD_LAYOUT_FORCE=1 to keep it for experiments' % (_pn, _o[1], _n[:4]))
     except SystemExit: raise
     except Exception as _e: os.remove(a.out); sys.exit('REFUSED: layout check failed (%s); output removed' % _e)
