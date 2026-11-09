@@ -45,4 +45,13 @@ lz = float(str(org).strip('[]').split(',')[2])
 op = 'aw:%s:%s:%s:%s:%s:%d:%r:%d:%d:%d' % (x0, y0, x1, y1, h, lv, lz, typ, ph, w)
 print('OP', op, flush=True)
 env = dict(os.environ, YEAR=year)
-sys.exit(subprocess.call([sys.executable, os.path.expanduser('~/rvt-research/edit-lab/rvtedit.py'), src, dst, op], env=env))
+_epi = bool(os.environ.get('RVT_ADD_EPISODE'))      # EXPERIMENT (c4x-rvtdiff): give the add Revit's new-episode bookkeeping (tools/rvt_new_episode.py); VM verdicts pending, never default
+_out = dst + '.noepisode.tmp' if _epi else dst
+_rc = subprocess.call([sys.executable, os.path.expanduser('~/rvt-research/edit-lab/rvtedit.py'), src, _out, op], env=env)
+if _rc == 0 and _epi:
+    try:
+        _rc = subprocess.call([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rvt_new_episode.py'), src, _out, dst])
+    finally:
+        if os.path.exists(_out): os.remove(_out)
+    if _rc != 0 and os.path.exists(dst): os.remove(dst)      # never leave a half-processed output
+sys.exit(_rc)
