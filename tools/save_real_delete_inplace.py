@@ -20,6 +20,9 @@ async def main(out, src0):
         try: pn, i, r, log, q = ed.g.e.trace(eid)
         except Exception: continue
         if r['class'] != cls or ed.latest_partition(eid) != pn: continue
+        if os.environ.get('SKIP_VIEW_OWNED') == '1':      # the editor refuses view-owned FamilyInstance (title block etc.); pick a model instance instead
+            import re as _re
+            if any(l[1] == 'Element.m_ownerDBViewId' and (_re.search(r'(\d+)', str(l[4])) or [0, 0]) and int((_re.search(r'(\d+)', str(l[4])) or _re.search(r'(0)', '0')).group(1)) < 2 ** 62 for l in log): continue
         try:
             if ed.cascade(eid) == [eid]: pick = eid; break
         except Exception: continue
