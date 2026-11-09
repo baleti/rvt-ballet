@@ -43,6 +43,10 @@ typ = eid(f['VWall.m_WallAttributesId']); ph = eid(f['Element.m_createdPhaseId']
 org = [l[4] for l in e.trace(lv)[3] if len(l) > 4 and l[1] == 'Plane.m_origin'][0]
 lz = float(str(org).strip('[]').split(',')[2])
 op = 'aw:%s:%s:%s:%s:%s:%d:%r:%d:%d:%d' % (x0, y0, x1, y1, h, lv, lz, typ, ph, w)
+try:      # thickness: the like-wall has the SAME type, so twice its key-reference offset is that type's width; the fitted template is a 200 mm wall (Revit 2026 harness: badvolume=1 without this)
+    _kro = float(str(f['VWall.m_keyRefOffset']).strip())
+    if math.isfinite(_kro) and 0.01 < _kro < 50 and abs(_kro - 0.32808398950131235) > 1e-6: op += ':%r' % (2 * _kro)
+except Exception: pass
 print('OP', op, flush=True)
 env = dict(os.environ, YEAR=year)
 _epi = bool(os.environ.get('RVT_ADD_EPISODE'))      # EXPERIMENT (c4x-rvtdiff): give the add Revit's new-episode bookkeeping (tools/rvt_new_episode.py); VM verdicts pending, never default

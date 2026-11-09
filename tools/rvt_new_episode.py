@@ -21,6 +21,8 @@ def main(before, edited, out):
         for k in range(n):
             o = 6 + 40 * k; i = struct.unpack_from('<Q', raw, o)[0]
             if i not in old: struct.pack_into('<3I', raw, o + 8, EP, EP, EP); st['new'] += 1
+            elif str(i) in os.environ.get('EP_TOUCH', '').split(','):      # experiment: rows Revit touched without a content diff in OUR edit (B := EP)
+                a, _, c = struct.unpack_from('<3I', raw, o + 8); struct.pack_into('<3I', raw, o + 8, a, EP, c)
             elif bytes(raw[o:o+40]) != old[i]:
                 a = struct.unpack_from('<I', raw, o + 8)[0]; struct.pack_into('<3I', raw, o + 8, a, EP, EP); st['chg'] += 1
         return bytes(raw)
@@ -31,11 +33,23 @@ def main(before, edited, out):
         k += 4; raw[k:k+4] = struct.pack('<I', EP + 1) + uuid.uuid4().bytes_le + b'\x28'
         return bytes(raw)
     drows = [0]
-    ed.global_edit('Global/ElemTable', et)
-    drows[0] = st['rows'] - n0
-    ed.global_edit('Global/History', hist)
-    ed.global_edit('Global/DocumentIncrementTable', lambda x: D.dit_next(x, int(time.time()), drows[0]))
+    only_rename = bool(os.environ.get('EP_ONLY_RENAME'))      # experiment: partition rename alone
+    et_only = bool(os.environ.get('EP_ET_ONLY'))      # experiment: only the ElemTable triples (new row = EP x3), nothing else (no rename: it was harmful, c4x 2026-11-09)
     c = ed.m.c; S = c.streams()
+    if et_only:
+        ed.global_edit('Global/ElemTable', et); ed.save(out); print('OK (ElemTable only) EP=%d new=%d chg=%d' % (EP, st['new'], st['chg'])); return
+    if not only_rename:
+        ed.global_edit('Global/ElemTable', et)
+        drows[0] = st['rows'] - n0
+        ed.global_edit('Global/History', hist)
+        ed.global_edit('Global/DocumentIncrementTable', lambda x: D.dit_next(x, int(time.time()), drows[0]))
+    parts = [n for n in S if n.startswith('Partitions/')]
+    if len(parts) == 1 and not os.environ.get('EP_NO_RENAME'):      # Revit renames the single partition stream to old+1 on every save (42->43, 21->22; = DIT save counter)
+        e = S[parts[0]]; new = str(int(parts[0].split('/')[1]) + 1)
+        raw = bytearray(e.raw); nb = new.encode('utf-16le') + b'\0\0'
+        raw[0:64] = nb + b'\0' * (64 - len(nb)); raw[64:66] = struct.pack('<H', len(nb)); e.raw = bytes(raw); e.name = new
+        print('partition stream renamed %s -> Partitions/%s' % (parts[0], new))
+    if only_rename: ed.save(out); print('OK (rename only)'); return
     bfi = bytes(S['BasicFileInfo'].data); order = []
     for m in B.GUID.finditer(bfi):
         if m.group(0) not in order: order.append(m.group(0))
