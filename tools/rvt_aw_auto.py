@@ -62,4 +62,16 @@ if _rc == 0 and _epi:
     finally:
         if os.path.exists(_out): os.remove(_out)
     if _rc != 0 and os.path.exists(dst): os.remove(dst)      # never leave a half-processed output
+if _rc == 0 and os.path.exists(dst) and not os.environ.get('RVTGEN_INPLACE'):      # post-write layout check (c4x-rvtdiff): on a base whose first partition member is full, a tiny first member in the output is the layout Revit 2024/2026 refuses (CorruptModelException)
+    try:
+        for _p in ('~/rvt-research/write-lab', '~/rvt-research'): sys.path.insert(0, os.path.expanduser(_p))
+        import rvtw, wlpart
+        def _first(path):
+            c = cfb.CFB(open(path, 'rb').read()); n = sorted(k for k in c.streams() if k.startswith('Partitions/'))[0]
+            m = wlpart.Partition(rvtw.Stream(c.streams()[n].data)).mem[0]['raw']; return len(m)
+        _a, _b = _first(src), _first(dst)
+        if _a > 100000 and _b < 1000:
+            os.remove(dst); sys.exit('REFUSED: output layout check failed (first partition member %d B -> %d B; Revit refuses this layout on Revit-saved files); output deleted, set RVTGEN_INPLACE=1 to use the in-place layout' % (_a, _b))
+    except SystemExit: raise
+    except Exception as _e: print('layout check skipped: %s' % _e)
 sys.exit(_rc)

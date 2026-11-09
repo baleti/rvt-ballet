@@ -24,5 +24,7 @@ def test_inplace_add_keeps_revit_layout_default_does_not():
         _add(os.path.join(d, 'ip.rvt'), True); n1, raw1, x1 = _layout(os.path.join(d, 'ip.rvt'))
         assert n1 <= n0 + 1, 'in-place add must not create new members (Revit adds at most one): %d -> %d' % (n0, n1)
         assert raw1 > 100000 and x1 >= x0 - 1, 'first member must stay a full member (raw %d, x1 %d, base x1 %d)' % (raw1, x1, x0)
-        _add(os.path.join(d, 'plain.rvt'), False); n2, raw2, x2 = _layout(os.path.join(d, 'plain.rvt'))
-        assert n2 >= n0 + 2 and raw2 < 1000, 'documents the failing layout (the Revit-refused one): %d members, first raw %d' % (n2, raw2)
+        # default layout is the Revit-refused one: the post-write check must refuse it and leave no output
+        env = dict(os.environ); env.pop('RVTGEN_INPLACE', None); out = os.path.join(d, 'plain.rvt')
+        r = subprocess.run([sys.executable, TOOL, BASE, out, '0', '0', '20', '0', '10', '2024'], env=env, capture_output=True, text=True, timeout=1500)
+        assert r.returncode != 0 and 'layout check failed' in (r.stdout + r.stderr) and not os.path.exists(out), (r.stdout + r.stderr)[-300:]
