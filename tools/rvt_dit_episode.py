@@ -24,6 +24,15 @@ def _recs(x):
 def _name_block(name):
     nb = struct.pack('<I', len(name)) + name.encode('utf-16le') + b'\0\0'
     return nb + b'\0' * (-len(nb) % 4)
+def top_epb(x):
+    """newest epB among the episode records (the file's current episode EP)"""
+    return max(U.unpack_from(x, r + 12 + 4 * _name_words(U.unpack_from(x, r+12)[0]) + 4)[0] for r in _recs(x))
+def top_counters(x):
+    """the 10 episode counters + the last word (11 values) of the newest record (first copy)"""
+    recs = _recs(x); nw = lambda r: _name_words(U.unpack_from(x, r+12)[0])
+    epb = lambda r: U.unpack_from(x, r + 12 + 4 * nw(r) + 4)[0]
+    r = [q for q in recs if epb(q) == max(epb(t) for t in recs)][0]
+    return list(struct.unpack_from('<10I', x, r + 12 + 4 * nw(r) + 24)) + list(struct.unpack_from('<I', x, r + 12 + 4 * nw(r) + 24 + 44))
 def dit_next(x, now, drows=0, newname=None):
     """newname: name of the saving user for the NEW record; default = the superseded record's own name (Revit-saved files: 'User').
     ORIGINAL files: pass the saving user's name (Revit wrote 'User' in the VM)."""

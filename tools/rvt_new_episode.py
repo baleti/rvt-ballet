@@ -10,8 +10,8 @@ import adiff, wledit
 import rvt_dit_episode as D, rvt_bfi_episode as B, rvt_contents_episode as C
 def main(before, edited, out):
     if os.path.realpath(out) in (os.path.realpath(before), os.path.realpath(edited)): sys.exit('REFUSED: output equals an input')
-    dit0 = adiff.graw(before, 'Global/DocumentIncrementTable'); recs = D._recs(dit0)
-    EP = max(D.U.unpack_from(dit0, r + 32)[0] for r in recs)
+    dit0 = adiff.graw(before, 'Global/DocumentIncrementTable')
+    EP = D.top_epb(dit0)
     et0 = adiff.graw(before, 'Global/ElemTable'); n0 = struct.unpack_from('<I', et0, 2)[0]
     old = {struct.unpack_from('<Q', et0, 6 + 40 * k)[0]: et0[6 + 40 * k:6 + 40 * k + 40] for k in range(n0)}
     ed = wledit.Editor(edited)
@@ -40,7 +40,7 @@ def main(before, edited, out):
     for m in B.GUID.finditer(bfi):
         if m.group(0) not in order: order.append(m.group(0))
     S['BasicFileInfo'].data, _ = B.bfi_next(bfi, [str(uuid.uuid4()) for _ in order])
-    S['Contents'].data = C.contents_next(bytes(S['Contents'].data))
+    S['Contents'].data = C.contents_next(bytes(S['Contents'].data), D.top_counters(dit0))
     ed.save(out)
     print('OK EP=%d rows %d->%d new=%d changed=%d' % (EP, n0, st['rows'], st['new'], st['chg']))
 if __name__ == '__main__':

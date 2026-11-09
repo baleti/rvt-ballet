@@ -3,10 +3,18 @@
 gzip payload (240 B raw): u32 counters at raw offsets 156,160,...,188 and 196 each +1 (low byte; verified 28/28 as a +1 on the byte). Self-test vs Revit pairs."""
 import sys, zlib, struct
 OFFS = (156, 160, 164, 168, 172, 176, 180, 184, 188, 196)
-def contents_next(x, level=None):
+def contents_next(x, counters=None):
+    """counters: the 10 u32 counters of the newest DIT episode record BEFORE the save. In ORIGINAL files the payload is shifted, so the 9+1 counters are located by value
+    (9 u32 = counters minus index 7, then ffffffff, then the DIT record's last word); without it the fixed offsets of Revit-saved files are used."""
     x = bytes(x); i = x.find(b'\x1f\x8b\x08'); assert i in (24, 91), 'unexpected Contents header size %d' % i
     raw = bytearray(zlib.decompressobj(31).decompress(x[i:]))
-    for o in OFFS:
+    offs = OFFS
+    if counters is not None:      # counters = the DIT record's 10 counters + its last word (11 values); Contents holds counters minus index 7, then ffffffff, then the last word
+        c9 = [v for j, v in enumerate(counters[:10]) if j != 7]
+        pat = struct.pack('<9I', *c9) + b'\xff\xff\xff\xff' + struct.pack('<I', counters[10]); k = bytes(raw).find(pat)
+        assert k >= 0 and bytes(raw).find(pat, k + 1) < 0, 'counter run not found (or ambiguous) in Contents payload'
+        offs = [k + 4 * j for j in range(9)] + [k + 40]
+    for o in offs:
         v = struct.unpack_from('<I', raw, o)[0]; struct.pack_into('<I', raw, o, v + 1)
     hdr = bytearray(x[:i]); hdr[87 if i == 91 else 20] += 1
     sys.path[:0] = ['~/rvt-research/write-lab', '~/rvt-research']
