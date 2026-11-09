@@ -601,6 +601,17 @@ def _delete(ed, eid):
     if os.environ.get('RVTBALLET_DELETE_ANY') != '1' and cls not in DELETE_VM_VERIFIED:
         raise EditError('element %d is a %s: delete is only enabled for classes whose output was opened in Revit without a repair prompt (%s); other classes are refused (override for experiments: RVTBALLET_DELETE_ANY=1)' % (eid, cls, ', '.join(sorted(DELETE_VM_VERIFIED))))
     if cls not in DELETE_VM_VERIFIED and UNIQUE_CLASS.search(cls): raise EditError('element %d is a %s: a project-wide settings / tracker / table element that Revit expects to exist exactly once (deleting AllProjectRevisions made Revit show "Repair Missing Unique Elements"); not deleted' % (eid, cls))
+    if cls == 'FamilyInstance':
+        # c4x-rvtmatrix item 53 (ESCAPE): deleting a Title Blocks instance owned by a drafting view (Element.m_ownerDBViewId = DBViewDrafting) on the 2026 HVAC sample was accepted (gate 0 diffs, our reader saw 1 element gone) but Revit's API readback of the output showed 9 fewer elements (title block, ViewSchedule, ScheduleSheetInstance, GraphicsStyle, 5 uncategorised). View-owned instances (title blocks, detail components, annotation symbols) are refused until their delete is reproduced exactly; model instances (no owner view; Structural 2024 588559 measured exactly -1 in Revit) stay allowed.
+        import re as _re
+        for l in ed.g.e.trace(eid)[3]:
+            if l[1] == 'Element.m_ownerDBViewId':
+                m = _re.search(r'(\d+)', str(l[4])); ov = int(m.group(1)) if m else None
+                if ov is not None and ov < 2 ** 62:
+                    try: oc = ed.g.e.trace(ov)[2]['class']
+                    except Exception: oc = '?'
+                    raise EditError('element %d belongs to a view (owner %s %d: a title block, detail component or annotation symbol): deleting it makes Revit also drop dependent elements (a schedule and related records were lost in the Revit readback of a measured 2026 delete) that this editor cannot reproduce; nothing was changed' % (eid, oc, ov))
+                break
     if cls in IN_USE_GUARD_CLASSES:
         # a type/style that other elements still reference: Structural 2024 DimensionStyle 908160 is used by 12 dimensions, the old delete removed only its own record (1 id) and left 12 dangling type refs (escape). Revit refuses or cascades; we refuse.
         import re as _re
