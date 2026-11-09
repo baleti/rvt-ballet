@@ -14,9 +14,15 @@ def _is_script(path):
     except OSError: return False
 
 
+def _timeout(path):
+    # a slow-by-design test declares '# RVT_TEST_TIMEOUT=<seconds>' in its first 2 KB (corpus loops)
+    m = re.search(rb'RVT_TEST_TIMEOUT=(\d+)', open(str(path), 'rb').read(2048))
+    return int(m.group(1)) if m else int(os.environ.get('RVT_SCRIPT_TEST_TIMEOUT', '900'))
+
+
 class ScriptItem(pytest.Item):
     def runtest(self):
-        r = subprocess.run([sys.executable, str(self.path)], capture_output=True, text=True, timeout=int(os.environ.get('RVT_SCRIPT_TEST_TIMEOUT', '900')))
+        r = subprocess.run([sys.executable, str(self.path)], capture_output=True, text=True, timeout=_timeout(self.path))
         if r.returncode != 0: raise AssertionError('rc=%d\n%s' % (r.returncode, (r.stdout + r.stderr)[-2000:]))
 
     def reportinfo(self): return self.path, 0, 'script test ' + self.path.name

@@ -1,4 +1,5 @@
 """2025 production gate: in-place SAVE of every local 2025 corpus file is refused (409 gate_closed); SAVE AS to a new file is allowed (200, unproven in Revit 2025); the source stays byte-identical, no temp files, no output. Real gate config untouched (temp journal, overwrite env open)."""
+# RVT_TEST_TIMEOUT=3600 (loops over every 2025 corpus file, one SAVE AS each)
 import os, sys, asyncio, tempfile, hashlib, shutil, glob
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)
