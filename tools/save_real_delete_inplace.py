@@ -23,6 +23,9 @@ async def main(out, src0):
         if os.environ.get('SKIP_VIEW_OWNED') == '1':      # the editor refuses view-owned FamilyInstance (title block etc.); pick a model instance instead
             import re as _re
             if any(l[1] == 'Element.m_ownerDBViewId' and (_re.search(r'(\d+)', str(l[4])) or [0, 0]) and int((_re.search(r'(\d+)', str(l[4])) or _re.search(r'(0)', '0')).group(1)) < 2 ** 62 for l in log): continue
+        if os.environ.get('CATID'):      # keep only instances of one category (e.g. -2001330 Structural Columns); header field m_categroryId
+            _c = [l for l in log if 'm_categroryId' in str(l[1])]
+            if not _c or str(os.environ['CATID']) not in str(_c[0][4]): continue
         try:
             if ed.cascade(eid) == [eid]: pick = eid; break
         except Exception: continue
