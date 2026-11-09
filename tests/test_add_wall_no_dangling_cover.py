@@ -11,7 +11,7 @@ def test_new_wall_param_element_ids_exist():
     import wledit, recwalk, rvt_diff as R
     with tempfile.TemporaryDirectory() as d:
         dst = os.path.join(d, 'out.rvt')
-        subprocess.run([sys.executable, os.path.join(TOOLS, 'rvt_aw_auto.py'), SRC, dst, '-260', '-100', '-250', '-100', '10', YEAR], check=True, timeout=1500)
+        subprocess.run([sys.executable, os.path.join(TOOLS, 'rvt_aw_auto.py'), SRC, dst, '-260', '-100', '-250', '-100', '10', YEAR], check=True, timeout=1500, env=dict(os.environ, RVT_ADD26_EXPERIMENT='1'))  # 2026 add-wall is disabled in production (sev1 open); this test checks the lab path's id references only
         wa, _ = recwalk.walk(SRC); wb, _ = recwalk.walk(dst)
         new = sorted(set(wb) - set(wa)); new = [i for i in new if i < (1 << 48)]
         assert len(new) == 1
