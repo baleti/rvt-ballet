@@ -1,4 +1,4 @@
-"""c1x-rvtdel: Snowdon Facades 2024 hosted FamilyInstance 593274: deleting the hosted instance alone removes exactly that id, leaves every survivor (incl. its host wall 593193) unchanged and mentioned nowhere. Pins the safe direction next to the wall-orphans test."""
+"""c1x-rvtdel: Snowdon Facades 2024 hosted FamilyInstance 593274: deleting the hosted instance alone removes exactly that id, leaves every survivor (incl. its host wall 593193) unchanged and mentioned nowhere. Pins the PARAMETER-level behaviour only. CAVEAT: another agent reports 593274 is the nested child of parent 593273 (c5x-link rbnest1); the parent's raw sub-component reference is NOT covered by this check, so this is not evidence the delete is semantically safe. No dashboard PASS until the Revit VM verdict and a nested-child analysis."""
 import os, sys, tempfile, shutil
 _T = tempfile.mkdtemp(); os.environ.update(SAVEGATE_JOURNAL=_T+'/j', SAVEGATE_CACHE=_T+'/c', RVTBALLET_SNAPSHOT_CACHE=_T+'/snap', RVTBALLET_EDIT_BACKEND='rvtedit', RVTBALLET_ENABLE_DELETE='1')
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
