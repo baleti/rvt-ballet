@@ -25,9 +25,14 @@ for _e, _c in _ix.items():
     if str(_c) == 'FamilySymbol' and _P(_e).get('Family Name') == _fam and _ed._nk(str(_P(_e).get('Type Name', ''))) == _ed._nk(name):
         sys.exit('type %d of family %r is already named %r: Revit does not allow duplicate type names in a family; nothing was written' % (_e, _fam, name))
 g = rvtgen.Gen(seed); e = g.e; W = 8
+_pn = e.trace(tid)[0]
+if _pn != g.pn:    # multi-partition files (Site 2024): templates and the new records must live in the partition that holds the symbol
+    g = rvtgen.Gen(seed, _pn); e = g.e
 assert e.trace(tid)[2]['class'] == 'FamilySymbol'
 T = g.template(tid); L = {n: (o, z) for n, o, z, _ in T['log']}
 sur = struct.unpack_from('<Q', T['rec'], L['FamilySymbol.m_partitionSurrogateId'][0])[0]
+if not any(x[0] == g.pn for x in e.m.find(sur)):
+    sys.exit('symbol %d and its surrogate %d live in different partitions (%s vs %s): a cross-partition duplicate is not supported; nothing was written' % (tid, sur, g.pn, [x[0] for x in e.m.find(sur)]))
 assert e.trace(sur)[2]['class'] == 'FamSymSurrogate', e.trace(sur)[2]['class']
 S = g.template(sur)
 nid = g.nextid; g.nextid += 2; nsur = nid + 1
