@@ -30,9 +30,10 @@ def main(before, edited, out):
         raw = bytearray(raw); raw[14] = (raw[14] + 1) & 255
         pat = b'\x66\x0a\x00\x00' + struct.pack('<I', EP); k = bytes(raw).find(pat)
         assert k >= 0, 'History episode field not found'
-        k += 4; raw[k:k+4] = struct.pack('<I', EP + 1) + uuid.uuid4().bytes_le + b'\x28'
+        k += 4; raw[k:k+4] = struct.pack('<I', EP + 1) + EPG.bytes_le + b'\x28'
         return bytes(raw)
     drows = [0]
+    EPG = uuid.uuid4()      # ONE new episode GUID: History and BasicFileInfo must carry the same one (Revit-made files do; c4x 2026-11-11 offline finding)
     only_rename = bool(os.environ.get('EP_ONLY_RENAME'))      # experiment: partition rename alone
     et_only = bool(os.environ.get('EP_ET_ONLY'))      # experiment: only the ElemTable triples (new row = EP x3), nothing else (no rename: it was harmful, c4x 2026-11-09)
     c = ed.m.c; S = c.streams()
@@ -53,7 +54,7 @@ def main(before, edited, out):
     bfi = bytes(S['BasicFileInfo'].data); order = []
     for m in B.GUID.finditer(bfi):
         if m.group(0) not in order and m.group(0) != B.ZERO: order.append(m.group(0))
-    S['BasicFileInfo'].data, _ = B.bfi_next(bfi, [str(uuid.uuid4()) for _ in order])
+    S['BasicFileInfo'].data, _ = B.bfi_next(bfi, [str(EPG) for _ in order])
     S['Contents'].data = C.contents_next(bytes(S['Contents'].data), D.top_counters(dit0))
     ed.save(out)
     print('OK EP=%d rows %d->%d new=%d changed=%d' % (EP, n0, st['rows'], st['new'], st['chg']))

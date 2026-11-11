@@ -74,6 +74,7 @@ def validate_op(op):
         v = op.get('value'); nm = op.get('param'); pid = op.get('pid')
         if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or abs(v) > 1e15: raise EditError('value must be a finite number (Revit internal units, feet for lengths)')
         if abs(v) > 1e6 or (v != 0 and abs(v) < 1e-12): raise EditError('value %r is outside the range the writer accepts for a type parameter (|v| <= 1e6, no subnormals); Revit behaviour for such values is unverified' % (v,))
+        if v < 0: raise EditError('negative type parameter value %r refused: the Revit VM accepted -5 on a width without an error but its stored result was not verified (it may clamp or reject); nothing was changed' % (v,))
         if (nm is None) == (pid is None): raise EditError('give exactly one of param (the type parameter caption) or pid (its parameter element id)')
         if pid is not None and (not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0): raise EditError('pid must be a positive integer (family parameter element id)')
         if nm is not None and (not isinstance(nm, str) or not nm): raise EditError('param must be a caption string')

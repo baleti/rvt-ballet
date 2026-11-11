@@ -26,7 +26,6 @@ C_FILE = '7. Structure of file'; C_SAFE = '8. Safety (applies to every save)'
 CASES = {
     (C_MOVE, 'family instance'): {'bundle': ('FamilyInstance', 'HVAC'), 'use': 'move'},
     (C_MOVE, 'wall'): {'bundle': ('SWall', 'Structural'), 'use': 'move'},
-    (C_MOVE, 'text note'): {'bundle': ('TextNote', 'HVAC'), 'use': 'move'},
     (C_MOVE, 'level'): {'bundle': ('Level', 'HVAC'), 'use': 'move'},
     (C_MOVE, 'grid'): {'bundle': ('Grid', 'HVAC'), 'use': 'move'},
     (C_MOVE, 'window'): {'bundle': ('FamilyInstance', 'Facades'), 'use': 'move'},

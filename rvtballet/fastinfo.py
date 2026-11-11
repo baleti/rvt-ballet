@@ -9,7 +9,7 @@ import os, sys, re, struct, zlib, io, zipfile, collections, json, time
 
 PAGE_STORED = 65249; PAGE_PAYLOAD = 64896; GZ = b'\x1f\x8b\x08\x00'
 WINDOW = int(os.environ.get('RVT_INFO_WINDOW_MB', '6')) << 20
-OVERLAP = 2 << 20
+OVERLAP = int(os.environ.get("RVT_INFO_OVERLAP_KB", "2048")) << 10
 FULL_CLASSES = ('Level', 'Grid', 'ProjectPhase', 'ProjectInfo', 'Viewport')
 FULL_PREFIX = ('DBView',)
 MAX_MEMBER = 1 << 30
@@ -284,6 +284,7 @@ def scan(path, log=None, want_elements=False, progress=None, _seg=None, _out=Non
         if cur: jobs.append(cur)
         import subprocess, pickle, tempfile
         for ji, job in enumerate(jobs):
+            if os.environ.get('RVT_INFO_JOBS') and str(ji + 1) not in os.environ['RVT_INFO_JOBS'].split(','): continue      # debugging: run only these jobs
             if alldone(): early = True; say('all headers and admin records found: %d of %d jobs skipped' % (len(jobs) - ji, len(jobs))); break
             fd, outp = tempfile.mkstemp(prefix='rvtinfo-seg-', suffix='.pkl'); os.close(fd)
             try:
