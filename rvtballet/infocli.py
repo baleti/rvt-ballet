@@ -1,7 +1,7 @@
 """rvt-ballet info | sheets | views | levels | grids | counts | elements FILE [--json] [--refresh]: administrative data of a .rvt WITHOUT conversion.
 Streamed (fastinfo.py), never starts the geometry pipeline, runs under a hard memory cap (RVT_INFO_MEM_GB, default 0.9) and caches its result per file
 (path, size, mtime) so the next subcommand is instant. `info` alone never touches the partitions (BasicFileInfo, project information, editors: about a second)."""
-import os, sys, json, argparse, hashlib, time
+import os, sys, json, argparse, hashlib, time, collections
 from . import plat, reader
 
 CMDS = ('info', 'sheets', 'views', 'levels', 'grids', 'counts', 'elements', 'diff')
@@ -49,7 +49,7 @@ def _capped(argv):
 
 
 def main(argv, say=print):
-    ap = argparse.ArgumentParser(prog='rvt-ballet'); ap.add_argument('cmd', choices=CMDS); ap.add_argument('file'); ap.add_argument('file2', nargs='?'); ap.add_argument('--deep', default='', help='diff: comma list of element ids whose FULL records are decoded in both files and compared field by field'); ap.add_argument('--all-records', action='store_true', help='diff: decode EVERY record of both files and compare field by field (small files only: %d MB, needs ~3 GB)' % ALLREC_MB); ap.add_argument('--allow', default='', help='diff: comma list of element ids expected to change')
+    ap = argparse.ArgumentParser(prog='rvt-ballet'); ap.add_argument('cmd', choices=CMDS); ap.add_argument('file'); ap.add_argument('file2', nargs='?'); ap.add_argument('--deep', default='', help='diff: comma list of element ids whose FULL records are decoded in both files and compared field by field'); ap.add_argument('--all-records', action='store_true', help='diff: decode EVERY record of both files and compare field by field (small files only: %d MB, needs ~3 GB)' % ALLREC_MB); ap.add_argument('--by', choices=('level', 'phase'), help='counts: elements per level / created phase (full records: small files only)'); ap.add_argument('--allow', default='', help='diff: comma list of element ids expected to change')
     ap.add_argument('--json', action='store_true'); ap.add_argument('--refresh', action='store_true', help='ignore the cached result')
     ap.add_argument('--views', action='store_true'); ap.add_argument('--levels', action='store_true'); ap.add_argument('--grids', action='store_true')
     ap.add_argument('--tsv', action='store_true', help='elements: tab separated rows'); ap.add_argument('--limit', type=int, default=0, help='elements: first N rows only')
@@ -62,6 +62,9 @@ def main(argv, say=print):
     if a.cmd == 'diff' and a.all_records:
         big = [f for f in (a.file, a.file2) if os.path.getsize(f) > ALLREC_MB * 1e6]
         if big: print('rvt-ballet: --all-records decodes every record in RAM; %s is above %.0f MB (RVT_ALLREC_MB). Use --deep ID,ID.' % (os.path.basename(big[0]), ALLREC_MB), file=sys.stderr); return 2
+        os.environ.setdefault('RVT_INFO_MEM_GB', '3.5')
+    if a.cmd == 'counts' and a.by:
+        if os.path.getsize(a.file) > ALLREC_MB * 1e6: print('rvt-ballet: counts --by needs every record decoded in RAM; %s is above %.0f MB (RVT_ALLREC_MB).' % (os.path.basename(a.file), ALLREC_MB), file=sys.stderr); return 2
         os.environ.setdefault('RVT_INFO_MEM_GB', '3.5')
     rc = _capped(argv)
     if rc is not None: return rc
@@ -84,6 +87,7 @@ def main(argv, say=print):
         if r['editors']: say('  Editors (increment table): %s' % ', '.join(r['editors'][:12]))
         say('  rvt-ballet sheets|views|levels|grids|counts|elements FILE for the model data (streamed, no conversion)')
         return 0
+    if a.cmd == 'counts' and a.by: return _by(path, r_ := _scan_cached(path, a.refresh, lg), a, say)
     if a.cmd == 'diff': return _diff(path, os.path.abspath(a.file2), a, say, lg)
     r = _scan_cached(path, a.refresh, lg)
     if a.cmd == 'info':
@@ -199,3 +203,21 @@ def _allrec(pa, pb):
             ch = {p: [fa.get(p), fb.get(p)] for p in set(fa) | set(fb) if fa.get(p) != fb.get(p)}
             diff[str(k[0])] = {'class': k[1], 'fields_changed': len(ch), 'changed': dict(sorted(ch.items())[:20])}
     return {'records': len(ka), 'only_a': len(ka - kb), 'only_b': len(kb - ka), 'differing': diff}
+
+
+def _by(path, r, a, say):
+    """elements per level (m_assocLevelId) or created phase (m_createdPhaseId) from the full records; -1 = none"""
+    from . import fastinfo; fastinfo._tune(); fastinfo._paths(); import rvt_fast as F
+    x = F.extract(path, want_all=True)['recs']; key = 'm_assocLevelId' if a.by == 'level' else 'm_createdPhaseId'
+    W = 8; cnt = collections.Counter(); seen = set()
+    for (eid, c), rec in x.items():
+        if eid in seen: continue
+        seen.add(eid); v = rec['fields'].get(key)
+        cnt[fastinfo._sc(v, W) if v is not None else None] += 1
+    names = {l['id']: l['name'] for l in r['levels']} if a.by == 'level' else {}
+    out = {('none' if k in (None, -1) else (names.get(k) or ('id %s' % k))): 0 for k in cnt}
+    for k, n in cnt.items(): out['none' if k in (None, -1) else (names.get(k) or ('id %s' % k))] += n
+    if a.json: say(json.dumps(dict(sorted(out.items())), indent=1, sort_keys=True)); return 0
+    say('elements per %s (%d records):' % (a.by, len(seen)))
+    for k, n in sorted(out.items(), key=lambda t: -t[1]): say('  %8d  %s' % (n, k))
+    return 0
