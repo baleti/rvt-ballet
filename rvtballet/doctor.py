@@ -65,6 +65,10 @@ def main(argv=None):
     # 5 lanes and memory guard (remote-host only: the Revit VMs live there)
     lc = os.path.join(ds, 'rvt-lanes', 'lanectl')
     mem = _memavail_mb()
+    try:
+        l1 = os.getloadavg()[0]; nc = os.cpu_count() or 1
+        add('ok' if l1 < nc else ('warn' if l1 < 2 * nc else 'fail'), 'load', '%.1f on %d CPUs (lanes and edits slow down sharply above CPU count; edit of a 22 MB file took 3-5 min at load 50-70)' % (l1, nc))
+    except (OSError, AttributeError): pass
     if mem is not None: add('ok' if mem >= 8192 else 'fail', 'memory', 'MemAvailable %d MB (lane guard floor 8192, start gate 19456)' % mem)
     if os.path.exists(lc):
         rc, o = _sh(['bash', lc, 'status'])
