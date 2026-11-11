@@ -1223,6 +1223,7 @@ def backups(src):
 
 def restore_backup(ss, mid, src, n=0):
     """put backup n (0 = newest) back over the source (savegate backs the current file up first); the doc is re-opened so the fingerprint matches"""
+    if isinstance(n, bool) or not isinstance(n, int) or n < 0: raise ValueError('backup number must be a non-negative integer')      # a negative n indexed from the end of the list
     sg = _import(); ss.close(mid); ops = ss.edits(mid).ops; kept = list(ops); src = os.path.realpath(src)      # a symlinked source is restored in its real file
     try: used = sg.restore(src, n)
     except BaseException:
