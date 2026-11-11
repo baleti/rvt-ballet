@@ -20,7 +20,7 @@ async def one(c, models, k, src):
     r = await c.post('/api/m/%s/edit' % mid, json={'op': 'set_string', 'eid': eid, 'param': 'Comments', 'value': os.environ.get('RVT_EDIT_VALUE', 'edited by h2-viewer test')}); j = await r.json()
     if r.status != 200: row['result'] = 'EDIT_REFUSED %s' % j.get('error', '')[:100]; return row
     out = os.path.join(_T, 'o%d.rvt' % k); keep = os.environ.get('RVT_KEEP_DIR'); r = await c.post('/api/m/%s/saveas' % mid, json={'dest': out}); j = await r.json(); keep and r.status == 200 and __import__('shutil').copy(out, os.path.join(keep, 'k%d_%s.rvt' % (k, os.path.basename(src)[:6].replace(' ', '_'))))
-    if r.status != 200: row['result'] = 'SAVE_%d %s' % (r.status, j.get('code')); row['detail'] = str(j.get('error'))[:160]; row['n_unexpected'] = (j.get('report') or {}).get('n_unexpected'); return row
+    if r.status != 200: row['result'] = 'SAVE_%d %s' % (r.status, j.get('code')); row['detail'] = str(j.get('error'))[:2000]; row['n_unexpected'] = (j.get('report') or {}).get('n_unexpected'); return row
     row['verify_diffs'] = j['verify']['n_unexpected']; row['warnings'] = bool(j.get('warnings'))
     if j.get('warnings') and os.environ.get('SHOW_WARNINGS'): print('WARNINGS', [str(w)[:200] for w in j['warnings']][:5])
     b = g(rvt_params.params(out).get(eid)); a = g(pr.get(eid)); changed = {x for x in set(a) | set(b) if a.get(x) != b.get(x)}
