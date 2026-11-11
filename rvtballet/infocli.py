@@ -150,7 +150,7 @@ def _diff(pa, pb, a, say, lg):
     out = {'lost': lost, 'new': new, 'changed': {str(k): v for k, v in sorted(chg.items())}, 'count_diffs': cd, 'sheets_equal': ra['sheets'] == rb['sheets'], 'views_equal': ra['views'] == rb['views'],
            'level_names_changed': {str(i): [lv[0].get(i), lv[1].get(i)] for i in set(lv[0]) | set(lv[1]) if lv[0].get(i) != lv[1].get(i)}}
     bad = [i for i in lost + new + list(chg) if i not in allow]
-    out['unexpected'] = len(bad) + (0 if out['sheets_equal'] else 1) + (0 if out['views_equal'] else 1) + len(out['level_names_changed'])
+    out['unexpected'] = len(bad) + (0 if out['sheets_equal'] else 1) + (0 if out['views_equal'] else 1) + len([i for i in out['level_names_changed'] if int(i) not in allow])
     if a.json: say(json.dumps(out, indent=1))
     else:
         say('lost %d, new %d, changed %d (%s), unexpected %d' % (len(lost), len(new), len(chg), ', '.join('%s:%s' % (k, '+'.join(v)) for k, v in list(sorted(chg.items()))[:8]), out['unexpected']))
