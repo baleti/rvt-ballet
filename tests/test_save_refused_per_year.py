@@ -29,4 +29,7 @@ async def run():
             if r.status != 200: assert r.status in (409, 415, 422, 507) and 'writable years' in t, (y, r.status, t[:200])
             print(y, r.status)
     print('per-year in-place save OK, %d years, sources untouched' % n)
-asyncio.run(run())
+def test_main():
+    asyncio.run(run())
+
+if __name__ == '__main__': test_main()

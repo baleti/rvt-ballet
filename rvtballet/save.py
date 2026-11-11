@@ -1151,6 +1151,11 @@ def group_warning(ss, mid, buf):
     return 'element %d is part of a group or design option, or is a moved element with dependents (hosted doors/windows, dimensions, level-relative elements) (%s): Revit opens such a copy without complaint, but a group member then differs from the other instances of its group type, a moved window/door can end up off its host wall, and dimensions or level-relative elements are not updated; check the copy in Revit before relying on it' % (e0, '; '.join(mem[e0]))
 
 
+def noop_numeric_warnings(ops):
+    """c4x-rvtwrite2 item 174: 'Unconnected Height' is stored on every wall but Revit ignores it when the wall top is constrained to a level (Revit 2026 API readback unchanged after an accepted, clean, exact-readback edit). The save cannot see the constraint, so say it."""
+    return ['element %s: Unconnected Height was changed in the file, but if this wall\'s top is attached to a level Revit ignores that stored value and the wall keeps its height; change Top Offset / Base Offset instead, or verify in Revit' % o.get('eid') for o in ops if o.get('op') == 'set_num' and o.get('param') == 'Unconnected Height']
+
+
 def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     """SAVE AS: never touches the source. new_bytes defaults to the loaded bytes (identity save)."""
     _cloud_gate(src, dest); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t); _refuse_damaged(d)
@@ -1162,6 +1167,7 @@ def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     r = result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite))
     if exp: r['expectations'] = exp      # replayable by tools/rvt_expect_check.py through the Revit API
     if gw: r.setdefault('warnings', []).append(gw)
+    if not explicit: r.setdefault('warnings', []).extend(noop_numeric_warnings(ss.edits(mid).ops))
     lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
     if lc is None: r.setdefault('warnings', []).append('the page-layout check could not run: this output is NOT confirmed to keep the layout of the source')
     elif lc: r.setdefault('warnings', []).extend('page layout of %s changed (%s -> %s, %+d bytes): this layout is NOT confirmed to open in Revit; verify the copy in Revit before relying on it' % (k, la, lb, dz) for k, la, lb, dz in lc)

@@ -23,4 +23,7 @@ async def run():
         print(y, 'refused %d/%d, source untouched' % (ok, len(OPS)))
     assert not bad, bad
     print('unsupported ops per year OK %d posts' % n)
-asyncio.run(run())
+def test_main():
+    asyncio.run(run())
+
+if __name__ == '__main__': test_main()

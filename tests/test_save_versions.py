@@ -41,5 +41,9 @@ async def run():
         res[year] = r.status
     print('save versions OK', res)
 
-if not os.path.exists(RTE) or not save.SaveSessions().available: print('skip: savegate or scene missing')
-else: asyncio.run(run())
+def test_save_versions():
+    import pytest
+    if not os.path.exists(RTE) or not save.SaveSessions().available: pytest.skip('savegate or scene missing')
+    asyncio.run(run())
+
+if __name__ == '__main__': test_save_versions()
