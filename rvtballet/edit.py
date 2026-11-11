@@ -43,7 +43,7 @@ def _check_text(v):
     if any(ord(ch) > 0xFFFF for ch in v): raise EditError('characters outside the Basic Multilingual Plane (emoji, rare CJK) are not supported in values yet; nothing was changed')
 
 
-_OP_KEYS = {'set_string': {'op', 'eid', 'param', 'value', 'match', 'field', 'pid', 'pids', 'kind', 'expect'}, 'move': {'op', 'eid', 'dx', 'dy', 'dz'}, 'set_num': {'op', 'eid', 'param', 'pid', 'pids', 'value', 'kind'}, 'delete': {'op', 'eid'}, 'rotate': {'op', 'eid', 'deg'}, 'change_type': {'op', 'eid', 'type_eid'}, 'set_type_num': {'op', 'eid', 'param', 'pid', 'value'}, 'set_type_eid': {'op', 'eid', 'pid', 'target'}, 'set_link_path': {'op', 'eid', 'value'}}      # strict key sets only for ops whose optional keys are safety guards
+_OP_KEYS = {'set_string': {'op', 'eid', 'param', 'value', 'match', 'field', 'pid', 'pids', 'kind', 'expect'}, 'move': {'op', 'eid', 'dx', 'dy', 'dz'}, 'set_num': {'op', 'eid', 'param', 'pid', 'pids', 'value', 'kind'}, 'delete': {'op', 'eid'}, 'rotate': {'op', 'eid', 'deg'}, 'change_type': {'op', 'eid', 'type_eid'}, 'set_type_num': {'op', 'eid', 'param', 'pid', 'value'}, 'set_type_eid': {'op', 'eid', 'pid', 'target'}, 'set_type_material': {'op', 'eid', 'target'}, 'set_link_path': {'op', 'eid', 'value'}}      # strict key sets only for ops whose optional keys are safety guards
 
 
 # VM-measured (c6x-rvtwrite, 2024 and 2025 Snowdon HVAC): writing the stored ParamValueInt of these does not change what the Revit API reports
@@ -51,7 +51,7 @@ REVIT_IGNORES_STORED_INT = {'Return Airflow', 'Power Load Units', 'Lighting Load
 
 
 def validate_op(op):
-    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate', 'change_type', 'set_type_num', 'set_type_eid', 'set_link_path'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
+    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate', 'change_type', 'set_type_num', 'set_type_eid', 'set_type_material', 'set_link_path'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
     if not isinstance(op.get('eid'), int) or isinstance(op.get('eid'), bool): raise EditError('eid (element id) must be an integer')
     _ok = _OP_KEYS.get(op['op'])
     if _ok is not None and set(op) - _ok: raise EditError('unknown key(s) %s for %s (a misspelt guard such as match would be silently dropped): nothing was changed' % (sorted(set(op) - _ok), op['op']))
@@ -86,6 +86,12 @@ def validate_op(op):
         if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0: raise EditError('pid must be a positive integer (family parameter element id)')
         if not isinstance(tgt, int) or isinstance(tgt, bool) or tgt <= 0: raise EditError('target must be a positive element id')
         return {'op': 'set_type_eid', 'eid': op['eid'], 'pid': pid, 'target': tgt}
+    if op['op'] == 'set_type_material':
+        if os.environ.get('RVTBALLET_ENABLE_TYPEEID') != '1': raise EditError('set_type_material is disabled (opt-in: RVTBALLET_ENABLE_TYPEEID=1; no Revit open verdict yet)')
+        if BACKEND() != 'rvtedit': raise EditError('set_type_material needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
+        tgt = op.get('target')
+        if not isinstance(tgt, int) or isinstance(tgt, bool) or tgt <= 0: raise EditError('target must be a positive material element id')
+        return {'op': 'set_type_material', 'eid': op['eid'], 'target': tgt}
     if op['op'] == 'rotate':
         if BACKEND() != 'rvtedit': raise EditError('rotate needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
         d = op.get('deg')
@@ -161,6 +167,7 @@ def compose(ops):
         elif o['op'] == 'rotate': k = ('rotate', e)
         elif o['op'] == 'set_type_num': k = ('set_type_num', e, o.get('pid'), o.get('param'))
         elif o['op'] == 'set_type_eid': k = ('set_type_eid', e, o.get('pid'))
+        elif o['op'] == 'set_type_material': k = ('set_type_material', e)
         elif o['op'] == 'change_type': k = ('change_type', e)      # the last type wins
         elif o['op'] == 'set_link_path': k = ('set_link_path', e)      # the last path wins
         if k is None: out.append(o); continue
@@ -443,6 +450,7 @@ def _rvtedit_pass(a, b, ops):
             elif o['op'] == 'set_num': _set_num_by_pid(ed, o)
             elif o['op'] == 'set_type_num': _set_type_num(ed, a, o)
             elif o['op'] == 'set_type_eid': _set_type_eid(ed, a, o)
+            elif o['op'] == 'set_type_material': _set_type_material(ed, a, o)
             elif o['op'] == 'set_string' and o.get('kind') == 'AString': _set_string_by_pid(ed, o)
             elif o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'], o['value'])
             else:
@@ -493,6 +501,29 @@ def _set_type_num(ed, src, o):
     log = ed.g.e.trace(o['eid'])[3]; n = [k for k, l in enumerate(log) if l[1] == 'NamedParam.m_paramId' and _eid_val(l[4]) == pid]
     if len(n) != 1: raise EditError('element %d has %d NamedParam entries for parameter %d (need exactly 1; is it a type?)' % (o['eid'], len(n), pid))
     ed.set_type_param(o['eid'], pid, o['value'])
+
+
+def _set_type_material(ed, src, o):
+    """assign a material to a SYSTEM type whose material is the built-in field Symbol.m_renderStyleId (spec from Revit pair c1xmatas: SysMullionFamSym 378 Material 1075 -> 751, record differs only in that 8-byte id). Target must be a MaterialElem; family types with a NamedParam material use set_type_eid."""
+    import re as _re, cfb as _cfb, struct
+    try: fy = int(_re.search(r'(20[12]\d)', bytes(_cfb.CFB(open(src, 'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le', 'ignore')).group(1))
+    except Exception: raise EditError('type material edit refused: cannot read the Revit version of the file')
+    if fy not in (2024, 2026): raise EditError('type material edit is only verified on Revit 2024/2026 files (this file is %d): refused' % fy)
+    try: tr = ed.g.e.trace(o['eid'])
+    except Exception: raise EditError('element %d does not exist; nothing was changed' % o['eid'])
+    log = tr[3]; n = [l for l in log if l[1] == 'Symbol.m_renderStyleId']
+    if len(n) != 1 or l_off(n[0]) is None: raise EditError('element %d has no single Symbol.m_renderStyleId material field; nothing was changed' % o['eid'])
+    old = _eid_val(n[0][4])
+    if old is None or old <= 0: raise EditError('element %d has no material assigned (%r); nothing was changed' % (o['eid'], n[0][4]))
+    if old == o['target']: raise EditError('element %d already uses material %d' % (o['eid'], old))
+    try: cls = ed.g.e.trace(o['target'])[2].get('class')
+    except Exception: raise EditError('target element %d does not exist; nothing was changed' % o['target'])
+    if cls != 'MaterialElem': raise EditError('target %d is a %s, not a MaterialElem: refused' % (o['target'], cls))
+    if n[0][3] - n[0][2] != 8: raise EditError('unexpected material field width; nothing was changed')
+    ed._rec_edit(o['eid'], [(n[0][2], 8, struct.pack('<Q', o['target']))])
+
+
+def l_off(l): return l[2]
 
 
 def _set_type_eid(ed, src, o):
