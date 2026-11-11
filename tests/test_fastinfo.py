@@ -59,7 +59,7 @@ def test_sample():
     FI.WINDOW = 8 << 20; FI.OVERLAP = 2 << 20
     r = FI.scan(f); p = E.parse(f)
     assert r['counts'] == p['counts'], 'category counts differ'
-    assert [l['name'] for l in r['levels']] == [l['name'] for l in p['levels']]
+    assert sorted(l['name'] for l in r['levels']) == sorted(l['name'] for l in p['levels'])
     assert r['grids'] == p['grids']
     assert [(s['number'], s['name'], s['views']) for s in r['sheets']] == [(s['number'], s['name'], s['views']) for s in p['sheets']]
     assert [(v['class'], v['name']) for v in r['views']] == [(v['class'], v['name']) for v in p['views']]

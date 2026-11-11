@@ -49,21 +49,29 @@ def _strip(buf, pages):
     return bytes(out)
 
 
-def chain_blocks(o, name, block_pages=256):
+def chain_blocks(o, name, block_pages=256, lo_page=0, hi_page=None):
     """payload of stream `name` (353-byte page trailers stripped) in blocks of ~block_pages pages, read from the CFB sector chain
-    (olefile.openstream would load the whole stream: 770 MB for one partition of a big central file)"""
+    (olefile.openstream would load the whole stream: 770 MB for one partition of a big central file). lo_page/hi_page select a page range (a segment for a worker process)."""
     e = o.direntries[o._find(name)]; ss = o.sectorsize; fat = o.fat; fp = o.fp
     if e.size < o.minisectorcutoff:                      # tiny streams live in the mini stream (not the sector chain): olefile reads those (< 4 KB)
+        if lo_page: return
         raw = o.openstream(name).read(); pages = len(raw) // PAGE_STORED
         yield _strip(raw, pages) + raw[pages * PAGE_STORED:]; return
-    sect = e.isectStart; left = e.size; want = block_pages * PAGE_STORED; buf = bytearray(); hops = 0; nsect = len(fat)
-    while 0 <= sect < 0xFFFFFFFA and left > 0:
+    lo_b = lo_page * PAGE_STORED; hi_b = e.size if hi_page is None else min(e.size, hi_page * PAGE_STORED)
+    if lo_b >= hi_b: return
+    first = lo_b // ss; last = (hi_b - 1) // ss; nsect = len(fat); sect = e.isectStart; secs = []
+    for idx in range(last + 1):
+        if not (0 <= sect < 0xFFFFFFFA): break
+        if idx >= first: secs.append(sect)
+        sect = fat[sect] if sect < nsect else -1
+    want = block_pages * PAGE_STORED; buf = bytearray(); pos = first * ss; k = 0
+    while k < len(secs):
         run = 1
-        while run < 4096 and run * ss < left and sect + run - 1 < nsect and fat[sect + run - 1] == sect + run: run += 1
-        fp.seek((sect + 1) * ss); chunk = fp.read(min(run * ss, left)); left -= len(chunk); buf += chunk
+        while k + run < len(secs) and run < 4096 and secs[k + run] == secs[k] + run: run += 1
+        fp.seek((secs[k] + 1) * ss); chunk = fp.read(run * ss); k += run
         if not chunk: break
-        sect = fat[sect + run - 1] if sect + run - 1 < nsect else -1; hops += run
-        if hops > nsect + 8: raise ValueError('FAT chain loop in ' + name)
+        a0 = max(lo_b - pos, 0); a1 = min(len(chunk), hi_b - pos); pos += run * ss
+        if a1 > a0: buf += chunk[a0:a1]
         if len(buf) >= want:
             pages = len(buf) // PAGE_STORED
             blk = _strip(buf, pages); del buf[:pages * PAGE_STORED]
@@ -157,6 +165,20 @@ def editors(o):
     except Exception: return []
 
 
+_KEEP = {'Level': ('m_text',), 'Grid': ('m_text',), 'ProjectPhase': ('m_name',), 'ProjectInfo': ('m_text', 'm_name'), 'Viewport': ('m_dbViewId',)}
+_KEEP_VIEW = ('m_viewName', 'm_sheetNumber', 'm_issueDate', 'm_drawnBy', 'm_sheetViewportElemIds', 'm_isTemplate', 'm_scale', 'm_text', 'm_name')
+
+
+def _reduce(c, rec):
+    """keep only the fields the lists need: DBView/ViewSchedule records are large trees (the retained full records were ~250 MB of the baseline RSS on a 900 MB file)"""
+    f = rec['fields']; keep = _KEEP_VIEW if c.startswith('DBView') else _KEEP.get(c, ())
+    out = {k: f[k] for k in keep if k in f}
+    if c == 'Level':
+        ps = f.get('m_pSurface'); ps = ps.get('obj', ps) if isinstance(ps, dict) else ps
+        if isinstance(ps, dict) and 'm_origin' in ps: out['m_pSurface'] = {'m_origin': list(ps['m_origin'])}
+    return {'id': rec['id'], 'fields': out}
+
+
 def _sc(v, W):
     v = int(v); return v - (1 << (8 * W)) if v >= 1 << (8 * W - 1) else v
 
@@ -192,7 +214,11 @@ def _reduce_headers(ehs):
     return out
 
 
-def scan(path, log=None, want_elements=False, progress=None):
+SEG_MB = float(os.environ.get('RVT_INFO_SEG_MB', '96'))        # stored MB of a partition handled per worker process (a fresh process: allocator state/baseline RSS reset)
+SEG_EXTRA_PAGES = 64
+
+
+def scan(path, log=None, want_elements=False, progress=None, _seg=None, _out=None):
     """-> dict: levels, grids, views, sheets, phases, counts (by category), class_counts, view_owned, stats, elements (when want_elements)"""
     _tune(); _paths()
     import olefile, rvt_scan as S, rvt_decode as D, rvt_inventory as I, fmt_parser as fp, rvtfmt, rvt_fast as F, rvt_entities as E
@@ -243,16 +269,55 @@ def scan(path, log=None, want_elements=False, progress=None):
         k = int(np.searchsorted(idarr, eid)); return k if k < N and int(idarr[k]) == eid else -1
     pns = sorted(n for n in names if n.startswith('Partitions/'))      # same (lexicographic) order as rvt_fast._partitions: first-wins across partitions
     nwin = 0; maxwin = 0; nb = 0; stalled = 0; lastseen = 0; early = False
-    for pi, pn in enumerate(pns):
+    items = [tuple(x) for x in _seg] if _seg else [(pn, 0, None) for pn in pns]
+    if not _seg and SEG_MB and not os.environ.get('RVT_INFO_INPROC'):
+        # all decoding happens in worker processes (a fresh process resets allocator state; the master stays ~150 MB): big partitions are cut into SEG_MB segments, small ones grouped
+        pp = int(SEG_MB * 1e6 // PAGE_STORED); jobs = []; cur = []; curpages = 0
+        for pn in pns:
+            sz = o.direntries[o._find(pn)].size; npg = -(-sz // PAGE_STORED)
+            if npg > pp * 1.5:
+                if cur: jobs.append(cur); cur = []; curpages = 0
+                for lo in range(0, npg, pp): jobs.append([(pn, lo, lo + pp + SEG_EXTRA_PAGES)])
+            else:
+                cur.append((pn, 0, None)); curpages += npg
+                if curpages >= pp: jobs.append(cur); cur = []; curpages = 0
+        if cur: jobs.append(cur)
+        import subprocess, pickle, tempfile
+        for ji, job in enumerate(jobs):
+            if alldone(): early = True; say('all headers and admin records found: %d of %d jobs skipped' % (len(jobs) - ji, len(jobs))); break
+            fd, outp = tempfile.mkstemp(prefix='rvtinfo-seg-', suffix='.pkl'); os.close(fd)
+            try:
+                code = "import sys, json; sys.path.insert(0, %r); from rvtballet import fastinfo as F; F._worker(sys.argv[1], json.loads(sys.argv[2]), sys.argv[3])" % os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                rc = subprocess.run([sys.executable, '-c', code, path, json.dumps(job), outp], env=dict(os.environ, RVT_INFO_INPROC='1')).returncode
+                if rc != 0: raise RuntimeError('worker for %s failed (exit %d)' % (job[0][0], rc))
+                part = pickle.load(open(outp, 'rb'))
+            finally:
+                try: os.remove(outp)
+                except OSError: pass
+            nwin += part['windows']; maxwin = max(maxwin, part['maxwin']); nb += part['nb']
+            sl = part['idx']; new = ~seen[sl]; t = sl[new]
+            seen[t] = True; a_cat[t] = part['cat'][new]; a_ov[t] = part['ov'][new]; a_fam[t] = part['fam'][new]; a_bb[t] = part['bb'][new]
+            for j, cc_ in enumerate(part['cls'][new]):
+                if cc_ == 65535: continue
+                nmx = part['cls_names'][int(cc_)]; ci = cn_ix.get(nmx)
+                if ci is None: ci = cn_ix[nmx] = len(cnames_l); cnames_l.append(nmx)
+                a_cls[t[j]] = ci
+            for k_, v_ in part['full'].items():
+                if k_ not in full: full[k_] = v_
+            found_ids |= part['found']; admin_ids |= part['admin']
+            say('job %d/%d (%s%s): %d new headers, %d windows, %.1fs' % (ji + 1, len(jobs), job[0][0], '+%d' % (len(job) - 1) if len(job) > 1 else ' pages %s-%s' % (job[0][1], job[0][2]), len(t), part['windows'], time.time() - t0))
+            if progress: progress(ji + 1, len(jobs), int(seen.sum()))
+        items = []
+    for pi, (pn, lo_p, hi_p) in enumerate(items):
         stalled = 0; lastseen = got(); p0 = lastseen; pearly = False
-        if alldone(): early = True; break
-        for chunk, fin in windows(chain_blocks(o, pn)):
-            if alldone() or (STALL and stalled >= STALL and lastseen > p0): early = pearly = True; break
+        if not _seg and alldone(): early = True; break
+        for chunk, fin in windows(chain_blocks(o, pn, lo_page=lo_p, hi_page=hi_p)):
+            if (not _seg and alldone()) or (STALL and stalled >= STALL and lastseen > p0): early = pearly = True; break
             nwin += 1; maxwin = max(maxwin, len(chunk)); nb += len(chunk)
             if os.environ.get('RVT_INFO_TRACE'): say('win %d %s: %.1f MB, hdr %d, rss %d MB' % (nwin, pn, len(chunk) / 1e6, int(seen.sum()), _rss_mb()))
             r = _extract_groups(rd, chunk, wanted, EH, slim_tags, idlist)
             for (eid, c), rec in r[0]:
-                if isfull(c) and rec.get('fields') and (eid, c) not in full: full[(eid, c)] = rec; found_ids.add(eid)
+                if isfull(c) and rec.get('fields') and (eid, c) not in full: full[(eid, c)] = _reduce(c, rec); found_ids.add(eid)
             for eid, h in r[1]:
                 k = slot(eid)
                 if k < 0 or seen[k]: continue
@@ -273,9 +338,13 @@ def scan(path, log=None, want_elements=False, progress=None):
                 if bb: a_bb[k] = bb
             del r, chunk; _trim()
             cur = got(); stalled = 0 if cur > lastseen else stalled + 1; lastseen = cur
-        if pearly: say('%s: stopped early after %d windows without a new header (RVT_INFO_STALL=0 reads everything)' % (pn, stalled))
-        if progress: progress(pi + 1, len(pns), int(seen.sum()))
-        say('partition %s (%d/%d): %d element headers, %.1fs' % (pn, pi + 1, len(pns), int(seen.sum()), time.time() - t0))
+        if pearly: say('%s: stopped early' % pn)
+        say('partition %s (%d/%d): %d element headers, %.1fs' % (pn, pi + 1, len(items), int(seen.sum()), time.time() - t0))
+    if _seg:
+        sl = np.nonzero(seen)[0]; import pickle
+        pickle.dump({'idx': sl, 'cat': a_cat[sl], 'ov': a_ov[sl], 'fam': a_fam[sl], 'bb': a_bb[sl], 'cls': a_cls[sl], 'cls_names': cnames_l, 'full': full, 'found': found_ids, 'admin': admin_ids,
+                     'windows': nwin, 'maxwin': maxwin, 'nb': nb}, open(_out, 'wb'), protocol=5)
+        return None
     res = {'stats': {'stopped_early': early, 'primary_elements': nprim, 'primary_with_header': int((seen & prim).sum()), 'partitions': len(pns), 'windows': nwin, 'max_window_mb': round(maxwin / 1e6, 1), 'decoded_mb': round(nb / 1e6), 'elements_with_header': int(seen.sum()), 'seconds': round(time.time() - t0, 2)}}
     cat = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'category_names.json')))
     u, n = np.unique(a_cat[seen], return_counts=True)
@@ -292,7 +361,7 @@ def scan(path, log=None, want_elements=False, progress=None):
         by[c].append(r); recs.setdefault(eid, r)
     nm = lambda i: (recs[i]['fields'].get('m_text') or recs[i]['fields'].get('m_viewName') or recs[i]['fields'].get('m_name') or '') if i in recs else ''
     res['levels'] = sorted([{'id': r['id'], 'name': r['fields'].get('m_text', ''), 'elevation_ft': (S_(r['fields'], 'm_pSurface', 'm_origin') or [None] * 3)[2]} for r in by['Level']],
-                           key=lambda l: (l['elevation_ft'] is None, l['elevation_ft'] if l['elevation_ft'] is not None else 0))
+                           key=lambda l: (l['elevation_ft'] is None, l['elevation_ft'] if l['elevation_ft'] is not None else 0, l['name'], l['id']))      # deterministic ties (diffable)
     res['grids'] = sorted(r['fields'].get('m_text', '') for r in by['Grid'])
     views = []; sheets = []
     for c, lst in by.items():
@@ -306,8 +375,12 @@ def scan(path, log=None, want_elements=False, progress=None):
             else: views.append({'id': r['id'], 'name': n, 'class': c, 'template': bool(f.get('m_isTemplate')), 'scale': f.get('m_scale')})
     vp = {r['id']: int(r['fields'].get('m_dbViewId', -1)) for r in by['Viewport']}
     for s in sheets: s['views'] = [nm(vp[v]) for v in s.pop('viewports') if v in vp and vp[v] in recs]
-    res['views'] = sorted(views, key=lambda v: (v['class'], v['name'])); res['sheets'] = sorted(sheets, key=lambda s: str(s['number']))
+    res['views'] = sorted(views, key=lambda v: (v['class'], v['name'], v['id'])); res['sheets'] = sorted(sheets, key=lambda s: (str(s['number']), s['id']))
     res['phases'] = [r['fields'].get('m_name') for r in by['ProjectPhase']]
     if want_elements:
         m = seen; res['arrays'] = {'id': idarr[m], 'cat': a_cat[m], 'owner_view': a_ov[m], 'family': a_fam[m], 'bbox': a_bb[m], 'cls': a_cls[m], 'cls_names': np.array(cnames_l or [''], dtype=str)}
     return res
+
+
+def _worker(path, items, out):
+    scan(path, _seg=items, _out=out)
