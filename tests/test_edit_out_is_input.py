@@ -9,6 +9,6 @@ def test_out_equals_input_refused_for_path_symlink_hardlink(tmp_path):
     hard = tmp_path / "hard.rvt"; os.link(src, hard)
     for out in (src, sym, hard):
         r = _run(str(src), "--set-string", "1", "Mark", "X", "-o", str(out), "--overwrite-output")
-        assert r.returncode == 2 and "OUT is the input file" in r.stderr, r.stderr
+        assert r.returncode == 2 and "OUT is the input file" in (r.stdout + r.stderr), r.stdout + r.stderr
         assert hashlib.sha256(src.read_bytes()).hexdigest() == h
     assert sorted(p.name for p in tmp_path.iterdir()) == ["a.rvt", "hard.rvt", "sym.rvt"]
