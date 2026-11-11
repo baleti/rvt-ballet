@@ -214,9 +214,13 @@ def _by(path, r, a, say):
         if eid in seen: continue
         seen.add(eid); v = rec['fields'].get(key)
         cnt[fastinfo._sc(v, W) if v is not None else None] += 1
-    names = {l['id']: l['name'] for l in r['levels']} if a.by == 'level' else {}
-    out = {('none' if k in (None, -1) else (names.get(k) or ('id %s' % k))): 0 for k in cnt}
-    for k, n in cnt.items(): out['none' if k in (None, -1) else (names.get(k) or ('id %s' % k))] += n
+    names = {l['id']: l['name'] for l in r['levels']} if a.by == 'level' else {eid: (rec['fields'].get('m_name') or '') for (eid, c), rec in x.items() if c == 'ProjectPhase'}
+    bad = {k for k in cnt if k not in (None, -1, 0) and k not in names and not (-(1 << 31) <= k < (1 << 31))}      # implausible ids: bad decode, not an element reference
+    if bad:
+        cnt['implausible'] = sum(cnt.pop(k) for k in bad)
+    lab = lambda k: 'none' if k in (None, -1) else (k if isinstance(k, str) else (names.get(k) or ('id %s' % k)))
+    out = {lab(k): 0 for k in cnt}
+    for k, n in cnt.items(): out[lab(k)] += n
     if a.json: say(json.dumps(dict(sorted(out.items())), indent=1, sort_keys=True)); return 0
     say('elements per %s (%d records):' % (a.by, len(seen)))
     for k, n in sorted(out.items(), key=lambda t: -t[1]): say('  %8d  %s' % (n, k))
