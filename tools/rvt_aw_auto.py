@@ -79,4 +79,12 @@ if _rc == 0 and os.path.exists(dst) and not os.environ.get('RVTGEN_INPLACE'):   
             os.remove(dst); sys.exit('REFUSED: output layout check failed (first partition member %d B -> %d B; Revit refuses this layout on Revit-saved files); output deleted, set RVTGEN_INPLACE=1 to use the in-place layout' % (_a, _b))
     except SystemExit: raise
     except Exception as _e: print('layout check skipped: %s' % _e)
+if _rc == 0 and os.path.exists(dst):      # member cap check (c3x-rvtdiff): Revit never writes a partition member > 131088 raw bytes; our 2026 add produced 238572 B
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import rvt_member_cap as _mc
+        _big = _mc.oversized(_mc.member_sizes(dst))
+        if _big and not _mc.oversized(_mc.member_sizes(src)):
+            os.remove(dst); sys.exit('REFUSED: output has partition member(s) over the Revit cap %d B: %s; output deleted' % (_mc.CAP, _big[:3]))
+    except SystemExit: raise
+    except Exception as _e: print('member cap check skipped: %s' % _e)
 sys.exit(_rc)
