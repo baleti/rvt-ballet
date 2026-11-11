@@ -39,7 +39,7 @@ async def main(src, n, seed):
             c['REFUSED'] += 1
             if cur != flipped: c['ORIG_CHANGED'] += 1; bad.append((i, hex(pos), 'original changed'))
         else:
-            c['SAVED'] += 1; savedpos.append(pos)
+            c['SAVED'] += 1; savedpos.append(pos); (os.environ.get('KEEP') and open(os.environ['KEEP'] + '/flipped_%d.bin' % pos, 'wb').write(flipped))
             try:
                 out = rvt_params.params(work)
                 lost = [e for e in (ref or {}) if e != eid and g(out.get(e, {})) != g(ref[e])]
