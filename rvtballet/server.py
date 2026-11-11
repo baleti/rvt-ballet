@@ -211,9 +211,11 @@ def make_app(models):
         try: body = await req.json()
         except Exception: body = {}
         if mid in saves.busy: return web.json_response({'ok': False, 'code': 'locked', 'error': 'a save of this model is in progress'}, status=423)
-        if body.get('confirm') is not True: raise web.HTTPBadRequest(text='restore overwrites the file: confirm=true required')
+        if not isinstance(body, dict) or body.get('confirm') is not True: raise web.HTTPBadRequest(text='restore overwrites the file: confirm=true required')
+        n = body.get('n', 0)
+        if isinstance(n, bool) or not isinstance(n, int) or not 0 <= n < 10 ** 6: raise web.HTTPBadRequest(text='n (backup number) must be a non-negative integer')      # a negative n indexed the backup list from the end
         if not saves.available or not src: return web.json_response({'ok': False, 'code': 'unavailable', 'error': 'saving is not available'}, status=501)
-        try: return web.json_response(await asyncio.get_event_loop().run_in_executor(None, lambda: savemod.restore_backup(saves, mid, src, int(body.get('n', 0)))))
+        try: return web.json_response(await asyncio.get_event_loop().run_in_executor(None, lambda: savemod.restore_backup(saves, mid, src, n)))
         except Exception as e:
             st, code = savemod.error_status(e); return web.json_response({'ok': False, 'code': code, 'error': savemod.user_message(e, st)}, status=st)
     async def recover(req):
