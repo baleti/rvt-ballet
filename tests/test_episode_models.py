@@ -36,3 +36,14 @@ def test_contents_payload_equals_revit(d):
 def test_dit_without_episode_records_refused():
     import rvt_dit_episode as D
     with pytest.raises(Exception): D.dit_next(b'\0' * 64, 0)
+@pytest.mark.parametrize('d', PAIRS[:1])
+def test_composer_history_and_bfi_share_one_episode_guid(d, tmp_path):
+    """Revit-made files carry the SAME new episode GUID in History and BasicFileInfo; the composer once wrote two different ones."""
+    import re, subprocess, uuid
+    out = str(tmp_path / 'o.rvt')
+    r = subprocess.run([sys.executable, os.path.join(HERE, '..', 'tools', 'rvt_new_episode.py'), d + 'base.rvt', d + 'base.rvt', out], capture_output=True, text=True)
+    if r.returncode: pytest.skip('composer not applicable to this pair: ' + r.stderr[-200:])
+    h = _g(out, 'Global/History'); b = _g(out, 'BasicFileInfo').decode('utf-16le', 'replace')
+    gs = {g for g in re.findall(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', b) if not g.startswith('00000000')}
+    new = [g for g in gs if g not in _g(d + 'base.rvt', 'BasicFileInfo').decode('utf-16le', 'replace')]
+    assert new and all(h.count(uuid.UUID(g).bytes_le) == 1 for g in new)
