@@ -1216,6 +1216,7 @@ def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
     except OSError: nlink = 1
     r = result_json(_guard(_import().save, d, new_bytes, manifest, force=force))
     _note_derived(ss, mid, r)
+    if ops: r.setdefault('warnings', []).extend(noop_numeric_warnings(ops))
     if nlink > 1: r.setdefault('warnings', []).append('the file had %d hard links: the save replaced this name only, the other name(s) still hold the OLD content' % nlink)
     del ss.edits(mid).ops[:ss.applied.pop(mid, 0)]          # only the ops that were applied are in the file now
     if not ss.edits(mid).ops:
