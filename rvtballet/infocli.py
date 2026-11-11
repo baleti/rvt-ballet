@@ -70,6 +70,7 @@ def main(argv, say=print):
         if i.get('Central Model Path'): say('  Central path     %s' % i['Central Model Path'])
         if i.get('Username'): say('  Username         %s' % i['Username'])
         if i.get('Last Save Path'): say('  Last save path   %s' % i['Last Save Path'])
+        if r.get('last_saved'): say('  Last saved       %s by %s (%d save records in the increment table, first %s)' % (r['last_saved'], r['last_saved_by'], r['save_records'], r['first_saved']))
         say('  File modified    %s' % r['mtime'])
         for k, v in r['project'].items(): say('  %-16s %s' % (k, v))
         if r['editors']: say('  Editors (increment table): %s' % ', '.join(r['editors'][:12]))

@@ -155,6 +155,21 @@ def project_information(o, names):
     return out
 
 
+def saves(o):
+    """[(user, unix time)] from Global/DocumentIncrementTable: each save record is the user name (UTF-16) followed by 4 zero bytes, two ids, a zero u32 and the save time as unix seconds
+    (verified against file mtimes of 4 seed files; implausible values are dropped)"""
+    import rvtfmt
+    PR = re.compile(rb'(?:[\x20-\x7e]\x00){3,}'); out = []
+    try:
+        pre, d, _ = rvtfmt.inflate_stream(o.openstream('Global/DocumentIncrementTable').read())
+        for m in PR.finditer(d):
+            if m.end() + 20 > len(d): continue
+            ts = struct.unpack_from('<I', d, m.end() + 16)[0]
+            if 1.0e9 < ts < 2.2e9: out.append((m.group().decode('utf-16le'), ts))
+    except Exception: pass
+    return out
+
+
 def editors(o):
     import rvtfmt
     PR = re.compile(rb'(?:[\x20-\x7e]\x00){3,}')
@@ -194,6 +209,10 @@ def file_info(path):
     o = olefile.OleFileIO(path); names = ['/'.join(e) for e in o.listdir(streams=True)]
     r = {'file_size': os.path.getsize(path), 'info': dict(basic_info(o)), 'project': project_information(o, names), 'editors': editors(o),
          'partitions': sum(1 for n in names if n.startswith('Partitions/'))}
+    sv = saves(o)
+    if sv:
+        u, t = max(sv, key=lambda x: x[1]); r['last_saved_by'] = u; r['last_saved'] = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(t)) + ' UTC'
+        r['first_saved'] = time.strftime('%Y-%m-%d', time.gmtime(min(x[1] for x in sv))); r['save_records'] = len(sv)
     r['mtime'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(os.path.getmtime(path)))
     return r
 
