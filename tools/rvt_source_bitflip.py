@@ -8,12 +8,13 @@ for p in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-resear
 from rvtballet import server
 import rvt_params, aiohttp
 from aiohttp.test_utils import TestClient, TestServer
+PARAM = os.environ.get('PARAM', 'Comments')
 g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
 async def main(src, n, seed):
     R = random.Random(seed); data = open(src, 'rb').read(); ext = os.path.splitext(src)[1]; c = collections.Counter(); bad = []
-    base = rvt_params.params(src); eid = next(e for e, d in base.items() if g(d).get('Comments') == '')
+    base = rvt_params.params(src); eid = next(e for e, d in base.items() if g(d).get(PARAM, None) is not None and (g(d).get(PARAM) == '' or os.environ.get('PARAM')))
     for i in range(n):
-        work = _T + '/w%d%s' % (i, ext); b = bytearray(data); pos = R.randrange(len(b)); b[pos] ^= 1 << R.randrange(8); open(work, 'wb').write(b); flipped = bytes(b)
+        work = _T + '/w%d%s' % (i, ext); b = bytearray(data); pos = R.randrange(len(b)); b[pos] ^= (0 if os.environ.get('NOFLIP') else 1) << R.randrange(8); open(work, 'wb').write(b); flipped = bytes(b)
         try: ref = rvt_params.params(work)
         except Exception: ref = None
         md = '%s/m%d' % (_T, i); os.makedirs(md); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': work}
@@ -21,7 +22,7 @@ async def main(src, n, seed):
             cl.session._timeout = aiohttp.ClientTimeout(total=None)
             try:
                 await cl.get('/api/m/m/saveinfo')
-                r = await cl.post('/api/m/m/edit', json={'op': 'set_string', 'eid': eid, 'param': 'Comments', 'value': 'flip %d' % i}); st = r.status
+                r = await cl.post('/api/m/m/edit', json={'op': 'set_string', 'eid': eid, 'param': PARAM, 'value': 'flip %d' % i}); st = r.status
                 if st == 200: r = await cl.post('/api/m/m/save', json={}); st = r.status
             except Exception as e: st = -1
         cur = open(work, 'rb').read()
