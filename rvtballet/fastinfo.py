@@ -8,8 +8,8 @@ window) and handed to the Rust RecDecoder.extract_chunk (rvt_fast), slim (empty 
 import os, sys, re, struct, zlib, io, zipfile, collections, json, time
 
 PAGE_STORED = 65249; PAGE_PAYLOAD = 64896; GZ = b'\x1f\x8b\x08\x00'
-WINDOW = int(os.environ.get('RVT_INFO_WINDOW_MB', '6')) << 20
-OVERLAP = int(os.environ.get("RVT_INFO_OVERLAP_KB", "2048")) << 10
+WINDOW = int(os.environ.get('RVT_INFO_WINDOW_MB', '3')) << 20
+OVERLAP = int(os.environ.get("RVT_INFO_OVERLAP_KB", "1024")) << 10
 FULL_CLASSES = ('Level', 'Grid', 'ProjectPhase', 'ProjectInfo', 'Viewport')
 FULL_PREFIX = ('DBView',)
 MAX_MEMBER = 1 << 30
@@ -179,6 +179,10 @@ def _reduce(c, rec):
     return {'id': rec['id'], 'fields': out}
 
 
+def _plausible(v, W):
+    v = _sc(v, W); return -(1 << 31) <= v < (1 << 31)
+
+
 def _sc(v, W):
     v = int(v); return v - (1 << (8 * W)) if v >= 1 << (8 * W - 1) else v
 
@@ -270,7 +274,8 @@ def scan(path, log=None, want_elements=False, progress=None, _seg=None, _out=Non
     pns = sorted(n for n in names if n.startswith('Partitions/'))      # same (lexicographic) order as rvt_fast._partitions: first-wins across partitions
     nwin = 0; maxwin = 0; nb = 0; stalled = 0; lastseen = 0; early = False
     items = [tuple(x) for x in _seg] if _seg else [(pn, 0, None) for pn in pns]
-    if not _seg and SEG_MB and not os.environ.get('RVT_INFO_INPROC'):
+    total_pages = sum(-(-o.direntries[o._find(n)].size // PAGE_STORED) for n in pns)
+    if not _seg and SEG_MB and total_pages * PAGE_STORED > SEG_MB * 1.5e6 and not os.environ.get('RVT_INFO_INPROC'):      # small files are decoded in this process
         # all decoding happens in worker processes (a fresh process resets allocator state; the master stays ~150 MB): big partitions are cut into SEG_MB segments, small ones grouped
         pp = int(SEG_MB * 1e6 // PAGE_STORED); jobs = []; cur = []; curpages = 0
         for pn in pns:
@@ -333,9 +338,9 @@ def scan(path, log=None, want_elements=False, progress=None, _seg=None, _out=Non
                     if ci is None: ci = cn_ix[nmx] = len(cnames_l); cnames_l.append(nmx)
                     a_cls[k] = ci
                     if isfull(nmx): admin_ids.add(eid)
-                if cid is not None: a_cat[k] = _sc(cid, W)
-                if ov is not None: a_ov[k] = _sc(ov, W)
-                if fam is not None: a_fam[k] = _sc(fam, W)
+                if cid is not None and _plausible(cid, W): a_cat[k] = _sc(cid, W)         # a garbage header (e.g. id 0 decoded from zero bytes) must not invent categories
+                if ov is not None and _plausible(ov, W): a_ov[k] = _sc(ov, W)
+                if fam is not None and _plausible(fam, W): a_fam[k] = _sc(fam, W)
                 if bb: a_bb[k] = bb
             del r, chunk; _trim()
             cur = got(); stalled = 0 if cur > lastseen else stalled + 1; lastseen = cur
@@ -375,7 +380,13 @@ def scan(path, log=None, want_elements=False, progress=None, _seg=None, _out=Non
                                'viewports': [int(v) for v in (f.get('m_sheetViewportElemIds') or [])]})
             else: views.append({'id': r['id'], 'name': n, 'class': c, 'template': bool(f.get('m_isTemplate')), 'scale': f.get('m_scale')})
     vp = {r['id']: int(r['fields'].get('m_dbViewId', -1)) for r in by['Viewport']}
-    for s in sheets: s['views'] = [nm(vp[v]) for v in s.pop('viewports') if v in vp and vp[v] in recs]
+    on_sheet = collections.defaultdict(list)             # 2023+ files: a sheet lists no viewports; each Viewport element is owned by its sheet (ElementHeader.m_ownerViewId)
+    for v, dv in vp.items():
+        k = slot(v)
+        if k >= 0 and a_ov[k] not in (-1, 0) and seen[k]: on_sheet[int(a_ov[k])].append(dv)
+    for s in sheets:
+        ids_ = [vp[v] for v in s.pop('viewports') if v in vp]
+        s['views'] = [nm(d) for d in ids_ if d in recs] if ids_ else sorted(nm(d) for d in on_sheet.get(s['id'], []) if d in recs)
     res['views'] = sorted(views, key=lambda v: (v['class'], v['name'], v['id'])); res['sheets'] = sorted(sheets, key=lambda s: (str(s['number']), s['id']))
     res['phases'] = [r['fields'].get('m_name') for r in by['ProjectPhase']]
     if want_elements:
