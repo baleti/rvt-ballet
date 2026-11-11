@@ -106,7 +106,9 @@ def run(cmd, env=None, timeout=3600):
 
 def vm_up():
     rc, out = run(['/srv/vm/win/runs/20261011-194452/gssh', 'hostname'], timeout=40)
-    return rc == 0 and 'No such device' not in out
+    if rc == 0 and 'No such device' not in out: return True
+    rc, out = run(['pgrep', '-f', 'qemu-system.*name revit-lane'], timeout=10)      # lane 1 (cid 30) is retired; Revit jobs run on lanes 2/3 through rvt_vm_open, which reports its own failures
+    return rc == 0 and bool(out.strip())
 
 
 def vm_open(year, path):
