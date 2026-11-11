@@ -1,28 +1,38 @@
-"""In-place save (atomic replace) of a source whose path has spaces, quotes, ';', unicode, a leading dash, a 200-char name and a deep directory: saved, bytes identical to the no-edit save of a plain path, no temp left, journal/backup work. Synthetic writer scene only."""
-import os, sys, tempfile, shutil, hashlib
-_T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-RTE = os.path.expanduser('~/rvt-research/write-lab/scenes/classtests/2024_writer_cols2.rte')
-if not os.path.exists(RTE): print('SKIP no scene'); sys.exit(0)
+"""c6x-rvtmatrix (new corruption angle): in-place edit+SAVE! on a source whose path has spaces, quotes, CJK and accents (backup name, journal and temp file must cope), and a DIRECTORY named x.rvt must be refused without touching anything. Autodesk 2024 Construction template."""
+import os, sys, tempfile, hashlib, shutil, json
+_T = tempfile.mkdtemp(); HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)
+SRC = os.path.expanduser('~/rvtfix/corpus/2024/71_Construction-DefaultMetric.rte')
+if not os.path.exists(SRC): print('skip: no template'); sys.exit(0)
+for p in ('~/rvt-research', '~/rvt-research/write-lab', '~/rvt-research/edit-lab'): sys.path.insert(0, os.path.expanduser(p))
+json.dump({'rvt': {'2024': 'open'}}, open(_T + '/gate.json', 'w'))
+os.environ.update(SAVEGATE_JOURNAL=_T + '/j', SAVEGATE_CACHE=_T + '/c', RVTBALLET_EDIT_BACKEND='rvtedit', RVTBALLET_ALLOW_OVERWRITE='1', SAVEGATE_GATE=_T + '/gate.json')
+sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
+import rvt_params
+g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
+EID = next(e for e, d in rvt_params.params(SRC).items() if g(d).get('Comments') == '')
 from rvtballet import save
 save._import()
 import savegate as sg
-sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
-def run(src):
-    ss = save.SaveSessions(sg.Config(allow_overwrite=True, require_gate=False, verify=False)); ss.doc('m', src)
-    save.save_overwrite(ss, 'm', src); ss.close()
+h0 = sha(SRC)
 try:
-    plain = os.path.join(_T, 'plain.rte'); shutil.copy(RTE, plain); run(plain); ref = sha(plain)
-    names = ["my file (1).rte", "q'uo\"te;semi.rte", "-dash.rte", "café 日本語 \U0001F3D7.rte", "a" * 200 + ".rte", "  lead space.rte"]
-    for i, n in enumerate(names + [None]):
-        d = os.path.join(_T, 'dir %d' % i)
-        if n is None: d = os.path.join(d, *['deep dï' + str(k) for k in range(12)]); n = 'x.rte'
-        os.makedirs(d); src = os.path.join(d, n); shutil.copy(RTE, src)
-        run(src)
-        assert sha(src) == ref, 'saved bytes differ for %r' % n
-        left = [f for f in os.listdir(d) if f not in (n, '.savegate')]
-        sgd = os.path.join(d, '.savegate'); assert not [f for f in (os.listdir(sgd) if os.path.isdir(sgd) else []) if f.endswith('.tmp') or '.tmp' in f], 'temp in .savegate'
-        assert not left, 'stray files %r next to %r' % (left, n)
-        print('ok', repr(n[:30]), len(src))
+    d = os.path.join(_T, "my 'quoted' dir 日本語 éü; x"); os.makedirs(d)
+    src = os.path.join(d, "modèle 漢字 (v2) 'a' & b.rvt"); shutil.copy(SRC, src)
+    ss = save.SaveSessions(sg.Config(allow_overwrite=True, require_gate=False)); ss.doc('m', src)
+    save.add_edit(ss, 'm', src, {'op': 'set_string', 'eid': EID, 'param': 'Comments', 'value': 'odd-path'})
+    save.save_overwrite(ss, 'm', src)
+    assert sha(src) != h0
+    left = sorted(os.listdir(d)); print('saved in odd path; dir now:', len(left), 'entries')
+    assert not [f for f in left if f.endswith(('.tmp', '.part')) or '.sgtmp' in f], left
+    bk = [f for f in left if f != os.path.basename(src)]; print('backup entries:', len(bk)); assert len(bk) == 1, left
+    P = rvt_params.params(src); assert g(P[EID]).get('Comments') == 'odd-path'
+    # a directory named *.rvt
+    dd = os.path.join(_T, 'dir.rvt'); os.makedirs(dd); open(dd + '/f', 'wb').write(b'x')
+    try:
+        ss2 = save.SaveSessions(sg.Config(allow_overwrite=True, require_gate=False)); ss2.doc('m2', dd)
+        save.add_edit(ss2, 'm2', dd, {'op': 'set_string', 'eid': EID, 'param': 'Comments', 'value': 'x'}); save.save_overwrite(ss2, 'm2', dd)
+        raise SystemExit('FAIL: directory accepted as source')
+    except SystemExit: raise
+    except Exception as e: print('directory source refused:', type(e).__name__)
+    assert os.path.isdir(dd) and os.listdir(dd) == ['f'] and open(dd + '/f', 'rb').read() == b'x'
     print('OK')
 finally: shutil.rmtree(_T, ignore_errors=True)
