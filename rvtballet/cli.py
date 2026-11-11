@@ -123,7 +123,8 @@ def prepare(files):
     for l in summary:
         if l.get('model') != 'FAILED': print('\nREADY: %s %s --sheets' % (os.path.join(here, 'bin', 'rvt-ballet'), l['file']))
 
-SUBCOMMANDS = ('open', 'convert', 'serve', 'info', 'edit')
+SUBCOMMANDS = ('open', 'convert', 'serve', 'info', 'edit', 'sheets', 'views', 'levels', 'grids', 'counts', 'elements')
+BIG_MB = float(os.environ.get('RVT_BIG_MB', '300'))
 
 
 def normalize_argv(argv):
@@ -135,12 +136,18 @@ def normalize_argv(argv):
 
 def main(argv=None):
     argv = normalize_argv(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] in ('info', 'edit'):
+    if argv and argv[0] == 'info' and '--save' in argv:        # the save-gate report (opens the model through the server code)
         from . import editcli
-        sys.exit((editcli.info_main if argv[0] == 'info' else editcli.edit_main)(argv[1:]))
+        sys.exit(editcli.info_main([x for x in argv[1:] if x != '--save']))
+    if argv and argv[0] in ('info', 'sheets', 'views', 'levels', 'grids', 'counts', 'elements'):       # streamed admin data, bounded memory, never the geometry pipeline
+        from . import infocli
+        sys.exit(infocli.main(argv))
+    if argv and argv[0] == 'edit':
+        from . import editcli
+        sys.exit(editcli.edit_main(argv[1:]))
     ap = argparse.ArgumentParser(prog='rvt-ballet'); sub = ap.add_subparsers(dest='cmd', required=True)
-    o = sub.add_parser('open'); o.add_argument('files', nargs='+'); o.add_argument('--port', type=int, default=0); o.add_argument('--no-browser', action='store_true'); o.add_argument('--workspace'); o.add_argument('--rebuild', action='store_true'); o.add_argument('--sheets', action='store_true', help='open directly on the sheets page'); o.add_argument('--hide', default='', help='comma list of categories hidden at start, e.g. Planting,Entourage (URL ?hide=...)'); o.add_argument('--prepare', action='store_true', help='demo prep: convert + cache the model(s), warm the sheets cache, print the exact demo command, do not serve')
-    c = sub.add_parser('convert'); c.add_argument('file'); c.add_argument('out', nargs='?')
+    o = sub.add_parser('open'); o.add_argument('files', nargs='+'); o.add_argument('--port', type=int, default=0); o.add_argument('--no-browser', action='store_true'); o.add_argument('--workspace'); o.add_argument('--rebuild', action='store_true'); o.add_argument('--force', action='store_true', help='open/convert files above %d MB anyway (RVT_BIG_MB)' % BIG_MB); o.add_argument('--sheets', action='store_true', help='open directly on the sheets page'); o.add_argument('--hide', default='', help='comma list of categories hidden at start, e.g. Planting,Entourage (URL ?hide=...)'); o.add_argument('--prepare', action='store_true', help='demo prep: convert + cache the model(s), warm the sheets cache, print the exact demo command, do not serve')
+    c = sub.add_parser('convert'); c.add_argument('file'); c.add_argument('out', nargs='?'); c.add_argument('--force', action='store_true', help='convert files above %d MB anyway (RVT_BIG_MB)' % BIG_MB)
     s = sub.add_parser('serve'); s.add_argument('dirs', nargs='*'); s.add_argument('--port', type=int, default=0)
     a = ap.parse_args(argv)
     from . import server
@@ -151,6 +158,12 @@ def main(argv=None):
             for f, m in bad: print('rvt-ballet: ' + m, file=sys.stderr)
             if a.cmd == 'convert' or len(bad) == len(a.files): sys.exit(2)
             a.files = [f for f in a.files if f not in {b[0] for b in bad}]
+    if a.cmd in ('open', 'convert') and not a.force and not os.environ.get('RVT_FORCE_BIG'):
+        big = [f for f in (a.files if a.cmd == 'open' else [a.file]) if os.path.exists(f) and os.path.getsize(f) > BIG_MB * 1e6]
+        if big:
+            for f in big: print('rvt-ballet: %s is %.0f MB (> %.0f MB): geometry conversion needs many GB of RAM and can run for hours. Use `rvt-ballet info|sheets|views|levels|grids|counts|elements FILE` (streamed, no conversion), or add --force.' % (os.path.basename(f), os.path.getsize(f) / 1e6, BIG_MB), file=sys.stderr)
+            if a.cmd == 'convert' or len(big) == len(a.files): sys.exit(3)
+            a.files = [f for f in a.files if f not in big]
     if a.cmd == 'open' and a.prepare: return prepare(a.files)
     if a.cmd == 'convert':
         if not os.environ.get('RVT_CAPPED') and not os.environ.get('RVT_NO_CAP'):

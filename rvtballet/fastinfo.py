@@ -1,0 +1,313 @@
+"""rvt-ballet admin-data reader: info / sheets / views / levels / grids / counts / elements of a .rvt WITHOUT conversion and with bounded memory.
+
+Never imports the geometry pipeline. Partition streams are read from the CFB sector chain in blocks (never a whole stream), gzip members are inflated
+one after the other, joined into windows of ~WINDOW decoded bytes (overlap OVERLAP, so a record straddling a window edge is decoded whole in the next
+window) and handed to the Rust RecDecoder.extract_chunk (rvt_fast), slim (empty fields) for every class except the few admin classes
+(Level, Grid, DBView*, Viewport, ProjectPhase, ProjectInfo). Per-element data is reduced to small tuples at once, so peak RSS depends on WINDOW, not on file size.
+"""
+import os, sys, re, struct, zlib, io, zipfile, collections, json, time
+
+PAGE_STORED = 65249; PAGE_PAYLOAD = 64896; GZ = b'\x1f\x8b\x08\x00'
+WINDOW = int(os.environ.get('RVT_INFO_WINDOW_MB', '6')) << 20
+OVERLAP = 2 << 20
+FULL_CLASSES = ('Level', 'Grid', 'ProjectPhase', 'ProjectInfo', 'Viewport')
+FULL_PREFIX = ('DBView',)
+MAX_MEMBER = 1 << 30
+
+
+def _tune():
+    """memory hygiene for the Rust decoder: one decode thread (RVT_THREADS) and one malloc arena; measured on a 15 MB file whose 17k ElementHeaders hold 60 KB trees each: peak 1.9 GB -> 0.43 GB"""
+    os.environ.setdefault('RVT_THREADS', '1')
+    try:
+        import ctypes; ctypes.CDLL('libc.so.6').mallopt(-8, 1)       # M_ARENA_MAX
+    except Exception: pass
+
+
+def _rss_mb():
+    try:
+        return int(open('/proc/self/statm').read().split()[1]) * os.sysconf('SC_PAGE_SIZE') >> 20
+    except Exception: return -1
+
+
+def _trim():
+    try:
+        import ctypes; ctypes.CDLL('libc.so.6').malloc_trim(0)
+    except Exception: pass
+
+
+def _paths():
+    for p in (os.environ.get('RVT_READER_DIR'), os.path.expanduser('~/rvt-research'), os.path.expanduser('~/src/rvt-core/python')):
+        if p and os.path.isdir(p) and p not in sys.path: sys.path.append(p)
+    try:
+        from . import plat   # noqa: F401  (adds the sibling rvt-core / rvt-sheets dirs to sys.path)
+    except Exception: pass
+
+
+def _strip(buf, pages):
+    out = bytearray()
+    for p in range(pages): out += buf[p * PAGE_STORED: p * PAGE_STORED + PAGE_PAYLOAD]
+    return bytes(out)
+
+
+def chain_blocks(o, name, block_pages=256):
+    """payload of stream `name` (353-byte page trailers stripped) in blocks of ~block_pages pages, read from the CFB sector chain
+    (olefile.openstream would load the whole stream: 770 MB for one partition of a big central file)"""
+    e = o.direntries[o._find(name)]; ss = o.sectorsize; fat = o.fat; fp = o.fp
+    if e.size < o.minisectorcutoff:                      # tiny streams live in the mini stream (not the sector chain): olefile reads those (< 4 KB)
+        raw = o.openstream(name).read(); pages = len(raw) // PAGE_STORED
+        yield _strip(raw, pages) + raw[pages * PAGE_STORED:]; return
+    sect = e.isectStart; left = e.size; want = block_pages * PAGE_STORED; buf = bytearray(); hops = 0; nsect = len(fat)
+    while 0 <= sect < 0xFFFFFFFA and left > 0:
+        run = 1
+        while run < 4096 and run * ss < left and sect + run - 1 < nsect and fat[sect + run - 1] == sect + run: run += 1
+        fp.seek((sect + 1) * ss); chunk = fp.read(min(run * ss, left)); left -= len(chunk); buf += chunk
+        if not chunk: break
+        sect = fat[sect + run - 1] if sect + run - 1 < nsect else -1; hops += run
+        if hops > nsect + 8: raise ValueError('FAT chain loop in ' + name)
+        if len(buf) >= want:
+            pages = len(buf) // PAGE_STORED
+            blk = _strip(buf, pages); del buf[:pages * PAGE_STORED]
+            yield blk
+    if buf:
+        pages = len(buf) // PAGE_STORED
+        yield _strip(buf, pages) + bytes(buf[pages * PAGE_STORED:])
+
+
+def members(blocks):
+    """decoded gzip members of a payload-block iterator, one at a time. Offset based (no per-member copies of the rest of the block) and the deflate input is fed
+    in 64 KB slices, so unused_data never drags the remaining megabytes along (that was quadratic: 10 MB/s). A stray marker inside bulk data is skipped like rvt2text.segments."""
+    buf = bytearray(); it = iter(blocks); eof = [False]; pos = 0
+    def more():
+        nonlocal pos
+        if eof[0]: return False
+        try: blk = next(it)
+        except StopIteration: eof[0] = True; return False
+        buf.extend(blk); return True
+    while True:
+        if pos > (1 << 20): del buf[:pos]; pos = 0               # compact only here: i / q below are buffer indices
+        i = buf.find(GZ, pos)
+        while i < 0:
+            pos = max(pos, len(buf) - 3)
+            if not more(): return
+            i = buf.find(GZ, pos)
+        pos = i + 10
+        while len(buf) < pos and more(): pass
+        d = zlib.decompressobj(-15); outs = []; total = 0; ok = False; bad = False; q = pos
+        while True:
+            if q >= len(buf):
+                if not more(): break
+                continue
+            piece = bytes(buf[q:q + 65536])
+            try: out = d.decompress(piece, MAX_MEMBER - total)
+            except zlib.error: bad = True; break
+            if out: outs.append(out); total += len(out)
+            if d.unconsumed_tail: raise ValueError('corrupt block: member expands beyond %d bytes' % MAX_MEMBER)
+            if d.eof: q += len(piece) - len(d.unused_data); ok = True; break
+            q += len(piece)
+        if bad: pos = i + 4; continue                             # false marker: resume right after it
+        if not ok: return                                          # stream ends inside a member
+        pos = q
+        yield b''.join(outs)
+        while len(buf) < pos + 8 and more(): pass
+        pos += 8                                                   # gzip CRC32/ISIZE trailer
+
+
+def windows(blocks):
+    """(chunk, final): joined member data. Every chunk but the last stops OVERLAP before the window end; the next window starts 2*OVERLAP before it."""
+    carry = b''; parts = []; n = 0
+    for m in members(blocks):
+        parts.append(m); n += len(m)
+        if n >= WINDOW:
+            w = carry + b''.join(parts); parts = []; n = 0
+            yield w[:len(w) - OVERLAP], False
+            carry = w[len(w) - 2 * OVERLAP:]; w = None
+    yield carry + b''.join(parts), True
+
+
+def basic_info(o):
+    b = o.openstream('BasicFileInfo').read(); i = b.find('Worksharing'.encode('utf-16le'))
+    t = b[i:].decode('utf-16le', 'ignore') if i >= 0 else b.decode('utf-16le', 'ignore')
+    d = collections.OrderedDict()
+    for l in re.split(r'[\r\n]+', t):
+        if ':' in l:
+            k, v = l.split(':', 1); d[k.strip()] = v.strip()
+    return d
+
+
+def project_information(o, names):
+    if 'ProjectInformation' not in names: return {}
+    try:
+        z = zipfile.ZipFile(io.BytesIO(o.openstream('ProjectInformation').read()))
+        x = z.read(z.namelist()[0]).decode('utf-8', 'replace')
+    except Exception: return {}
+    out = {}
+    for tag in ('title', 'BuildingName', 'OrganizationName', 'OrganizationDescription', 'Author', 'ProjectNumber', 'ProjectName', 'ProjectIssueDate', 'ProjectStatus', 'ClientName', 'Address'):
+        m = re.search(r'<%s>([^<]*)</%s>' % (tag, tag), x, re.I)
+        if m and m.group(1).strip(): out[tag] = m.group(1).strip()
+    return out
+
+
+def editors(o):
+    import rvtfmt
+    PR = re.compile(rb'(?:[\x20-\x7e]\x00){3,}')
+    try:
+        pre, dit, _ = rvtfmt.inflate_stream(o.openstream('Global/DocumentIncrementTable').read())
+        c = collections.Counter(m.group().decode('utf-16le') for m in PR.finditer(dit))
+        return [u for u, n in c.most_common() if re.search(r'[A-Za-z]{3}', u)][:30]
+    except Exception: return []
+
+
+def _sc(v, W):
+    v = int(v); return v - (1 << (8 * W)) if v >= 1 << (8 * W - 1) else v
+
+
+def file_info(path):
+    """seconds: BasicFileInfo, project information, editors. No partition is touched."""
+    _paths()
+    import olefile
+    o = olefile.OleFileIO(path); names = ['/'.join(e) for e in o.listdir(streams=True)]
+    r = {'file_size': os.path.getsize(path), 'info': dict(basic_info(o)), 'project': project_information(o, names), 'editors': editors(o),
+         'partitions': sum(1 for n in names if n.startswith('Partitions/'))}
+    r['mtime'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(os.path.getmtime(path)))
+    return r
+
+
+GROUP = int(os.environ.get('RVT_INFO_GROUP', '0'))     # 0 = off (id groups did not lower the peak; kept for experiments)
+
+
+def _extract_groups(rd, chunk, wanted, EH, slim_tags, idlist):
+    """rd.extract_chunk over id groups: a decoded ElementHeader carries a m_regenHistory/m_parents tree (60 KB of Python objects for some elements), so one call over a
+    header-dense window returned 1.5-1.9 GB of Python objects (15 MB file). Groups of GROUP ids bound that per call; results are reduced before the next call."""
+    if not GROUP or len(idlist) <= GROUP: return rd.extract_chunk(chunk, wanted, EH, None, slim_tags)
+    recs = []; ehs = []
+    for a in range(0, len(idlist), GROUP):
+        r = rd.extract_chunk(chunk, wanted, EH, idlist[a:a + GROUP], slim_tags)
+        recs.extend(r[0]); ehs.extend(_reduce_headers(r[1]))
+    return recs, ehs
+
+
+def _reduce_headers(ehs):
+    out = []
+    for eid, h in ehs: out.append((eid, {k: h.get(k) for k in ('m_categroryId', 'm_ownerViewId', 'm_familyId', 'm_pBBox')}))
+    return out
+
+
+def scan(path, log=None, want_elements=False, progress=None):
+    """-> dict: levels, grids, views, sheets, phases, counts (by category), class_counts, view_owned, stats, elements (when want_elements)"""
+    _tune(); _paths()
+    import olefile, rvt_scan as S, rvt_decode as D, rvt_inventory as I, fmt_parser as fp, rvtfmt, rvt_fast as F, rvt_entities as E
+    t0 = time.time(); say = log or (lambda *a: None)
+    o = olefile.OleFileIO(path); names = ['/'.join(e) for e in o.listdir(streams=True)]
+    cls, _ = fp.parse(rvtfmt.inflate_stream(o.openstream('Formats/Latest').read())[1])
+    W = S.id_size(cls); sch = D.Schema(cls)
+    et = rvtfmt.inflate_stream(o.openstream('Global/ElemTable').read())[1]
+    nh = struct.unpack_from('<I', et, 2)[0]
+    if W == 4: ids = {struct.unpack_from('<I', et, 6 + 28 * k)[0] for k in range(min(nh, (len(et) - 6) // 28) if nh else (len(et) - 6) // 28)}; prim_ids = set(ids)
+    else:
+        n = (len(et) - 6) // 40
+        if 0 < nh <= n: n = nh
+        ids = {struct.unpack_from('<Q', et, 6 + 40 * k)[0] for k in range(n)}; prim_ids = set(ids)
+        top = max(ids) + 16
+        ids |= {v for v in (struct.unpack_from('<Q', et, 6 + 40 * k + 20)[0] for k in range(n)) if 0 < v < top}
+    owner = {}
+    if W == 4:
+        for k in range(min(nh, (len(et) - 6) // 28) if nh else (len(et) - 6) // 28):
+            r = struct.unpack_from('<7I', et, 6 + 28 * k)
+            if r[6] != 0xffffffff: owner[r[0]] = r[6]
+    else:
+        for k in range(min(nh, (len(et) - 6) // 40) if nh else (len(et) - 6) // 40):
+            ow = struct.unpack_from('<Q', et, 6 + 40 * k + 28)[0]
+            if ow != 0xffffffffffffffff: owner[struct.unpack_from('<Q', et, 6 + 40 * k)[0]] = ow
+    del et
+    EH = sch.by.get('ElementHeader', -999) + 12; cnames = {i + 12: c['name'] for i, c in enumerate(cls)}; etags = I.element_tags(cls)
+    isfull = lambda c: c in FULL_CLASSES or c.startswith(FULL_PREFIX)
+    wanted = sorted(t for t, n in cnames.items() if t in etags)                      # all element classes: with only the admin classes wanted, ~0.03% of the headers are not accepted (f35: 6 of 22984)
+    slim_tags = sorted(t for t in wanted if not isfull(cnames[t]))
+    ENDX = len(cls)
+    try: es = F.es_load(path)[0]
+    except Exception: es = {}
+    idlist = sorted(ids); rd = F.make_recdecoder(sch, W, es); rd.set_ids(idlist)
+    import numpy as np
+    idarr = np.array(idlist, dtype=np.uint64); N = len(idarr)
+    seen = np.zeros(N, bool); a_cat = np.zeros(N, np.int64); a_ov = np.full(N, -1, np.int64); a_fam = np.full(N, -1, np.int64); a_bb = np.full((N, 6), np.nan, np.float32)
+    a_cls = np.full(N, 65535, np.uint16); cnames_l = []; cn_ix = {}; full = {}; NOCAT = -(1 << 62)
+    a_cat[:] = NOCAT
+    prim = np.isin(idarr, np.array(sorted(prim_ids), dtype=np.uint64)); nprim = int(prim.sum()); del prim_ids
+    STALL = int(os.environ.get('RVT_INFO_STALL', '0'))      # windows without a new header / admin record after which the scan stops early (0 = only when every element has its header and every admin record is found)
+    admin_ids = set()
+    found_ids = set()
+    def got():       # element headers + class records found so far (both must stop growing / be complete before the scan may stop early)
+        return int(seen.sum()) + len(found_ids)
+    def alldone(): return int((seen & prim).sum()) >= nprim - 2 and admin_ids <= found_ids
+    def slot(eid):
+        k = int(np.searchsorted(idarr, eid)); return k if k < N and int(idarr[k]) == eid else -1
+    pns = sorted(n for n in names if n.startswith('Partitions/'))      # same (lexicographic) order as rvt_fast._partitions: first-wins across partitions
+    nwin = 0; maxwin = 0; nb = 0; stalled = 0; lastseen = 0; early = False
+    for pi, pn in enumerate(pns):
+        stalled = 0; lastseen = got(); p0 = lastseen; pearly = False
+        if alldone(): early = True; break
+        for chunk, fin in windows(chain_blocks(o, pn)):
+            if alldone() or (STALL and stalled >= STALL and lastseen > p0): early = pearly = True; break
+            nwin += 1; maxwin = max(maxwin, len(chunk)); nb += len(chunk)
+            if os.environ.get('RVT_INFO_TRACE'): say('win %d %s: %.1f MB, hdr %d, rss %d MB' % (nwin, pn, len(chunk) / 1e6, int(seen.sum()), _rss_mb()))
+            r = _extract_groups(rd, chunk, wanted, EH, slim_tags, idlist)
+            for (eid, c), rec in r[0]:
+                if isfull(c) and rec.get('fields') and (eid, c) not in full: full[(eid, c)] = rec; found_ids.add(eid)
+            for eid, h in r[1]:
+                k = slot(eid)
+                if k < 0 or seen[k]: continue
+                seen[k] = True
+                cid = h.get('m_categroryId'); ov = h.get('m_ownerViewId'); fam = h.get('m_familyId')
+                pb = h.get('m_pBBox'); pb = pb.get('obj', pb) if isinstance(pb, dict) else pb
+                mm = pb.get('m_minmax') if isinstance(pb, dict) else None
+                bb = (tuple(map(float, mm[0])) + tuple(map(float, mm[1]))) if mm and len(mm) == 2 else None
+                cd = h.get('m_classDef'); cd = cd.get('m_ref') if isinstance(cd, dict) else cd         # class tag of the element (tag - 12 = schema index; 25593 of 25595 equal the decoded record class)
+                if isinstance(cd, int) and 12 <= cd < 12 + ENDX:
+                    nmx = cls[cd - 12]['name']; ci = cn_ix.get(nmx)
+                    if ci is None: ci = cn_ix[nmx] = len(cnames_l); cnames_l.append(nmx)
+                    a_cls[k] = ci
+                    if isfull(nmx): admin_ids.add(eid)
+                if cid is not None: a_cat[k] = _sc(cid, W)
+                if ov is not None: a_ov[k] = _sc(ov, W)
+                if fam is not None: a_fam[k] = _sc(fam, W)
+                if bb: a_bb[k] = bb
+            del r, chunk; _trim()
+            cur = got(); stalled = 0 if cur > lastseen else stalled + 1; lastseen = cur
+        if pearly: say('%s: stopped early after %d windows without a new header (RVT_INFO_STALL=0 reads everything)' % (pn, stalled))
+        if progress: progress(pi + 1, len(pns), int(seen.sum()))
+        say('partition %s (%d/%d): %d element headers, %.1fs' % (pn, pi + 1, len(pns), int(seen.sum()), time.time() - t0))
+    res = {'stats': {'stopped_early': early, 'primary_elements': nprim, 'primary_with_header': int((seen & prim).sum()), 'partitions': len(pns), 'windows': nwin, 'max_window_mb': round(maxwin / 1e6, 1), 'decoded_mb': round(nb / 1e6), 'elements_with_header': int(seen.sum()), 'seconds': round(time.time() - t0, 2)}}
+    cat = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'category_names.json')))
+    u, n = np.unique(a_cat[seen], return_counts=True)
+    cc = collections.Counter()
+    for v, c in zip(u.tolist(), n.tolist()): cc[cat.get(str(v), 'cat %s' % (v if v != NOCAT else 'none'))] += c
+    res['counts'] = dict(cc.most_common())
+    u, n = np.unique(a_cls[a_cls != 65535], return_counts=True)
+    res['class_counts'] = dict(sorted(((cnames_l[int(i)], int(c)) for i, c in zip(u, n)), key=lambda t: -t[1]))
+    res['view_owned'] = int(((a_ov != -1) & seen).sum())
+    S_ = E.S_
+    recs = {}; by = collections.defaultdict(list)
+    for (eid, c), r in full.items():
+        if eid in owner and c in ('Level', 'Grid', 'RoomElem', 'DBViewDrafting'): continue     # copies owned by groups / assemblies (rvt_entities.parse)
+        by[c].append(r); recs.setdefault(eid, r)
+    nm = lambda i: (recs[i]['fields'].get('m_text') or recs[i]['fields'].get('m_viewName') or recs[i]['fields'].get('m_name') or '') if i in recs else ''
+    res['levels'] = sorted([{'id': r['id'], 'name': r['fields'].get('m_text', ''), 'elevation_ft': (S_(r['fields'], 'm_pSurface', 'm_origin') or [None] * 3)[2]} for r in by['Level']],
+                           key=lambda l: (l['elevation_ft'] is None, l['elevation_ft'] if l['elevation_ft'] is not None else 0))
+    res['grids'] = sorted(r['fields'].get('m_text', '') for r in by['Grid'])
+    views = []; sheets = []
+    for c, lst in by.items():
+        if not c.startswith('DBView'): continue
+        for r in lst:
+            f = r['fields']; n = f.get('m_viewName')
+            if n is None: continue
+            if c == 'DBViewDrafting' and f.get('m_sheetNumber'):
+                sheets.append({'id': r['id'], 'number': f.get('m_sheetNumber'), 'name': n, 'issue_date': f.get('m_issueDate'), 'drawn_by': f.get('m_drawnBy'),
+                               'viewports': [int(v) for v in (f.get('m_sheetViewportElemIds') or [])]})
+            else: views.append({'id': r['id'], 'name': n, 'class': c, 'template': bool(f.get('m_isTemplate')), 'scale': f.get('m_scale')})
+    vp = {r['id']: int(r['fields'].get('m_dbViewId', -1)) for r in by['Viewport']}
+    for s in sheets: s['views'] = [nm(vp[v]) for v in s.pop('viewports') if v in vp and vp[v] in recs]
+    res['views'] = sorted(views, key=lambda v: (v['class'], v['name'])); res['sheets'] = sorted(sheets, key=lambda s: str(s['number']))
+    res['phases'] = [r['fields'].get('m_name') for r in by['ProjectPhase']]
+    if want_elements:
+        m = seen; res['arrays'] = {'id': idarr[m], 'cat': a_cat[m], 'owner_view': a_ov[m], 'family': a_fam[m], 'bbox': a_bb[m], 'cls': a_cls[m], 'cls_names': np.array(cnames_l or [''], dtype=str)}
+    return res
