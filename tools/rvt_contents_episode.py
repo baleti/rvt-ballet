@@ -19,9 +19,15 @@ def contents_next(x, counters=None):
     hdr = bytearray(x[:i]); hdr[87 if i == 91 else 20] += 1
     sys.path[:0] = ['~/rvt-research/write-lab', '~/rvt-research']
     import rvtw      # write-lab: deflate_to_size makes a valid deflate stream of EXACTLY the original length (the stream keeps Revit's size)
-    z = rvtw.deflate_to_size(bytes(raw), len(x) - i - 18)
-    assert z is not None, 'cannot reproduce the original deflate length'
+    # c4x 2026-11-11 (VM verdict z_c): padding the deflate with empty sync blocks to fill the slot made Revit 2026 say 'saved by a later version'. Revit writes a COMPACT
+    # deflate and leaves the rest of the slot as it was; do the same: shortest raw deflate that fits, then keep the old slot bytes behind the gzip trailer.
+    cand = []
+    for lvl in (9, 6, 1):
+        c = zlib.compressobj(lvl, zlib.DEFLATED, -15); cand.append(c.compress(bytes(raw)) + c.flush())
+    z = min(cand, key=len)
+    assert len(z) + 10 + 8 <= len(x) - i, 'compact deflate does not fit the Contents slot'
     gz = x[i:i+10] + z + struct.pack('<II', zlib.crc32(bytes(raw)) & 0xffffffff, len(raw))
+    gz = gz + x[i + len(gz):]
     return bytes(hdr) + gz
 if __name__ == '__main__':
     sys.path[:0] = ['~/rvt-research/write-lab', '~/rvt-research']
