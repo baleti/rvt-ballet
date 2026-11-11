@@ -16,7 +16,7 @@ CORP = os.path.expanduser('~/rvtfix/corpus')
 async def run():
     from aiohttp.test_utils import TestClient, TestServer
     models = server.Models(); n = 0
-    async with TestClient(TestServer(server.make_app(models))) as c:
+    async with TestClient(TestServer(server.make_app(models)), timeout=__import__("aiohttp").ClientTimeout(total=None)) as c:
         for y in range(2017, 2027):
             d = '%s/%d' % (CORP, y)
             fs = sorted((os.path.join(d, f) for f in os.listdir(d) if f.lower().endswith('.rvt')), key=os.path.getsize) if os.path.isdir(d) else []
