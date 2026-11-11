@@ -49,7 +49,7 @@ def _capped(argv):
 
 
 def main(argv, say=print):
-    ap = argparse.ArgumentParser(prog='rvt-ballet'); ap.add_argument('cmd', choices=CMDS); ap.add_argument('file'); ap.add_argument('file2', nargs='?'); ap.add_argument('--deep', default='', help='diff: comma list of element ids whose FULL records are decoded in both files and compared field by field'); ap.add_argument('--all-records', action='store_true', help='diff: decode EVERY record of both files and compare field by field (small files only: %d MB, needs ~3 GB)' % ALLREC_MB); ap.add_argument('--by', choices=('level', 'phase'), help='counts: elements per level / created phase (full records: small files only)'); ap.add_argument('--allow', default='', help='diff: comma list of element ids expected to change')
+    ap = argparse.ArgumentParser(prog='rvt-ballet'); ap.add_argument('cmd', choices=CMDS); ap.add_argument('file'); ap.add_argument('file2', nargs='?'); ap.add_argument('--deep', default='', help='diff: comma list of element ids whose FULL records are decoded in both files and compared field by field'); ap.add_argument('--all-records', action='store_true', help='diff: decode EVERY record of both files and compare field by field (small files only: %d MB, needs ~3 GB)' % ALLREC_MB); ap.add_argument('--by', choices=('level', 'phase'), help='counts: elements per level / created phase (full records: small files only)'); ap.add_argument('--ops', help='diff --all-records: JSON list of requested edits [{"id":N,"path":".field[0]","new":V,"old":V?}]; passes only if the record diff equals exactly these'); ap.add_argument('--allow', default='', help='diff: comma list of element ids expected to change')
     ap.add_argument('--json', action='store_true'); ap.add_argument('--refresh', action='store_true', help='ignore the cached result')
     ap.add_argument('--views', action='store_true'); ap.add_argument('--levels', action='store_true'); ap.add_argument('--grids', action='store_true')
     ap.add_argument('--tsv', action='store_true', help='elements: tab separated rows'); ap.add_argument('--limit', type=int, default=0, help='elements: first N rows only')
@@ -155,15 +155,21 @@ def _diff(pa, pb, a, say, lg):
            'level_names_changed': {str(i): [lv[0].get(i), lv[1].get(i)] for i in set(lv[0]) | set(lv[1]) if lv[0].get(i) != lv[1].get(i)}}
     bad = [i for i in lost + new + list(chg) if i not in allow]
     out['unexpected'] = len(bad) + (0 if out['sheets_equal'] else 1) + (0 if out['views_equal'] else 1) + len([i for i in out['level_names_changed'] if int(i) not in allow])
-    if a.json: say(json.dumps(out, indent=1))
-    else:
-        say('lost %d, new %d, changed %d (%s), unexpected %d' % (len(lost), len(new), len(chg), ', '.join('%s:%s' % (k, '+'.join(v)) for k, v in list(sorted(chg.items()))[:8]), out['unexpected']))
-        say('category count diffs: %s | sheets equal %s | views equal %s | level names changed %s' % (cd or 'none', out['sheets_equal'], out['views_equal'], out['level_names_changed'] or 'none'))
+    def _emit():
+        if a.json: say(json.dumps(out, indent=1))
+        else:
+            say('lost %d, new %d, changed %d (%s), unexpected %d' % (len(lost), len(new), len(chg), ', '.join('%s:%s' % (k, '+'.join(v)) for k, v in list(sorted(chg.items()))[:8]), out['unexpected']))
+            say('category count diffs: %s | sheets equal %s | views equal %s | level names changed %s' % (cd or 'none', out['sheets_equal'], out['views_equal'], out['level_names_changed'] or 'none'))
     if a.all_records:
         out['all_records'] = _allrec(pa, pb); say(json.dumps(out['all_records'], indent=1, default=str)) if not a.json else None
-        out['unexpected'] += len([k for k in out['all_records']['differing'] if int(k) not in allow]) + out['all_records']['only_a'] + out['all_records']['only_b']
+        out['unexpected'] += 0 if a.ops else len([k for k in out['all_records']['differing'] if int(k) not in allow]) + out['all_records']['only_a'] + out['all_records']['only_b']
+    if a.ops:
+        if not a.all_records: print('rvt-ballet: --ops needs --all-records', file=sys.stderr); return 2
+        out['ops'] = _ops(out['all_records'], json.load(open(a.ops))); out['unexpected'] += len(out['ops']['unmatched_changes']) + len(out['ops']['missing_ops'])
+        say(json.dumps(out['ops'], indent=1, default=str)) if not a.json else None
     if a.deep:
         ids = [int(x) for x in a.deep.split(',') if x.strip()]; out['deep'] = _deep(pa, pb, ids); say(json.dumps(out['deep'], indent=1, default=str)) if not a.json else None
+    _emit()
     return 1 if out['unexpected'] else 0
 
 
@@ -225,3 +231,20 @@ def _by(path, r, a, say):
     say('elements per %s (%d records):' % (a.by, len(seen)))
     for k, n in sorted(out.items(), key=lambda t: -t[1]): say('  %8d  %s' % (n, k))
     return 0
+
+
+def _same(x, y):
+    try: return abs(float(x) - float(y)) <= 1e-9 * max(1.0, abs(float(x)))
+    except (TypeError, ValueError): return str(x).strip("'") == str(y).strip("'")
+
+
+def _ops(allrec, ops):
+    """the record diff must equal the requested ops: every changed (id, path) is requested with the right new (and old) value, every op shows up. Changes beyond the 20 listed per record cannot be matched: reported as truncated."""
+    diff = allrec['differing']; want = {(int(o['id']), o['path']): o for o in ops}; unmatched = []; seen = set()
+    for i, rec in diff.items():
+        if rec['fields_changed'] > len(rec['changed']): unmatched.append({'id': int(i), 'path': '<truncated>', 'why': '%d fields changed, only %d listed' % (rec['fields_changed'], len(rec['changed']))})
+        for path, (old, new) in rec['changed'].items():
+            o = want.get((int(i), path)); seen.add((int(i), path))
+            if o is None: unmatched.append({'id': int(i), 'path': path, 'old': old, 'new': new, 'why': 'not requested'})
+            elif not _same(o['new'], new) or ('old' in o and not _same(o['old'], old)): unmatched.append({'id': int(i), 'path': path, 'old': old, 'new': new, 'why': 'value differs from request %r' % (o,)})
+    return {'requested': len(want), 'matched': len(seen & set(want)), 'unmatched_changes': unmatched, 'missing_ops': [{'id': k[0], 'path': k[1]} for k in want if k not in seen]}
