@@ -123,7 +123,7 @@ def prepare(files):
     for l in summary:
         if l.get('model') != 'FAILED': print('\nREADY: %s %s --sheets' % (os.path.join(here, 'bin', 'rvt-ballet'), l['file']))
 
-SUBCOMMANDS = ('open', 'convert', 'serve', 'info', 'edit', 'doctor', 'sheets', 'views', 'levels', 'grids', 'counts', 'elements')
+SUBCOMMANDS = ('open', 'convert', 'serve', 'info', 'edit', 'doctor', 'sheets', 'views', 'levels', 'grids', 'counts', 'elements', 'diff')
 BIG_MB = float(os.environ.get('RVT_BIG_MB', '300'))
 
 
@@ -139,7 +139,7 @@ def main(argv=None):
     if argv and argv[0] == 'info' and '--save' in argv:        # the save-gate report (opens the model through the server code)
         from . import editcli
         sys.exit(editcli.info_main([x for x in argv[1:] if x != '--save']))
-    if argv and argv[0] in ('info', 'sheets', 'views', 'levels', 'grids', 'counts', 'elements'):       # streamed admin data, bounded memory, never the geometry pipeline
+    if argv and argv[0] in ('info', 'sheets', 'views', 'levels', 'grids', 'counts', 'elements', 'diff'):       # streamed admin data, bounded memory, never the geometry pipeline
         from . import infocli
         sys.exit(infocli.main(argv))
     if argv and argv[0] == 'doctor':

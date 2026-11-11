@@ -4,7 +4,7 @@ Streamed (fastinfo.py), never starts the geometry pipeline, runs under a hard me
 import os, sys, json, argparse, hashlib, time
 from . import plat, reader
 
-CMDS = ('info', 'sheets', 'views', 'levels', 'grids', 'counts', 'elements')
+CMDS = ('info', 'sheets', 'views', 'levels', 'grids', 'counts', 'elements', 'diff')
 VERSION = 'fi1'
 
 
@@ -46,7 +46,7 @@ def _capped(argv):
 
 
 def main(argv, say=print):
-    ap = argparse.ArgumentParser(prog='rvt-ballet'); ap.add_argument('cmd', choices=CMDS); ap.add_argument('file')
+    ap = argparse.ArgumentParser(prog='rvt-ballet'); ap.add_argument('cmd', choices=CMDS); ap.add_argument('file'); ap.add_argument('file2', nargs='?'); ap.add_argument('--allow', default='', help='diff: comma list of element ids expected to change')
     ap.add_argument('--json', action='store_true'); ap.add_argument('--refresh', action='store_true', help='ignore the cached result')
     ap.add_argument('--views', action='store_true'); ap.add_argument('--levels', action='store_true'); ap.add_argument('--grids', action='store_true')
     ap.add_argument('--tsv', action='store_true', help='elements: tab separated rows'); ap.add_argument('--limit', type=int, default=0, help='elements: first N rows only')
@@ -55,6 +55,7 @@ def main(argv, say=print):
     from . import cli
     bad = cli.check_input(a.file)
     if bad: print('rvt-ballet: ' + bad, file=sys.stderr); return 2
+    if a.cmd == 'diff' and (not a.file2 or cli.check_input(a.file2)): print('rvt-ballet: diff needs two readable .rvt files', file=sys.stderr); return 2
     rc = _capped(argv)
     if rc is not None: return rc
     from . import fastinfo
@@ -76,6 +77,7 @@ def main(argv, say=print):
         if r['editors']: say('  Editors (increment table): %s' % ', '.join(r['editors'][:12]))
         say('  rvt-ballet sheets|views|levels|grids|counts|elements FILE for the model data (streamed, no conversion)')
         return 0
+    if a.cmd == 'diff': return _diff(path, os.path.abspath(a.file2), a, say, lg)
     r = _scan_cached(path, a.refresh, lg)
     if a.cmd == 'info':
         out = {k: r[k] for k in ('levels', 'grids', 'views') if getattr(a, k)}
@@ -122,3 +124,28 @@ def main(argv, say=print):
         for i in range(n):
             x = row(i); say('%s\t%s\t%s\t%s\t%s\t%s' % (x[0], x[1], x[3] or x[2], '' if x[4] == -1 else x[4], '' if x[5] == -1 else x[5], ' '.join('%.3f' % v for v in x[6]) if x[6] else ''))
     return 0
+
+
+def _diff(pa, pb, a, say, lg):
+    """before/after sanity at element-header level: lost / new elements, changed category / owner view / family / bbox, plus category counts, sheets, levels, views.
+    Exit 0 when every difference is on an --allow id (or there is none), 1 otherwise. NOT a replacement for opening the file in Revit."""
+    import numpy as np
+    ra = _scan_cached(pa, a.refresh, lg); rb = _scan_cached(pb, a.refresh, lg); A = _elements(pa); B = _elements(pb)
+    allow = {int(x) for x in a.allow.split(',') if x.strip()}
+    ia = {int(i): k for k, i in enumerate(A['id'])}; ib = {int(i): k for k, i in enumerate(B['id'])}
+    lost = sorted(set(ia) - set(ib)); new = sorted(set(ib) - set(ia)); chg = {}
+    for i in set(ia) & set(ib):
+        x, y = ia[i], ib[i]; what = [col for col in ('cat', 'owner_view', 'family') if A[col][x] != B[col][y]]
+        if not np.array_equal(A['bbox'][x], B['bbox'][y], equal_nan=True): what.append('bbox')
+        if what: chg[i] = what
+    cd = {k: (ra['counts'].get(k, 0), rb['counts'].get(k, 0)) for k in set(ra['counts']) | set(rb['counts']) if ra['counts'].get(k, 0) != rb['counts'].get(k, 0)}
+    lv = {l['id']: l['name'] for l in ra['levels']}, {l['id']: l['name'] for l in rb['levels']}
+    out = {'lost': lost, 'new': new, 'changed': {str(k): v for k, v in sorted(chg.items())}, 'count_diffs': cd, 'sheets_equal': ra['sheets'] == rb['sheets'], 'views_equal': ra['views'] == rb['views'],
+           'level_names_changed': {str(i): [lv[0].get(i), lv[1].get(i)] for i in set(lv[0]) | set(lv[1]) if lv[0].get(i) != lv[1].get(i)}}
+    bad = [i for i in lost + new + list(chg) if i not in allow]
+    out['unexpected'] = len(bad) + (0 if out['sheets_equal'] else 1) + (0 if out['views_equal'] else 1) + len(out['level_names_changed'])
+    if a.json: say(json.dumps(out, indent=1))
+    else:
+        say('lost %d, new %d, changed %d (%s), unexpected %d' % (len(lost), len(new), len(chg), ', '.join('%s:%s' % (k, '+'.join(v)) for k, v in list(sorted(chg.items()))[:8]), out['unexpected']))
+        say('category count diffs: %s | sheets equal %s | views equal %s | level names changed %s' % (cd or 'none', out['sheets_equal'], out['views_equal'], out['level_names_changed'] or 'none'))
+    return 1 if out['unexpected'] else 0
