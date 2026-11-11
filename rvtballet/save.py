@@ -210,6 +210,10 @@ class SaveSessions:
     def _doc(self, mid, src, precheck=True):
         sg = _import()
         if sg is None: raise RuntimeError('savegate is not installed')
+        import stat as _st
+        try: _m = os.stat(src).st_mode
+        except OSError: _m = None
+        if _m is not None and not _st.S_ISREG(_m): raise sg.UnsupportedVersion('%s is not a regular file (directory, FIFO or device); nothing can be saved' % os.path.basename(src))      # a FIFO would block the read forever
         d = self.docs.get(mid)
         if d is None or d.path != os.path.abspath(src):
             pass      # the memory estimate is enforced when a non-limited save starts (save_as / save_overwrite), not at open
