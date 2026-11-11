@@ -10,9 +10,13 @@ T = tempfile.mkdtemp(dir=os.environ.get('TMPDIR'))
 os.environ['SAVEGATE_JOURNAL'] = T + '/j'; os.environ['SAVEGATE_CACHE'] = T + '/c'; os.environ['RVTBALLET_SNAPSHOT_CACHE'] = '0'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'
 open(T + '/gate.json', 'w').write('{"rvt": {"2024": "open"}}'); os.environ['SAVEGATE_GATE'] = T + '/gate.json'
 sys.path[:0] = [os.path.expanduser('~/src/savegate'), os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')]
-S = os.path.expanduser('~/rvt-research/write-lab/scenes/classtests/2024_writer_cols2.rte')
+S = os.path.expanduser('~/rvtfix/corpus/2024/71_Construction-DefaultMetric.rte')
 if not os.path.exists(S): print('skip'); sys.exit(0)
 from rvtballet import server
+sys.path[:0] = [os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab')]
+import rvt_params
+g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
+EID = next(e for e, d in rvt_params.params(S).items() if g(d).get('Comments') == '')
 from aiohttp.test_utils import TestClient, TestServer
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 async def run():
@@ -20,7 +24,7 @@ async def run():
     md = tempfile.mkdtemp(dir=T); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': p}
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
-        r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': 301595, 'param': 'Comments', 'value': 'bk'}); print('edit', r.status, flush=True)
+        r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': EID, 'param': 'Comments', 'value': 'bk'}); print('edit', r.status, flush=True)
         r = await c.post('/api/m/m/save', json={}); t = await r.text(); print('save', r.status, t[:100], flush=True)
         r = await c.get('/api/m/m/backups'); bl = await r.json(); print('backups', len(bl), flush=True)
         bk = []
@@ -28,6 +32,7 @@ async def run():
             for f in fs:
                 if os.path.join(root, f) != p: bk.append(os.path.join(root, f))
         assert bk, 'no backup file found (save refused?)'
+        assert r.status == 200 and sha(p) != h0 and sha(bk[0]) == h0, 'save did not change the file / backup is not the original'
         hb = {b: sha(b) for b in bk}; print('backup files', len(bk), flush=True)
         targets = bk + [os.path.join(os.path.dirname(bk[0]), 'new.rvt')]
         bad = 0
