@@ -288,13 +288,25 @@ def scan(path, log=None, want_elements=False, progress=None, _seg=None, _out=Non
                 if curpages >= pp: jobs.append(cur); cur = []; curpages = 0
         if cur: jobs.append(cur)
         import subprocess, pickle, tempfile
+        WORKERS = max(1, int(os.environ.get('RVT_INFO_WORKERS', '1')))        # > 1 needs a memory cap of about 0.45 GB per worker + 0.2 GB
+        code = "import sys, json; sys.path.insert(0, %r); from rvtballet import fastinfo as F; F._worker(sys.argv[1], json.loads(sys.argv[2]), sys.argv[3])" % os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        running = {}
+        def launch(j):
+            fd, op = tempfile.mkstemp(prefix='rvtinfo-seg-', suffix='.pkl'); os.close(fd)
+            running[j] = (subprocess.Popen([sys.executable, '-c', code, path, json.dumps(jobs[j]), op], env=dict(os.environ, RVT_INFO_INPROC='1')), op)
         for ji, job in enumerate(jobs):
+            for j in range(ji, min(len(jobs), ji + WORKERS)):
+                if j not in running and not (os.environ.get('RVT_INFO_JOBS') and str(j + 1) not in os.environ['RVT_INFO_JOBS'].split(',')): launch(j)
             if os.environ.get('RVT_INFO_JOBS') and str(ji + 1) not in os.environ['RVT_INFO_JOBS'].split(','): continue      # debugging: run only these jobs
-            if alldone(): early = True; say('all headers and admin records found: %d of %d jobs skipped' % (len(jobs) - ji, len(jobs))); break
-            fd, outp = tempfile.mkstemp(prefix='rvtinfo-seg-', suffix='.pkl'); os.close(fd)
+            if alldone():
+                for pr, op in running.values():
+                    pr.kill()
+                    try: os.remove(op)
+                    except OSError: pass
+                early = True; say('all headers and admin records found: %d of %d jobs skipped' % (len(jobs) - ji, len(jobs))); break
+            proc, outp = running.pop(ji)
             try:
-                code = "import sys, json; sys.path.insert(0, %r); from rvtballet import fastinfo as F; F._worker(sys.argv[1], json.loads(sys.argv[2]), sys.argv[3])" % os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                rc = subprocess.run([sys.executable, '-c', code, path, json.dumps(job), outp], env=dict(os.environ, RVT_INFO_INPROC='1')).returncode
+                rc = proc.wait()
                 if rc != 0: raise RuntimeError('worker for %s failed (exit %d)' % (job[0][0], rc))
                 part = pickle.load(open(outp, 'rb'))
             finally:
