@@ -11,7 +11,7 @@ from aiohttp.test_utils import TestClient, TestServer
 PARAM = os.environ.get('PARAM', 'Comments')
 g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
 async def main(src, n, seed):
-    R = random.Random(seed); data = open(src, 'rb').read(); ext = os.path.splitext(src)[1]; c = collections.Counter(); bad = []
+    R = random.Random(seed); data = open(src, 'rb').read(); ext = os.path.splitext(src)[1]; c = collections.Counter(); bad = []; savedpos = []
     base = rvt_params.params(src); eid = next(e for e, d in base.items() if g(d).get(PARAM, None) is not None and (g(d).get(PARAM) == '' or os.environ.get('PARAM')))
     for i in range(n):
         work = _T + '/w%d%s' % (i, ext); b = bytearray(data); pos = R.randrange(len(b)); b[pos] ^= (0 if os.environ.get('NOFLIP') else 1) << R.randrange(8); open(work, 'wb').write(b); flipped = bytes(b)
@@ -30,12 +30,12 @@ async def main(src, n, seed):
             c['REFUSED'] += 1
             if cur != flipped: c['ORIG_CHANGED'] += 1; bad.append((i, hex(pos), 'original changed'))
         else:
-            c['SAVED'] += 1
+            c['SAVED'] += 1; savedpos.append(pos)
             try:
                 out = rvt_params.params(work)
                 lost = [e for e in (ref or {}) if e != eid and g(out.get(e, {})) != g(ref[e])]
                 if g(out.get(eid, {})).get('Comments') != 'flip %d' % i or lost or ref is None: c['LAUNDER'] += 1; bad.append((i, hex(pos), 'readback/changed %d' % len(lost)))
             except Exception as e: c['LAUNDER'] += 1; bad.append((i, hex(pos), 'output unreadable'))
         os.remove(work)
-    print(os.path.basename(src)[:6], 'N', n, dict(c), bad[:8], flush=True)
+    print(os.path.basename(src)[:6], 'N', n, dict(c), bad[:8], 'saved_pos', savedpos[:8], flush=True)
 asyncio.run(main(sys.argv[1], int(sys.argv[2]), int(sys.argv[3])))
