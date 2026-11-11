@@ -166,7 +166,7 @@ def editors(o):
 
 
 _KEEP = {'Level': ('m_text',), 'Grid': ('m_text',), 'ProjectPhase': ('m_name',), 'ProjectInfo': ('m_text', 'm_name'), 'Viewport': ('m_dbViewId',)}
-_KEEP_VIEW = ('m_viewName', 'm_sheetNumber', 'm_issueDate', 'm_drawnBy', 'm_sheetViewportElemIds', 'm_isTemplate', 'm_scale', 'm_text', 'm_name')
+_KEEP_VIEW = ('m_viewName', 'm_sheetNumber', 'm_issueDate', 'm_drawnBy', 'm_sheetViewportElemIds', 'm_isTemplate', 'm_scale', 'm_text', 'm_name', 'm_approvedBy', 'm_explicitlyPresentRevisionIds', 'm_revNumMap')
 
 
 def _reduce(c, rec):
@@ -376,7 +376,7 @@ def scan(path, log=None, want_elements=False, progress=None, _seg=None, _out=Non
             f = r['fields']; n = f.get('m_viewName')
             if n is None: continue
             if c == 'DBViewDrafting' and f.get('m_sheetNumber'):
-                sheets.append({'id': r['id'], 'number': f.get('m_sheetNumber'), 'name': n, 'issue_date': f.get('m_issueDate'), 'drawn_by': f.get('m_drawnBy'),
+                sheets.append({'id': r['id'], 'number': f.get('m_sheetNumber'), 'name': n, 'issue_date': f.get('m_issueDate'), 'drawn_by': f.get('m_drawnBy'), 'approved_by': f.get('m_approvedBy'), 'revision_ids': [int(v) for v in (f.get('m_explicitlyPresentRevisionIds') or []) if isinstance(v, (int,)) or hasattr(v, '__int__')],
                                'viewports': [int(v) for v in (f.get('m_sheetViewportElemIds') or [])]})
             else: views.append({'id': r['id'], 'name': n, 'class': c, 'template': bool(f.get('m_isTemplate')), 'scale': f.get('m_scale')})
     vp = {r['id']: int(r['fields'].get('m_dbViewId', -1)) for r in by['Viewport']}
