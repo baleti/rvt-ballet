@@ -10,7 +10,9 @@ VERSION = 'fi1'
 
 def cache_file(path):
     st = os.stat(path)
-    key = hashlib.md5(('%s|%d|%s|%s' % (os.path.abspath(path), st.st_size, st.st_mtime, VERSION)).encode()).hexdigest()[:16]
+    from . import fastinfo
+    code = hashlib.md5(open(fastinfo.__file__, 'rb').read()).hexdigest()[:8]          # a reader change must never reuse an older result
+    key = hashlib.md5(('%s|%d|%s|%s|%s|%s|%s' % (os.path.abspath(path), st.st_size, st.st_mtime, VERSION, code, fastinfo.WINDOW, fastinfo.OVERLAP)).encode()).hexdigest()[:16]
     return os.path.join(reader.CACHE_DIR, 'info-' + key + '.json')
 
 
