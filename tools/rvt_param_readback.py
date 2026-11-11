@@ -10,5 +10,5 @@ with guest.vmlock():
         base='rb%d_%s'%(i,os.path.basename(f)); guest.put(f,'C:/wl/'+base)
         cs=open(os.path.expanduser('~/src/rvt-viewer/tools/rvt_param_readback.cs')).read().replace('__FILE__','C:/wl/'+base).replace('__IDS__',ids)
         out=guest.run_job(year,port,cs,'rb%d'%i,300)
-        print('==',os.path.basename(os.path.dirname(f)) or f, flush=True); print('\n'.join(l for l in out.replace('\r','').splitlines() if l.startswith(('RB','REGEN','RESULT')))[:1500], flush=True)
+        print('==',os.path.basename(os.path.dirname(f)) or f, flush=True); print('\n'.join(l for l in out.replace('\r','').splitlines() if l.startswith(('RB','REGEN','RESULT')))[:400000], flush=True)      # a long string value prints 5 chars per UTF-16 unit: 1500 truncated a 500-char value and hid the next elements ("not read")
         guest.down(year)
