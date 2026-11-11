@@ -6,6 +6,7 @@ from . import plat, reader
 
 CMDS = ('info', 'sheets', 'views', 'levels', 'grids', 'counts', 'elements', 'diff')
 VERSION = 'fi1'
+ALLREC_MB = float(os.environ.get('RVT_ALLREC_MB', '120'))
 
 
 def cache_file(path):
@@ -48,7 +49,7 @@ def _capped(argv):
 
 
 def main(argv, say=print):
-    ap = argparse.ArgumentParser(prog='rvt-ballet'); ap.add_argument('cmd', choices=CMDS); ap.add_argument('file'); ap.add_argument('file2', nargs='?'); ap.add_argument('--deep', default='', help='diff: comma list of element ids whose FULL records are decoded in both files and compared field by field'); ap.add_argument('--allow', default='', help='diff: comma list of element ids expected to change')
+    ap = argparse.ArgumentParser(prog='rvt-ballet'); ap.add_argument('cmd', choices=CMDS); ap.add_argument('file'); ap.add_argument('file2', nargs='?'); ap.add_argument('--deep', default='', help='diff: comma list of element ids whose FULL records are decoded in both files and compared field by field'); ap.add_argument('--all-records', action='store_true', help='diff: decode EVERY record of both files and compare field by field (small files only: %d MB, needs ~3 GB)' % ALLREC_MB); ap.add_argument('--allow', default='', help='diff: comma list of element ids expected to change')
     ap.add_argument('--json', action='store_true'); ap.add_argument('--refresh', action='store_true', help='ignore the cached result')
     ap.add_argument('--views', action='store_true'); ap.add_argument('--levels', action='store_true'); ap.add_argument('--grids', action='store_true')
     ap.add_argument('--tsv', action='store_true', help='elements: tab separated rows'); ap.add_argument('--limit', type=int, default=0, help='elements: first N rows only')
@@ -58,6 +59,10 @@ def main(argv, say=print):
     bad = cli.check_input(a.file)
     if bad: print('rvt-ballet: ' + bad, file=sys.stderr); return 2
     if a.cmd == 'diff' and (not a.file2 or cli.check_input(a.file2)): print('rvt-ballet: diff needs two readable .rvt files', file=sys.stderr); return 2
+    if a.cmd == 'diff' and a.all_records:
+        big = [f for f in (a.file, a.file2) if os.path.getsize(f) > ALLREC_MB * 1e6]
+        if big: print('rvt-ballet: --all-records decodes every record in RAM; %s is above %.0f MB (RVT_ALLREC_MB). Use --deep ID,ID.' % (os.path.basename(big[0]), ALLREC_MB), file=sys.stderr); return 2
+        os.environ.setdefault('RVT_INFO_MEM_GB', '3.5')
     rc = _capped(argv)
     if rc is not None: return rc
     from . import fastinfo
@@ -150,6 +155,9 @@ def _diff(pa, pb, a, say, lg):
     else:
         say('lost %d, new %d, changed %d (%s), unexpected %d' % (len(lost), len(new), len(chg), ', '.join('%s:%s' % (k, '+'.join(v)) for k, v in list(sorted(chg.items()))[:8]), out['unexpected']))
         say('category count diffs: %s | sheets equal %s | views equal %s | level names changed %s' % (cd or 'none', out['sheets_equal'], out['views_equal'], out['level_names_changed'] or 'none'))
+    if a.all_records:
+        out['all_records'] = _allrec(pa, pb); say(json.dumps(out['all_records'], indent=1, default=str)) if not a.json else None
+        out['unexpected'] += len([k for k in out['all_records']['differing'] if int(k) not in allow]) + out['all_records']['only_a'] + out['all_records']['only_b']
     if a.deep:
         ids = [int(x) for x in a.deep.split(',') if x.strip()]; out['deep'] = _deep(pa, pb, ids); say(json.dumps(out['deep'], indent=1, default=str)) if not a.json else None
     return 1 if out['unexpected'] else 0
@@ -178,3 +186,16 @@ def _deep(pa, pb, ids):
         ch = {k: [a[1].get(k), b[1].get(k)] for k in set(a[1]) | set(b[1]) if a[1].get(k) != b[1].get(k)}
         res[str(i)] = {'class': a[0], 'fields_changed': len(ch), 'changed': dict(sorted(ch.items())[:40])}
     return res
+
+
+def _allrec(pa, pb):
+    """every record of both files (rvt_fast.extract want_all) compared field by field: -> {'records': n, 'only_a', 'only_b', 'differing': {id: {class, fields_changed, changed(first 20)}}}"""
+    from . import fastinfo; fastinfo._tune(); fastinfo._paths(); import rvt_fast as F
+    xa = F.extract(pa, want_all=True)['recs']; xb = F.extract(pb, want_all=True)['recs']
+    ka = set(xa); kb = set(xb); diff = {}
+    for k in ka & kb:
+        if repr(xa[k]['fields']) != repr(xb[k]['fields']):
+            fa = {}; fb = {}; _walk(xa[k]['fields'], '', fa, 10 ** 6); _walk(xb[k]['fields'], '', fb, 10 ** 6)
+            ch = {p: [fa.get(p), fb.get(p)] for p in set(fa) | set(fb) if fa.get(p) != fb.get(p)}
+            diff[str(k[0])] = {'class': k[1], 'fields_changed': len(ch), 'changed': dict(sorted(ch.items())[:20])}
+    return {'records': len(ka), 'only_a': len(ka - kb), 'only_b': len(kb - ka), 'differing': diff}
