@@ -583,6 +583,10 @@ def _refuse_bad_output(nb):
     ssz = 1 << struct.unpack_from('<H', b, 30)[0] if struct.unpack_from('<H', b, 30)[0] in (9, 12) else 512
     bad = _cfb_structure_bad(b, ssz, max(1, len(b) // ssz), struct.unpack_from('<I', b, 44)[0], 0, struct.unpack_from('<I', b, 72)[0])
     if bad: raise OutputUnreadable('the edited file has a damaged container structure (%s); nothing was written' % bad[0][0])
+    if os.environ.get('RVTBALLET_OUTPUT_GATE', '1') == '1':      # c6x-rvtread 2026-11-11: the output must also pass the full source gate (page ECC, gzip CRCs, member tiling, header rules): with only the container check a restamped deflate corruption in a member was ACCEPTED by save_as (10 of 12 injected, verify on)
+        sg = _import(); from savegate.adapters import RvtAdapter
+        dm = RvtAdapter().source_damage(b)
+        if dm: raise OutputUnreadable('the edited file fails the damage check (%s); nothing was written' % dm[0][:120])
 
 
 def _pending(ss, mid, d, new_bytes, manifest, light=False):
