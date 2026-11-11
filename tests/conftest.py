@@ -22,6 +22,7 @@ def _timeout(path):
 
 class ScriptItem(pytest.Item):
     def runtest(self):
+        if not os.path.isdir(os.path.expanduser('~/rvt-research')) and b'rvt-research' in open(str(self.path), 'rb').read(): pytest.skip('local corpus ~/rvt-research is not present')
         r = subprocess.run([sys.executable, str(self.path)], capture_output=True, text=True, timeout=_timeout(self.path))
         if r.returncode != 0: raise AssertionError('rc=%d\n%s' % (r.returncode, (r.stdout + r.stderr)[-2000:]))
 
