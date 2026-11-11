@@ -11,7 +11,7 @@ buf = open(S, 'rb').read(); g = lambda x: (x.get('params', x) if isinstance(x, d
 P0 = rvt_params.params(S); E = next(e for e, d in P0.items() if g(d).get('Comments') == '')
 def params(b):
     d = tempfile.mkdtemp(); p = d + '/x.rte'; open(p, 'wb').write(b); return rvt_params.params(p)
-cases = {'cjk': '日本語テスト 漢字', 'accents': 'Ünïcödé àéîõü ß', 'emoji': 'ok \U0001F600\U0001F680 end', 'long': '界' * 300, 'crlf': 'l1\r\nl2\n', 'quote': '"\'<>&\\', 'nul': 'a\x00b', 'too_long': 'c' * 4097}
+cases = {'cjk': '日本語テスト 漢字', 'accents': 'Ünïcödé àéîõü ß', 'emoji': 'ok \U0001F600\U0001F680 end', 'long': '界' * 300, 'crlf': 'l1\r\nl2\n', 'quote': '"\'<>&\\', 'nul': 'a\x00b', 'max4096': 'm' * 4096, 'cjk4096': '界' * 4096, 'too_long': 'c' * 4097}
 for name, val in cases.items():
     try: out, _ = edit.apply_full(buf, [edit.validate_op({'op': 'set_string', 'eid': E, 'param': 'Comments', 'value': val})])
     except edit.EditError as e:
