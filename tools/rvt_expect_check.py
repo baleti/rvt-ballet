@@ -6,10 +6,17 @@ year, orig, out, expf = sys.argv[1], os.path.abspath(sys.argv[2]), os.path.abspa
 exp = json.load(open(expf)); HERE = os.path.dirname(os.path.abspath(__file__))
 WL = os.path.expanduser('~/rvt-research/write-lab')
 def run(tool, ids, f):
-    r = subprocess.run(['python3', os.path.join(HERE, tool), year, ids, f], cwd=WL, capture_output=True, text=True, timeout=int(os.environ.get('RVT_EXPECT_TIMEOUT', '43200')))      # the shared VM lock can make a run wait for hours
-    if 'no Revit port' in (r.stdout + r.stderr):      # guest Revit did not start: infrastructure, NOT a verdict on the edit
-        print('INFRA no Revit port (no verdict; rerun when the VM lane is healthy)'); sys.exit(3)
-    return r.stdout
+    """one VM readback session; a 'no Revit port' start failure is retried per session (RVT_EXPECT_SESSION_TRIES, default 4, 90 s apart) and every successful readback is cached by file sha256 + tool + ids, so a rerun after an infrastructure failure only repeats the sessions that failed (c6x-rvtmatrix: the check needs 2-4 sessions and about half of the VM starts fail)"""
+    import hashlib, time
+    cd = os.path.expanduser(os.environ.get('RVT_EXPECT_CACHE', '~/.cache/rvt_expect')); os.makedirs(cd, exist_ok=True)
+    key = hashlib.sha256(open(f, 'rb').read() + b'\0' + tool.encode() + b'\0' + ids.encode() + b'\0' + year.encode()).hexdigest(); cf = os.path.join(cd, key + '.txt')
+    if os.path.exists(cf): return open(cf).read()
+    for k in range(int(os.environ.get('RVT_EXPECT_SESSION_TRIES', '4'))):
+        r = subprocess.run(['python3', os.path.join(HERE, tool), year, ids, f], cwd=WL, capture_output=True, text=True, timeout=int(os.environ.get('RVT_EXPECT_TIMEOUT', '43200')))      # the shared VM lock can make a run wait for hours
+        if 'no Revit port' in (r.stdout + r.stderr): time.sleep(90); continue
+        open(cf, 'w').write(r.stdout); return r.stdout
+    print('INFRA no Revit port (no verdict; rerun when the VM lane is healthy)'); sys.exit(3)
+
 def parse_loc(txt):
     d = {}
     tf = {}
