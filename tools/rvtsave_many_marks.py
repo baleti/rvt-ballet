@@ -13,7 +13,8 @@ g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
 async def main(src, out, n):
     base = rvt_params.params(src); eids = [e for e, d in base.items() if isinstance(g(d).get('Mark'), str)][:n]
     want = {}
-    for i, e in enumerate(eids): want[e] = 'x' * 4000 if i == 1 else ('' if i == 2 else 'm%d' % i)
+    VALS = json.loads(os.environ['VALUES']) if os.environ.get('VALUES') else None      # VALUES='["a","b"]': exact values for the first len() Marks
+    for i, e in enumerate(eids): want[e] = VALS[i] if VALS else ('x' * 4000 if i == 1 else ('' if i == 2 else 'm%d' % i))
     md = _T + '/m'; os.makedirs(md); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models))) as cl:
         cl.session._timeout = aiohttp.ClientTimeout(total=None)
