@@ -19,3 +19,5 @@ assert not bad, bad[:5]
 print('OK')
 try: edit.apply_full(b1, [edit.validate_op({'op': 'set_string', 'eid': E, 'param': 'Comments', 'value': 'z', 'match': '界' * 59 + 'X'})]); raise SystemExit('FAIL: stale match accepted')
 except edit.EditError as e: print('stale match refused:', str(e)[:40])
+try: edit.apply_full(b1, [edit.validate_op({'op': 'set_string', 'eid': E, 'param': 'Comments', 'value': 'z', 'match': '界' * 4095 + 'X'})]); raise SystemExit('FAIL: tail-different match accepted')
+except edit.EditError as e: print('tail-different match refused')

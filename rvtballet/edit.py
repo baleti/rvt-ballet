@@ -569,6 +569,16 @@ def _check_datum_name_unique(src, o):
             raise EditError('a %s named %r already exists (element %d): Revit does not allow duplicate names; nothing was changed' % (k[1], o['value'], k[0]))
 
 
+def _full_astr(ed, vn):
+    """full text of an AString value entry (the decoder trace keeps only str(value)[:60]); falls back to the 60-char preview when the bytes do not decode as count + UTF-16"""
+    import struct
+    try:
+        n = struct.unpack_from('<I', ed.g.bj, vn[2])[0]
+        if vn[3] - vn[2] == 4 + 2 * n: return bytes(ed.g.bj[vn[2] + 4:vn[3]]).decode('utf-16le')
+    except Exception: pass
+    return vn[4]
+
+
 def _set_string_by_pid(ed, o):
     """overwrite the string value that belongs to ONE parameter id (exact log entry), not 'the first value with this text'"""
     import struct
@@ -578,7 +588,7 @@ def _set_string_by_pid(ed, o):
             # the value entry is the one whose bytes are CONTIGUOUS with this id entry (directly after, else directly before): never 'the nearest value' (that picked the neighbouring parameter)
             vn = _value_entry(log, 'AString', l)
             if vn is None: break
-            if o.get('expect') is not None and vn[4] != str(o['expect'])[:60]: raise EditError('element %d parameter is %r, not the expected %r: nothing was changed' % (o['eid'], vn[4], o['expect']))      # stale expected value (c3x-rvttype)
+            if o.get('expect') is not None and _full_astr(ed, vn) != str(o['expect']): raise EditError('element %d parameter is %r, not the expected %r: nothing was changed' % (o['eid'], vn[4], o['expect']))      # stale expected value (c3x-rvttype)
             nb = struct.pack('<I', len(o['value'].encode('utf-16le')) // 2) + o['value'].encode('utf-16le'); ed._rec_edit(o['eid'], [(vn[2], vn[3] - vn[2], nb)]); return
     raise KeyError('string parameter %d not stored on %d' % (pid, o['eid']))
 
