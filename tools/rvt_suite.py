@@ -26,6 +26,12 @@ C_FILE = '7. Structure of file'; C_SAFE = '8. Safety (applies to every save)'
 CASES = {
     (C_MOVE, 'family instance'): {'bundle': ('FamilyInstance', 'HVAC'), 'use': 'move'},
     (C_MOVE, 'wall'): {'bundle': ('SWall', 'Structural'), 'use': 'move'},
+    (C_MOVE, 'text note'): {'bundle': ('TextNote', 'HVAC'), 'use': 'move'},
+    (C_MOVE, 'level'): {'bundle': ('Level', 'HVAC'), 'use': 'move'},
+    (C_MOVE, 'grid'): {'bundle': ('Grid', 'HVAC'), 'use': 'move'},
+    (C_MOVE, 'window'): {'bundle': ('FamilyInstance', 'Facades'), 'use': 'move'},
+    (C_MOVE, 'door'): {'bundle': ('FamilyInstance', 'Facades'), 'use': 'move'},
+    (C_MOVE, 'column'): {'bundle': ('FamilyInstance', 'Structural'), 'use': 'move'},
     (C_TYPE, 'string parameter'): {'bundle': ('FamilyInstance', 'HVAC'), 'use': 'set_string'},
     (C_TYPE, 'number parameter'): {'bundle': ('Floor', 'Structural'), 'use': 'set_num'},
     (C_FILE, 'save in place (overwrite)'): {'bundle': ('FamilyInstance', 'HVAC'), 'use': 'save_in_place'},
