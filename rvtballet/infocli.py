@@ -46,7 +46,7 @@ def _capped(argv):
 
 
 def main(argv, say=print):
-    ap = argparse.ArgumentParser(prog='rvt-ballet'); ap.add_argument('cmd', choices=CMDS); ap.add_argument('file'); ap.add_argument('file2', nargs='?'); ap.add_argument('--allow', default='', help='diff: comma list of element ids expected to change')
+    ap = argparse.ArgumentParser(prog='rvt-ballet'); ap.add_argument('cmd', choices=CMDS); ap.add_argument('file'); ap.add_argument('file2', nargs='?'); ap.add_argument('--deep', default='', help='diff: comma list of element ids whose FULL records are decoded in both files and compared field by field'); ap.add_argument('--allow', default='', help='diff: comma list of element ids expected to change')
     ap.add_argument('--json', action='store_true'); ap.add_argument('--refresh', action='store_true', help='ignore the cached result')
     ap.add_argument('--views', action='store_true'); ap.add_argument('--levels', action='store_true'); ap.add_argument('--grids', action='store_true')
     ap.add_argument('--tsv', action='store_true', help='elements: tab separated rows'); ap.add_argument('--limit', type=int, default=0, help='elements: first N rows only')
@@ -148,4 +148,31 @@ def _diff(pa, pb, a, say, lg):
     else:
         say('lost %d, new %d, changed %d (%s), unexpected %d' % (len(lost), len(new), len(chg), ', '.join('%s:%s' % (k, '+'.join(v)) for k, v in list(sorted(chg.items()))[:8]), out['unexpected']))
         say('category count diffs: %s | sheets equal %s | views equal %s | level names changed %s' % (cd or 'none', out['sheets_equal'], out['views_equal'], out['level_names_changed'] or 'none'))
+    if a.deep:
+        ids = [int(x) for x in a.deep.split(',') if x.strip()]; out['deep'] = _deep(pa, pb, ids); say(json.dumps(out['deep'], indent=1, default=str)) if not a.json else None
     return 1 if out['unexpected'] else 0
+
+
+def _walk(x, path, out, lim=60):
+    if len(out) >= lim: return
+    if isinstance(x, dict): [_walk(v, path + '.' + str(k), out, lim) for k, v in x.items()]
+    elif isinstance(x, (list, tuple)) and len(x) <= 64: [_walk(v, path + '[%d]' % i, out, lim) for i, v in enumerate(x)]
+    else: out[path] = repr(x)[:80]
+
+
+def _deep(pa, pb, ids):
+    """full records of `ids` (rvt_fast.extract only_ids, fields flattened) in both files -> {id: {'class':..., 'changed': {path: [a, b]}, 'only_a': n, 'only_b': n}}"""
+    from . import fastinfo; fastinfo._tune(); fastinfo._paths(); import rvt_fast as F
+    R = []
+    for p in (pa, pb):
+        x = F.extract(p, only_ids=ids, want_all=True); d = {}
+        for (eid, c), rec in x['recs'].items():
+            if eid in ids and eid not in d: f = {}; _walk(rec['fields'], '', f, 100000); d[eid] = (c, f)
+        R.append(d)
+    res = {}
+    for i in ids:
+        a, b = R[0].get(i), R[1].get(i)
+        if not a or not b: res[str(i)] = {'present': [bool(a), bool(b)]}; continue
+        ch = {k: [a[1].get(k), b[1].get(k)] for k in set(a[1]) | set(b[1]) if a[1].get(k) != b[1].get(k)}
+        res[str(i)] = {'class': a[0], 'fields_changed': len(ch), 'changed': dict(sorted(ch.items())[:40])}
+    return res
