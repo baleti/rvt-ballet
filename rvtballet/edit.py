@@ -646,6 +646,21 @@ IN_USE_GUARD_CLASSES = {'DimensionStyle', 'CompoundCeilingType', 'AssemblyCodeTa
 IN_USE_GUARD_ALLOW = 5      # measured: an id occurs 5 times more in the file before delete than after (own record + lists), Structural 2024 DimensionStyle/CategoryElem/CompoundCeilingType
 
 
+def tags_hosting(ed, eid):
+    """ids of IndependentTag elements whose host reference (RoomBoundingItem.m_linkInstOrHostId) is eid (the tag is not in the host's deletion list)"""
+    import rvt_params, re as _re
+    out = []
+    for t, v in rvt_params.params(ed.src).items():
+        if v.get('class') != 'IndependentTag': continue
+        try: log = ed.g.e.trace(t)[3]
+        except Exception: continue
+        for l in log:
+            if l[1] == 'RoomBoundingItem.m_linkInstOrHostId':
+                m = _re.search(r'(\d+)', str(l[4]))
+                if m and int(m.group(1)) == int(eid): out.append(t); break
+    return out
+
+
 def _delete(ed, eid):
     """delete with what Revit's Delete removes: class-specific paths of rvtedit (floor / view / sheet), else owned_set; returns every deleted id (they all go in the manifest)"""
     try: cls = ed.g.e.trace(eid)[2]['class']
@@ -664,6 +679,10 @@ def _delete(ed, eid):
                     except Exception: oc = '?'
                     raise EditError('element %d belongs to a view (owner %s %d: a title block, detail component or annotation symbol): deleting it makes Revit also drop dependent elements (a schedule and related records were lost in the Revit readback of a measured 2026 delete) that this editor cannot reproduce; nothing was changed' % (eid, oc, ov))
                 break
+    if cls not in ('IndependentTag', 'ViewSheet') and not cls.startswith('DBView'):
+        # c4x-rvtmatrix item 81: a tag points at its host through RoomBoundingItem.m_linkInstOrHostId and is NOT in the host's deletion list, so owned_set/cascade never saw it. 2025 Structural column delete (606331) was accepted (gate 0 diffs) and left Tag 869338 dangling; Revit dropped the tag on open (readback 2 elements gone, not 1). Refuse while a tag still names the element.
+        tg = tags_hosting(ed, eid)
+        if tg: raise EditError('element %d is the host of %d tag(s) (%s): deleting it would leave dangling tag references (Revit removes the tags itself on open, so the saved file would differ from what was requested); delete the tags first. Nothing was changed' % (eid, len(tg), ', '.join(map(str, tg[:5]))))
     if cls in IN_USE_GUARD_CLASSES:
         # a type/style that other elements still reference: Structural 2024 DimensionStyle 908160 is used by 12 dimensions, the old delete removed only its own record (1 id) and left 12 dangling type refs (escape). Revit refuses or cascades; we refuse.
         import re as _re
