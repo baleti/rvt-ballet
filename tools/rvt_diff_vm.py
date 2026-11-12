@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """rvt_diff_vm.py YEAR SAMPLE.rvt TAG OPSPEC [--no-fields]   paired experiment in the OFFLINE Revit VM (Autodesk samples / synthetic only).
 OPSPEC (one string, ';' separates ops): addwall:x0:y0:x1:y1:height (feet; type/level of first wall) | move:ID:dx:dy:dz (feet) | rotatefree:deg (first wall with no hosted family instances, about its midpoint) | rotate:ID:deg (about the instance origin, Z axis) | wallunjoin:WALLID (WallUtils.DisallowWallJoinAtEnd both ends) | wallend:WALLID:dlen (extend the end point along the wall by dlen ft, unjoined walls only) | elev:LEVELID:dz (Level.Elevation += dz, feet) | delete:ID[,ID..] | param:ID:BuiltInParameterName:value (double, internal units)
-        | matcreate:NAME | parambind:NAME (shared parameter, instance binding on Walls) | tparamid:ID:NAME:ELEMID | tparamyn:ID (toggle first writable Yes/No param, logs its name) | tparamstr:ID:NAME:TEXT | tparam:ID:NAME:NUM (LookupParameter(NAME).Set, ID may be a type) | type:ID:TYPEID | duptype:TYPEID:NEWNAME (ElementType.Duplicate) | none
+        | linkdwg (env RVTDIFF_DWG=local.dwg is copied to the guest and linked as a CAD link in the first plan view) | matcreate:NAME | parambind:NAME (shared parameter, instance binding on Walls) | tparamid:ID:NAME:ELEMID | tparamyn:ID (toggle first writable Yes/No param, logs its name) | tparamstr:ID:NAME:TEXT | tparam:ID:NAME:NUM (LookupParameter(NAME).Set, ID may be a type) | type:ID:TYPEID | duptype:TYPEID:NEWNAME (ElementType.Duplicate) | none
 Opens SAMPLE with audit, SaveAs BASE (no edit: Revit's own rewrite, the noise floor) and then applies the ops in one transaction and SaveAs AFTER.
 Pulls both to work dir (default ~/c2x-diff/TAG/) and prints rvt_diff of  ORIG->BASE (what a plain Revit save changes),  BASE->AFTER (the edit pattern)  and  ORIG->AFTER.
 Needs the VM lock (guest.vmlock); one VM instance at a time."""
@@ -25,6 +25,7 @@ def cs_for(ops, tag, file):
         elif k == 'addwall': body.append('{ Wall w0 = new FilteredElementCollector(d).OfClass(typeof(Wall)).Cast<Wall>().First(c => c.Location is LocationCurve); var ln = Line.CreateBound(new XYZ(%s, %s, 0), new XYZ(%s, %s, 0)); var nw = Wall.Create(d, ln, w0.WallType.Id, w0.LevelId, %s, 0.0, false, false); log.AppendLine("OP addwall " + nw.Id + " type " + w0.WallType.Id + " level " + w0.LevelId); }' % (p[1], p[2], p[3], p[4], p[5]))
         elif k == 'wallunjoin': body.append('{ var e = (Wall)d.GetElement(new ElementId(%sL)); WallUtils.DisallowWallJoinAtEnd(e, 0); WallUtils.DisallowWallJoinAtEnd(e, 1); log.AppendLine("OP wallunjoin " + e.Id); }' % p[1])
         elif k == 'elev': body.append('{ var lv = (Level)d.GetElement(new ElementId(%sL)); lv.Elevation = lv.Elevation + %s; log.AppendLine("OP elev " + lv.Elevation); }' % (p[1], p[2]))
+        elif k == 'linkdwg': body.append('{ var vp = new FilteredElementCollector(d).OfClass(typeof(ViewPlan)).Cast<ViewPlan>().First(v => !v.IsTemplate); var io = new DWGImportOptions(); io.Placement = ImportPlacement.Origin; ElementId lid; var okl = d.Link("C:/wl/link.dwg", io, vp, out lid); log.AppendLine("OP linkdwg ok=" + okl + " new id " + lid); }')
         elif k == 'delete': body.append('{ var del = d.Delete(new List<ElementId>(new long[]{%s}.Select(x => new ElementId(x)))); log.AppendLine("OP delete cascade=" + string.Join(",", del.Select(x => x.ToString()))); }' % p[1])
         elif k == 'param': body.append('{ var e = d.GetElement(new ElementId(%sL)); var pr = e.get_Parameter(BuiltInParameter.%s); pr.Set(%s); log.AppendLine("OP param " + pr.Definition.Name); }' % (p[1], p[2], p[3]))
         elif k == 'tparam': body.append('{ var e = d.GetElement(new ElementId(%sL)); var pr = e.LookupParameter("%s"); if (pr == null) throw new Exception("no param"); if (%s) pr.Set((double)%s); else pr.Set((int)%s); log.AppendLine("OP tparam " + pr.Definition.Name + " = " + (pr.StorageType == StorageType.Double ? pr.AsDouble().ToString("R") : pr.AsInteger().ToString())); }' % (p[1], p[2], 'true', p[3], p[3]))
@@ -65,6 +66,7 @@ Console.WriteLine(log.ToString());
 def one(year, port, src, tag, ops):
     rem = 'C:/wl/diff_%s_src%s' % (tag, os.path.splitext(src)[1] or '.rvt')
     guest.put(src, rem)
+    if 'linkdwg' in ops: guest.put(os.environ['RVTDIFF_DWG'], 'C:/wl/link.dwg')
     out = guest.run_job(year, port, cs_for(ops, tag, rem), 'diff_' + tag, int(os.environ.get('RVTDIFF_TIMEOUT', '900')))
     print('[%s]' % tag, '\n'.join(l for l in out.replace('\r', '').splitlines() if l.startswith(('OP', 'SAVED', 'FAILURE', 'RESULT'))), flush=True)
     if not any(l.startswith(('OP', 'SAVED', 'FAILURE', 'RESULT')) for l in out.splitlines()): print('[%s] RAW guest output (no OP/SAVED/RESULT lines):' % tag, out[-1500:].replace('\r', ''), flush=True)
