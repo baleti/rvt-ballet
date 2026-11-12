@@ -575,7 +575,7 @@ def _drop_reader_caches():
             if isinstance(c, dict): c.clear()
 
 
-def _refuse_bad_output(nb):
+def _refuse_bad_output(nb, ref=None):
     """c7x-rvtread 107: the writer's own output must pass the same CFB header/directory/FAT-chain structure check as a source (5 ms); a broken container is never written"""
     import struct
     b = bytes(nb)
@@ -585,7 +585,8 @@ def _refuse_bad_output(nb):
     if bad: raise OutputUnreadable('the edited file has a damaged container structure (%s); nothing was written' % bad[0][0])
     if os.environ.get('RVTBALLET_OUTPUT_GATE', '1') == '1':      # c6x-rvtread 2026-11-11: the output must also pass the full source gate (page ECC, gzip CRCs, member tiling, header rules): with only the container check a restamped deflate corruption in a member was ACCEPTED by save_as (10 of 12 injected, verify on)
         sg = _import(); from savegate.adapters import RvtAdapter
-        dm = RvtAdapter().source_damage(b)
+        try: dm = RvtAdapter().source_damage(b, ref=ref) if os.environ.get('RVTBALLET_OUTPUT_GATE_REF', '0') == '1' else RvtAdapter().source_damage(b)      # ref mode (opt-in) skips streams identical to the gate-clean source; measured: NOT faster (7.6 s vs 5.5 s CPU on a 26 MB Snowdon edit), so the full scan is the default
+        except TypeError: dm = RvtAdapter().source_damage(b)      # older savegate without the ref argument
         if dm: raise OutputUnreadable('the edited file fails the damage check (%s); nothing was written' % dm[0][:120])
 
 
@@ -1162,7 +1163,7 @@ def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     check_memory(src, d.buf)      # TooBig (507) before any work; the UI then offers the labelled limited verification
     gw = group_warning(ss, mid, d.buf) if new_bytes is None else None
     explicit = new_bytes is not None
-    new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _refuse_bad_output(new_bytes); _stage(ss, mid, 'verifying and writing')
+    new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _refuse_bad_output(new_bytes, ref=d.buf); _stage(ss, mid, 'verifying and writing')
     exp = [] if explicit else expectations(ss.edits(mid).ops, [int(k[3:]) for k in manifest.get('deleted', ())])
     r = result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite))
     if exp: r['expectations'] = exp      # replayable by tools/rvt_expect_check.py through the Revit API
@@ -1179,7 +1180,7 @@ def save_as_light(ss, mid, src, dest, overwrite=False):
     """SAVE AS with LIMITED verification (rvtballet.lightverify) for models too large for the element-level verify. Explicit opt-in, SAVE AS only: never used for overwrite."""
     from .lightverify import light_verify
     _cloud_gate(src, dest); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src, precheck=False); _refuse_damaged(d)
-    new_bytes, manifest = _pending(ss, mid, d, None, None, light=True); _refuse_bad_output(new_bytes); n = len(ss.edits(mid).ops)
+    new_bytes, manifest = _pending(ss, mid, d, None, None, light=True); _refuse_bad_output(new_bytes, ref=d.buf); n = len(ss.edits(mid).ops)
     _stage(ss, mid, 'limited verification (structure only)'); rep = light_verify(d.buf, new_bytes, max(1, n))
     _stage(ss, mid, 'writing'); r = result_json(_guard(_import().save_as, d, new_bytes, dest, manifest, overwrite=overwrite, verify=False))
     r['verify'] = rep; r['limited_verification'] = True
@@ -1207,7 +1208,7 @@ def save_overwrite(ss, mid, src, force=False, new_bytes=None, manifest=None):
         if mem:
             e0 = sorted(mem)[0]
             raise GroupOrOption('overwrite refused: element %d is part of a group or design option, or is a moved element with dependents (hosted elements, dimensions, level-relative elements) (%s); such edits can leave an inconsistent model that Revit still opens. Use SAVE AS and check the copy; the file was not touched.' % (e0, '; '.join(mem[e0])))
-    new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _refuse_bad_output(new_bytes); _stage(ss, mid, 'verifying and writing')
+    new_bytes, manifest = _pending(ss, mid, d, new_bytes, manifest); _refuse_bad_output(new_bytes, ref=d.buf); _stage(ss, mid, 'verifying and writing')
     lc = layout_changes(d.buf, new_bytes) if new_bytes is not d.buf else []
     if lc is None and os.environ.get('RVTBALLET_ALLOW_LAYOUT_CHANGE') != '1': raise LayoutChanged('overwrite refused: the page-layout check could not run, so the output is not known to keep the source layout. Use SAVE AS (override: RVTBALLET_ALLOW_LAYOUT_CHANGE=1).')
     if lc and os.environ.get('RVTBALLET_ALLOW_LAYOUT_CHANGE') != '1':
