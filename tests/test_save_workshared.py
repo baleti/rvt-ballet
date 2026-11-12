@@ -40,4 +40,6 @@ def test_save_workshared():
     if not os.path.exists(SRC) or not save.SaveSessions().available: pytest.skip('source or savegate missing')
     asyncio.run(run())
 
-if __name__ == '__main__': test_save_workshared()
+if __name__ == '__main__':      # script mode (tests/test_refusal_scripts.py): a missing sample prints 'skip', never a traceback
+    if not os.path.exists(SRC) or not save.SaveSessions().available: print('skip')
+    else: test_save_workshared()
