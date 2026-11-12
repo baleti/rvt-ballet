@@ -43,7 +43,7 @@ def _check_text(v):
     if any(ord(ch) > 0xFFFF for ch in v): raise EditError('characters outside the Basic Multilingual Plane (emoji, rare CJK) are not supported in values yet; nothing was changed')
 
 
-_OP_KEYS = {'set_string': {'op', 'eid', 'param', 'value', 'match', 'field', 'pid', 'pids', 'kind', 'expect'}, 'move': {'op', 'eid', 'dx', 'dy', 'dz'}, 'set_num': {'op', 'eid', 'param', 'pid', 'pids', 'value', 'kind'}, 'delete': {'op', 'eid'}, 'rotate': {'op', 'eid', 'deg'}, 'change_type': {'op', 'eid', 'type_eid'}, 'set_type_num': {'op', 'eid', 'param', 'pid', 'value'}, 'set_type_eid': {'op', 'eid', 'pid', 'target'}, 'set_type_material': {'op', 'eid', 'target'}, 'set_link_path': {'op', 'eid', 'value'}}      # strict key sets only for ops whose optional keys are safety guards
+_OP_KEYS = {'set_string': {'op', 'eid', 'param', 'value', 'match', 'field', 'pid', 'pids', 'kind', 'expect'}, 'move': {'op', 'eid', 'dx', 'dy', 'dz'}, 'set_num': {'op', 'eid', 'param', 'pid', 'pids', 'value', 'kind'}, 'delete': {'op', 'eid'}, 'rotate': {'op', 'eid', 'deg'}, 'change_type': {'op', 'eid', 'type_eid'}, 'set_type_num': {'op', 'eid', 'param', 'pid', 'value'}, 'set_type_eid': {'op', 'eid', 'pid', 'target'}, 'set_type_material': {'op', 'eid', 'target'}, 'set_link_path': {'op', 'eid', 'value'}, 'set_link_override': {'op', 'eid', 'link', 'linked_view'}}      # strict key sets only for ops whose optional keys are safety guards
 
 
 # VM-measured (c6x-rvtwrite, 2024 and 2025 Snowdon HVAC): writing the stored ParamValueInt of these does not change what the Revit API reports
@@ -63,7 +63,7 @@ REVIT_IGNORES_STORED_INT = {'Return Airflow', 'Power Load Units', 'Lighting Load
 
 
 def validate_op(op):
-    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate', 'change_type', 'set_type_num', 'set_type_eid', 'set_type_material', 'set_link_path'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
+    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate', 'change_type', 'set_link_override', 'set_type_num', 'set_type_eid', 'set_type_material', 'set_link_path'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
     if not isinstance(op.get('eid'), int) or isinstance(op.get('eid'), bool): raise EditError('eid (element id) must be an integer')
     _ok = _OP_KEYS.get(op['op'])
     if _ok is not None and set(op) - _ok: raise EditError('unknown key(s) %s for %s (a misspelt guard such as match would be silently dropped): nothing was changed' % (sorted(set(op) - _ok), op['op']))
@@ -110,6 +110,12 @@ def validate_op(op):
         if isinstance(d, bool) or not isinstance(d, (int, float)) or d != d or abs(d) > 360: raise EditError('deg must be a finite number of degrees, |deg| <= 360')
         if d % 360 == 0: raise EditError('rotate by a multiple of 360 degrees changes nothing')
         return {'op': 'rotate', 'eid': op['eid'], 'deg': float(d)}
+    if op['op'] == 'set_link_override':
+        if os.environ.get('RVTBALLET_ENABLE_LINKOVERRIDE') != '1': raise EditError('link override edit is disabled (opt-in: RVTBALLET_ENABLE_LINKOVERRIDE=1; Revit-verified on 2024 only)')
+        if BACKEND() != 'rvtedit': raise EditError('link override edit needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
+        for k in ('link', 'linked_view'):
+            if not isinstance(op.get(k), int) or isinstance(op.get(k), bool) or op[k] <= 0: raise EditError('%s must be a positive element id' % k)
+        return {'op': 'set_link_override', 'eid': op['eid'], 'link': op['link'], 'linked_view': op['linked_view']}
     if op['op'] == 'set_link_path':
         if os.environ.get('RVTBALLET_ENABLE_LINKPATH') != '1': raise EditError('link path edit is disabled (opt-in: RVTBALLET_ENABLE_LINKPATH=1; Revit-verified on 2024 only)')
         if BACKEND() != 'rvtedit': raise EditError('link path edit needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
@@ -185,6 +191,7 @@ def compose(ops):
         elif o['op'] == 'set_type_material': k = ('set_type_material', e)
         elif o['op'] == 'change_type': k = ('change_type', e)      # the last type wins
         elif o['op'] == 'set_link_path': k = ('set_link_path', e)      # the last path wins
+        elif o['op'] == 'set_link_override': k = ('set_link_override', e, o['link'])      # the last setting wins
         if k is None: out.append(o); continue
         if k in slot:
             i = slot[k]
@@ -379,6 +386,30 @@ def _set_link_path(ed, o):
     ed._rec_edit(o['eid'], edits)
 
 
+# one RvtLinkDisplaySettings map (count 1 + one std::pair<ElementId,RvtLinkDisplaySettings> entry), 142 bytes, copied from the Revit 2024 VM result of View.SetLinkOverrides(linkTypeId, ByLinkView + LinkedViewId) on the Autodesk HVAC sample (view record 1363877): key at [4:12], RvtLinkDisplaySettings.m_linkedView at [20:28]
+_LINK_OVR_TEMPLATE = bytes.fromhex('01000000e1cf14000000000000000000000000001ae501000000000000000000ffffffffffffffffffffffffffffffff00000000010000000100000000000000010000000100000000000000010000000100000001000000010000000100000001000000010000000100000001000000000000000100000001000000010000000100000001000000000000000000')
+
+
+def _set_link_override(ed, o):
+    """View link override 'by linked view': inserts one entry into RvtLinkOverrides.m_displaySettingsMap of a view record (Revit 2024 VM: the only change Revit made to the file is this 142-byte replacement of the map count in the view record). v1 handles the EMPTY map only (refuses a view that already has overrides) and needs the view to have RvtLinkOverrides; the link must be a RvtLinkSymbol/type of the file."""
+    import struct
+    import re as _re, cfb as _cfb
+    if os.environ.get('RVTBALLET_LINKOVR_ANY_YEAR') != '1':
+        try: fy = int(_re.search(r'(20[12]\d)', bytes(_cfb.CFB(open(ed.src, 'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le', 'ignore')).group(1))
+        except Exception: raise EditError('link override edit refused: cannot read the Revit version of the file')
+        if fy != 2024: raise EditError('link override edit is only verified on Revit 2024 files (this file is %d): refused' % fy)
+    if len(_LINK_OVR_TEMPLATE) != 142: raise EditError('internal: override template size')
+    if o['link'] not in ed.g.e.m.ids: raise EditError('link element %d does not exist' % o['link'])
+    log = ed.g.e.trace(o['eid'])[3]
+    mp = [l for l in log if l[1] == 'RvtLinkOverrides.m_displaySettingsMap']
+    if len(mp) != 1: raise EditError('element %d has no RvtLinkOverrides (not a view with link overrides): refused' % o['eid'])
+    s, e = mp[0][2], mp[0][3]
+    if e - s != 4 or struct.unpack_from('<I', ed.g.bj, s)[0] != 0: raise EditError('element %d already has link display overrides: v1 only fills an empty map; refused' % o['eid'])
+    ent = bytearray(_LINK_OVR_TEMPLATE)
+    struct.pack_into('<Q', ent, 4, o['link']); struct.pack_into('<Q', ent, 20, o['linked_view'])
+    ed._rec_edit(o['eid'], [(s, 4, bytes(ent))])
+
+
 def _change_type(ed, o):
     """point a FamilyInstance at another FamilySymbol of the SAME family: overwrite FamilyInstance.m_masterSymbolId (8-byte ElementId) in the instance record. Refused unless the instance has that field, the target has FamilySymbol.m_familyId, and both families are equal (a symbol of another family would need a different geometry / host relation)"""
     if os.environ.get('RVTBALLET_CHANGETYPE_ANY_YEAR') != '1':      # Revit-verified on 2024/2026 only (VM); other years were never gated
@@ -462,6 +493,7 @@ def _rvtedit_pass(a, b, ops):
                 ed.rotate(o['eid'], o['deg'])
             elif o['op'] == 'change_type': _change_type(ed, o)
             elif o['op'] == 'set_link_path': _set_link_path(ed, o)
+            elif o['op'] == 'set_link_override': _set_link_override(ed, o)
             elif o['op'] == 'set_num': _set_num_by_pid(ed, o)
             elif o['op'] == 'set_type_num': _set_type_num(ed, a, o)
             elif o['op'] == 'set_type_eid': _set_type_eid(ed, a, o)
