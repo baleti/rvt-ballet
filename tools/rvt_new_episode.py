@@ -55,7 +55,8 @@ def main(before, edited, out):
     for m in B.GUID.finditer(bfi):
         if m.group(0) not in order and m.group(0) != B.ZERO: order.append(m.group(0))
     S['BasicFileInfo'].data, _ = B.bfi_next(bfi, [str(EPG) for _ in order])
-    S['Contents'].data = C.contents_next(bytes(S['Contents'].data), D.top_counters(dit0))
+    if os.environ.get('EP_CONTENTS'):      # VM z_c3 2026-11-12: Revit opens a file whose Contents is the OLD one; every rewrite of Contents tried so far (padded z_c, compact z_c2/y8) is rejected, so leave it alone by default
+        S['Contents'].data = C.contents_next(bytes(S['Contents'].data), D.top_counters(dit0))
     ed.save(out)
     print('OK EP=%d rows %d->%d new=%d changed=%d' % (EP, n0, st['rows'], st['new'], st['chg']))
 if __name__ == '__main__':
