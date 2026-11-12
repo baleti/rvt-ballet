@@ -18,6 +18,7 @@ try {
     var lp = e.Location as LocationPoint; var lc = e.Location as LocationCurve;
     if (lp != null) sb.Append("LP" + lp.Point.X.ToString("F6") + "," + lp.Point.Y.ToString("F6") + "," + lp.Point.Z.ToString("F6"));
     if (lc != null) sb.Append("LC" + lc.Curve.GetEndPoint(0).X.ToString("F6") + "," + lc.Curve.GetEndPoint(0).Y.ToString("F6") + "," + lc.Curve.GetEndPoint(1).X.ToString("F6") + "," + lc.Curve.GetEndPoint(1).Y.ToString("F6"));
+    try { var bb = e.get_BoundingBox(null); if (bb != null) sb.Append("BB" + bb.Min.X.ToString("F4") + "," + bb.Min.Y.ToString("F4") + "," + bb.Min.Z.ToString("F4") + "," + bb.Max.X.ToString("F4") + "," + bb.Max.Y.ToString("F4") + "," + bb.Max.Z.ToString("F4")); } catch (Exception) { sb.Append("BBerr"); }      // geometry extent in the hash (c6x-rvtmatrix): a distorted unrelated element changes it
     var tn = e as TextNote; if (tn != null) sb.Append("TN" + tn.Coord.X.ToString("F6") + "," + tn.Coord.Y.ToString("F6"));
     if (wantIds.Contains(e.Id.ToString())) ed.AppendLine("ED " + e.Id.ToString() + " " + sb.ToString());
     foreach (char c in sb.ToString()) { h ^= c; h *= 16777619; }
