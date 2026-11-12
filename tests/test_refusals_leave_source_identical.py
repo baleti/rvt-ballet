@@ -15,7 +15,9 @@ try:
     lvl = next(e for e, v in pr.items() if isinstance(v, dict) and v.get('class') == 'Level')
     grd = next(e for e, v in pr.items() if isinstance(v, dict) and v.get('class') == 'Grid')
     bad = [{'op': 'delete', 'eid': lvl}, {'op': 'delete', 'eid': grd}, {'op': 'move', 'eid': 1, 'dx': 1.0, 'dy': 0.0, 'dz': 0.0},
-           {'op': 'move', 'eid': 987654321, 'dx': 1.0, 'dy': 0.0, 'dz': 0.0}, {'op': 'frobnicate', 'eid': lvl}, {'op': 'set_string', 'eid': 987654321, 'field': 'Mark', 'value': 'x'}]
+           {'op': 'move', 'eid': 987654321, 'dx': 1.0, 'dy': 0.0, 'dz': 0.0}, {'op': 'frobnicate', 'eid': lvl}, {'op': 'set_string', 'eid': 987654321, 'field': 'Mark', 'value': 'x'},
+           {'op': 'move', 'eid': lvl, 'dx': float('nan'), 'dy': 0.0, 'dz': 0.0}, {'op': 'move', 'eid': lvl, 'dx': float('inf'), 'dy': 0.0, 'dz': 0.0},
+           {'op': 'set_string', 'eid': lvl, 'field': 'NoSuchField', 'value': 'x'}, {'op': 'move', 'eid': 'abc', 'dx': 1.0, 'dy': 0.0, 'dz': 0.0}]
     n = 0
     for op in bad:
         try: save.add_edit(ss, 'm', src, op); print('accepted (not a refusal):', op['op'], op['eid']); continue
@@ -28,6 +30,13 @@ try:
     try: save.save_overwrite(ss, 'm', src)
     except Exception as e: print('overwrite no-op raised', type(e).__name__)
     assert sha(src) == h0, 'source changed by no-edit overwrite'
+    # save-time refusal: hosted FamilyInstance (Structural sample 589763 is hosted on 585255): add may pass, in-place save must refuse, source identical
+    try:
+        save.add_edit(ss, 'm', src, {'op': 'move', 'eid': 589763, 'dx': 1.0, 'dy': 0.0, 'dz': 0.0})
+        try: save.save_overwrite(ss, 'm', src); print('hosted overwrite ACCEPTED')
+        except Exception as e: n += 1; print('hosted overwrite refused', type(e).__name__)
+    except Exception as e: n += 1; print('hosted add refused', type(e).__name__)
+    assert sha(src) == h0, 'source changed by refused hosted move'
     assert n >= 3, 'too few refusals (%d): test not exercising the refusal path' % n
     print('OK refusals', n, 'source identical')
 finally: shutil.rmtree(_T, ignore_errors=True)

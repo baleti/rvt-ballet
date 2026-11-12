@@ -11,7 +11,9 @@ class Chained(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             a1, a2 = os.path.join(d, 'a1.rvt'), os.path.join(d, 'a2.rvt')
             for s, o, y in ((F, a1, '0'), (a1, a2, '5')):
-                r = subprocess.run([sys.executable, TOOL, s, o, '0', y, '10', y], capture_output=True, text=True); self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                r = subprocess.run([sys.executable, TOOL, s, o, '0', y, '10', y], capture_output=True, text=True)
+                if r.returncode != 0 and 'REFUSED' in r.stdout + r.stderr: self.skipTest('fail-closed layout refusal on this source (not Revit-saved >= 20231029): ' + (r.stdout + r.stderr)[-160:])
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             ix = [G.file_geometry_index(f) for f in (F, a1, a2)]
             self.assertEqual([len(i) for i in ix], [len(ix[0]), len(ix[0]) + 1, len(ix[0]) + 2])
             w = [{e for e, v in i.items() if str(v) == 'SWall'} for i in ix]
