@@ -103,7 +103,7 @@ def main(argv, say=print):
     if a.cmd == 'sheets':
         if a.json: say(json.dumps(r['sheets'], indent=1, default=str)); return 0
         say('Sheets (%d):' % len(r['sheets']))
-        for s in r['sheets']: say('  %-8s %s%s%s | views: %s' % (s['number'], s['name'], ('  (issued %s)' % s['issue_date']) if s.get('issue_date') else '', ('  rev %s' % s['revision']) if s.get('revision') else '', ', '.join(s['views']) or '-'))
+        for s in r['sheets']: say('  %-8s %s%s%s | views: %s' % (s['number'], s['name'], ('  (issued %s)' % s['issue_date']) if s.get('issue_date') else '', ('  rev %s' % '; '.join('%s %s' % (x['number'], x['description']) for x in s['revisions'])) if s.get('revisions') else '', ', '.join(s['views']) or '-'))
     elif a.cmd == 'views':
         if a.json: say(json.dumps(r['views'], indent=1, default=str)); return 0
         vv = [v for v in r['views'] if not v['template']]; say('Views (%d, %d templates not listed):' % (len(vv), len(r['views']) - len(vv)))
