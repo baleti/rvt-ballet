@@ -29,7 +29,7 @@ async def main(out, src0):
             _v = int((_eh.get(eid) or {}).get('m_categroryId', 0)); _v = _v - (1 << 8 * _W) if _v >= 1 << (8 * _W - 1) else _v
             if _v != int(os.environ['CATID']): continue
         try:
-            if ed.cascade(eid) == [eid]: pick = eid; break
+            if os.environ.get('PICK_EID') or ed.cascade(eid) == [eid]: pick = eid; break      # PICK_EID: let the real edit path decide (it may cascade or refuse)
         except Exception: continue
     del ed
     if not pick: row['result'] = 'NO_CANDIDATE'; print(row); json.dump(row, open(out, 'w')); return
