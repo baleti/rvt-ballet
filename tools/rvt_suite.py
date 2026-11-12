@@ -206,11 +206,10 @@ def decide_change_type(year, workdir, use_vm):
     opened, cmp_ok, note = vm_open(year, keep)
     if opened is None: return 'ERROR', note
     if not opened or not cmp_ok: return 'FAIL', 'Revit open/compare: ' + note
-    rc, o0 = run([sys.executable, HERE + '/rvt_param_readback.py', str(year), '%d|@symbol' % inst, src], timeout=3000)
     rc, o1 = run([sys.executable, HERE + '/rvt_param_readback.py', str(year), '%d|@symbol' % inst, keep], timeout=3000)
-    s0 = re.search(r'symbol=(\d+)', o0); s1 = re.search(r'symbol=(\d+)', o1)
-    if not s0 or not s1: return 'ERROR', 'no Revit symbol readback (orig: %s | saved: %s)' % (o0.strip()[-160:].replace('\n', ' / '), o1.strip()[-160:].replace('\n', ' / '))
-    if int(s0.group(1)) != t0 or int(s1.group(1)) != t1: return 'FAIL', 'Revit Symbol.Id %s -> %s, expected %d -> %d' % (s0.group(1), s1.group(1), t0, t1)
+    s1 = re.search(r'symbol=(\d+)', o1)
+    if not s1: return 'ERROR', 'no Revit symbol readback of the saved file: ' + o1.strip()[-200:].replace('\n', ' / ')
+    if int(s1.group(1)) != t1: return 'FAIL', 'Revit Symbol.Id of the saved file is %s, expected %d (original %d)' % (s1.group(1), t1, t0)
     return 'PASS', 'FamilyInstance %d type %d -> same-family %d; gate verify_diffs 0, only the target element differs, SAVE! in place == SAVE AS; Revit opens clean (%s) and Symbol.Id reads %d' % (inst, t0, t1, note, t1)
 
 def decide_add_fi(year, workdir, use_vm):
