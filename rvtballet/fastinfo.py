@@ -361,8 +361,11 @@ def scan(path, log=None, want_elements=False, progress=None, _seg=None, _out=Non
             r = _extract_groups(rd, chunk, wanted, EH, slim_tags, idlist)
             for (eid, c), rec in r[0]:
                 if isfull(c) and rec.get('fields') and (eid, c) not in full: full[(eid, c)] = _reduce(c, rec); found_ids.add(eid)
-            for eid, h in r[1]:
-                k = slot(eid)
+            if r[1]:
+                _ea = np.array([int(e) for e, _ in r[1]], dtype=np.uint64); _ks = np.searchsorted(idarr, _ea); _ks[_ks >= N] = N - 1
+                _ok = idarr[_ks] == _ea; _slots = np.where(_ok, _ks, -1).tolist()      # one vectorised lookup per window instead of one searchsorted per header
+            else: _slots = []
+            for (eid, h), k in zip(r[1], _slots):
                 if k < 0 or seen[k]: continue
                 seen[k] = True
                 cid = h.get('m_categroryId'); ov = h.get('m_ownerViewId'); fam = h.get('m_familyId')
