@@ -35,6 +35,7 @@ async def run(orig, n):
         for k in range(1, n + 1):
             if os.environ.get('LINK_MODE') and not os.path.islink(src): print('LINK_BROKEN before save', k, flush=True)
             new = 'CH%d' % (k + int(os.environ.get('CH_OFF', '0')))
+            if cur: new = ''.join(chr(ord('A') + (k + i) % 26) for i in range(len(cur)))      # gate rule member_span: same-length values only (c6x-rvtwrite); differs every round
             r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': e, 'param': 'Mark', 'value': new, 'match': cur}); assert r.status == 200, r.status
             from rvtballet._vendor.rvtplat import mem as _m0; rss_edit = _m0.rss_bytes() >> 20
             b = sha(src); sz = os.path.getsize(src)
