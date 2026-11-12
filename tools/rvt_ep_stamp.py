@@ -13,3 +13,15 @@ def stamp_entries(part, old_ep, new_ep, first=1, limit=64):
         if struct.unpack_from('<I', part, o)[0] == old_ep:
             struct.pack_into('<I', part, o, new_ep); n += 1
     return bytes(part), n
+
+def fix_chunk(part, s):
+    """Wall-record chunk header at partition offset s (c4xaw26: 37436623): u32 adler at s+8, u32 body length at s+12, body at s+16, flag byte at s+18 relative to
+    the start of the 11 B field after the wall id (read from run 15 of the Structural pair: adler 4 B | len 4 B | 9e 08 | flag). VM-verified (x_w2) with flag 0x1f->0x1e
+    and the adler recomputed over the body: Revit accepts. Returns new bytes."""
+    import zlib
+    part = bytearray(part)
+    n = struct.unpack_from('<I', part, s + 12)[0]
+    assert 0 < n < 1 << 20 and s + 16 + n <= len(part), 'chunk length implausible'
+    if part[s + 18] == 0x1f: part[s + 18] = 0x1e
+    struct.pack_into('<I', part, s + 8, zlib.adler32(bytes(part[s + 16:s + 16 + n])) & 0xffffffff)
+    return bytes(part)

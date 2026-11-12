@@ -11,3 +11,12 @@ def test_stamp_entries_reproduces_revit_headers():
     for k in range(1, 13):
         o = 14 + 22 * k
         assert out[o:o + 22] == P['revit'][o:o + 22]
+def test_fix_chunk_flag_and_adler():
+    """flag byte sits at s+18 INSIDE the adler-covered body (body starts s+16), so the flag must change before the adler is recomputed."""
+    import zlib, struct, rvt_ep_stamp as S
+    body = bytearray(bytes(range(200)) * 3); body[2] = 0x1f
+    s = 48
+    part = bytearray(s + 8) + bytearray(4) + bytearray(struct.pack('<I', len(body))) + body
+    out = S.fix_chunk(bytes(part), s)
+    assert out[s + 18] == 0x1e
+    assert struct.unpack_from('<I', out, s + 8)[0] == zlib.adler32(out[s + 16:s + 16 + len(body)])
