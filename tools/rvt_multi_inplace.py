@@ -7,10 +7,11 @@ _H = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [os.path.join(_H
 from rvtballet import server
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 async def run(src, out, ops):
+    import aiohttp
     from aiohttp.test_utils import TestClient, TestServer
     work = _T + '/w.rvt'; shutil.copy(src, work); h0 = sha(work); md = _T + '/m'; os.makedirs(md)
     models = server.Models(); models.m['m'] = {'dir': md, 'name': 'f', 'src': work}
-    async with TestClient(TestServer(server.make_app(models))) as c:
+    async with TestClient(TestServer(server.make_app(models)), timeout=aiohttp.ClientTimeout(total=None)) as c:
         info = await (await c.get('/api/m/m/saveinfo')).json(); print('open', info.get('open'), str(info.get('error'))[:80])
         bad = 0
         for o in ops:
