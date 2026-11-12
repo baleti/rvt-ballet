@@ -695,6 +695,17 @@ def _offset_echo(n, x, y):
     return {k} if abs((y[k] - x[k]) - (d if n == 'Top Offset' else -d)) < 1e-6 else set()
 
 
+_ELEV_DRIVERS = ('Elevation from Level', 'Offset from Host', 'Height Offset From Level')
+
+
+def vertical_echo(x, y, o):
+    """c4x-rvtwrite2 items 188-190: keys that a pure vertical move (dz only) of a placed instance changes legitimately. The reader shows the one stored elevation number under several names (Elevation from Level, Offset from Host, Total Connected ... all +dz on a Snowdon FamilyInstance; Revit 2026 probe: the location z moved by exactly dz, x/y unchanged, opens clean). Strict: dx and dy are zero, dz is non-zero, every key in the result is numeric and changed by exactly +dz (1e-6), and at least one real driver (_ELEV_DRIVERS) is among them; otherwise nothing is allowed and the gate refuses as before."""
+    dz = o.get('dz') or 0.0
+    if o.get('op') != 'move' or o.get('dx') or o.get('dy') or not dz: return set()
+    ech = {k for k in set(x) | set(y) if isinstance(x.get(k), float) and isinstance(y.get(k), float) and abs((y[k] - x[k]) - dz) <= 1e-6 * max(1.0, abs(dz)) + 1e-6}
+    return ech if ech & set(_ELEV_DRIVERS) else set()
+
+
 def derived_echoes(src_buf, nb, ops):
     """ids of UNEDITED elements whose reader view changed only because the reader shows the edited element's parameter on them too (a view's Detail Level on its viewports / elevation arrows, a family's Section Shape on its
     symbols; QUEUE 64). Strict rule: the element changed in exactly ONE parameter, the edited parameter name, from exactly the edited element's old value to exactly its new value. Anything else stays an undeclared
@@ -1021,7 +1032,8 @@ def _readback(src_buf, nb, ops):
                 e0, e1 = x.get('Elevation'), y.get('Elevation'); dz = o.get('dz', 0.0)
                 if o.get('dx') or o.get('dy'): bad.append('moved level %d: only a vertical move (dz) is a level move' % o['eid'])
                 elif not isinstance(e0, (int, float)) or not isinstance(e1, (int, float)) or abs((e1 - e0) - dz) > 1e-6 * max(1.0, abs(dz)) + 1e-6: bad.append('moved level %d: Elevation %r -> %r, not the requested shift of %.6g ft' % (o['eid'], e0, e1, dz))
-            ch = [k for k in set(x) | set(y) if k not in own and not (lvl and k == 'Elevation') and x.get(k) != y.get(k) and not (k.startswith('Column Location Mark') and isinstance(x.get(k), str) and _same_mark_base(x[k], y.get(k)))]
+            vech = vertical_echo(x, y, o) if not lvl else set()      # pure vertical move of a placed instance: elevation-type parameters (and the reader's aliases of the same stored number) change by exactly dz
+            ch = [k for k in set(x) | set(y) if k not in own and k not in vech and not (lvl and k == 'Elevation') and x.get(k) != y.get(k) and not (k.startswith('Column Location Mark') and isinstance(x.get(k), str) and _same_mark_base(x[k], y.get(k)))]
             if ch: bad.append('moved element %d: parameters changed' % o['eid'])
             if o['op'] == 'move' and not any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv):      # the displacement itself: the element's bounding box must shift by exactly (dx, dy, dz) (feet); skipped only when the geometry reader has no box for the SOURCE element
                 b0, b1 = _pair(_bbox_of, src_buf, nb, o['eid'])
