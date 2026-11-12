@@ -185,6 +185,7 @@ def decide_class_case(year, spec, workdir, use_vm):
     if vm['opened'] is None: return 'ERROR', vm['note']
     if not vm['opened']: return 'FAIL', 'Revit did not open the output cleanly: ' + vm['note']
     if not vm['cmp']: return 'FAIL', 'Revit resave compare not 0/0: ' + vm['note']
+    if use in ('move', 'set_string', 'set_num') and vm['exp_ok'] is None: return 'ERROR', 'VM infrastructure problem, not a result: the Revit expectation check printed no verdict (' + vm['exp_note'] + ')'
     if use in ('move', 'set_string', 'set_num') and vm['exp_ok'] is not True: return 'FAIL', 'Revit readback did not match: ' + vm['exp_note']
     if use == 'untouched' and row.get('other_elements_param_changed', 0) not in (0, row.get('declared_dependents')): return 'FAIL', 'other elements changed: %s' % row.get('other_elements_param_changed')
     return 'PASS', '%s; class %s on a %d sample, gate verify_diffs 0, %s of %s elements untouched (%s pct); Revit: %s %s' % (use, cls, year, (row.get('elements') or 0) - (row.get('elements_changed') or 0), row.get('elements'), row.get('elements_untouched_pct'), vm['note'], vm['exp_note'])
