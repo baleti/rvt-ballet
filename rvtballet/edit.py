@@ -647,19 +647,12 @@ IN_USE_GUARD_ALLOW = 5      # measured: an id occurs 5 times more in the file be
 
 
 def tags_hosting(ed, eid):
-    """ids of IndependentTag elements whose host reference (RoomBoundingItem.m_linkInstOrHostId) is eid (the tag is not in the host's deletion list)"""
-    import rvt_params, re as _re
-    out = []
-    for t, v in rvt_params.params(ed.src).items():
-        if v.get('class') != 'IndependentTag': continue
-        try: log = ed.g.e.trace(t)[3]
-        except Exception: continue
-        for l in log:
-            if l[1] == 'RoomBoundingItem.m_linkInstOrHostId':
-                m = _re.search(r'(\d+)', str(l[4]))
-                if m and int(m.group(1)) == int(eid): out.append(t); break
-    return out
-
+    """ids of IndependentTag elements whose host reference (RoomBoundingItem.m_linkInstOrHostId) is eid (the tag is not in the host's deletion list). Reads the decoded records of the reader cache (rvt_xcache), no per-element trace."""
+    import rvt_xcache
+    needle = 'EID(%d)' % int(eid); out = []
+    for key, rec in rvt_xcache.get_x(ed.src)['recs'].items():
+        if key[1] == 'IndependentTag' and needle in str(rec.get('fields')): out.append(int(key[0]))
+    return sorted(out)
 
 def _delete(ed, eid):
     """delete with what Revit's Delete removes: class-specific paths of rvtedit (floor / view / sheet), else owned_set; returns every deleted id (they all go in the manifest)"""
