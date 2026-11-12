@@ -9,9 +9,10 @@ for p in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-resear
 from rvtballet import server
 import rvt_params, aiohttp
 from aiohttp.test_utils import TestClient, TestServer
+PARAM = os.environ.get('PARAM', 'Mark')      # PARAM=Type Mark etc.: any string parameter
 g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
 async def main(src, out, n):
-    base = rvt_params.params(src); eids = [e for e, d in base.items() if isinstance(g(d).get('Mark'), str)][:n]
+    base = rvt_params.params(src); eids = [e for e, d in base.items() if isinstance(g(d).get(PARAM), str)][:n]
     want = {}
     VALS = json.loads(os.environ['VALUES']) if os.environ.get('VALUES') else None      # VALUES='["a","b"]': exact values for the first len() Marks
     for i, e in enumerate(eids): want[e] = VALS[i] if VALS else ('x' * 4000 if i == 1 else ('' if i == 2 else 'm%d' % i))
@@ -22,12 +23,12 @@ async def main(src, out, n):
         import time; t0 = time.time()
         for k, (e, v) in enumerate(want.items()):
             if k % 20 == 0: print('edit', k, '%.0fs' % (time.time() - t0), flush=True)
-            r = await cl.post('/api/m/m/edit', json={'op': 'set_string', 'eid': e, 'param': 'Mark', 'value': v})
+            r = await cl.post('/api/m/m/edit', json={'op': 'set_string', 'eid': e, 'param': PARAM, 'value': v})
             if r.status != 200: bad += 1; print('edit refused', e, r.status, (await r.text())[:100])
         if INPLACE: r = await cl.post('/api/m/m/save', json={'confirm': True}); t = await r.text(); print('save in place', r.status, t[:200]); out = src
         else: r = await cl.post('/api/m/m/saveas', json={'dest': out, 'confirm': True}); t = await r.text(); print('saveas', r.status, t[:200])
     res = rvt_params.params(out)
-    wrong = [e for e, v in want.items() if g(res.get(e, {})).get('Mark') != v]
+    wrong = [e for e, v in want.items() if g(res.get(e, {})).get(PARAM) != v]
     other = [e for e in base if e not in want and g(res.get(e, {})) != g(base[e])]
     print('edits', len(want), 'edit_refused', bad, 'readback_wrong', len(wrong), 'other_elements_changed', len(other), 'missing', len([e for e in base if e not in res]))
 INPLACE = bool(os.environ.get('INPLACE'))
