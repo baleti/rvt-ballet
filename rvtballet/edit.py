@@ -57,6 +57,8 @@ def _discipline_ok(v):
     return v == 4095 or (v > 0 and v & (v - 1) == 0)
 
 
+# material Class / Behavior: the reader shows the material asset's value, the stored ParamValueInt is a different field, so the edit never reads back (save-time read-back refuses it with 422 'unchanged by the edit'); refuse at /edit instead
+READBACK_NEVER_MATCHES_INT = {'Class', 'Behavior'}
 REVIT_IGNORES_STORED_INT = {'Return Airflow', 'Power Load Units', 'Lighting Load Units'}
 
 
@@ -128,6 +130,7 @@ def validate_op(op):
         if op.get('param') in DERIVED_NUM: raise EditError('parameter %r is a structural-asset value that this reader shows as a derived or placeholder value (not the stored field), so an edit cannot be verified; nothing was changed. Edit it in Revit.' % op.get('param'))
         if kind == 'Int' and op.get('param') in ENUM_INT_RANGE and not ENUM_INT_RANGE[op['param']][0] <= v <= ENUM_INT_RANGE[op['param']][1]: raise EditError('%s %d is not a valid choice (Revit would show it with a blank name); valid values are %d to %d. Nothing was changed.' % (op['param'], v, ENUM_INT_RANGE[op['param']][0], ENUM_INT_RANGE[op['param']][1]))
         if kind == 'Int' and op.get('param') == 'Discipline' and not _discipline_ok(v): raise EditError('Discipline %d is not a valid choice (Revit would show it with a blank name); valid values are 1, 2, 4, 8, 16 and 4095. Nothing was changed.' % v)
+        if kind == 'Int' and op.get('param') in READBACK_NEVER_MATCHES_INT: raise EditError('parameter %r: the value shown for it comes from the material asset, not from the stored integer, so an edit cannot be verified; nothing was changed. Edit it in Revit.' % op['param'])
         if op.get('param') in REVIT_IGNORES_STORED_INT: raise EditError('parameter %r: the stored integer can be changed, but the real Revit (2024 and 2026 VM readback) still shows the old value for it, so the edit would have no effect there; nothing was changed. Edit it in Revit.' % op.get('param'))
         pid, cands = _param_spec(op)
         if BACKEND() != 'rvtedit': raise EditError('set_num needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
