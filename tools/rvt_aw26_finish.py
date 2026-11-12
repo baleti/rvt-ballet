@@ -3,7 +3,7 @@
 Revit 2026 opened in the VM (y12; y14 = this pipeline is the pure-tools test): (1) partition header stamps old EP -> EP (rvt_ep_stamp.stamp_entries), (2) wall chunk flag 0x1f->0x1e
 and Adler32 (find_chunks/fix_chunk), (3) oversize partition member cut like Revit (rvt_split_oversize), (4) new-episode bookkeeping (rvt_new_episode: ElemTable/History/DIT/BFI, rename
 partition n -> n+1, Contents untouched). Single-partition (Revit-saved) bases only. Writes OUT only; refuses when a step does not apply. UNVERIFIED until a VM verdict + readback."""
-import os, sys, subprocess
+import os, sys, subprocess, struct
 H = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, H)
 for p in ('~/rvt-research/write-lab', '~/rvt-research/edit-lab', '~/rvt-research'): sys.path.insert(0, os.path.expanduser(p))
 def main(before, edited, out):
@@ -18,7 +18,11 @@ def main(before, edited, out):
     st, n = T.stamp_entries(joined, ep - 1, ep)
     if n == 0: sys.exit('REFUSED: no partition header entry holds the previous episode %d; the stamp rule does not apply' % (ep - 1))
     ch = T.find_chunks(st)
-    if len(ch) != 1: sys.exit('REFUSED: expected exactly one wall chunk with a stale flag, found %d' % len(ch))
+    if len(ch) != 1:      # Revit-saved bases can hold chunks with the same marker of their own (Electrical: 2): keep only those that are NEW (not present, by adler+length, in BEFORE)
+        bm = wledit.Editor(before).m; bj = bytes(bm.parts[list(bm.parts)[0]]['joined'])
+        old = {(struct.unpack_from('<I', bj, c + 8)[0], struct.unpack_from('<I', bj, c + 12)[0]) for c in T.find_chunks(bj)}
+        ch = [c for c in ch if (struct.unpack_from('<I', st, c + 8)[0], struct.unpack_from('<I', st, c + 12)[0]) not in old]
+    if len(ch) != 1: sys.exit('REFUSED: expected exactly one NEW wall chunk with a stale flag, found %d' % len(ch))
     fx = T.fix_chunk(st, ch[0])
     A = np.frombuffer(joined, np.uint8); B = np.frombuffer(fx, np.uint8); idx = np.nonzero(A != B)[0].tolist(); runs = []
     for i in idx:

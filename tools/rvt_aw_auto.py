@@ -58,12 +58,12 @@ try:      # thickness: the like-wall has the SAME type, so twice its key-referen
 except Exception: pass
 print('OP', op, flush=True)
 env = dict(os.environ, YEAR=year)
-_epi = bool(os.environ.get('RVT_ADD_EPISODE'))      # EXPERIMENT (c4x-rvtdiff): give the add Revit's new-episode bookkeeping (tools/rvt_new_episode.py); VM verdicts pending, never default
+_epi = bool(os.environ.get('RVT_ADD_EPISODE')) or bool(os.environ.get('RVT_ADD26_FINISH'))      # RVT_ADD26_FINISH=1 (2026 only, c4x-rvtdiff): stamps + chunk flag/Adler + oversize split + episode composer via tools/rvt_aw26_finish.py (VM y14/y15 opened)      # EXPERIMENT (c4x-rvtdiff): give the add Revit's new-episode bookkeeping (tools/rvt_new_episode.py); VM verdicts pending, never default
 _out = dst + '.noepisode.tmp' if _epi else dst
 _rc = subprocess.call([sys.executable, os.path.expanduser('~/rvt-research/edit-lab/rvtedit.py'), src, _out, op], env=env)
 if _rc == 0 and _epi:
     try:
-        _rc = subprocess.call([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rvt_new_episode.py'), src, _out, dst])
+        _rc = subprocess.call([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rvt_aw26_finish.py' if os.environ.get('RVT_ADD26_FINISH') else 'rvt_new_episode.py'), src, _out, dst])
     finally:
         if os.path.exists(_out): os.remove(_out)
     if _rc != 0 and os.path.exists(dst): os.remove(dst)      # never leave a half-processed output
@@ -79,7 +79,7 @@ if _rc == 0 and os.path.exists(dst) and not os.environ.get('RVTGEN_INPLACE'):   
             os.remove(dst); sys.exit('REFUSED: output layout check failed (first partition member %d B -> %d B; Revit refuses this layout on Revit-saved files); output deleted, set RVTGEN_INPLACE=1 to use the in-place layout' % (_a, _b))
     except SystemExit: raise
     except Exception as _e: print('layout check skipped: %s' % _e)
-if _rc == 0 and os.path.exists(dst):      # member cap check (c3x-rvtdiff): Revit never writes a partition member > 131088 raw bytes; our 2026 add produced 238572 B
+if _rc == 0 and os.path.exists(dst) and os.environ.get('RVT_MEMBER_CAP') != '0':      # member cap check (RVT_MEMBER_CAP=0: lab only, keep the output) (c3x-rvtdiff): Revit never writes a partition member > 131088 raw bytes; our 2026 add produced 238572 B
     try:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import rvt_member_cap as _mc
         _big = _mc.oversized(_mc.member_sizes(dst))
