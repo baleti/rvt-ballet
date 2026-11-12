@@ -182,7 +182,7 @@ def _walk(x, path, out, lim=60):
     if len(out) >= lim: return
     if isinstance(x, dict): [_walk(v, path + '.' + str(k), out, lim) for k, v in x.items()]
     elif isinstance(x, (list, tuple)) and len(x) <= 64: [_walk(v, path + '[%d]' % i, out, lim) for i, v in enumerate(x)]
-    else: out[path] = repr(x)[:80]
+    else: out[path] = repr(x)[:12000]
 
 
 def _deep(pa, pb, ids):
@@ -240,7 +240,10 @@ def _by(path, r, a, say):
 
 def _same(x, y):
     try: return abs(float(x) - float(y)) <= 1e-9 * max(1.0, abs(float(x)))
-    except (TypeError, ValueError): return str(x).strip("'") == str(y).strip("'")
+    except (TypeError, ValueError):
+        x, y = str(x), str(y)
+        if x.strip("'") == y.strip("'"): return True
+        return repr(x)[1:-1] == y.strip("'") or repr(y)[1:-1] == x.strip("'") or x.strip("'") == y[1:-1].encode().decode('unicode_escape', 'ignore') or y.strip("'") == x[1:-1].encode().decode('unicode_escape', 'ignore')
 
 
 def _ops(allrec, ops):
