@@ -143,6 +143,7 @@ def _diff(pa, pb, a, say, lg):
     import numpy as np
     ra = _scan_cached(pa, a.refresh, lg); rb = _scan_cached(pb, a.refresh, lg); A = _elements(pa); B = _elements(pb)
     allow = {int(x) for x in a.allow.split(',') if x.strip()}
+    if a.ops and os.path.exists(a.ops): allow |= {int(o['id']) for o in json.load(open(a.ops))}      # requested ids may change at header level too
     ia = {int(i): k for k, i in enumerate(A['id'])}; ib = {int(i): k for k, i in enumerate(B['id'])}
     lost = sorted(set(ia) - set(ib)); new = sorted(set(ib) - set(ia)); chg = {}
     for i in set(ia) & set(ib):
@@ -165,7 +166,11 @@ def _diff(pa, pb, a, say, lg):
         out['unexpected'] += 0 if a.ops else len([k for k in out['all_records']['differing'] if int(k) not in allow]) + out['all_records']['only_a'] + out['all_records']['only_b']
     if a.ops:
         if not a.all_records: print('rvt-ballet: --ops needs --all-records', file=sys.stderr); return 2
-        out['ops'] = _ops(out['all_records'], json.load(open(a.ops))); out['unexpected'] += len(out['ops']['unmatched_changes']) + len(out['ops']['missing_ops'])
+        ops = json.load(open(a.ops)); ids = sorted({int(o['id']) for o in ops})
+        for i, rec in _deep(pa, pb, ids).items():          # the listed ids are decoded on their own (only_ids): the all-records view can miss fields behind shared pointer objects
+            if 'changed' in rec: out['all_records']['differing'][i] = rec
+            else: out['all_records']['differing'].pop(i, None)
+        out['ops'] = _ops(out['all_records'], ops); out['unexpected'] += len(out['ops']['unmatched_changes']) + len(out['ops']['missing_ops'])
         say(json.dumps(out['ops'], indent=1, default=str)) if not a.json else None
     if a.deep:
         ids = [int(x) for x in a.deep.split(',') if x.strip()]; out['deep'] = _deep(pa, pb, ids); say(json.dumps(out['deep'], indent=1, default=str)) if not a.json else None
