@@ -18,7 +18,7 @@ async def main(out, src0):
     pr = rvt_params.params(src); ed = rvtedit.Edit(src); pick = None
     if os.environ.get('CATID'):
         import rvt_xcache; _x = rvt_xcache.get_x(src); _eh = _x['eh']; _W = _x['W']
-    for eid in list(pr)[:int(os.environ.get('SCAN_N', '3000'))]:
+    for eid in ([int(os.environ['PICK_EID'])] if os.environ.get('PICK_EID') else list(pr)[:int(os.environ.get('SCAN_N', '3000'))]):      # PICK_EID: delete exactly this element
         try: pn, i, r, log, q = ed.g.e.trace(eid)
         except Exception: continue
         if r['class'] != cls or ed.latest_partition(eid) != pn: continue
