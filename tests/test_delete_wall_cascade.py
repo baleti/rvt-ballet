@@ -4,7 +4,9 @@ _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ[
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 SRC = os.path.expanduser('~/c2x-tmp/ip25/2024_43_Snowdon_Towers_Sample_Structural.rvt'); W = 585072
 from rvtballet import save, edit
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 if not os.path.exists(SRC) or not save.SaveSessions().available: print('skip'); sys.exit(0)
+from _tagfix import stripped; SRC = stripped(SRC, W)
 src = os.path.join(_T, 'src.rvt'); shutil.copy(SRC, src)
 d = save.SaveSessions().doc('m', src)
 op = edit.validate_op({'op': 'delete', 'eid': W})
