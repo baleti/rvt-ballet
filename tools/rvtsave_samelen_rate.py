@@ -26,5 +26,6 @@ async def main(src, n):
             if r.status == 200: ok += 1; print('OK', e, k, len(v), flush=True)
             else: ref += 1; print('SAVE_REFUSED', r.status, e, k, len(v), t[:140].replace('\n', ' '), flush=True)
             if os.path.exists(out): os.remove(out)
+            models.m.pop(mid, None); import gc; gc.collect()      # one model session at a time: otherwise the memory guard (507 too_big) fires from the harness's own retained sessions
     print('ok', ok, 'refused', ref, 'of', len(cands))
 asyncio.run(main(sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 20))
