@@ -47,6 +47,11 @@ _OP_KEYS = {'set_string': {'op', 'eid', 'param', 'value', 'match', 'field', 'pid
 
 
 # VM-measured (c6x-rvtwrite, 2024 and 2025 Snowdon HVAC): writing the stored ParamValueInt of these does not change what the Revit API reports
+# Int parameters that are choice lists: allowed range (inclusive), VM-measured with the Revit API display name (blank = invalid): Detail Level 1..3 valid, 4 blank (0 not measured, refused);
+# Mullion Family General Shape 0..5 valid (6 blank); Tangent Joins 0 and 2 valid, 3 blank (1 assumed valid between them)
+ENUM_INT_RANGE = {'Detail Level': (1, 3), 'Mullion Family General Shape': (0, 5), 'Tangent Joins': (0, 2)}
+
+
 def _discipline_ok(v):
     """Discipline is a bit-flag choice: values seen in the Autodesk samples are 1, 2, 4, 8, 16 and 4095; Revit 2024 and 2026 show 3 and 5 with a blank name (VM readback), i.e. not a valid choice"""
     return v == 4095 or (v > 0 and v & (v - 1) == 0)
@@ -121,6 +126,7 @@ def validate_op(op):
         if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or abs(v) > 1e15: raise EditError('value must be a finite number')
         if kind == 'Int' and (not isinstance(v, int) or abs(v) >= 2 ** 31): raise EditError('Int value must be a 32-bit integer')
         if op.get('param') in DERIVED_NUM: raise EditError('parameter %r is a structural-asset value that this reader shows as a derived or placeholder value (not the stored field), so an edit cannot be verified; nothing was changed. Edit it in Revit.' % op.get('param'))
+        if kind == 'Int' and op.get('param') in ENUM_INT_RANGE and not ENUM_INT_RANGE[op['param']][0] <= v <= ENUM_INT_RANGE[op['param']][1]: raise EditError('%s %d is not a valid choice (Revit would show it with a blank name); valid values are %d to %d. Nothing was changed.' % (op['param'], v, ENUM_INT_RANGE[op['param']][0], ENUM_INT_RANGE[op['param']][1]))
         if kind == 'Int' and op.get('param') == 'Discipline' and not _discipline_ok(v): raise EditError('Discipline %d is not a valid choice (Revit would show it with a blank name); valid values are 1, 2, 4, 8, 16 and 4095. Nothing was changed.' % v)
         if op.get('param') in REVIT_IGNORES_STORED_INT: raise EditError('parameter %r: the stored integer can be changed, but the real Revit (2024 and 2026 VM readback) still shows the old value for it, so the edit would have no effect there; nothing was changed. Edit it in Revit.' % op.get('param'))
         pid, cands = _param_spec(op)
