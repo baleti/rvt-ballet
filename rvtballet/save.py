@@ -432,6 +432,7 @@ def source_damage(buf):
         import struct
         if len(buf) >= 28 and struct.unpack_from('<H', buf, 26)[0] not in (3, 4):      # c7x-rvtread 94: major-version high byte flipped; the reader loads it, Revit 2024 refuses (COleException 0x80030105)
             out.append(('CFB header (major version)', 0))
+        if len(buf) >= 512 and buf[:8] != bytes.fromhex('d0cf11e0a1b11ae1'): out.append(('CFB header (signature)', 0))      # c5x-rvtread: one-byte flip at offset 0, Revit 2024 'could not be opened' (vm2.log), reader tolerated it
         # c7x-rvtread 97: VM verdicts on single-byte header flips (Revit 2024 refuses, reader loads): minicutoff 0x38..0x3b, minishift 0x20, DIFAT start 0x44 (no DIFAT sectors), unused DIFAT entries 0x60..0x1f0 not FREESECT
         if len(buf) >= 512 and buf[:8] == bytes.fromhex('d0cf11e0a1b11ae1'):
             ms, cut, nfat, dstart, ndif = struct.unpack_from('<H', buf, 32)[0], struct.unpack_from('<I', buf, 56)[0], struct.unpack_from('<I', buf, 44)[0], struct.unpack_from('<I', buf, 68)[0], struct.unpack_from('<I', buf, 72)[0]

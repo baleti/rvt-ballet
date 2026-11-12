@@ -27,6 +27,11 @@ class T(unittest.TestCase):
         for off in (0x10, 0x14, 0x18, 0x1c, 0x1d, 0x08, 0x22, 0x34):
             b = bytearray(open(S, 'rb').read()); b[off] ^= 0xFF
             self.assertTrue(save.source_damage(bytes(b)), hex(off))
+    def test_signature_flip_flagged(self):
+        # c5x-rvtread: vm2.log offsets 0,26,48,60,66 refused by Revit 2024; offset 0 (signature) was the one not flagged
+        for off in (0, 1, 7, 26, 48, 60, 66):
+            b = bytearray(open(S, 'rb').read()); b[off] ^= 0xFF
+            self.assertTrue(save.source_damage(bytes(b)), off)
 if __name__ == '__main__': unittest.main()
 
 class Struct(unittest.TestCase):
