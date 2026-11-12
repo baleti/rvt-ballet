@@ -70,4 +70,20 @@ def test_sample():
     g = subprocess.run([rb, 'convert', f, '/nonexistent/out'], capture_output=True, text=True, env=dict(os.environ, RVT_BIG_MB='1')); assert g.returncode == 3 and 'rvt-ballet info' in g.stderr, g.stderr
     print('sample ok: %d categories, %d sheets, %d views' % (len(r['counts']), len(r['sheets']), len(r['views'])))
 
-if __name__ == '__main__': test_primitives(); test_sample()
+def test_damaged():
+    """damaged copies of the 2020 sample: truncation -> one-line 'cannot read' (exit 1, no traceback); byte flip inside a compressed block -> warning on stderr or a one-line error"""
+    import shutil, tempfile
+    f = os.path.expanduser('~/rvt-research/corpus/2020/18_rst_basic_sample_project.rvt')
+    if not os.path.exists(f): print('sample absent: skipped'); return
+    rb = os.path.join(HERE, 'bin', 'rvt-ballet'); T = tempfile.mkdtemp(); env = dict(os.environ, RVT_BALLET_CACHE=T + '/cache')
+    try:
+        t1 = T + '/t1.rvt'; shutil.copy(f, t1)
+        with open(t1, 'r+b') as h: h.truncate(os.path.getsize(f) - 400000)
+        r = subprocess.run([rb, 'counts', t1], capture_output=True, text=True, env=env); assert 'Traceback' not in r.stderr and ((r.returncode == 1 and 'cannot read' in r.stderr) or 'WARNING' in r.stderr), (r.returncode, r.stderr[-300:])
+        t2 = T + '/t2.rvt'; shutil.copy(f, t2)
+        with open(t2, 'r+b') as h: h.seek(os.path.getsize(f) // 2); b = h.read(1); h.seek(os.path.getsize(f) // 2); h.write(bytes([b[0] ^ 0xFF]))
+        r = subprocess.run([rb, 'counts', t2], capture_output=True, text=True, env=env); assert 'Traceback' not in r.stderr and ('WARNING' in r.stderr or 'cannot read' in r.stderr), (r.returncode, r.stderr[-300:])
+        print('damaged-file handling ok')
+    finally: shutil.rmtree(T, ignore_errors=True)
+
+if __name__ == '__main__': test_primitives(); test_sample(); test_damaged()
