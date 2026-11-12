@@ -587,6 +587,7 @@ def _refuse_bad_output(nb, ref=None):
         sg = _import(); from savegate.adapters import RvtAdapter
         try: dm = RvtAdapter().source_damage(b, ref=ref) if os.environ.get('RVTBALLET_OUTPUT_GATE_REF', '0') == '1' else RvtAdapter().source_damage(b)      # ref mode (opt-in) skips streams identical to the gate-clean source; measured: NOT faster (7.6 s vs 5.5 s CPU on a 26 MB Snowdon edit), so the full scan is the default
         except TypeError: dm = RvtAdapter().source_damage(b)      # older savegate without the ref argument
+        dm = [x for x in dm if not x.startswith('the file has ')]      # trailing bytes after the last sector: refused by the verify step with its own, specific code (test_save_trailing_garbage)
         if dm: raise OutputUnreadable('the edited file fails the damage check (%s); nothing was written' % dm[0][:120])
 
 
