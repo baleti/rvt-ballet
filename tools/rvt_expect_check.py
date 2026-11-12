@@ -38,7 +38,7 @@ def parse_par(txt):
 loc_ids = ','.join(sorted({str(e['eid']) for e in exp if e['kind'] in ('move', 'rotate', 'absent')})); par = sorted({'%d|%s' % (e['eid'], e['name']) for e in exp if e['kind'] == 'param'})
 res = {}
 for label, f in (('orig', orig), ('out', out)):
-    res[label] = {'loc': parse_loc(run(os.environ.get('RVT_LOC_TOOL','rvt_rotation_readback.py'), loc_ids, f)) if loc_ids else {}, 'par': parse_par(run('rvt_param_readback.py', ','.join(par), f)) if par else {}}
+    res[label] = {'loc': parse_loc(run(os.environ.get('RVT_LOC_TOOL','rvt_rotation_readback.py'), loc_ids, f)) if loc_ids else {}, 'par': parse_par(run(os.environ.get('RVT_PAR_TOOL','rvt_param_readback.py'), ','.join(par), f)) if par else {}}
 npass = nfail = 0
 for e in exp:
     k = e['kind']; ok = False; why = ''
