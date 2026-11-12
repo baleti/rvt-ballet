@@ -4,7 +4,7 @@ Streamed (fastinfo.py), never starts the geometry pipeline, runs under a hard me
 import os, sys, json, argparse, hashlib, time, collections
 from . import plat, reader
 
-CMDS = ('info', 'sheets', 'views', 'levels', 'grids', 'counts', 'elements', 'diff')
+CMDS = ('info', 'sheets', 'views', 'levels', 'grids', 'counts', 'elements', 'diff', 'check')
 VERSION = 'fi1'
 ALLREC_MB = float(os.environ.get('RVT_ALLREC_MB', '120'))
 
@@ -58,6 +58,10 @@ def _main(argv, say=print):
     from . import cli
     bad = cli.check_input(a.file)
     if bad: print('rvt-ballet: ' + bad, file=sys.stderr); return 2
+    if a.cmd == 'check':
+        mb = float(os.environ.get('RVT_CHECK_MB', '150'))
+        if os.path.getsize(a.file) > mb * 1e6: print('rvt-ballet: check loads the whole file; %s is above %.0f MB (RVT_CHECK_MB)' % (os.path.basename(a.file), mb), file=sys.stderr); return 2
+        os.environ.setdefault('RVT_INFO_MEM_GB', '3.5')
     if a.cmd == 'diff' and (not a.file2 or cli.check_input(a.file2)): print('rvt-ballet: diff needs two readable .rvt files', file=sys.stderr); return 2
     if a.cmd == 'diff' and a.all_records:
         big = [f for f in (a.file, a.file2) if os.path.getsize(f) > ALLREC_MB * 1e6]
@@ -69,7 +73,9 @@ def _main(argv, say=print):
     rc = _capped(argv)
     if rc is not None: return rc
     from . import fastinfo
-    path = os.path.abspath(a.file); lg = (lambda m: print(m, file=sys.stderr, flush=True)) if a.verbose else (lambda m: None)
+    path = os.path.abspath(a.file)
+    if a.cmd == 'check': return _check(path, a, say)
+    lg = (lambda m: print(m, file=sys.stderr, flush=True)) if a.verbose else (lambda m: None)
     t0 = time.time()
     if a.cmd == 'info' and not (a.views or a.levels or a.grids):
         r = fastinfo.file_info(path)
@@ -268,3 +274,19 @@ def main(argv, say=print):
         from . import cli
         if os.environ.get('RVT_INFO_TRACE'): raise
         print('rvt-ballet: cannot read %s: %s' % (os.path.basename(argv[1]) if len(argv) > 1 else 'file', cli.friendly_error(ex)), file=sys.stderr); return 1
+
+
+def _check(path, a, say):
+    """integrity check with the SAVE GATE's own damage detector (page ECC, gzip CRC/size, inflate, container walk): the question 'is this file safe to edit / was it damaged in transit?'. Files <= RVT_CHECK_MB (the whole file is read). Exit 0 = nothing found, 1 = problems."""
+    from . import fastinfo; fastinfo._paths()
+    sg = os.path.expanduser('~/src/savegate')
+    if sg not in sys.path: sys.path.append(sg)
+    try: from savegate import adapters
+    except ImportError as ex: print('rvt-ballet: the save gate library is not installed: %s' % ex, file=sys.stderr); return 2
+    buf = open(path, 'rb').read(); t = time.time(); errs = adapters.RvtAdapter().source_damage(buf)
+    if a.json: say(json.dumps({'file': os.path.basename(path), 'size': len(buf), 'problems': errs, 'seconds': round(time.time() - t, 1)}, indent=1))
+    elif errs:
+        say('%s: %d problem(s) found by the save-gate integrity check:' % (os.path.basename(path), len(errs)))
+        for e in errs[:30]: say('  ' + str(e))
+    else: say('%s: no damage found (page ECC, gzip checksums, stream containers checked in %.0f s)' % (os.path.basename(path), time.time() - t))
+    return 1 if errs else 0

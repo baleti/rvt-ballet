@@ -34,3 +34,4 @@ All but plain `info` accept `--json` and `--refresh`. The first scan of a file i
 * `RVT_INFO_WORKERS=N` runs segment workers in parallel (each ~450 MB peak). The info cache key includes the reader code hash and window settings.
 * The diff is a reader-side pre-filter before the Revit VM open. It cannot see bytes the reader does not decode (padding, checksums, undecoded streams) and it does not replace the VM verdict.
 * sheets also list their revisions (number, description, date) from the ProjectRevision elements, and the scan returns the project revision list.
+* `rvt-ballet check FILE [--json]`: integrity check with the save gate's own damage detector (page ECC, gzip CRC/size, container walk); files up to 150 MB (RVT_CHECK_MB), exit 0 = nothing found, 1 = problems. Use it on a file received from somewhere before editing it, or when `counts` printed the checksum warning.
