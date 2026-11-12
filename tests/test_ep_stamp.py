@@ -20,3 +20,13 @@ def test_fix_chunk_flag_and_adler():
     out = S.fix_chunk(bytes(part), s)
     assert out[s + 18] == 0x1e
     assert struct.unpack_from('<I', out, s + 8)[0] == zlib.adler32(out[s + 16:s + 16 + len(body)])
+def test_find_chunks_self_validating():
+    import zlib, struct, rvt_ep_stamp as S
+    body = bytearray(b'\x9e\x08\x1f' + bytes(range(150)))
+    good = bytes(40) + struct.pack('<II', zlib.adler32(bytes(body)), len(body)) + bytes(body)       # s = 40-8 ... header (8B) before adler? see below
+    # layout: s+8 adler, s+12 len, s+16 body -> pad 8 bytes of junk before the adler
+    s = 32
+    part = bytes(s + 8) + struct.pack('<II', zlib.adler32(bytes(body)), len(body)) + bytes(body) + bytes(20)
+    assert S.find_chunks(part) == [s]
+    bad = bytearray(part); bad[s + 8] ^= 1          # wrong adler: not reported
+    assert S.find_chunks(bytes(bad)) == []

@@ -25,3 +25,17 @@ def fix_chunk(part, s):
     if part[s + 18] == 0x1f: part[s + 18] = 0x1e
     struct.pack_into('<I', part, s + 8, zlib.adler32(bytes(part[s + 16:s + 16 + n])) & 0xffffffff)
     return bytes(part)
+
+def find_chunks(part, limit=64):
+    """Self-validating scan for wall chunk headers: ... adler(4) len(4) 9e 08 1f ...  where adler32(part[s+16:s+16+len]) == stored adler.
+    Returns the list of chunk header offsets s (chunk header = 8 B before the adler field; fix_chunk(part, s))."""
+    import zlib
+    out = []; pat = b'\x9e\x08\x1f'; i = part.find(pat)
+    while i >= 0 and len(out) < limit:
+        s = i - 16                      # body starts at s+16 with 9e 08 1f
+        if s >= 0:
+            n = struct.unpack_from('<I', part, s + 12)[0]
+            if 0 < n < 1 << 20 and s + 16 + n <= len(part) and struct.unpack_from('<I', part, s + 8)[0] == zlib.adler32(part[s + 16:s + 16 + n]) & 0xffffffff:
+                out.append(s)
+        i = part.find(pat, i + 1)
+    return out
