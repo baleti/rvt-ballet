@@ -30,8 +30,13 @@ async def run(src, out):
     md = tempfile.mkdtemp(); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models))) as c:
         c.session._timeout = aiohttp.ClientTimeout(total=None); await c.get('/api/m/m/saveinfo')
+        if os.environ.get('OPS'):      # OPS='[[eid,"Param",value,"Int"|"Double"], ...]': exactly these edits (enum probes)
+            for e, n, v, k in json.loads(os.environ['OPS']):
+                body = {'op': 'set_num', 'eid': e, 'param': n, 'value': v, 'kind': k}; r = await c.post('/api/m/m/edit', json=body); print('OPS', e, n, v, r.status, (await r.text())[:120] if r.status != 200 else '')
+                if r.status == 200: ops.append(body); used.add(e)
+            print('SWEEPIDS', ','.join('%d|%s' % (o['eid'], o['param']) for o in ops))
         K = os.environ.get('KIND', 'Int'); N = int(os.environ.get('N', '20')); seen = set()
-        for e, n, v, body in cands[K]:
+        for e, n, v, body in ([] if os.environ.get('OPS') else cands[K]):
             if e in used or n in seen: continue
             r = await c.post('/api/m/m/edit', json=body)
             if r.status == 200: ops.append(body); used.add(e); seen.add(n); print(K, e, n, v, '->', body['value'], 200)
