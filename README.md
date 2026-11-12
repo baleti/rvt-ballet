@@ -8,6 +8,8 @@
     rvt-ballet sheets|views|levels|grids|counts|elements FILE.rvt [--json]   # admin data without converting (streamed, capped memory, cached; docs/fast-info.md)
     rvt-ballet diff BEFORE.rvt AFTER.rvt [--deep IDS] [--all-records] [--ops ops.json]   # before/after check of an edit (pre-filter, not the Revit verdict)
     rvt-ballet info FILE.rvt --save               # the save-gate report: can it be edited/saved
+    rvt-ballet check FILE.rvt                     # integrity check (page ECC, gzip checksums) with the save gate's damage detector
+    # what was tested for in-place saves: docs/inplace-safety-evidence.md
     rvt-ballet edit --list-ops                    # what passes today per Revit year (supported / experimental / refused)
     rvt-ballet edit FILE.rvt --move EID 2 0 0 --set-string EID Mark X -o OUT.rvt   # writes a NEW file; the original is never touched
     rvt-ballet edit FILE.rvt --rotate EID 30 --in-place   # savegate with backup + verify; needs RVTBALLET_ALLOW_OVERWRITE=1 (SAVE! policy)
