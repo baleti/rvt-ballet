@@ -73,6 +73,7 @@ def validate_op(op):
         d = [op.get(k, 0.0) for k in ('dx', 'dy', 'dz')]
         if any(isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or abs(v) > 5e4 for v in d): raise EditError('dx, dy, dz must be finite numbers (Revit internal units = feet), |v| <= 50000 (Revit keeps geometry within about 20 miles = 105600 ft of the origin)')
         if not any(d): raise EditError('move by zero')
+        if max(abs(v) for v in d) < 1e-9: raise EditError('move of %.3g ft is below the 1e-9 ft resolution (compose drops moves under 1e-12 ft, the gate tolerance is 1e-6 ft): refused rather than reported as moved while the file stays unchanged' % max(abs(v) for v in d))
         return {'op': 'move', 'eid': op['eid'], 'dx': float(d[0]), 'dy': float(d[1]), 'dz': float(d[2])}
     if op['op'] == 'change_type':
         if os.environ.get('RVTBALLET_ENABLE_CHANGETYPE') != '1': raise EditError('change_type is disabled (opt-in: RVTBALLET_ENABLE_CHANGETYPE=1; no Revit evidence for it yet)')
