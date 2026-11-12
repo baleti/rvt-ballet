@@ -13,6 +13,7 @@ OVERLAP = int(os.environ.get("RVT_INFO_OVERLAP_KB", "1024")) << 10
 FULL_CLASSES = ('Level', 'Grid', 'ProjectPhase', 'ProjectInfo', 'Viewport', 'ProjectRevision')
 FULL_PREFIX = ('DBView',)
 MAX_MEMBER = 1 << 30
+STATS = {'crc_bad': 0, 'members': 0}      # damaged-block counters (reset by scan); a bad gzip CRC/size trailer on a member that inflated to its end = real damage
 
 
 def _tune():
@@ -115,8 +116,13 @@ def members(blocks):
         if bad: pos = i + 4; continue                             # false marker: resume right after it
         if not ok: return                                          # stream ends inside a member
         pos = q
-        yield b''.join(outs)
+        data = b''.join(outs)
         while len(buf) < pos + 8 and more(): pass
+        STATS['members'] += 1
+        if len(buf) >= pos + 8:
+            crc, isz = struct.unpack_from('<II', buf, pos)
+            if crc != (zlib.crc32(data) & 0xffffffff) or isz != (len(data) & 0xffffffff): STATS['crc_bad'] += 1
+        yield data
         pos += 8                                                   # gzip CRC32/ISIZE trailer
 
 
@@ -245,7 +251,7 @@ def scan(path, log=None, want_elements=False, progress=None, _seg=None, _out=Non
     """-> dict: levels, grids, views, sheets, phases, counts (by category), class_counts, view_owned, stats, elements (when want_elements)"""
     _tune(); _paths()
     import olefile, rvt_scan as S, rvt_decode as D, rvt_inventory as I, fmt_parser as fp, rvtfmt, rvt_fast as F, rvt_entities as E
-    t0 = time.time(); say = log or (lambda *a: None)
+    t0 = time.time(); say = log or (lambda *a: None); STATS['crc_bad'] = 0; STATS['members'] = 0
     o = olefile.OleFileIO(path); names = ['/'.join(e) for e in o.listdir(streams=True)]
     cls, _ = fp.parse(rvtfmt.inflate_stream(o.openstream('Formats/Latest').read())[1])
     W = S.id_size(cls); sch = D.Schema(cls)
@@ -331,7 +337,7 @@ def scan(path, log=None, want_elements=False, progress=None, _seg=None, _out=Non
             finally:
                 try: os.remove(outp)
                 except OSError: pass
-            nwin += part['windows']; maxwin = max(maxwin, part['maxwin']); nb += part['nb']
+            nwin += part['windows']; maxwin = max(maxwin, part['maxwin']); nb += part['nb']; STATS['crc_bad'] += part.get('crc_bad', 0); STATS['members'] += part.get('members', 0)
             sl = part['idx']; new = ~seen[sl]; t = sl[new]
             seen[t] = True; a_cat[t] = part['cat'][new]; a_ov[t] = part['ov'][new]; a_fam[t] = part['fam'][new]; a_bb[t] = part['bb'][new]
             for j, cc_ in enumerate(part['cls'][new]):
@@ -380,9 +386,9 @@ def scan(path, log=None, want_elements=False, progress=None, _seg=None, _out=Non
     if _seg:
         sl = np.nonzero(seen)[0]; import pickle
         pickle.dump({'idx': sl, 'cat': a_cat[sl], 'ov': a_ov[sl], 'fam': a_fam[sl], 'bb': a_bb[sl], 'cls': a_cls[sl], 'cls_names': cnames_l, 'full': full, 'found': found_ids, 'admin': admin_ids,
-                     'windows': nwin, 'maxwin': maxwin, 'nb': nb}, open(_out, 'wb'), protocol=5)
+                     'windows': nwin, 'maxwin': maxwin, 'nb': nb, 'crc_bad': STATS['crc_bad'], 'members': STATS['members']}, open(_out, 'wb'), protocol=5)
         return None
-    res = {'stats': {'stopped_early': early, 'primary_elements': nprim, 'primary_with_header': int((seen & prim).sum()), 'partitions': len(pns), 'windows': nwin, 'max_window_mb': round(maxwin / 1e6, 1), 'decoded_mb': round(nb / 1e6), 'elements_with_header': int(seen.sum()), 'seconds': round(time.time() - t0, 2)}}
+    res = {'stats': {'damaged_members': STATS['crc_bad'], 'members': STATS['members'], 'stopped_early': early, 'primary_elements': nprim, 'primary_with_header': int((seen & prim).sum()), 'partitions': len(pns), 'windows': nwin, 'max_window_mb': round(maxwin / 1e6, 1), 'decoded_mb': round(nb / 1e6), 'elements_with_header': int(seen.sum()), 'seconds': round(time.time() - t0, 2)}}
     cat = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'category_names.json')))
     u, n = np.unique(a_cat[seen], return_counts=True)
     cc = collections.Counter()

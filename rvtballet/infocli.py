@@ -48,7 +48,7 @@ def _capped(argv):
     return p.wait()
 
 
-def main(argv, say=print):
+def _main(argv, say=print):
     ap = argparse.ArgumentParser(prog='rvt-ballet'); ap.add_argument('cmd', choices=CMDS); ap.add_argument('file'); ap.add_argument('file2', nargs='?'); ap.add_argument('--deep', default='', help='diff: comma list of element ids whose FULL records are decoded in both files and compared field by field'); ap.add_argument('--all-records', action='store_true', help='diff: decode EVERY record of both files and compare field by field (small files only: %d MB, needs ~3 GB)' % ALLREC_MB); ap.add_argument('--by', choices=('level', 'phase'), help='counts: elements per level / created phase (full records: small files only)'); ap.add_argument('--ops', help='diff --all-records: JSON list of requested edits [{"id":N,"path":".field[0]","new":V,"old":V?}]; passes only if the record diff equals exactly these'); ap.add_argument('--allow', default='', help='diff: comma list of element ids expected to change')
     ap.add_argument('--json', action='store_true'); ap.add_argument('--refresh', action='store_true', help='ignore the cached result')
     ap.add_argument('--views', action='store_true'); ap.add_argument('--levels', action='store_true'); ap.add_argument('--grids', action='store_true')
@@ -90,6 +90,7 @@ def main(argv, say=print):
     if a.cmd == 'counts' and a.by: return _by(path, r_ := _scan_cached(path, a.refresh, lg), a, say)
     if a.cmd == 'diff': return _diff(path, os.path.abspath(a.file2), a, say, lg)
     r = _scan_cached(path, a.refresh, lg)
+    if r['stats'].get('damaged_members'): print('rvt-ballet: WARNING: %d of %d compressed blocks of this file fail their checksum: the file looks damaged and the numbers below may be incomplete' % (r['stats']['damaged_members'], r['stats'].get('members', 0)), file=sys.stderr)
     if a.cmd == 'info':
         out = {k: r[k] for k in ('levels', 'grids', 'views') if getattr(a, k)}
         say(json.dumps(out, indent=1, default=str) if a.json else '')
@@ -256,3 +257,14 @@ def _ops(allrec, ops):
             if o is None: unmatched.append({'id': int(i), 'path': path, 'old': old, 'new': new, 'why': 'not requested'})
             elif not _same(o['new'], new) or ('old' in o and not _same(o['old'], old)): unmatched.append({'id': int(i), 'path': path, 'old': old, 'new': new, 'why': 'value differs from request %r' % (o,)})
     return {'requested': len(want), 'matched': len(seen & set(want)), 'unmatched_changes': unmatched, 'missing_ops': [{'id': k[0], 'path': k[1]} for k in want if k not in seen]}
+
+
+def main(argv, say=print):
+    """_main with a one-line message instead of a traceback for unreadable / damaged files (exit 1)"""
+    try: return _main(argv, say)
+    except (SystemExit, KeyboardInterrupt): raise
+    except MemoryError: print('rvt-ballet: out of memory while reading this file', file=sys.stderr); return 1
+    except Exception as ex:
+        from . import cli
+        if os.environ.get('RVT_INFO_TRACE'): raise
+        print('rvt-ballet: cannot read %s: %s' % (os.path.basename(argv[1]) if len(argv) > 1 else 'file', cli.friendly_error(ex)), file=sys.stderr); return 1
