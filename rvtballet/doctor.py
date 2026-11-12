@@ -76,6 +76,9 @@ def main(argv=None):
             lvl = 'ok' if ' up' in l else 'warn'
             if 'lane1' in l: lvl = 'ok' if ' up' in l else 'na'
             add(lvl, l.split(':')[0].split(' (')[0], l.split(':', 1)[-1].strip() or l)
+        vq = os.path.join(home, 'rvt-research', 'write-lab', 'campaign', 'vmq')
+        if os.path.isdir(vq):
+            n = len(os.listdir(vq)); add('ok' if n < 8 else 'warn', 'oracle queue', '%d tickets waiting for a Revit lane (each job ~7+ min; FIFO, one ticket per file)' % n)
         rc, o = _sh(['bash', '-c', "ps -eo args | grep -E 'lanectl.* (guard|auto)' | grep -v grep | head -3"])
         add('ok', 'lane guard/auto loop', 'running' if o else 'not running now (guard only acts when a loop or cron calls `lanectl guard`)')
         gl = os.path.join(ds, 'rvt-lanes', 'guard.log')
