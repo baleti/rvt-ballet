@@ -29,7 +29,7 @@ if _fy == 2026 and os.environ.get('RVT_ADD26_SAVED') and not os.environ.get('RVT
     _st = _re.findall(r'(20\d{6})_\d{4}\(x\d+\)', _bfi); _need = {2026: 20250519}[_fy]
     if not _st or int(_st[0]) < _need: sys.exit('REFUSED: file was not saved by the Revit build the VM verified (BasicFileInfo build stamp %s, need >= %d); originals and synthetic files corrupt on open; nothing written' % (_st[:1], _need))
     if _np != 1: sys.exit('REFUSED: 2026 add-wall is only allowed on a Revit-saved file (1 partition stream); this file has %d (original, Revit 2026 rejects our add on those); nothing written' % _np)
-    os.environ['RVTGEN_INPLACE'] = '1'; os.environ['RVT_ADD26_EXPERIMENT'] = '1'
+    os.environ['RVTGEN_INPLACE'] = '1'; os.environ['RVT_ADD26_EXPERIMENT'] = '1'; os.environ.setdefault('RVT_ADD26_FINISH', '1')      # c4x-rvtdiff 2026-11-12: the opt-in saved-base path now runs the finishing pipeline (VM: Structural + Electrical opened, readback exact)
 if _fy == 2026 and not os.environ.get('RVT_ADD26_EXPERIMENT'): sys.exit('REFUSED: 2026 add-wall output was refused by Revit 2026 on the original Snowdon Structural sample (CorruptModel / ModificationForbidden, sev1 open); disabled until a Revit-verified fix. Set RVT_ADD26_EXPERIMENT=1 for lab use only; nothing written')
 if _fy == 2024 and os.environ.get('RVTGEN_INPLACE'):      # in-place layout opened only on a 2024 file saved by Revit (build stamp 20231029); all 3 originals (stamp 20230206) were CorruptModel
     _st = _re.findall(r'(20\d{6})_\d{4}\(x\d+\)', _bfi)
