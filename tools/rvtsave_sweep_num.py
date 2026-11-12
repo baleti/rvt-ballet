@@ -34,7 +34,7 @@ async def run(src, out):
         c.session._timeout = aiohttp.ClientTimeout(total=None); await c.get('/api/m/m/saveinfo')
         if os.environ.get('OPS'):      # OPS='[[eid,"Param",value,"Int"|"Double"], ...]': exactly these edits (enum probes)
             for e, n, v, k in json.loads(os.environ['OPS']):
-                body = {'op': 'set_num', 'eid': e, 'param': n, 'value': v, 'kind': k}; r = await c.post('/api/m/m/edit', json=body); print('OPS', e, n, v, r.status, (await r.text())[:120] if r.status != 200 else '')
+                body = {'op': 'set_string', 'eid': e, 'param': n, 'value': v} if k == 'String' else {'op': 'set_num', 'eid': e, 'param': n, 'value': v, 'kind': k}; r = await c.post('/api/m/m/edit', json=body); print('OPS', e, n, v, r.status, (await r.text())[:120] if r.status != 200 else '')
                 if r.status == 200: ops.append(body); used.add(e)
             print('SWEEPIDS', ','.join('%d|%s' % (o['eid'], o['param']) for o in ops))
         K = os.environ.get('KIND', 'Int'); N = int(os.environ.get('N', '20')); seen = set()
