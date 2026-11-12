@@ -14,6 +14,8 @@ async def run(src, out):
     inplace = bool(os.environ.get('INPLACE'))
     if inplace: os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; orig = src; src = out; shutil.copy(orig, src); h0 = hashlib.sha256(open(src, 'rb').read()).hexdigest()[:12]      # INPLACE=1: out is a private copy that SAVE! overwrites
     from rvtballet import server, save as S
+    if os.environ.get('NOGUARD'):      # probes only: switch the VM-measured enum guards off to measure another year
+        from rvtballet import edit as _ed; _ed.ENUM_INT_RANGE.clear(); _ed.REVIT_IGNORES_STORED_INT.clear()
     import rvt_params
     from aiohttp.test_utils import TestClient, TestServer
     import aiohttp
