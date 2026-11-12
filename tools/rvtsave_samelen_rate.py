@@ -20,7 +20,7 @@ async def main(src, n):
         cl.session._timeout = aiohttp.ClientTimeout(total=None)
         for i, (e, k, v) in enumerate(cands):
             mid = 'm%d' % i; md = tempfile.mkdtemp(dir=_T); models.m[mid] = {'dir': md, 'name': 'a', 'src': src}; await cl.get('/api/m/%s/saveinfo' % mid)
-            r = await cl.post('/api/%s/%s/edit' % ('m', mid), json={'op': 'set_string', 'eid': e, 'param': k, 'value': ('Z' * len(v))})
+            r = await cl.post('/api/%s/%s/edit' % ('m', mid), json={'op': 'set_string', 'eid': e, 'param': k, 'value': ('Z' * max(1, len(v) + int(os.environ.get('DELTA', '0'))))})
             if r.status != 200: print('EDIT_REFUSED', e, k, len(v), (await r.text())[:100].replace('\n', ' '), flush=True); ref += 1; continue
             out = _T + '/o%d.rvt' % i; r = await cl.post('/api/m/%s/saveas' % mid, json={'dest': out, 'confirm': True}); t = await r.text()
             if r.status == 200: ok += 1; print('OK', e, k, len(v), flush=True)
