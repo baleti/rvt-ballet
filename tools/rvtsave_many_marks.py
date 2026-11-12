@@ -12,7 +12,7 @@ from aiohttp.test_utils import TestClient, TestServer
 PARAM = os.environ.get('PARAM', 'Mark')      # PARAM=Type Mark etc.: any string parameter
 g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
 async def main(src, out, n):
-    base = rvt_params.params(src); eids = [e for e, d in base.items() if isinstance(g(d).get(PARAM), str)][:n]
+    base = rvt_params.params(src); eids = [e for e, d in base.items() if isinstance(g(d).get(PARAM), str) and (g(d).get(PARAM) or not os.environ.get('NONEMPTY'))][:n]
     want = {}
     VALS = json.loads(os.environ['VALUES']) if os.environ.get('VALUES') else None      # VALUES='["a","b"]': exact values for the first len() Marks
     for i, e in enumerate(eids): want[e] = VALS[i] if VALS else ('x' * 4000 if i == 1 else ('' if i == 2 else 'm%d' % i))
