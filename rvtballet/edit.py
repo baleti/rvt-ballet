@@ -504,6 +504,7 @@ def _rvtedit_pass(a, b, ops):
             else:
                 if o['field'] in ('DatumPlane.m_text', 'DBView.m_viewName', 'SymbolInfo.m_name'): _check_element_name(o['value'])
                 if o['field'] in ('DatumPlane.m_text', 'DBView.m_viewName'): _check_datum_name_unique(a, o)
+                if o['field'] == 'SymbolInfo.m_name': _check_symbol_name_unique(a, o)
                 ed._str_edit(o['eid'], o['field'], o['value'], o['match'])
         except (IndexError, KeyError, StopIteration, AssertionError, struct_error()) as e:
             hint = ' (the record layout of this kind of element, e.g. a group member, is not handled by the edit backend)' if o['op'] in ('move', 'rotate') else ''
@@ -657,6 +658,26 @@ def _check_datum_name_unique(src, o):
     for k, v in r['recs'].items():
         if k[1] == mine[0][1] and k[0] != o['eid'] and _nk(str(v.get('fields', {}).get(fld, ''))) == new:
             raise EditError('a %s named %r already exists (element %d): Revit does not allow duplicate names; nothing was changed' % (k[1], o['value'], k[0]))
+
+
+def _check_symbol_name_unique(src, o):
+    """Revit does not allow two types of one family with the same name (case-insensitive): refuse a type rename onto a sibling's name (c5x-rvtread item 20). Uses the reader's FamilySymbol 'Type Name'/'Family Name'; when the reader does not expose that symbol (2024 template, other classes) nothing is checked here."""
+    import sys, os
+    for pth in ('~/rvt-research', '~/rvt-research/write-lab'):
+        if os.path.expanduser(pth) not in sys.path: sys.path.insert(0, os.path.expanduser(pth))
+    try:
+        import rvt_params; P = rvt_params.params(src)
+    except Exception: return
+    me = P.get(o['eid'])
+    if not isinstance(me, dict) or me.get('class') != 'FamilySymbol': return
+    fam = (me.get('params') or {}).get('Family Name')
+    if fam is None: return
+    new = _nk(o['value'])
+    for e, d in P.items():
+        if e != o['eid'] and isinstance(d, dict) and d.get('class') == 'FamilySymbol':
+            q = d.get('params') or {}
+            if q.get('Family Name') == fam and _nk(str(q.get('Type Name', ''))) == new:
+                raise EditError('type %r already exists in family %r (element %d): Revit does not allow duplicate type names; nothing was changed' % (o['value'], fam, e))
 
 
 def _full_astr(ed, vn):
