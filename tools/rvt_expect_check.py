@@ -11,9 +11,9 @@ def run(tool, ids, f):
     cd = os.path.expanduser(os.environ.get('RVT_EXPECT_CACHE', '~/.cache/rvt_expect')); os.makedirs(cd, exist_ok=True)
     key = hashlib.sha256(open(f, 'rb').read() + b'\0' + tool.encode() + b'\0' + ids.encode() + b'\0' + year.encode()).hexdigest(); cf = os.path.join(cd, key + '.txt')
     if os.path.exists(cf): return open(cf).read()
-    for k in range(int(os.environ.get('RVT_EXPECT_SESSION_TRIES', '4'))):
+    for k in range(int(os.environ.get('RVT_EXPECT_SESSION_TRIES', '6'))):
         r = subprocess.run(['python3', os.path.join(HERE, tool), year, ids, f], cwd=WL, capture_output=True, text=True, timeout=int(os.environ.get('RVT_EXPECT_TIMEOUT', '43200')))      # the shared VM lock can make a run wait for hours
-        if 'no Revit port' in (r.stdout + r.stderr) or 'RESULT ok' not in r.stdout: time.sleep(90); continue      # no port, or the session died before its RESULT line (a crashed session must not turn into a 'not read' FAIL)
+        if 'no Revit port' in (r.stdout + r.stderr) or 'RESULT ok' not in r.stdout: time.sleep(min(600, 90 * (k + 1))); continue      # no port, or the session died before its RESULT line (a crashed session must not turn into a 'not read' FAIL)
         if 'RB ' in r.stdout: open(cf, 'w').write(r.stdout)      # only real readback lines are cached (a crashed or empty session is never a cache hit)
         return r.stdout
     print('INFRA no Revit port (no verdict; rerun when the VM lane is healthy)'); sys.exit(3)
