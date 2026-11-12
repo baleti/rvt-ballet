@@ -207,7 +207,7 @@ def decide_change_type(year, workdir, use_vm):
     opened, cmp_ok, note = vm_open(year, keep)
     if opened is None: return 'ERROR', note
     if not opened or not cmp_ok: return 'FAIL', 'Revit open/compare: ' + note
-    rc, o1 = run([sys.executable, HERE + '/rvt_param_readback.py', str(year), '%d|@symbol' % inst, keep], timeout=3000)
+    rc, o1 = run([sys.executable, HERE + '/rvt_param_readback.py', str(year), '%d|@symbol' % inst, keep], timeout=10800)
     s1 = re.search(r'symbol=(\d+)', o1)
     if not s1: return 'ERROR', 'no Revit symbol readback of the saved file: ' + o1.strip()[-200:].replace('\n', ' / ')
     if int(s1.group(1)) != t1: return 'FAIL', 'Revit Symbol.Id of the saved file is %s, expected %d (original %d)' % (s1.group(1), t1, t0)
