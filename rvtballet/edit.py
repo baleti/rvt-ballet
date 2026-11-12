@@ -220,6 +220,26 @@ def last_dirty_members():
     return None if d is None else {k: sorted(v) for k, v in d.items()}
 
 
+def member_diff_ranges(src, out, dm):
+    """{stream: {str(member): [[lo, hi), ...]}} the exact byte runs the writer changed inside each declared dirty member (equal-length members only; a length change gets no entry). The gate (manifest member_diff_ranges) then refuses any byte that differs outside them: a flip next to the edit, inside the span window but outside the writer's own runs, was ACCEPTED (c2x-rvtsave 2026-11-12)."""
+    import cfb, rvtw, wlpart
+    a, b = cfb.CFB(src).streams(), cfb.CFB(out).streams(); res = {}
+    for pn, mem in (dm or {}).items():
+        pa, pb = wlpart.Partition(rvtw.Stream(a[pn].data)), wlpart.Partition(rvtw.Stream(b[pn].data))
+        for mi in mem:
+            ra, rb = bytes(pa.mem[mi]['raw']), bytes(pb.mem[mi]['raw'])
+            if len(ra) != len(rb): continue
+            runs = []; i = 0; n = len(ra)
+            while i < n:
+                if ra[i] != rb[i]:
+                    j = i
+                    while j < n and ra[j] != rb[j]: j += 1
+                    runs.append([i, j]); i = j
+                else: i += 1
+            res.setdefault(pn, {})[str(mi)] = runs
+    return res
+
+
 def _sweep_stale_edit_dirs(max_age=6 * 3600):
     """a SIGKILL/power loss in the middle of an edit leaves rvtballet-edit-* (a full copy of the user's model) in the temp dir; remove our own such dirs older than max_age (an edit takes minutes)"""
     import time, shutil
