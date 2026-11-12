@@ -272,7 +272,7 @@ for (e, c), r in x['recs'].items():
 leveled = {}      # level id -> elements associated with it (m_assocLevelId / m_levelId / m_upperLevelId): Revit moves level-relative elements with a moved level, the writer moves the Level record only
 for (e, c), r in x['recs'].items():
     if c == 'Level': continue
-    for key in ('m_assocLevelId', 'm_levelId', 'm_upperLevelId'):
+    for key in ('m_assocLevelId', 'm_levelId', 'm_upperLevelId', 'm_refLevelId', 'm_topLevelId', 'm_baseLevelId', 'm_idLevel', 'm_datumPlaneId', 'm_genElemId'):      # 2022 rst sample: m_refLevelId (132 instances), SketchPlane.m_datumPlaneId, StairsElement.m_topLevelId, DBViewPlan.m_genElemId referenced levels the old 3 keys missed
         t = []; find(r.get('fields'), key, t)
         for v in t:
             for i in ids(v):
