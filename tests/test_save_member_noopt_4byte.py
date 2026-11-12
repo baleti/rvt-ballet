@@ -7,9 +7,11 @@ def run(opt):
     sys.modules['rvt_xcache'] = m; import tempfile; ip = tempfile.mktemp(suffix='.json'); json.dump([7], open(ip, 'w')); sys.argv = ['w', 'x', ip]; buf = io.StringIO()
     with contextlib.redirect_stdout(buf): exec(compile(save._MEMBER_WORKER, 'w', 'exec'), {'__name__': '__main__'})
     os.remove(ip); return json.loads(buf.getvalue().splitlines()[-1])['7'][0]['options']
-assert run(4294967295) == [], 'FAIL 4-byte -1 counted as option'
-assert run(4294967292) == [], 'FAIL 4-byte -4 counted as option'
-assert run(2 ** 64 - 4) == [], 'FAIL 8-byte -4 counted as option'
-assert run(2 ** 64 - 1) == [], 'FAIL 8-byte -1 counted as option'
-assert run(123456) == [123456], 'FAIL real option dropped'
-print('OK')
+def test_noopt_4byte():
+    assert run(4294967295) == [], 'FAIL 4-byte -1 counted as option'
+    assert run(4294967292) == [], 'FAIL 4-byte -4 counted as option'
+    assert run(2 ** 64 - 4) == [], 'FAIL 8-byte -4 counted as option'
+    assert run(2 ** 64 - 1) == [], 'FAIL 8-byte -1 counted as option'
+    assert run(123456) == [123456], 'FAIL real option dropped'
+
+if __name__ == '__main__': test_noopt_4byte(); print('OK')

@@ -35,5 +35,9 @@ async def run():
         r = await c.post('/api/m/m/save', json={}); assert r.status == 200, r.status
     assert sha(src) == h0 and not [f for f in os.listdir(_T) if f.endswith(('.tmp', '.part'))]
     print('workshared in-place refusal OK (Central/Local/unreadable refused, SAVE AS and normal save fine)')
-if not os.path.exists(SRC) or not save.SaveSessions().available: print('skip')
-else: asyncio.run(run())
+def test_save_workshared():
+    import pytest
+    if not os.path.exists(SRC) or not save.SaveSessions().available: pytest.skip('source or savegate missing')
+    asyncio.run(run())
+
+if __name__ == '__main__': test_save_workshared()
