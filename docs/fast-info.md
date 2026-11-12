@@ -25,3 +25,11 @@ All but plain `info` accept `--json` and `--refresh`. The first scan of a file i
 * Level / phase / workset per element are NOT available yet: they live in the full element records (m_assocLevelId, m_createdPhaseId, worksets), which this reader does not decode (would need records, not headers). Header columns only.
 * Counts equal `rvt_entities.parse()` on 9 of 10 Autodesk/real seed files; the 10th differs by one element whose header the reference reader decodes with a garbage category (65536) and the windowed read decodes correctly. Window size 3 MB / overlap 1 MB may lose ~1 header in 28 000 vs 6/2 MB.
 * Sheet revision and "last saved when" are not extracted (file mtime is shown).
+
+## Later additions
+* `info` also prints **last saved by / when** (decoded from Global/DocumentIncrementTable: user name, unix save time, number of save records).
+* `sheets` lists the views placed on each sheet (2023+ files: from each Viewport's owner view), approved-by and revision element ids.
+* `counts FILE --by level|phase` (files <= 120 MB, `RVT_ALLREC_MB`): elements per level (m_assocLevelId) / created phase (m_createdPhaseId, names via ProjectPhase elements). Needs every record decoded in RAM (~3 GB cap).
+* **`diff BEFORE AFTER`**: element-header level sanity (lost/new elements, changed category / owner view / family / bbox, category counts, sheets, views, level names). Exit 1 on anything outside `--allow ID,ID`. `--deep ID,ID` decodes the full records of those elements in both files and prints changed fields; `--all-records` compares every record (files <= 120 MB); `--ops ops.json` (with `--all-records`) passes only if the record diff equals the requested edits exactly: `[{"id": N, "path": ".m_instOrigin[0]", "old": V?, "new": V}]`, paths as printed by the diff.
+* `RVT_INFO_WORKERS=N` runs segment workers in parallel (each ~450 MB peak). The info cache key includes the reader code hash and window settings.
+* The diff is a reader-side pre-filter before the Revit VM open. It cannot see bytes the reader does not decode (padding, checksums, undecoded streams) and it does not replace the VM verdict.
