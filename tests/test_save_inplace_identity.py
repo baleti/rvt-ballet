@@ -9,7 +9,7 @@ import os, sys, asyncio, tempfile, hashlib, shutil, json
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'
 os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; json.dump({'rvt': {'2024': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)
-SRC = os.path.expanduser('~/rvtfix/corpus/2024/71_Construction-DefaultMetric.rte')
+SRC = os.path.expanduser(os.environ.get('IDENT_SRC') or '~/rvtfix/corpus/2024/71_Construction-DefaultMetric.rte')
 from rvtballet import server, save
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 async def run():
