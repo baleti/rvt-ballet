@@ -9,7 +9,7 @@ def run(tool, ids, f):
     """one VM readback session; a 'no Revit port' start failure is retried per session (RVT_EXPECT_SESSION_TRIES, default 4, 90 s apart) and every successful readback is cached by file sha256 + tool + ids, so a rerun after an infrastructure failure only repeats the sessions that failed (c6x-rvtmatrix: the check needs 2-4 sessions and about half of the VM starts fail)"""
     import hashlib, time
     cd = os.path.expanduser(os.environ.get('RVT_EXPECT_CACHE', '~/.cache/rvt_expect')); os.makedirs(cd, exist_ok=True)
-    key = hashlib.sha256(open(f, 'rb').read() + b'\0' + tool.encode() + b'\0' + ids.encode() + b'\0' + year.encode()).hexdigest(); cf = os.path.join(cd, key + '.txt')
+    key = hashlib.sha256(open(f, 'rb').read() + b'\0' + tool.encode() + b'\0' + ids.encode() + b'\0' + year.encode() + b'\0' + (open(os.path.join(HERE, tool[:-3] + '.cs'), 'rb').read() if os.path.exists(os.path.join(HERE, tool[:-3] + '.cs')) else b'')).hexdigest(); cf = os.path.join(cd, key + '.txt')
     if os.path.exists(cf): return open(cf).read()
     for k in range(int(os.environ.get('RVT_EXPECT_SESSION_TRIES', '6'))):
         r = subprocess.run(['python3', os.path.join(HERE, tool), year, ids, f], cwd=WL, capture_output=True, text=True, timeout=int(os.environ.get('RVT_EXPECT_TIMEOUT', '43200')))      # the shared VM lock can make a run wait for hours
