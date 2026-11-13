@@ -368,7 +368,7 @@ def worksharing_state(buf):
     except Exception: return None
     for off in (0, 1):                     # the UTF-16 text starts at an odd offset in some years
         m = re.search(r'Worksharing:\s([^\r\n]*)', d[off:].decode('utf-16le', 'ignore'))
-        if m: return m.group(1).strip()
+        if m: return re.split(r'Username:|[\x00-\x1f]', m.group(1))[0].strip()      # the next BasicFileInfo field can follow without a line break ('CentralUsername:')
     return None
 
 
