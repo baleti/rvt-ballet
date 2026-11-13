@@ -7,6 +7,8 @@ HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 sys.path.insert(0, os.path.expanduser('~/src/savegate'))
 out = os.path.join(tempfile.mkdtemp(), 'o.rvt')
 r = subprocess.run([sys.executable, os.path.join(HERE, 'tools/rvt_add_link.py'), SEED, out, '--src', '1363937'], capture_output=True, text=True)
+assert r.returncode != 0 and not os.path.exists(out) and 'same linked file' in r.stderr, 'same-file clone must be refused by default'
+r = subprocess.run([sys.executable, os.path.join(HERE, 'tools/rvt_add_link.py'), SEED, out, '--src', '1363937', '--same-file'], capture_output=True, text=True)
 assert r.returncode == 0 and os.path.exists(out), r.stderr[-300:]
 from savegate import rvt_elements as R
 a = R.elements(open(SEED, 'rb').read()); b = R.elements(open(out, 'rb').read())

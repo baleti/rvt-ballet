@@ -30,7 +30,10 @@ import rvt_idlist as idlist
 ap=argparse.ArgumentParser(); ap.add_argument('seed'); ap.add_argument('out'); ap.add_argument('--src',type=int,required=True)
 ap.add_argument('--dx',type=float,default=3.0); ap.add_argument('--dy',type=float,default=4.0); ap.add_argument('--dz',type=float,default=0.0); ap.add_argument('--nolatest',action='store_true'); ap.add_argument('--force',action='store_true',help='skip the dependents screen (instances that own children corrupt the model when copied)')
 ap.add_argument('--base',type=int,default=0,help='first new id (internal, multi-partition passes)'); ap.add_argument('--members',default='012',help='which of symbol(0)/instance(1)/detail(2) this pass clones (internal)')
+ap.add_argument('--same-file',action='store_true',help='allow the new link type to keep pointing at the SAME linked file as the source (Revit 2024 VM 2026-11-13: with the target beside the host BOTH link types then read not loaded; a clone with its own path loads fine). Edit the new link type path afterwards (rvtedit set_link_path) instead of using this')
 a=ap.parse_args()
+if not a.same_file and '--members' not in sys.argv and not os.environ.get('RVT_ADD_SAME_FILE'):
+    sys.exit('REFUSED: the clone would point at the same linked file as the source link; Revit 2024 then fails to load BOTH link types when the file is present (VM-verified 2026-11-13). Re-run with --same-file only if you set a new path on the new link type afterwards')
 if not os.environ.get('RVT_ADD_DAMAGED_FORCE'):      # a damaged input (bad gzip member / ECC page) was silently cloned into an 'ok' output (64 flipped bytes, 3 of 3 positions); refuse before building
     import rvt_scan as _S, rvt2text as _T, rvt_entities as _E
     _o = _S.load(a.seed)[0]; _bad = {}
