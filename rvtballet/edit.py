@@ -366,6 +366,12 @@ def _apply_rvtedit(a, b, ops):
                         raise EditError('element %d has records in several partitions (the edit would go to the newest copy, which the viewer cannot read back): rotate refused' % o['eid'])
                 except EditError: raise
                 except Exception: pn = None
+                if o['op'] == 'set_link_path':      # c5x-rvtlink: edit EVERY partition copy of the link type (2026 Electrical: 39 and 41, Revit reads 41); one pass per partition
+                    try: _ps = sorted({str(q) for q, *_ in probe.g.e.m.find(o['eid'])})
+                    except Exception: _ps = []
+                    if len(_ps) > 1:
+                        for q in _ps: groups.setdefault(q, []).append(o)
+                        continue
                 groups.setdefault(pn, []).append(o)
             del probe
             if len(groups) > 1 and any(o['op'] == 'delete' for o in ops): raise EditError('a delete cannot be saved together with edits in other partitions of this file (the order across partitions is not preserved): save the delete separately')
@@ -442,7 +448,7 @@ def _set_link_path(ed, o):
     if not olds: raise EditError('element %d is not a link type (no ModelPath.m_path): link path edit refused' % o['eid'])
     try: _parts = {pn for pn, *_ in ed.g.e.m.find(o['eid'])}
     except Exception: _parts = set()
-    if len(_parts) > 1: raise EditError('element %d has records in several partitions (%s): Revit may read a copy this edit does not change (Revit 2026 VM 2026-11-13, silent no-op): link path edit refused' % (o['eid'], ', '.join(sorted(map(str, _parts)))))
+    if len(_parts) > 1 and not os.environ.get('PART'): raise EditError('element %d has records in several partitions (%s): Revit may read a copy this edit does not change (Revit 2026 VM 2026-11-13, silent no-op): link path edit refused' % (o['eid'], ', '.join(sorted(map(str, _parts)))))
     def full(l):
         b = _body(ed, o['eid']); n = struct.unpack_from('<I', b, l[2])[0]; return bytes(b[l[2] + 4:l[2] + 4 + 2 * n]).decode('utf-16le')      # the element's own partition body (ed.g.bj is another buffer on 2025 files: reads were garbage)
     try: old = full(olds[0])      # the reader's l[4] is display-truncated (60 chars): using it duplicated the tail of long paths inside the display path
@@ -657,6 +663,9 @@ def _set_type_num(ed, src, o):
         try: fy = int(_re.search(r'(20[12]\d)', bytes(_cfb.CFB(open(src, 'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le', 'ignore')).group(1))
         except Exception: raise EditError('type parameter edit refused: cannot read the Revit version of the file')
         if fy not in (2024, 2026): raise EditError('type parameter edit is only verified on Revit 2024/2026 files (this file is %d): refused' % fy)
+    try: _mid = _field64(ed, o['eid'], 'FamilySymbol.m_masterId')
+    except (IndexError, KeyError): raise EditError('element %d does not exist in this file: set_type_num refused' % o['eid'])
+    if _mid is not None and _mid != 0xFFFFFFFFFFFFFFFF: raise EditError('element %d is a derived symbol of type %d (FamilySymbol.m_masterId set): edit the master type instead; nothing was changed' % (o['eid'], _mid))
     pid = o.get('pid')
     if pid is None:
         rr = os.path.expanduser('~/rvt-research')
