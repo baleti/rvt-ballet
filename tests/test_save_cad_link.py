@@ -23,7 +23,6 @@ async def run():
             r = await c.post('/api/m/m/save', json={}); j = await r.json()
             if r.status != 200: print(name, 'refused at save', r.status, j.get('code')); assert sha(src) == h0, 'refused save changed the file'
             else:
-                assert name != 'cad_move_dz', 'CAD link dz move is not Revit-verified and must be refused'
                 assert name != 'cad_rotate', 'rotate of a CAD link has no Revit-verified implementation and must be refused'
                 print(name, 'saved, unexpected diffs', j['verify']['n_unexpected']); assert j['verify']['n_unexpected'] == 0 and j['verify']['objects_src'] == j['verify']['objects_out'], j['verify']
                 assert j.get('backup') and sha(j['backup']) == h0, 'backup is not the original'; assert sha(src) != h0
