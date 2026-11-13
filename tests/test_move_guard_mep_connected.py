@@ -23,3 +23,12 @@ def test_geometry_joined_instance_move_is_risky():
     buf = open(STRUCT, 'rb').read()
     r = risky_membership(membership(buf, {607834, 606905}), [{'op': 'move', 'eid': 607834}, {'op': 'move', 'eid': 606905}])
     for i in (607834, 606905): assert any(x.startswith('joined to ') for x in r.get(i, [])), r
+
+
+@pytest.mark.skipif(not os.path.exists(STRUCT), reason='Structural 2024 sample not present')
+def test_framing_support_move_is_risky():
+    """608203 is a point-located column named by 10 beams' m_endStructId and was accepted before."""
+    from rvtballet.save import membership, risky_membership
+    buf = open(STRUCT, 'rb').read()
+    r = risky_membership(membership(buf, {608203}), [{'op': 'move', 'eid': 608203}])
+    assert any(x.startswith('supports ') for x in r.get(608203, [])), r
