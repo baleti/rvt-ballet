@@ -12,7 +12,7 @@ async def run():
     import aiohttp, subprocess
     src = os.path.join(_T, 'src.rvt'); shutil.copy(SRC, src); h0 = sha(src); md = os.path.join(_T, 'm'); os.makedirs(md)
     r = subprocess.run([os.path.join(HERE, 'rvt-ballet'), 'convert', src, _T + '/c0'], capture_output=True, text=True); assert r.returncode == 0, r.stderr[-300:]; db = sqlite3.connect(_T + '/c0/model.sqlite'); assert db.execute("select cls from el where id=%d" % EID).fetchone()[0] == 'ImportInstance'
-    cases = [('cad_move', {'op': 'move', 'eid': EID, 'dx': 1.0}), ('cad_string', {'op': 'set_string', 'eid': EID, 'value': 'c2x test', 'match': ''})]
+    cases = [('cad_move', {'op': 'move', 'eid': EID, 'dx': 1.0}), ('cad_string', {'op': 'set_string', 'eid': EID, 'value': 'c2x test', 'match': ''}), ('cad_rotate', {'op': 'rotate', 'eid': EID, 'deg': 30})]
     models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models)), timeout=aiohttp.ClientTimeout(total=None)) as c:
         await c.get('/api/m/m/saveinfo')
@@ -22,6 +22,7 @@ async def run():
             r = await c.post('/api/m/m/save', json={}); j = await r.json()
             if r.status != 200: print(name, 'refused at save', r.status, j.get('code')); assert sha(src) == h0, 'refused save changed the file'
             else:
+                assert name != 'cad_rotate', 'rotate of a CAD link has no Revit-verified implementation and must be refused'
                 print(name, 'saved, unexpected diffs', j['verify']['n_unexpected']); assert j['verify']['n_unexpected'] == 0 and j['verify']['objects_src'] == j['verify']['objects_out'], j['verify']
                 assert j.get('backup') and sha(j['backup']) == h0, 'backup is not the original'; assert sha(src) != h0
                 if os.environ.get('KEEP_DIR'): shutil.copy(src, os.path.join(os.environ['KEEP_DIR'], name + '.rvt'))
