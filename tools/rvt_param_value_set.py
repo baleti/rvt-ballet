@@ -1,27 +1,43 @@
-"""set a STRING value of a (new) shared parameter on an existing element that already has a string value set (experiment, Autodesk samples only):
+"""KIND (optional 6th arg, default string): string | double | int | eid. double/int/eid insert a fixed-size entry [f64 value][pid u64] (double, as written by Revit) | [pid u64][i32] (int, layout from existing sets, NOT Revit-verified) into the element's ParamValueSetDouble/Int/ElementId (sorted by signed pid, count bumped); refused unless that set object already exists on the element (a null set pointer would need a new object, not built) and the parameter definition type matches (double: has m_specTypeId; int: has m_lowBound).
+set a STRING value of a (new) shared parameter on an existing element that already has a string value set (experiment, Autodesk samples only):
 usage rvt_param_value_set.py SRC OUT EID PARAM_NAME VALUE   (inserts [pid u64][nchars u32][utf16] into ParamValueSetAString in signed pid order, bumps the count)"""
 import sys,os,struct
-if len(sys.argv)!=6: sys.exit(__doc__)
+if len(sys.argv) not in (6,7): sys.exit(__doc__)
 src,out,eid,pname,val=sys.argv[1],sys.argv[2],int(sys.argv[3]),sys.argv[4],sys.argv[5]
+kind=sys.argv[6] if len(sys.argv)==7 else 'string'
+if kind not in ('string','double','int','eid'): sys.exit('REFUSED: unknown kind')
 if os.path.realpath(src)==os.path.realpath(out): sys.exit('REFUSED: output path equals the input file; nothing written')
 for p in ('~/rvt-research/edit-lab','~/rvt-research/write-lab','~/rvt-research'): sys.path.insert(0,os.path.expanduser(p))
 os.environ.setdefault('RVT_GEOM','1')
 import rvtedit, rvt_xcache
-if any(ord(c)>0xFFFF or ord(c)<32 for c in val): sys.exit('REFUSED: unsupported characters in value; nothing written')
+if kind=='string' and any(ord(c)>0xFFFF or ord(c)<32 for c in val): sys.exit('REFUSED: unsupported characters in value; nothing written')
 recs=rvt_xcache.get_x_ro(src)['recs']
 pids=[k[0] for k,v in recs.items() if v['class']=='ParamElemExternal' and (v['fields'].get('m_pParamDef') or {}).get('obj',{}).get('m_caption')==pname]
 if len(pids)!=1: sys.exit('REFUSED: parameter %r found %d times; nothing written'%(pname,len(pids)))
 pid=pids[0]
 ed=rvtedit.Edit(src); log=ed.g.e.trace(eid)[3]
 L={l[1]:l for l in log}
-if 'ParamValueSetAString.m_paramSet' not in L: sys.exit('REFUSED: element %d has no string value set to extend; nothing written'%eid)
-a,b=L['ParamValueSetAString.m_paramSet'][2],L['ParamValueSetAString.m_paramSet'][3]
+SETS={'string':'ParamValueSetAString.m_paramSet','double':'ParamValueSetDouble.m_paramSet','int':'ParamValueSetInt.m_paramSet','eid':'ParamValueSetElementId.m_paramSet'}
+if kind!='string':
+    d=(recs[(pid,'ParamElemExternal')] if (pid,'ParamElemExternal') in recs else [v for k,v in recs.items() if (k[0] if isinstance(k,tuple) else k)==pid][0])['fields']['m_pParamDef']['obj']
+    if kind=='double' and 'm_specTypeId' not in d: sys.exit('REFUSED: parameter definition is not a Double type; nothing written')
+    if kind=='int' and 'm_lowBound' not in d: sys.exit('REFUSED: parameter definition is not an Integer type; nothing written')
+    if kind=='int': sys.exit('REFUSED: int parameter values not Revit-verified; nothing written')
+    if kind=='eid': sys.exit('REFUSED: element-id parameter values not verified; nothing written')
+    FS={'double':16,'int':12}[kind]
+    try: pk=struct.pack('<d',float(val)) if kind=='double' else struct.pack('<i',int(val))
+    except ValueError: sys.exit('REFUSED: value does not parse; nothing written')
+if SETS[kind] not in L: sys.exit('REFUSED: element %d has no %s value set object to extend; nothing written'%(eid,kind))
+a,b=L[SETS[kind]][2],L[SETS[kind]][3]
 raw=bytes(ed.g.bj[a:b]); n=struct.unpack_from('<I',raw,0)[0]; o=4; ents=[]
 for _ in range(n):
-    k=struct.unpack_from('<Q',raw,o)[0]; m=struct.unpack_from('<I',raw,o+8)[0]; ents.append((k,raw[o:o+12+2*m])); o+=12+2*m
-if o!=len(raw): sys.exit('REFUSED: string value set did not parse (%d != %d); nothing written'%(o,len(raw)))
+    k=struct.unpack_from('<Q',raw,o+8 if kind=='double' else o)[0]
+    sz=12+2*struct.unpack_from('<I',raw,o+8)[0] if kind=='string' else FS
+    ents.append((k,raw[o:o+sz])); o+=sz
+if o!=len(raw): sys.exit('REFUSED: value set did not parse (%d != %d); nothing written'%(o,len(raw)))
 sg=lambda k: k-(1<<64) if k>=1<<63 else k
 if any(k==pid for k,_ in ents): sys.exit('REFUSED: parameter already has a value on this element; use set-by-pid; nothing written')
-ents.append((pid,struct.pack('<QI',pid,len(val))+val.encode('utf-16-le'))); ents.sort(key=lambda t:sg(t[0]))
+if [sg(k) for k,_ in ents]!=sorted(sg(k) for k,_ in ents): sys.exit('REFUSED: existing set not in signed pid order; nothing written')
+ents.append((pid,(struct.pack('<QI',pid,len(val))+val.encode('utf-16-le')) if kind=='string' else (pk+struct.pack('<Q',pid) if kind=='double' else struct.pack('<Q',pid)+pk))); ents.sort(key=lambda t:sg(t[0]))
 new=struct.pack('<I',len(ents))+b''.join(e for _,e in ents)
-ed._rec_edit(eid,[(a,b-a,new)]); ed.save(out); print('wrote',out,'pid',pid,'on',eid)
+ed._rec_edit(eid,[(a,b-a,new)]); ed.save(out); print('wrote',out,'pid',pid,'on',eid,kind)
