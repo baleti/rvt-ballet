@@ -5,7 +5,7 @@ import sys,os,struct
 if len(sys.argv) not in (6,7): sys.exit(__doc__)
 src,out,eid,pname,val=sys.argv[1],sys.argv[2],int(sys.argv[3]),sys.argv[4],sys.argv[5]
 kind=sys.argv[6] if len(sys.argv)==7 else 'string'
-if kind not in ('string','double','int','eid'): sys.exit('REFUSED: unknown kind')
+if kind not in ('string','double','int','yesno','eid'): sys.exit('REFUSED: unknown kind')
 if os.path.realpath(src)==os.path.realpath(out): sys.exit('REFUSED: output path equals the input file; nothing written')
 for p in ('~/rvt-research/edit-lab','~/rvt-research/write-lab','~/rvt-research'): sys.path.insert(0,os.path.expanduser(p))
 os.environ.setdefault('RVT_GEOM','1')
@@ -20,8 +20,11 @@ L={l[1]:l for l in log}
 SETS={'string':'ParamValueSetAString.m_paramSet','double':'ParamValueSetDouble.m_paramSet','int':'ParamValueSetInt.m_paramSet','eid':'ParamValueSetElementId.m_paramSet'}
 if kind!='string':
     d=(recs[(pid,'ParamElemExternal')] if (pid,'ParamElemExternal') in recs else [v for k,v in recs.items() if (k[0] if isinstance(k,tuple) else k)==pid][0])['fields']['m_pParamDef']['obj']
+    _pt=(recs[(pid,'ParamElemExternal')] if (pid,'ParamElemExternal') in recs else [v for k,v in recs.items() if (k[0] if isinstance(k,tuple) else k)==pid][0])['fields']['m_pParamDef']['ptr']   # definition class pointer encodes the data type (Revit-made files: 672 text, 514 int, 680 double, 3002 yes/no, 2916 material)
+    if kind=='yesno' and (_pt!=3002 or val not in ('0','1')): sys.exit('REFUSED: not a Yes/No parameter or value not 0/1; nothing written')
+    if kind=='yesno': kind='int'
+    elif kind=='int' and _pt!=514: sys.exit('REFUSED: parameter definition is not an Integer type; nothing written')
     if kind=='double' and 'm_specTypeId' not in d: sys.exit('REFUSED: parameter definition is not a Double type; nothing written')
-    if kind=='int' and 'm_lowBound' not in d: sys.exit('REFUSED: parameter definition is not an Integer type; nothing written')
     if kind=='eid': sys.exit('REFUSED: element-id parameter values not verified; nothing written')
     FS={'double':16,'int':12}[kind]
     try: pk=struct.pack('<d',float(val)) if kind=='double' else struct.pack('<i',int(val))
