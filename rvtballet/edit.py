@@ -408,6 +408,8 @@ def _set_link_path(ed, o):
     import re as _re2
     _v = o['value']
     if not isinstance(_v, str) or not _v or _re2.search(r'[<>"|?*\x00-\x1f]', _v): raise EditError('link path has empty value or characters Windows forbids (<>"|?* or control): refused')
+    try: _v.encode('utf-16-le')
+    except UnicodeEncodeError: raise EditError('link path has an unpaired surrogate (not valid UTF-16): refused')
     if len(_v) > 259: raise EditError('link path is %d chars (> 259, Windows MAX_PATH): refused, Revit behaviour beyond it is untested' % len(_v))
     _segs = [x for x in _re2.split(r'[\\/]', _v) if x]
     if any(x in ('.', '..') for x in _segs): raise EditError("link path contains '.' or '..' segments (Revit normalises them, the stored path would not match): refused")
