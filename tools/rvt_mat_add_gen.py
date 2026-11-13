@@ -1,6 +1,7 @@
 """material create on an ARBITRARY 2024 project (experiment; Autodesk samples only): usage gen.py SEED OUT NAME
 Clones the Revit-made empty MaterialElem (c5xmat pair: name only, no assets), new id, new name; appends the id to the Latest id-list(s) holding existing MaterialElem ids."""
 import sys,os,re,struct
+os.environ.setdefault('RVTGEN_INPLACE','1')      # insert into the existing member (Revit's own way); the default append path produces CArchiveException 105 on Structural 2024
 if len(sys.argv) != 4: sys.exit('usage: rvt_mat_add_gen.py SEED OUT NAME')
 if os.path.realpath(sys.argv[1]) == os.path.realpath(sys.argv[2]): sys.exit('REFUSED: output path equals the input file; nothing written')
 WL=os.path.expanduser('~/rvt-research/write-lab'); sys.path.insert(0,WL); sys.path.insert(1,os.path.expanduser('~/rvt-research'))
