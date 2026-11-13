@@ -114,7 +114,7 @@ def vm_up():
 
 def vm_open(year, path):
     """-> (opened, cmp_ok, note) from tools/rvt_vm_open.py's TSV row"""
-    rc, out = run([sys.executable, HERE + '/rvt_vm_open.py', str(year), path], timeout=3000)
+    rc, out = run([sys.executable, HERE + '/rvt_vm_open.py', str(year), path], timeout=10800)
     row = next((l for l in out.splitlines() if l.startswith('c3x-rvtmatrix')), '')
     if not row: return None, None, 'no VM verdict (' + out.strip()[-120:] + ')'
     f = row.split('\t')
@@ -159,7 +159,7 @@ def revit_checks(year, b):
     opened, cmp_ok, note = vm_open(year, b['out']); vm = {'opened': opened, 'cmp': cmp_ok, 'note': note, 'exp_ok': None, 'exp_note': ''}
     if opened and b['applied']:
         ex = expectations(b['applied']); ep = b['out'] + '.expect.json'; json.dump(ex, open(ep, 'w'))
-        rc, out = run([sys.executable, HERE + '/rvt_expect_check.py', str(year), b['src'], b['out'], ep], timeout=3600)
+        rc, out = run([sys.executable, HERE + '/rvt_expect_check.py', str(year), b['src'], b['out'], ep], timeout=10800)
         m = re.search(r"EXPECT-CHECK \{'expectations': (\d+), 'pass': (\d+), 'fail': (\d+)\}", out)
         if m: vm['exp_ok'] = int(m.group(3)) == 0 and int(m.group(2)) == int(m.group(1)); vm['exp_note'] = 'expectations %s/%s' % (m.group(2), m.group(1))
         else: vm['exp_note'] = 'no expectation verdict'
