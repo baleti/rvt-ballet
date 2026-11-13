@@ -20,7 +20,9 @@ def _chain(s):
 dsecs = list(_chain(dstart)); ents = [e for e in _c.entries if e.type == 2]
 for i in range(n):
     d = bytearray(b)
-    if MODE == 'hdr':
+    if MODE == 'trunc':
+        off = r.randrange(1, len(b) // _ss) * _ss + (0 if r.random() < .5 else r.randrange(1, _ss)); d = d[:off + (512 if _c.major == 3 else 0)]
+    elif MODE == 'hdr':
         off = r.choice([r.randrange(28, 76), r.randrange(76, 512)]); d[off] ^= 1 << r.randrange(8)
     else:
         e = r.choice(ents); pos = dsecs[e.idx * 128 // _ss]; off = _off(pos) + (e.idx * 128) % _ss + 120 + r.choice([3, 4, 5, 7])
