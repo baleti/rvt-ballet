@@ -13,6 +13,7 @@ async def run():
     src = os.path.join(_T, 'src.rvt'); shutil.copy(SRC, src); h0 = sha(src); md = os.path.join(_T, 'm'); os.makedirs(md)
     r = subprocess.run([os.path.join(HERE, 'rvt-ballet'), 'convert', src, _T + '/c0'], capture_output=True, text=True); assert r.returncode == 0, r.stderr[-300:]; db = sqlite3.connect(_T + '/c0/model.sqlite'); assert db.execute("select cls from el where id=%d" % EID).fetchone()[0] == 'ImportInstance'
     cases = [('cad_move', {'op': 'move', 'eid': EID, 'dx': 1.0}), ('cad_string', {'op': 'set_string', 'eid': EID, 'value': 'c2x test', 'match': ''}), ('cad_move_dy', {'op': 'move', 'eid': EID, 'dy': -2.5}), ('cad_move_dz', {'op': 'move', 'eid': EID, 'dz': 0.5}), ('cad_rotate', {'op': 'rotate', 'eid': EID, 'deg': 30})]
+    if os.environ.get('CAD_ONLY'): cases = [c for c in cases if c[0] in os.environ['CAD_ONLY'].split(',')]      # e.g. CAD_ONLY=cad_move_dz: one case per run (each save costs minutes on a loaded host)
     models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models)), timeout=aiohttp.ClientTimeout(total=None)) as c:
         await c.get('/api/m/m/saveinfo')
