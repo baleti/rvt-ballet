@@ -35,12 +35,17 @@ fake_cfb = types.ModuleType('cfb'); fake_cfb.CFB = FakeCFB; real_cfb = sys.modul
 calls = []
 class FakeEdit:
     def __init__(self, path):
-        self.path = path; self.g = types.SimpleNamespace(e=types.SimpleNamespace(m=types.SimpleNamespace(parts={'a': 1, 'b': 2}), trace=lambda eid: ('Partitions/%d' % (1 if eid < 100 else 2), 0, {'class': 'FamilyInstance'}, [])))
+        self.path = path; self.g = types.SimpleNamespace(e=types.SimpleNamespace(m=types.SimpleNamespace(parts={'a': 1, 'b': 2}, find=lambda eid: [(1 if eid < 100 else 2,)]), trace=lambda eid: ('Partitions/%d' % (1 if eid < 100 else 2), 0, {'class': 'FamilyInstance'}, [])))
+    def owned_set(self, eid): return [eid]
+    def delete(self, *ids): pass
     def move(self, eid, dx, dy, dz): calls.append(('move', eid, os.environ.get('PART')))
     def set_string(self, eid, old, new):
         if eid == 777: raise RuntimeError('boom in the second pass')
     def save(self, dst): open(dst, 'wb').write(b'x')
 fake_edit = types.ModuleType('rvtedit'); fake_edit.Edit = FakeEdit; real_edit = sys.modules.get('rvtedit'); sys.modules['rvtedit'] = fake_edit
+os.environ['RVTBALLET_DELETE_ANY'] = '1'      # fake class is not delete-verified
+edit.tags_hosting = lambda ed, eid: []      # fake backend has no reader cache (ce47c26 dangling-tag guard has its own test)
+edit._check_member_limit = lambda src, out: None
 dirs = []; real_mk = tempfile.mkdtemp
 def mk(*a, **k): d = real_mk(*a, **k); dirs.append(d); return d
 tempfile.mkdtemp = mk
