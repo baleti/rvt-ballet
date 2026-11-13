@@ -712,6 +712,8 @@ def _set_type_eid(ed, src, o):
     if fy not in (2024, 2026): raise EditError('type parameter edit is only verified on Revit 2024/2026 files (this file is %d): refused' % fy)
     tr = ed.g.e.trace(o['eid']); log = tr[3]
     if tr[2].get('class') != 'FamilySymbol': raise EditError('element %d is not a FamilySymbol (type); nothing was changed' % o['eid'])
+    _mid = _field64(ed, o['eid'], 'FamilySymbol.m_masterId')
+    if _mid is not None and _mid != 0xFFFFFFFFFFFFFFFF: raise EditError('element %d is a derived symbol of type %d (FamilySymbol.m_masterId set): edit the master type instead; nothing was changed' % (o['eid'], _mid))
     n = [k for k, l in enumerate(log) if l[1] == 'NamedParam.m_paramId' and _eid_val(l[4]) == o['pid']]
     if len(n) != 1: raise EditError('element %d has %d NamedParam entries for parameter %d (need exactly 1)' % (o['eid'], len(n), o['pid']))
     k = n[0]; ev = [log[j] for j in range(max(k - 12, 0), min(k + 12, len(log))) if log[j][1] == 'NamedParam.m_elemId']
