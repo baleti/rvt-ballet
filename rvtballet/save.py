@@ -1060,8 +1060,8 @@ def _readback(src_buf, nb, ops):
         if any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv): continue
         try: cl = _bbox_class(src_buf, o['eid'])
         except Exception: cl = ''
-        if cl and cl not in ('FamilyInstance', 'SWall', 'LinearDimString', 'RvtLinkInstance', 'TextNote', 'Level', 'Grid', 'Viewport'): bad.append('moved element %d: class %s has no readable displacement witness, so the move cannot be verified (refused)' % (o['eid'], cl))
-        elif cl in ('FamilyInstance', ''):      # '' = the class index does not list the element (older files): box or record origin must witness
+        if cl and cl not in ('FamilyInstance', 'ImportInstance', 'SWall', 'LinearDimString', 'RvtLinkInstance', 'TextNote', 'Level', 'Grid', 'Viewport'): bad.append('moved element %d: class %s has no readable displacement witness, so the move cannot be verified (refused)' % (o['eid'], cl))
+        elif cl in ('FamilyInstance', 'ImportInstance', ''):      # '' = the class index does not list the element (older files): box or record origin must witness
             try: has_box = _bbox_of(src_buf, o['eid']) is not None
             except Exception: has_box = False
             if not has_box:
