@@ -12,6 +12,12 @@ def _refuse_crash(t, v, tb):   # only Revit 2024/2026 layouts are verified; any 
 sys.excepthook = _refuse_crash
 import os
 if os.path.realpath(seed)==os.path.realpath(out): sys.exit('REFUSED: output path equals the input file; this tool writes a copy only')
+# explicit year guard: the writer is verified on 2024 only; other years must be refused before any parsing
+sys.path[:0] = [os.path.expanduser('~/rvt-research/write-lab')]
+import re as _re, cfb as _cfb
+try: _fy = int(_re.search(r'(20[12]\d)', bytes(_cfb.CFB(open(seed, 'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le', 'ignore')).group(1))
+except Exception: sys.exit('REFUSED: cannot read the Revit version of the file; nothing written')
+if _fy != 2024: sys.exit('REFUSED: duplicate type is only built for Revit 2024 files (this file is %d); nothing written' % _fy)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from rvtballet import edit as _ed
 _ed._check_element_name(name)          # Revit's name rules (empty, forbidden chars, control/format chars)
