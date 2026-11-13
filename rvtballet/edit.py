@@ -404,6 +404,13 @@ def _set_link_path(ed, o):
         n = struct.unpack_from('<I', ed.g.bj, l[2])[0]; return bytes(ed.g.bj[l[2] + 4:l[2] + 4 + 2 * n]).decode('utf-16le')
     old = full(olds[0])      # the reader's l[4] is display-truncated (60 chars): using it duplicated the tail of long paths inside the display path
     if not isinstance(old, str) or not old: raise EditError('element %d: existing link path is empty or unreadable: refused' % o['eid'])
+    # Revit 2024 VM 2026-11-13 (c5x-rvtlink, 6 odd-path variants): <>|?*, '..' segments, reserved device names and trailing dot/space opened without repair but gave NotFound/normalised/mismatched paths: refuse them
+    import re as _re2
+    _v = o['value']
+    if not isinstance(_v, str) or not _v or _re2.search(r'[<>"|?*\x00-\x1f]', _v): raise EditError('link path has empty value or characters Windows forbids (<>"|?* or control): refused')
+    _segs = [x for x in _re2.split(r'[\\/]', _v) if x]
+    if any(x in ('.', '..') for x in _segs): raise EditError("link path contains '.' or '..' segments (Revit normalises them, the stored path would not match): refused")
+    if any(x != x.rstrip(' .') or _re2.fullmatch(r'(?i)(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?', x) for x in _segs): raise EditError('link path has a reserved device name or a segment ending in dot or space: refused')
     # Revit keeps ONE link type per linked file: two link types on one path both fail to load (Revit 2024 VM 2026-11-13, c5x-rvtlink), so refuse a path another link type already has
     try:
         import sys as _sys
