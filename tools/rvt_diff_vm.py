@@ -33,6 +33,7 @@ def cs_for(ops, tag, file):
         elif k == 'addtag': body.append('{ var tt = (IndependentTag)d.GetElement(new ElementId(%sL)); var hh = d.GetElement(new ElementId(%sL)); var nt = IndependentTag.Create(d, tt.OwnerViewId, new Reference(hh), false, TagMode.TM_ADDBY_CATEGORY, TagOrientation.Horizontal, (hh.get_BoundingBox((View)d.GetElement(tt.OwnerViewId)) is BoundingBoxXYZ hb ? (hb.Min + hb.Max) / 2 : XYZ.Zero)); nt.ChangeTypeId(tt.GetTypeId()); log.AppendLine("OP addtag new=" + nt.Id + " view=" + tt.OwnerViewId); }' % (p[1], p[2]))
         elif k == 'loadfam': body.append('{ Family lf; var okf = d.LoadFamily("C:/wl/fam.rfa", out lf); log.AppendLine("OP loadfam ok=" + okf + " fam=" + (lf == null ? "null" : lf.Name + " id " + lf.Id)); }')
         elif k == 'linkrvt': body.append('{ var mp = ModelPathUtils.ConvertUserVisiblePathToModelPath("C:/wl/link.rvt"); var lo = new RevitLinkOptions(false); var lr = RevitLinkType.Create(d, mp, lo); var li = RevitLinkInstance.Create(d, lr.ElementId); log.AppendLine("OP linkrvt type " + lr.ElementId + " inst " + li.Id); }')
+        elif k == 'pinel': body.append('{ var pe = d.GetElement(new ElementId(%sL)); pe.Pinned = true; log.AppendLine("OP pinel " + pe.Id + " pinned=" + pe.Pinned); }' % p[1])
         elif k == 'linkdwgpin': body.append('{ var vp = new FilteredElementCollector(d).OfClass(typeof(ViewPlan)).Cast<ViewPlan>().First(v => !v.IsTemplate); var io = new DWGImportOptions(); io.Placement = ImportPlacement.Origin; ElementId lid; var okl = d.Link("C:/wl/link.dwg", io, vp, out lid); if (okl) { var le = d.GetElement(lid); le.Pinned = true; } log.AppendLine("OP linkdwgpin ok=" + okl + " new id " + lid + " pinned=" + (okl ? d.GetElement(lid).Pinned.ToString() : "-")); }')
         elif k == 'linkdwg': body.append('{ var vp = new FilteredElementCollector(d).OfClass(typeof(ViewPlan)).Cast<ViewPlan>().First(v => !v.IsTemplate); var io = new DWGImportOptions(); io.Placement = ImportPlacement.Origin; ElementId lid; var okl = d.Link("C:/wl/link.dwg", io, vp, out lid); log.AppendLine("OP linkdwg ok=" + okl + " new id " + lid); }')
         elif k == 'linkdwgat': body.append('{ var vp = new FilteredElementCollector(d).OfClass(typeof(ViewPlan)).Cast<ViewPlan>().First(v => !v.IsTemplate); var io = new DWGImportOptions(); io.Placement = ImportPlacement.Origin; ElementId lid; var okl = d.Link("C:/wl/link.dwg", io, vp, out lid); if (okl) { var le = d.GetElement(lid); if (le.Pinned) le.Pinned = false; ElementTransformUtils.MoveElement(d, lid, new XYZ(12.5, 7.25, 0)); } log.AppendLine("OP linkdwgat ok=" + okl + " new id " + lid); }')
@@ -79,7 +80,9 @@ def one(year, port, src, tag, ops):
     if 'loadfam' in ops: guest.put(os.environ['RVTDIFF_RFA'], 'C:/wl/fam.rfa')
     if 'linkrvt' in ops: guest.put(os.environ['RVTDIFF_RVT'], 'C:/wl/link.rvt')
     if 'linkdwg' in ops or 'linkdwgat' in ops or 'linkdwgpin' in ops: guest.put(os.environ['RVTDIFF_DWG'], 'C:/wl/link.dwg')
-    out = guest.run_job(year, port, cs_for(ops, tag, rem), 'diff_' + tag, int(os.environ.get('RVTDIFF_TIMEOUT', '900')))
+    cs = cs_for(ops, tag, rem)
+    if year < 2024: cs = re.sub(r'new ElementId\((\d+)L\)', r'new ElementId(\1)', cs)  # ElementId(long) only exists from Revit 2024
+    out = guest.run_job(year, port, cs, 'diff_' + tag, int(os.environ.get('RVTDIFF_TIMEOUT', '900')))
     print('[%s]' % tag, '\n'.join(l for l in out.replace('\r', '').splitlines() if l.startswith(('OP', 'SAVED', 'FAILURE', 'RESULT'))), flush=True)
     if not any(l.startswith(('OP', 'SAVED', 'FAILURE', 'RESULT')) for l in out.splitlines()): print('[%s] RAW guest output (no OP/SAVED/RESULT lines):' % tag, out[-1500:].replace('\r', ''), flush=True)
     wd = os.path.expanduser('~/c2x-diff/%s' % tag); os.makedirs(wd, exist_ok=True)
