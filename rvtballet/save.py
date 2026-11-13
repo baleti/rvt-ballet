@@ -296,6 +296,13 @@ for (e, c), r in x['recs'].items():
         for w in f:
             for i in ids(w):
                 if i < 2 ** 32 - 1 and i != e: joined.setdefault(e, set()).add(i); joined.setdefault(i, set()).add(e)
+for (e, c), r in x['recs'].items():      # geometry joins (m_geomJoined, Structural 2024 instance 607834 has 6): Revit re-cuts the joined partners on a move, the writer moves only the one record
+    t = []; find(r.get('fields'), 'm_geomJoined', t)
+    for v in t:
+        f = []; find(v, 'm_elemId', f)
+        for w in f:
+            for i in ids(w):
+                if i < 2 ** 32 - 1 and i != e: joined.setdefault(e, set()).add(i); joined.setdefault(i, set()).add(e)
 connected = {}   # element id -> MEP elements named in its own m_pConnectorManager m_arrRefs (Revit 2024 paired run, HVAC fitting move +1 ft: 24 connected duct/fitting records regenerated (GLine origin/endParams, MEPAnalyticalNode); the writer moves only the one instance, leaving the connected curves stale)
 for (e, c), r in x['recs'].items():
     t = []; find(r.get('fields'), 'm_pConnectorManager', t)

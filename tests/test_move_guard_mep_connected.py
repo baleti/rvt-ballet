@@ -12,3 +12,14 @@ def test_connected_fitting_move_is_risky():
     for i in ids: assert any(x.startswith('connected to ') for x in r.get(i, [])), r
     # a parameter edit of the same fitting is not a move: not flagged for connectivity
     assert 1409785 not in risky_membership(membership(buf, {1409785}), [{'op': 'set_str', 'eid': 1409785}])
+
+
+STRUCT = os.path.expanduser('~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt')
+
+@pytest.mark.skipif(not os.path.exists(STRUCT), reason='Structural 2024 sample not present')
+def test_geometry_joined_instance_move_is_risky():
+    """607834 is geometry-joined (m_geomJoined) to 6 instances and was unflagged before this guard."""
+    from rvtballet.save import membership, risky_membership
+    buf = open(STRUCT, 'rb').read()
+    r = risky_membership(membership(buf, {607834, 606905}), [{'op': 'move', 'eid': 607834}, {'op': 'move', 'eid': 606905}])
+    for i in (607834, 606905): assert any(x.startswith('joined to ') for x in r.get(i, [])), r
