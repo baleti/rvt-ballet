@@ -240,6 +240,16 @@ def member_diff_ranges(src, out, dm):
     return res
 
 
+def member_raw_digests(out, dm):
+    """{stream: {str(member): sha256 hex of the decompressed member}} of the writer's own output, for every declared dirty member. The gate (manifest member_raw_sha256) requires the output member to equal it exactly: member_diff_ranges only bounds WHERE bytes differ, a flip of a byte the writer itself changed (rotate: 2 of 6 window flips, c2x-rvtsave 2026-11-12) passed it."""
+    import cfb, rvtw, wlpart, hashlib
+    b = cfb.CFB(out).streams(); res = {}
+    for pn, mem in (dm or {}).items():
+        pb = wlpart.Partition(rvtw.Stream(b[pn].data))
+        for mi in mem: res.setdefault(pn, {})[str(mi)] = hashlib.sha256(bytes(pb.mem[mi]['raw'])).hexdigest()
+    return res
+
+
 def _sweep_stale_edit_dirs(max_age=6 * 3600):
     """a SIGKILL/power loss in the middle of an edit leaves rvtballet-edit-* (a full copy of the user's model) in the temp dir; remove our own such dirs older than max_age (an edit takes minutes)"""
     import time, shutil
@@ -544,6 +554,7 @@ def _rvtedit_pass(a, b, ops):
         except (IndexError, KeyError, StopIteration, AssertionError, struct_error()) as e:
             hint = ' (the record layout of this kind of element, e.g. a group member, is not handled by the edit backend)' if o['op'] in ('move', 'rotate') else ''
             if o['op'] == 'set_string' and o.get('field') in ('DatumPlane.m_text', 'DBView.m_viewName', 'SymbolInfo.m_name'): hint = ' (this element does not have that name field: %s is only for %s, or the match text is not its current name)' % (o['field'], {'DatumPlane.m_text': 'Levels and Grids', 'DBView.m_viewName': 'views', 'SymbolInfo.m_name': 'family types'}[o['field']])
+            if o['op'] == 'set_string' and o.get('field') == 'ParamValueAString.m_value': hint = ' (this element has no stored string parameter value matching that name/match text: CAD links, imports and similar elements keep none, so nothing can be set)'
             if o['op'] == 'rotate' and isinstance(e, KeyError): hint = ' (rotate is only supported for placed family instances such as columns, doors and furniture; walls, floors and annotations cannot be rotated here)'
             raise EditError('element %d: %s could not be applied (%s)%s; nothing was changed' % (o['eid'], o.get('field') or o['op'] + (' parameter %s' % o['pid'] if o.get('pid') is not None else ''), type(e).__name__, hint))
         except RuntimeError as e:        # e.g. rvtedit: 'element N lives in Partitions/X but this save edits Partitions/Y' (one partition per save)

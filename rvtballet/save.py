@@ -632,6 +632,8 @@ def _pending(ss, mid, d, new_bytes, manifest, light=False):
     if mf.get('member_span_max') and len(cops) == 1 and cops[0].get('op') in ('move', 'rotate', 'set_num') and os.environ.get('RVTBALLET_RANGE_RULE', '1') == '1':      # c2x-rvtsave: exact writer byte runs per equal-length dirty member (a flip next to the edit inside the span window was accepted)
         from .edit import member_diff_ranges
         mf['member_diff_ranges'] = member_diff_ranges(d.buf, nb, dm)
+        from .edit import member_raw_digests
+        mf['member_raw_sha256'] = member_raw_digests(nb, dm)
     _declare_bucket0(mf)
     if echoes: mf['modified'] = sorted(set(mf['modified']) | {'el:%d' % i for i in echoes}); ss.derived[mid] = len(echoes)
     else: ss.derived.pop(mid, None)
