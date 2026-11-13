@@ -15,8 +15,8 @@ async def run(orig, keep):
     if not c0: print(res, 'NO_CANDIDATE'); return
     e, old = c0[0]; md = tempfile.mkdtemp(dir=_T); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     import aiohttp
-    allp = save._read_params(open(src, 'rb').read()); e2 = next(k for k, v in sorted(allp.items()) if k >= 1000 and k != e and isinstance(v.get('params', {}).get('Comments'), str))
-    steps = [(e, 'Mark', 'chainM1', old), (e2, 'Comments', 'chainC1', allp[e2]['params']['Comments']), (e, 'Mark', 'chainM2', 'chainM1')]
+    allp = save._read_params(open(src, 'rb').read()); e2 = next(k for k, v in sorted(allp.items()) if k >= 1000 and k != e and isinstance(v.get('params', {}).get('Comments'), str) and (not os.environ.get('SAMELEN') or v['params']['Comments']))
+    steps = [(e, 'Mark', 'chainM1', old), (e2, 'Comments', (('Z' * len(allp[e2]['params']['Comments'])) if os.environ.get('SAMELEN') else 'chainC1'), allp[e2]['params']['Comments']), (e, 'Mark', 'chainM2', 'chainM1')]
     shas = [h0]
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
