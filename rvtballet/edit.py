@@ -43,7 +43,7 @@ def _check_text(v):
     if any(ord(ch) > 0xFFFF for ch in v): raise EditError('characters outside the Basic Multilingual Plane (emoji, rare CJK) are not supported in values yet; nothing was changed')
 
 
-_OP_KEYS = {'set_string': {'op', 'eid', 'param', 'value', 'match', 'field', 'pid', 'pids', 'kind', 'expect'}, 'move': {'op', 'eid', 'dx', 'dy', 'dz'}, 'set_num': {'op', 'eid', 'param', 'pid', 'pids', 'value', 'kind'}, 'delete': {'op', 'eid'}, 'rotate': {'op', 'eid', 'deg'}, 'change_type': {'op', 'eid', 'type_eid'}, 'set_type_num': {'op', 'eid', 'param', 'pid', 'value'}, 'set_type_eid': {'op', 'eid', 'pid', 'target'}, 'set_type_material': {'op', 'eid', 'target'}, 'set_link_path': {'op', 'eid', 'value'}, 'set_link_override': {'op', 'eid', 'link', 'linked_view'}}      # strict key sets only for ops whose optional keys are safety guards
+_OP_KEYS = {'set_string': {'op', 'eid', 'param', 'value', 'match', 'field', 'pid', 'pids', 'kind', 'expect'}, 'move': {'op', 'eid', 'dx', 'dy', 'dz'}, 'set_num': {'op', 'eid', 'param', 'pid', 'pids', 'value', 'kind'}, 'delete': {'op', 'eid'}, 'rotate': {'op', 'eid', 'deg'}, 'change_type': {'op', 'eid', 'type_eid'}, 'set_type_num': {'op', 'eid', 'param', 'pid', 'value'}, 'set_type_eid': {'op', 'eid', 'pid', 'target'}, 'set_type_material': {'op', 'eid', 'target'}, 'set_link_path': {'op', 'eid', 'value'}, 'set_link_override': {'op', 'eid', 'link', 'linked_view'}, 'set_room_bounding': {'op', 'eid', 'value'}}      # strict key sets only for ops whose optional keys are safety guards
 
 
 # VM-measured (c6x-rvtwrite, 2024 and 2025 Snowdon HVAC): writing the stored ParamValueInt of these does not change what the Revit API reports
@@ -63,7 +63,7 @@ REVIT_IGNORES_STORED_INT = {'Return Airflow', 'Power Load Units', 'Lighting Load
 
 
 def validate_op(op):
-    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate', 'change_type', 'set_link_override', 'set_type_num', 'set_type_eid', 'set_type_material', 'set_link_path'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
+    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate', 'change_type', 'set_link_override', 'set_type_num', 'set_type_eid', 'set_type_material', 'set_link_path', 'set_room_bounding'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
     if not isinstance(op.get('eid'), int) or isinstance(op.get('eid'), bool): raise EditError('eid (element id) must be an integer')
     _ok = _OP_KEYS.get(op['op'])
     if _ok is not None and set(op) - _ok: raise EditError('unknown key(s) %s for %s (a misspelt guard such as match would be silently dropped): nothing was changed' % (sorted(set(op) - _ok), op['op']))
@@ -92,6 +92,11 @@ def validate_op(op):
         if pid is not None and (not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0): raise EditError('pid must be a positive integer (family parameter element id)')
         if nm is not None and (not isinstance(nm, str) or not nm): raise EditError('param must be a caption string')
         return {'op': 'set_type_num', 'eid': op['eid'], 'pid': pid, 'param': nm, 'value': float(v)}
+    if op['op'] == 'set_room_bounding':
+        if os.environ.get('RVTBALLET_ENABLE_ROOMBOUND') != '1': raise EditError('set_room_bounding is disabled (opt-in: RVTBALLET_ENABLE_ROOMBOUND=1; no Revit open verdict yet)')
+        if BACKEND() != 'rvtedit': raise EditError('set_room_bounding needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
+        if not isinstance(op.get('value'), bool): raise EditError('value must be true or false')
+        return {'op': 'set_room_bounding', 'eid': op['eid'], 'value': op['value']}
     if op['op'] == 'set_type_eid':
         if os.environ.get('RVTBALLET_ENABLE_TYPEEID') != '1': raise EditError('set_type_eid is disabled (opt-in: RVTBALLET_ENABLE_TYPEEID=1; no Revit evidence for it yet)')
         if BACKEND() != 'rvtedit': raise EditError('set_type_eid needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
@@ -190,6 +195,7 @@ def compose(ops):
         elif o['op'] == 'rotate': k = ('rotate', e)
         elif o['op'] == 'set_type_num': k = ('set_type_num', e, o.get('pid'), o.get('param'))
         elif o['op'] == 'set_type_eid': k = ('set_type_eid', e, o.get('pid'))
+        elif o['op'] == 'set_room_bounding': k = ('set_room_bounding', e)      # the last value wins
         elif o['op'] == 'set_type_material': k = ('set_type_material', e)
         elif o['op'] == 'change_type': k = ('change_type', e)      # the last type wins
         elif o['op'] == 'set_link_path': k = ('set_link_path', e)      # the last path wins
@@ -432,6 +438,9 @@ def _set_link_path(ed, o):
     except (IndexError, KeyError, StopIteration, OverflowError, TypeError, ValueError): raise EditError('element %r does not exist in this file: link path edit refused' % (o['eid'],))
     olds = [l for l in log if l[1] == 'ModelPath.m_path']
     if not olds: raise EditError('element %d is not a link type (no ModelPath.m_path): link path edit refused' % o['eid'])
+    try: _parts = {pn for pn, *_ in ed.g.e.m.find(o['eid'])}
+    except Exception: _parts = set()
+    if len(_parts) > 1: raise EditError('element %d has records in several partitions (%s): Revit may read a copy this edit does not change (Revit 2026 VM 2026-11-13, silent no-op): link path edit refused' % (o['eid'], ', '.join(sorted(map(str, _parts)))))
     def full(l):
         b = _body(ed, o['eid']); n = struct.unpack_from('<I', b, l[2])[0]; return bytes(b[l[2] + 4:l[2] + 4 + 2 * n]).decode('utf-16le')      # the element's own partition body (ed.g.bj is another buffer on 2025 files: reads were garbage)
     try: old = full(olds[0])      # the reader's l[4] is display-truncated (60 chars): using it duplicated the tail of long paths inside the display path
@@ -520,6 +529,18 @@ def _change_type(ed, o):
     ed.set_field(o['eid'], 'FamilyInstance.m_masterSymbolId', o['type_eid'], fmt='<Q')
 
 
+def _set_room_bounding(ed, o):
+    """Room Bounding yes/no on a host object (wall/floor/...): one byte HostObj.m_roomBounding (paired Revit experiment, Structural 2024 wall: 01 -> 00, only that byte plus regenerated caches changed). Refused unless the field is exactly 1 byte holding 0 or 1."""
+    try: log = ed.g.e.trace(o['eid'])[3]
+    except (IndexError, KeyError): raise EditError('element %d does not exist in this file: set_room_bounding refused' % o['eid'])
+    f = [l for l in log if l[1] == 'HostObj.m_roomBounding']
+    if len(f) != 1 or f[0][3] - f[0][2] != 1: raise EditError('element %d has no single-byte HostObj.m_roomBounding: refused' % o['eid'])
+    cur = _body(ed, o['eid'])[f[0][2]]
+    if cur not in (0, 1): raise EditError('element %d: m_roomBounding holds %d (not 0/1): refused' % (o['eid'], cur))
+    if cur == int(o['value']): raise EditError('element %d: Room Bounding is already %s' % (o['eid'], bool(cur)))
+    ed.set_field(o['eid'], 'HostObj.m_roomBounding', int(o['value']), fmt='<B')
+
+
 def _move_datum(ed, o):
     """Level / Grid move: the datum's position is Plane.m_origin (stored twice in the element record; DatumPlane.m_freeEnd/m_bubbleEnd are constant defaults, measured on Autodesk HVAC 2024).
     Level: only dz (a level is a horizontal plane; in-plane shifts are refused). Grid: only the component along the plane normal (shifting a grid along its own line changes extents that are not rewritten here: refused)."""
@@ -592,6 +613,7 @@ def _rvtedit_pass(a, b, ops):
             elif o['op'] == 'set_type_num': _set_type_num(ed, a, o)
             elif o['op'] == 'set_type_eid': _set_type_eid(ed, a, o)
             elif o['op'] == 'set_type_material': _set_type_material(ed, a, o)
+            elif o['op'] == 'set_room_bounding': _set_room_bounding(ed, o)
             elif o['op'] == 'set_string' and o.get('kind') == 'AString': _set_string_by_pid(ed, o)
             elif o['field'] == 'ParamValueAString.m_value': ed.set_string(o['eid'], o['match'], o['value'])
             else:
