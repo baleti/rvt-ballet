@@ -89,6 +89,9 @@ def one(year, port, src, tag, ops):
     out = guest.run_job(year, port, cs, 'diff_' + tag, int(os.environ.get('RVTDIFF_TIMEOUT', '900')))
     print('[%s]' % tag, '\n'.join(l for l in out.replace('\r', '').splitlines() if l.startswith(('OP', 'SAVED', 'FAILURE', 'RESULT'))), flush=True)
     if not any(l.startswith(('OP', 'SAVED', 'FAILURE', 'RESULT')) for l in out.splitlines()): print('[%s] RAW guest output (no OP/SAVED/RESULT lines):' % tag, out[-1500:].replace('\r', ''), flush=True)
+    if not any(l.startswith(('OP', 'SAVED', 'FAILURE', 'RESULT')) for l in out.splitlines()):
+      try: print('[%s] JOURNAL tail (dialog text hunt):' % tag, guest.journal_tail(year, 80).replace('\r', '')[-3500:], flush=True)
+      except Exception as e: print('[%s] journal_tail failed %r' % (tag, e), flush=True)
     wd = os.path.expanduser('~/c2x-diff/%s' % tag); os.makedirs(wd, exist_ok=True)
     ok = 'SAVED after' in out and all(guest.get('C:/wl/out/%s_%s%s' % (tag, k, EXT(src)), os.path.join(wd, '%s%s' % (k, EXT(src))), int(os.environ.get('RVTDIFF_GET_TIMEOUT', '1200'))) for k in ('base', 'after'))
     return ok, wd
