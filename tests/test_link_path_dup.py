@@ -16,4 +16,7 @@ for v in ('Brand_New.rvt', 'Snowdon Towers Sample Structural.rvt'): edit._set_li
 for v in ('a<b>.rvt', 'a|b?c*.rvt', '..\\x\\..\\y.rvt', 'COM1.rvt', 'trail.rvt .', '', 'a\ud800b.rvt', 'd\\' * 130 + 'x.rvt'):
     try: edit._set_link_path(ed, {'eid': 1363937, 'value': v}); raise SystemExit('odd path accepted: %r' % v)
     except edit.EditError: pass
+for e in (99999999, -1):
+    try: edit._set_link_path(ed, {'eid': e, 'value': 'x.rvt'}); raise SystemExit('missing eid accepted')
+    except edit.EditError: pass
 print('OK link path duplicate guard')
