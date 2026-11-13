@@ -25,6 +25,8 @@ async def run(orig, keep):
             r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': eid, 'param': p, 'value': val, 'match': m}); row = {'step': i, 'param': p, 'edit': r.status}
             if r.status == 200:
                 r = await c.post('/api/m/m/save', json={}, timeout=aiohttp.ClientTimeout(total=None)); j = await r.json(); row.update(save=r.status, code=j.get('code', 'ok')); (r.status != 200) and row.update(err=str(j.get('error'))[:300])
+                if r.status != 200 and os.environ.get('UNDO_REFUSED'):
+                    u = await c.post('/api/m/m/edit/undo', json={}); row['undo'] = u.status
                 if r.status == 200:
                     after = save._read_params(open(src, 'rb').read()); row['only_target'] = [k for k in before if before[k] != after.get(k)] == [eid] and after[eid]['params'][p] == val
                     shas.append(sha(src))
