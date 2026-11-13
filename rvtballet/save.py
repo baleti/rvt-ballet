@@ -709,6 +709,19 @@ _ECHO_ALIAS = {'Name': ('View Name',), 'View Name': ('Name',)}
 _LEVELELEV_KEYS = {'Elevation from Level', 'Coefficient of Utilization', 'Offset From Attachment At Top'}
 
 
+def _assembly_echo(n, x, y):
+    """{'Assembly Description|String'} when the edited parameter is Assembly Code and the reader's derived description of the NEW code is exactly the Uniformat table entry (the table the reader derives it from), or is absent because the new code is not in that table; else empty. Found by c6x-rvtwrite (2024 HVAC): any Assembly Code edit changed this derived description and the read-back refused every such save."""
+    k = 'Assembly Description|String'
+    if n != 'Assembly Code' or not isinstance(y.get(n), str): return set()
+    rr = os.path.expanduser('~/rvt-research')
+    if rr not in sys.path: sys.path.insert(0, rr)
+    try: import rvt_params; tab = getattr(rvt_params, '_ASSEMBLY_DESC', {})
+    except Exception: return set()
+    want = tab.get(y[n])
+    if want is None: return {k} if k not in y else set()
+    return {k} if y.get(k) == want else set()
+
+
 def _offset_echo(n, x, y):
     """{'Unconnected Height|Double'} when the edited parameter is Top Offset / Base Offset and that derived height changed by exactly +delta / -delta (strict, 1e-6); else empty"""
     k = 'Unconnected Height|Double'
@@ -1147,14 +1160,15 @@ def _readback(src_buf, nb, ops):
     for o in tg:
         x, y = g(a.get(o['eid'])), g(b.get(o['eid'])); n = o['param']
         if o['eid'] not in b: bad.append('element %d missing in the output' % o['eid']); continue
-        if len(y) < len(x): bad.append('element %d lost parameters (%d -> %d)' % (o['eid'], len(x), len(y))); continue
+        _ae = _assembly_echo(n, x, y)      # derived Assembly Description of the new Assembly Code (table-exact), may also disappear when the code is not in the table
+        if len(y) + len([k for k in _ae if k in x and k not in y]) < len(x): bad.append('element %d lost parameters (%d -> %d)' % (o['eid'], len(x), len(y))); continue
         ch = {k for k in set(x) | set(y) if x.get(k) != y.get(k)}
         if n not in ch and not (n in x and x[n] == o['value']): bad.append('element %d: parameter %r unchanged by the edit' % (o['eid'], n))
         if o['op'] == 'set_string' and y.get(n) != o['value']: bad.append('element %d: %r reads back %r, not the requested value' % (o['eid'], n, str(y.get(n))[:30]))
         if o['op'] == 'set_num' and isinstance(y.get(n), (int, float)) and isinstance(o.get('value'), (int, float)) and abs(float(y[n]) - float(o['value'])) > 1e-6 * max(1.0, abs(float(o['value']))):      # severity: a wrong NUMBER inside the declared element used to pass (c1x-rvtmatrix 2026-11-02)
             bad.append('element %d: %r reads back %r, not the requested %r' % (o['eid'], n, y.get(n), o['value']))
         sib = {q.get('param') for q in tg if q['eid'] == o['eid'] and q is not o}      # parameters the same save edits on this element: each is verified by its own iteration, so they are not 'other' changes (c6x-rvtmatrix item 8)
-        _d = _offset_echo(n, x, y)      # Top/Base Offset: the reader's derived 'Unconnected Height|Double' moves by exactly the offset delta (Revit-verified readback of the same quantity)
+        _d = _offset_echo(n, x, y) | _ae      # Top/Base Offset: the reader's derived 'Unconnected Height|Double' moves by exactly the offset delta (Revit-verified readback of the same quantity)
         if [k for k in ch - {n} - sib - _d if y.get(k) != y.get(n)]: bad.append('element %d: %d other parameter(s) changed (%s)' % (o['eid'], len(ch - {n} - sib), ', '.join('%s: %s -> %s' % (k, str(x.get(k))[:12], str(y.get(k))[:12]) for k in sorted(ch - {n} - sib, key=str)[:4])))
     if bad: raise sg.VerifyFailed('read-back of the edited element(s) failed: %s' % '; '.join(bad[:3]), {'n_unexpected': len(bad), 'unexpected': bad[:20]})
 
