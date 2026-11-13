@@ -360,8 +360,8 @@ def _apply_rvtedit(a, b, ops):
             for o in ops:
                 try:
                     pn = (getattr(probe, 'latest_partition', lambda e: None)(o['eid']) or probe.g.e.trace(o['eid'])[0])
-                    if o['op'] in ('move', 'delete') and len({q for q, *_ in probe.g.e.m.find(o['eid'])}) > 1:      # c5x-rvtlink 2026-11-13: the episode heuristic picked the copy Revit ignores for a 2026 link type (silent no-op the witness cannot see)
-                        raise EditError('element %d has records in several partitions (Revit may read a copy this edit would not change): %s refused' % (o['eid'], o['op']))
+                    if o['op'] != 'set_link_path' and isinstance(o.get('eid'), int) and len({q for q, *_ in probe.g.e.m.find(o['eid'])}) > 1 and os.environ.get('RVTBALLET_MULTIPART_OK') != '1':      # c5x-rvtlink 2026-11-13: the episode heuristic picked the copy Revit ignores for a 2026 link type (silent no-op the witness cannot see)
+                        raise EditError('element %d has records in several partitions (Revit may read a copy this edit would not change; 2026 Electrical sample: 19%% of sampled elements, 2024 Facades: 0%%): %s refused' % (o['eid'], o['op']))
                     if o['op'] == 'rotate' and pn != probe.g.e.trace(o['eid'])[0]:      # older copy elsewhere: the reader sees the OLD copy, so the rotation could not be verified (QUEUE 59e)
                         raise EditError('element %d has records in several partitions (the edit would go to the newest copy, which the viewer cannot read back): rotate refused' % o['eid'])
                 except EditError: raise
@@ -528,6 +528,8 @@ def _change_type(ed, o):
     fam_old = _field64(ed, cur, 'FamilySymbol.m_familyId')
     if fam_old is None or fam_old != fam_new: raise EditError('type %d belongs to another family than the current type %d of element %d: change_type refused (same-family types only)' % (o['type_eid'], cur, o['eid']))
     if cur == o['type_eid']: raise EditError('element %d already has type %d' % (o['eid'], cur))
+    mid = _field64(ed, o['type_eid'], 'FamilySymbol.m_masterId')      # surrogate/derived symbol: Revit API ChangeTypeId refused it (2024 HVAC: 1530089, m_masterId=1379030, empty name)
+    if mid is not None and mid != 0xFFFFFFFFFFFFFFFF: raise EditError('type %d is a derived symbol of type %d (FamilySymbol.m_masterId set), not a user type: change_type refused (Revit rejects it)' % (o['type_eid'], mid))
     ed.set_field(o['eid'], 'FamilyInstance.m_masterSymbolId', o['type_eid'], fmt='<Q')
 
 
