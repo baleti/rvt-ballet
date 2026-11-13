@@ -1,5 +1,7 @@
 """param-only add on an ARBITRARY 2024 project (experiment; Autodesk samples only): usage gen.py SEED OUT"""
 import sys,os,re,struct,json
+if os.environ.get('RVTGEN_INPLACE') == '' and not os.environ.get('RVTGEN_EXPERIMENT'):
+    sys.exit('REFUSED: the member-boundary insert path (RVTGEN_INPLACE empty) produces CArchiveException 105 in Revit on vendor-original files (c5x-rvttype 2026-11-13); set RVTGEN_EXPERIMENT=1 to run it on Revit-saved bases only')
 os.environ.setdefault('RVTGEN_INPLACE','1')      # insert into the existing member (Revit's own way); the default append path produces CArchiveException 105 on Structural 2024
 import uuid as _uuid
 sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab'))
