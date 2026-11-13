@@ -1,5 +1,6 @@
 """regression (c5x-rvtmatrix, RVT-EDIT rung 4): a change_type output that carries a different type (or none) must be refused by save._readback; the honest type change passes. Autodesk 2024 HVAC sample; skipped if absent."""
 import os, sys
+os.environ['RVTBALLET_TEST_ALLOW_DERIVED_TYPE'] = '1'      # these tests exercise save/readback machinery with derived sibling 1530089; Revit itself rejects that swap (see test_changetype_derived_symbol.py)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_ENABLE_CHANGETYPE'] = '1'
 d = os.path.expanduser('~/rvt-research/corpus/2024')

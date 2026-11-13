@@ -1,6 +1,7 @@
 """c7x-rvtread 115d: change_type and set_type_num (each changes only the element partition: HVAC 2024, Partitions/21) now get manifest frozen_streams from save._pending.
 Run: python3 tests/test_save_frozen_changetype.py (skips without the Autodesk 2024 HVAC sample)"""
 import os, sys, types
+os.environ['RVTBALLET_TEST_ALLOW_DERIVED_TYPE'] = '1'      # these tests exercise save/readback machinery with derived sibling 1530089; Revit itself rejects that swap (see test_changetype_derived_symbol.py)
 os.environ.update(RVTBALLET_EDIT_BACKEND='rvtedit', RVTBALLET_ENABLE_CHANGETYPE='1', RVTBALLET_ENABLE_TYPEPARAM='1')
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 sys.path[:0] = [os.path.expanduser(p) for p in ('~/rvt-research', '~/rvt-research/write-lab', '~/src/savegate')]

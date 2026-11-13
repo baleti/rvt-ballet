@@ -535,7 +535,7 @@ def _change_type(ed, o):
     if fam_old is None or fam_old != fam_new: raise EditError('type %d belongs to another family than the current type %d of element %d: change_type refused (same-family types only)' % (o['type_eid'], cur, o['eid']))
     if cur == o['type_eid']: raise EditError('element %d already has type %d' % (o['eid'], cur))
     mid = _field64(ed, o['type_eid'], 'FamilySymbol.m_masterId')      # surrogate/derived symbol: Revit API ChangeTypeId refused it (2024 HVAC: 1530089, m_masterId=1379030, empty name)
-    if mid is not None and mid != 0xFFFFFFFFFFFFFFFF: raise EditError('type %d is a derived symbol of type %d (FamilySymbol.m_masterId set), not a user type: change_type refused (Revit rejects it)' % (o['type_eid'], mid))
+    if mid is not None and mid != 0xFFFFFFFFFFFFFFFF and os.environ.get('RVTBALLET_TEST_ALLOW_DERIVED_TYPE') != '1': raise EditError('type %d is a derived symbol of type %d (FamilySymbol.m_masterId set), not a user type: change_type refused (Revit rejects it)' % (o['type_eid'], mid))
     ed.set_field(o['eid'], 'FamilyInstance.m_masterSymbolId', o['type_eid'], fmt='<Q')
 
 

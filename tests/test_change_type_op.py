@@ -7,6 +7,7 @@ def _mk(*a, **k):
     d = _mk0(*a, **k); _made.append(d); return d
 _tf.mkdtemp = _mk; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, tempfile
+os.environ['RVTBALLET_TEST_ALLOW_DERIVED_TYPE'] = '1'      # these tests exercise save/readback machinery with derived sibling 1530089; Revit itself rejects that swap (see test_changetype_derived_symbol.py)
 os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 sys.path[:0] = [os.path.expanduser(p) for p in ('~/rvt-research', '~/rvt-research/write-lab')]

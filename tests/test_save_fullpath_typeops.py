@@ -6,6 +6,7 @@ def _mkd(*a, **k):
     d = _mkd0(*a, **k); _made.append(d); return d
 _tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
 import os, sys, asyncio, tempfile, shutil, hashlib
+os.environ['RVTBALLET_TEST_ALLOW_DERIVED_TYPE'] = '1'      # these tests exercise save/readback machinery with derived sibling 1530089; Revit itself rejects that swap (see test_changetype_derived_symbol.py)
 _T = tempfile.mkdtemp(); os.environ.update(SAVEGATE_JOURNAL=_T+'/j', SAVEGATE_CACHE=_T+'/c', RVTBALLET_EDIT_BACKEND='rvtedit', RVTBALLET_ENABLE_CHANGETYPE='1', RVTBALLET_ENABLE_TYPEPARAM='1')
 sys.path.insert(0, os.path.expanduser('~/src/rvt-viewer'))
 dd = os.path.expanduser('~/rvt-research/corpus/2024'); RTE = os.path.join(dd, [n for n in os.listdir(dd) if n.endswith('HVAC.rvt')][0])

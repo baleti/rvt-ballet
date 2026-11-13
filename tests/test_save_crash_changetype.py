@@ -2,6 +2,7 @@
 Invariants: after the kill the source is complete and equals either the original (tmp_written, before_replace) or the edited result (after_replace), never a mix; for after_replace a
 backup equal to the original exists and restore_backup puts the original back byte for byte; a following normal SAVE! works. Autodesk 2024 template only."""
 import os, sys, tempfile, hashlib, shutil, subprocess, signal, json
+os.environ['RVTBALLET_TEST_ALLOW_DERIVED_TYPE'] = '1'      # these tests exercise save/readback machinery with derived sibling 1530089; Revit itself rejects that swap (see test_changetype_derived_symbol.py)
 _T = tempfile.mkdtemp(); J = _T + '/j'; C = _T + '/c'
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)
 YEAR = os.environ.get('CRASH_YEAR', '2024')
