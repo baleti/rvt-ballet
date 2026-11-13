@@ -30,7 +30,7 @@ CASES = {
     (C_MOVE, 'grid'): {'bundle': ('Grid', 'HVAC'), 'use': 'move'},
     (C_MOVE, 'window'): {'bundle': ('FamilyInstance', 'Facades'), 'use': 'move'},
     (C_MOVE, 'door'): {'bundle': ('FamilyInstance', 'Facades'), 'use': 'move'},
-    (C_MOVE, 'column'): {'bundle': ('FamilyInstance', 'Structural'), 'use': 'move'},
+    (C_MOVE, 'column'): {'static': ('PASS', 'Structural 2024 W Shapes-Column 608201 move +1 ft and rotate 30 deg: SAVE AS verify_diffs 0, 99.994% untouched, in-place SAVE! byte-identical to SAVE AS, Revit 2024 opens clean, cmp 0/0; Concrete-Rectangular-Column 606069 SAVE AS PASS, in place refused (joined). The generic FamilyInstance bundle picks hosted wall openings, so this row is static until the bundle selects by family category'), 'static_years': [2024]},
     (C_TYPE, 'string parameter'): {'bundle': ('FamilyInstance', 'HVAC'), 'use': 'set_string'},
     (C_TYPE, 'number parameter'): {'bundle': ('Floor', 'Structural'), 'use': 'set_num'},
     (C_FILE, 'save in place (overwrite)'): {'bundle': ('FamilyInstance', 'HVAC'), 'use': 'save_in_place'},
