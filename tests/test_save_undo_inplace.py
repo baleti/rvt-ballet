@@ -24,7 +24,9 @@ async def run():
         r = await c.post('/api/m/m/save', json={}); j = await r.json(); assert r.status == 200 and sha(src) == h0, ('empty-ops in-place save changed the file', r.status, j.get('error'))
         assert (await c.post('/api/m/m/edit', json=mv(301595))).status == 200; await c.post('/api/m/m/edit/undo', json={})
         assert (await c.post('/api/m/m/edit', json=mv(301596))).status == 200
-        r = await c.post('/api/m/m/save', json={}); j = await r.json(); assert r.status == 200, j
+        r = await c.post('/api/m/m/save', json={}); j = await r.json()
+        if r.status != 200: json.dump(j, open(os.path.expanduser('~/c3x-rvtmatrix-work/undo_flake_report_%d.json' % os.getpid()), 'w'), default=str)      # c3x-rvtmatrix AB: keep the full gate report of a flaky refusal
+        assert r.status == 200, j
         assert (await (await c.get('/api/m/m/saveinfo')).json())['pending_edits'] == 0, 'ops not cleared after save'
         h1 = sha(src); assert h1 != h0
         from rvtballet import edit
