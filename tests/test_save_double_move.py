@@ -20,10 +20,11 @@ async def one(ops):
         for op in ops:
             r = await c.post('/api/m/m/edit', json=op)
             if r.status != 200: print('edit refused:', (await r.text())[:200]); return 'refused_edit'
-        r = await c.post('/api/m/m/save', json={}); j = await r.json()
-        if r.status != 200: return 'refused_save'
+        out = os.path.join(d, 'out.rvt')      # SAVE AS: the in-place SAVE is (correctly) refused for this joined column (group_or_option guard, c575f61)
+        r = await c.post('/api/m/m/saveas', json={'dest': out}); j = await r.json()
+        if r.status != 200: print('save refused:', str(j)[:600]); return 'refused_save'
         assert j['verify']['n_unexpected'] == 0
-    return sha(src)
+    return sha(out)
 async def run():
     mv = lambda dx: {'op': 'move', 'eid': 606069, 'dx': dx}
     h0 = sha(SRC); a = await one([mv(1.0), mv(-1.0)]); b = await one([mv(-1.0)])
