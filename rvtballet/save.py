@@ -982,6 +982,12 @@ def _origin_field(src_buf, eid):
     return 'Viewport.m_offset' if c == 'Viewport' else 'TextElement.m_orig' if c == 'TextNote' else 'Plane.m_origin' if c == 'Grid' else 'Trf.m_or'
 
 
+def _box_same(b0, b1):
+    """True when two reader boxes are equal up to float noise (1e-9 ft): a cached tessellation in symbol coordinates that did not follow the move (c5x-rvtread 66: Structural 2024 el 673054 shifted ~1e-14). Such a box is no witness either way; the record origin check decides."""
+    try: return all(abs(b1[i][k] - b0[i][k]) <= 1e-9 for i in (0, 1) for k in range(3))
+    except (TypeError, IndexError, KeyError): return b1 == b0
+
+
 def _origin_move_bad(src_buf, nb, o):
     """box not rebuilt by the writer: the record origin must shift by exactly the declared displacement (c2x-rvtsave: dx=7 bytes passed under declared dx=1). Returns a list of problems."""
     d = (o.get('dx', 0.0), o.get('dy', 0.0), o.get('dz', 0.0))
@@ -1086,7 +1092,7 @@ def _readback(src_buf, nb, ops):
                 if b0 is not None:
                     d = (o['dx'], o['dy'], o['dz'])
                     if b1 is None: bad.append('moved element %d: no geometry in the output' % o['eid'])
-                    elif b1 == b0 and nb != src_buf: bad.extend(_origin_move_bad(src_buf, nb, o))      # box unchanged but the output differs from the source: the cached tessellation of some elements (HVAC duct 1365188) is not rebuilt by the writer although Revit moves the element exactly (+2 ft, API readback); not a witness. Byte-identical output is still refused below
+                    elif _box_same(b0, b1) and nb != src_buf: bad.extend(_origin_move_bad(src_buf, nb, o))      # box unchanged but the output differs from the source: the cached tessellation of some elements (HVAC duct 1365188) is not rebuilt by the writer although Revit moves the element exactly (+2 ft, API readback); not a witness. Byte-identical output is still refused below
                     elif any(abs((b1[i][k] - b0[i][k]) - d[k]) > 1e-6 * max(1.0, abs(d[k])) + 1e-6 for i in (0, 1) for k in range(3)): bad.append('moved element %d: displacement in the output is not the requested (%.4g, %.4g, %.4g); measured box shift (%s)' % ((o['eid'],) + d + (' | '.join(', '.join('%.9g' % (b1[i][k] - b0[i][k]) for k in range(3)) for i in (0, 1)),)))
     for o in [r for r in mv if r['op'] == 'move']:      # no witness, no move: only classes whose displacement the gate can measure (instance box or record origin; wall / dimension origin below) are accepted. SketchPlane and GeoLocation moves used to pass on 'bytes differ' alone (c6x-rvtmatrix 2026-11-04; a project-location shift nobody can read back)
         if any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv): continue
