@@ -28,6 +28,14 @@ async def one_class(c, models, k, src, cls, pr, ix):
     models.m[mid] = {'dir': md, 'name': 'f', 'src': work}
     info = await (await c.get('/api/m/%s/saveinfo' % mid)).json()
     if not info.get('open'): row['result'] = 'NOT_OPEN ' + str(info.get('error'))[:80]; return row
+    from rvtballet import save as _sv
+    _buf0 = open(work, 'rb').read(); _rc = {}
+    def _risky(eid, op):      # same test the overwrite gate uses (save.risky_membership); cached per (eid, op kind)
+        k = (eid, op['op'])
+        if k not in _rc:
+            try: _rc[k] = bool(_sv.risky_membership(_sv.membership(_buf0, {eid}), [op]))
+            except Exception: _rc[k] = True
+        return _rc[k]
     applied = []; refused = {}; used = set()
     for kind in ('set_string', 'set_num', 'move', 'set_field'):
         tried = 0; skip = set()
@@ -51,6 +59,7 @@ async def one_class(c, models, k, src, cls, pr, ix):
                 if not f or not nm: continue
                 op = {'op': 'set_string', 'eid': eid, 'field': f, 'value': nm + os.environ.get('CP_SUFFIX', ' c3x'), 'match': nm, 'param': None}
             else: op = {'op': 'move', 'eid': eid, 'dx': 1.0, 'dy': 0.0, 'dz': 0.0}
+            if _risky(eid, op): refused[kind] = 'skipped: group/design-option member or moved element with dependents (SAVE! would refuse it)'; tried += 1; continue
             tried += 1; st, j = await post(c, mid, op)
             if st == 200: applied.append(op); used.add(eid); break
             refused[kind] = (j.get('error') or j.get('code') or '')[:70]
