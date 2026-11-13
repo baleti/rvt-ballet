@@ -57,6 +57,7 @@ for e in exp:
     elif k == 'param':
         a, b = res['orig']['par'].get((e['eid'], e['name'])), res['out']['par'].get((e['eid'], e['name']))
         if b is None: why = 'not read'
+        elif e.get('type') == 'Changed': a0 = res['orig']['par'].get((e['eid'], e['name'])); ok = a0 is not None and a0[3] != b[3] and (not e.get('value') or b[3] == e['value']); why = 'shown %r -> %r' % (a0 and a0[3], b[3])      # c5x: type change check, display text of Family and Type must differ (and equal value when given)
         elif e['type'] == 'Shown': ok = b[3] == e['value']; why = 'shown %r' % b[3]      # displayed text (ElementId parameters such as Family and Type)
         elif e['type'] == 'String':
             want = ','.join('%X' % ord(c) if ord(c) < 0x10000 else '%X,%X' % (0xD800 + ((ord(c) - 0x10000) >> 10), 0xDC00 + ((ord(c) - 0x10000) & 0x3FF)) for c in e['value'])
