@@ -43,8 +43,13 @@ if os.environ.get('EDIT_FLIP_WINDOW'):      # targeted: N byte flips of the DECO
         for mi in mem:
             ps = wlpart.Partition(rvtw.Stream(cfb.CFB(buf).streams()[pn].data)).mem[mi]['raw']
             c = cfb.CFB(good); st_ = rvtw.Stream(c.streams()[pn].data); pt = wlpart.Partition(st_); r = pt.mem[mi]['raw']
-            if len(ps) != len(r): continue
-            d = [i for i in range(len(r)) if r[i] != ps[i]]
+            if len(ps) != len(r):      # length-changing edit (c2x-rvtsave 105): the edit window is what is left after the common prefix and suffix
+                m_ = min(len(ps), len(r)); pre = 0
+                while pre < m_ and ps[pre] == r[pre]: pre += 1
+                suf = 0
+                while suf < m_ - pre and ps[len(ps) - 1 - suf] == r[len(r) - 1 - suf]: suf += 1
+                d = [pre, max(pre, len(r) - suf - 1)]
+            else: d = [i for i in range(len(r)) if r[i] != ps[i]]
             if not d: continue
             for t in range(int(os.environ['EDIT_FLIP_WINDOW'])):
                 c = cfb.CFB(good); st_ = rvtw.Stream(c.streams()[pn].data); pt = wlpart.Partition(st_); r = pt.mem[mi]['raw']
