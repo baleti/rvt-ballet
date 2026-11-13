@@ -824,7 +824,8 @@ def _same_mark_base(old, new):
     """a column location mark is 'GRID' or 'GRID(offset mm)'; a move changes only the offset ('D-1' -> 'D-1(610)', and 'W(137)-16(1162)' -> 'W(137)-16(1467)' when it already had one): same base text, different or added trailing offset"""
     import re
     new = str(new); strip = lambda t: re.sub(r'\(-?\d+(\.\d+)?\)$', '', t)
-    return bool(old) and (new.startswith(old) or strip(old) == strip(new))      # 'D-1' -> 'D-1(610)', 'W-16(1162)' -> 'W-16(1467)', and 'D-1(610)' -> 'D-1' (moved back onto the grid line)
+    off = lambda t: re.sub(r'''\(-?[\d'" /.\-]+\)''', '()', t)      # imperial offsets "C(6'-4 3/4")-8(9'-6 1/2")" and a move that changes either offset (c5x-rvtmatrix, HSS column 617623): only the offset text inside the brackets may differ, the grid names must match
+    return bool(old) and (new.startswith(old) or strip(old) == strip(new) or (off(old) == off(new) and off(old) != old))      # 'D-1' -> 'D-1(610)', 'W-16(1162)' -> 'W-16(1467)', and 'D-1(610)' -> 'D-1' (moved back onto the grid line)
 
 
 def _tris_of(buf, eid):
