@@ -20,6 +20,7 @@ if len(rows) < 2 or not all(opened(l.replace('revit_open=True', 'revit_open=True
 rc, o2 = run([sys.executable, os.path.join(H, 'rvt_expect_check.py'), year, orig, out, expf], 'expect')
 if rc != 0 or 'fail\': 0' not in o2: print('JUDGE FAIL readback', o2.strip().splitlines()[-3:]); sys.exit(1)
 rc, o3 = run([sys.executable, os.path.join(H, 'rvt_elemhash_readback.py'), year, os.path.join(wd, 'eh'), orig, out], 'hash')
+if not (os.path.exists(os.path.join(wd, 'eh', '0.txt')) and os.path.exists(os.path.join(wd, 'eh', '1.txt'))): print('JUDGE FAIL oracle: hash step produced no output (not a verdict on the file)', [l for l in o3.splitlines() if 'RESULT' in l][:2]); sys.exit(2)
 r = subprocess.run([sys.executable, os.path.join(H, 'rvt_elemhash_compare.py'), os.path.join(wd, 'eh', '0.txt'), os.path.join(wd, 'eh', '1.txt'), allowed], capture_output=True, text=True)
 print(r.stdout.strip())
 if r.returncode != 0: print('JUDGE FAIL untouched elements: differing ids outside the allowed list (explain by dump before trusting the edit)'); sys.exit(1)

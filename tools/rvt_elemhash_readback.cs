@@ -17,7 +17,7 @@ try {
       sb.Append(p.Definition.Name).Append('=').Append(v).Append(';'); } } catch (Exception) { sb.Append("paramerr"); }
     var lp = e.Location as LocationPoint; var lc = e.Location as LocationCurve;
     if (lp != null) sb.Append("LP" + lp.Point.X.ToString("F6") + "," + lp.Point.Y.ToString("F6") + "," + lp.Point.Z.ToString("F6"));
-    if (lc != null) sb.Append("LC" + lc.Curve.GetEndPoint(0).X.ToString("F6") + "," + lc.Curve.GetEndPoint(0).Y.ToString("F6") + "," + lc.Curve.GetEndPoint(1).X.ToString("F6") + "," + lc.Curve.GetEndPoint(1).Y.ToString("F6"));
+    if (lc != null && lc.Curve != null && lc.Curve.IsBound) sb.Append("LC" + lc.Curve.GetEndPoint(0).X.ToString("F6") + "," + lc.Curve.GetEndPoint(0).Y.ToString("F6") + "," + lc.Curve.GetEndPoint(1).X.ToString("F6") + "," + lc.Curve.GetEndPoint(1).Y.ToString("F6"));
     try { var bb = e.get_BoundingBox(null); if (bb != null) sb.Append("BB" + bb.Min.X.ToString("F4") + "," + bb.Min.Y.ToString("F4") + "," + bb.Min.Z.ToString("F4") + "," + bb.Max.X.ToString("F4") + "," + bb.Max.Y.ToString("F4") + "," + bb.Max.Z.ToString("F4")); } catch (Exception) { sb.Append("BBerr"); }      // geometry extent in the hash (c6x-rvtmatrix): a distorted unrelated element changes it
     var gr = e as Grid; if (gr != null) { try { var gc = gr.Curve; if (gc != null && gc.IsBound) sb.Append("GR" + gc.GetEndPoint(0).X.ToString("F6") + "," + gc.GetEndPoint(0).Y.ToString("F6") + "," + gc.GetEndPoint(1).X.ToString("F6") + "," + gc.GetEndPoint(1).Y.ToString("F6")); } catch (Exception) { sb.Append("GRerr"); } }      // c2x-rvtmove: Grid has no LocationCurve, so the move was invisible to the hash
     var tn = e as TextNote; if (tn != null) sb.Append("TN" + tn.Coord.X.ToString("F6") + "," + tn.Coord.Y.ToString("F6"));
