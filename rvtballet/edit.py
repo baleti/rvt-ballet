@@ -403,6 +403,15 @@ def _trf_or(ed, eid):
     except Exception: return None
 
 
+def _is_pinned(ed, eid):
+    """Element.m_locked (Revit Pinned): Revit-made witness, Grid 1363058 HVAC 2024 pinned by the API flips exactly Element.m_locked 0 -> 1. Revit's own API refuses to move a pinned element, so we refuse too."""
+    try:
+        for l in ed.g.e.trace(eid)[3]:
+            if l[1].startswith('Element.m_locked') and l[3] - l[2] == 1: return _body(ed, eid)[l[2]] != 0
+    except Exception: return False
+    return False
+
+
 def _field64(ed, eid, name):
     import struct
     for l in ed.g.e.trace(eid)[3]:
@@ -553,6 +562,7 @@ def _rvtedit_pass(a, b, ops):
                 if o['eid'] in deleted: continue      # already removed by an earlier delete's cascade: no second removal
                 deleted += [i for i in _delete(ed, o['eid']) if i not in deleted]
             elif o['op'] == 'move':
+                if _is_pinned(ed, o['eid']): raise EditError('element %d is pinned (Element.m_locked): moving a pinned element is refused, as Revit does; unpin it first' % o['eid'])
                 _o0 = _trf_or(ed, o['eid'])
                 try:
                     if _o0 == (0.0, 0.0, 0.0) and not any(str(x[1]).startswith('GLine') for x in ed.g.e.trace(o['eid'])[3]): raise EditError('element %d: move refused, its placement origin Trf.m_or is exactly (0,0,0) (host-relative or unplaced), so a move would not change the record; nothing was changed' % o['eid'])
@@ -572,6 +582,7 @@ def _rvtedit_pass(a, b, ops):
                         if 'Leader.m_type' in ld and struct.unpack_from('<i', _body(ed, o['eid']), ld['Leader.m_type'][2])[0] != 0: raise NotImplementedError('text note with an active leader: moving it is switched off (RVTBALLET_ENABLE_LEADERNOTEMOVE=0)')
                     ed.move_annotation(o['eid'], o['dx'], o['dy'])
             elif o['op'] == 'rotate':
+                if _is_pinned(ed, o['eid']): raise EditError('element %d is pinned (Element.m_locked): rotating a pinned element is refused, as Revit does; unpin it first' % o['eid'])
                 if any(str(x[1]).startswith('FamInstCurveDriver.') for x in ed.g.e.trace(o['eid'])[3]): raise EditError('element %d: rotate refused, it is a curve-located family instance (beam / brace: FamInstCurveDriver with its own curve, end joins and cached extents); rotating only its placement frame makes the record inconsistent. Columns and point-located instances are supported' % o['eid'])
                 ed.rotate(o['eid'], o['deg'])
             elif o['op'] == 'change_type': _change_type(ed, o)
