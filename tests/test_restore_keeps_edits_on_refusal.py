@@ -13,10 +13,10 @@ async def run():
     models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models)), timeout=aiohttp.ClientTimeout(total=None)) as c:
         await c.get('/api/m/m/saveinfo')
-        r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': 1365188, 'dx': 2.0}); assert r.status == 200
+        r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': 1362429, 'param': 'Mark', 'value': 'rk1'}); assert r.status == 200, await r.text()
         r = await c.post('/api/m/m/save', json={}); assert r.status == 200, await r.text()
         h1 = sha(src)
-        r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': 1365188, 'dx': 1.0}); assert r.status == 200, await r.text()
+        r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': 1362429, 'param': 'Mark', 'value': 'rk2'}); assert r.status == 200, await r.text()
         files = [os.path.join(rt, n) for rt, _, ns in os.walk(_T + '/c') for n in ns if '.rvt.' in n and not n.endswith('.part')]; assert files, 'no backup'
         for f in files: b = bytearray(open(f, 'rb').read()); b[len(b) // 2] ^= 1; open(f, 'wb').write(bytes(b))      # every backup corrupt
         r = await c.post('/api/m/m/restore', json={'confirm': True, 'n': 0}); assert r.status >= 400, r.status
