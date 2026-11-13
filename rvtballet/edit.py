@@ -277,9 +277,30 @@ def apply_full(buf, ops):
     try:
         with open(a, 'wb') as f: f.write(buf)
         deleted = (_apply_rvtedit if BACKEND() == 'rvtedit' else _apply_wledit)(a, b, ops) or []
-        with open(b, 'rb') as f: return f.read(), deleted
+        with open(b, 'rb') as f: out = f.read()
+        _check_member_limit(buf, out)
+        return out, deleted
     finally:
         import shutil; shutil.rmtree(d, ignore_errors=True)      # everything in it, including intermediate pass files of a failed multi-partition run
+
+
+def _max_member_raw(buf):
+    """largest raw (decompressed) size of any partition member in the file; 0 when there is none"""
+    if WL not in sys.path: sys.path.insert(0, WL)
+    import cfb, rvtw, wlpart
+    big = 0
+    for n, e in cfb.CFB(buf).streams().items():
+        if n.startswith('Partitions/'):
+            big = max([big] + [len(m['raw']) for m in wlpart.Partition(rvtw.Stream(e.data)).mem])
+    return big
+
+
+def _check_member_limit(src, out):
+    """c5x-rvttype 2026-11-13: a partition member above 131088 raw bytes (or above the largest one the source already had) is rejected by Revit (CorruptModelException) although our reader accepts it: never return such an output"""
+    got = _max_member_raw(out)
+    if got <= 131088: return      # the common case costs one scan of the output only
+    lim = max(131088, _max_member_raw(src))
+    if got > lim: raise EditError('edit refused: the result would contain a partition member of %d bytes (limit %d); Revit rejects such a file, nothing written' % (got, lim))
 
 
 def _apply_wledit(a, b, ops):
@@ -403,7 +424,7 @@ def _set_link_path(ed, o):
     olds = [l for l in log if l[1] == 'ModelPath.m_path']
     if not olds: raise EditError('element %d is not a link type (no ModelPath.m_path): link path edit refused' % o['eid'])
     def full(l):
-        n = struct.unpack_from('<I', ed.g.bj, l[2])[0]; return bytes(ed.g.bj[l[2] + 4:l[2] + 4 + 2 * n]).decode('utf-16le')
+        b = _body(ed, o['eid']); n = struct.unpack_from('<I', b, l[2])[0]; return bytes(b[l[2] + 4:l[2] + 4 + 2 * n]).decode('utf-16le')      # the element's own partition body (ed.g.bj is another buffer on 2025 files: reads were garbage)
     try: old = full(olds[0])      # the reader's l[4] is display-truncated (60 chars): using it duplicated the tail of long paths inside the display path
     except (UnicodeDecodeError, struct.error): raise EditError('element %d: the link path bytes do not decode as the verified (2024) layout: refused' % o['eid'])
     if not isinstance(old, str) or not old: raise EditError('element %d: existing link path is empty or unreadable: refused' % o['eid'])
