@@ -32,8 +32,8 @@ def parse_loc(txt):
 def parse_par(txt):
     d = {}
     for l in txt.splitlines():
-        m = re.match(r'RB (\d+)\|(.*?) storage=(\w+) value=(.*?)( shown=.*?)?( len=(\d+) utf16=(\S*))?$', l)
-        if m: d[(int(m.group(1)), m.group(2))] = (m.group(3), m.group(4), m.group(8), (m.group(5) or '').strip()[len('shown='):])
+        m = re.match(r'RB (\d+)\|(.*?) storage=(\w+) value=(.*?)( shown=.*?)?( len=(\d+) utf16=(\S*(?: allx=\w+)?))?$', l)
+        if m: d[(int(m.group(1)), m.group(2))] = (m.group(3), m.group(4), m.group(8), (m.group(5) or '').strip()[len('shown='):], m.group(7))
     return d
 loc_ids = ','.join(sorted({str(e['eid']) for e in exp if e['kind'] in ('move', 'rotate', 'absent')})); par = sorted({'%d|%s' % (e['eid'], e['name']) for e in exp if e['kind'] == 'param'})
 res = {}
@@ -58,7 +58,10 @@ for e in exp:
         a, b = res['orig']['par'].get((e['eid'], e['name'])), res['out']['par'].get((e['eid'], e['name']))
         if b is None: why = 'not read'
         elif e['type'] == 'Shown': ok = b[3] == e['value']; why = 'shown %r' % b[3]      # displayed text (ElementId parameters such as Family and Type)
-        elif e['type'] == 'String': want = ','.join('%X' % ord(c) if ord(c) < 0x10000 else '%X,%X' % (0xD800 + ((ord(c) - 0x10000) >> 10), 0xDC00 + ((ord(c) - 0x10000) & 0x3FF)) for c in e['value']); ok = b[2] == want; why = 'utf16 %s' % b[2]
+        elif e['type'] == 'String':
+            want = ','.join('%X' % ord(c) if ord(c) < 0x10000 else '%X,%X' % (0xD800 + ((ord(c) - 0x10000) >> 10), 0xDC00 + ((ord(c) - 0x10000) & 0x3FF)) for c in e['value'])
+            ok = b[2] == want; why = 'utf16 %s' % b[2]
+            if b[2] is not None and b[2].startswith('LONG'): ok = b[1] == e['value'] and b[4] == str(len(e['value'])); why = 'long value (guest prints no code points above 200 chars): text %s, len %s' % (b[1] == e['value'], b[4])
         else: ok = abs(float(b[1]) - float(e['value'])) < 1e-6; why = 'value %s' % b[1]
     print(('PASS ' if ok else 'FAIL ') + k + ' (' + why + ')'); npass += ok; nfail += not ok
 print('EXPECT-CHECK', {'expectations': len(exp), 'pass': npass, 'fail': nfail})
