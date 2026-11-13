@@ -641,6 +641,9 @@ def _pending(ss, mid, d, new_bytes, manifest, light=False):
         mf['member_diff_ranges'] = member_diff_ranges(d.buf, nb, dm)
         from .edit import member_raw_digests
         mf['member_raw_sha256'] = member_raw_digests(nb, dm)
+    if dm and cops and 'member_raw_sha256' not in mf and os.environ.get('RVTBALLET_DIGEST_RULE', '1') == '1':      # c2x-rvtsave 107: every other op that declares dirty members (delete, change_type, set_type_num, multi-op, ...) is pinned to the writer's own output too
+        from .edit import member_raw_digests
+        mf["member_raw_sha256"] = member_raw_digests(nb, dm)
     _declare_bucket0(mf)
     if echoes: mf['modified'] = sorted(set(mf['modified']) | {'el:%d' % i for i in echoes}); ss.derived[mid] = len(echoes)
     else: ss.derived.pop(mid, None)
