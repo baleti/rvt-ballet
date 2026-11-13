@@ -32,7 +32,7 @@ def parse_loc(txt):
 def parse_par(txt):
     d = {}
     for l in txt.splitlines():
-        m = re.match(r'RB (\d+)\|(.*?) storage=(\w+) value=(.*?)( shown=.*?)?( len=(\d+) utf16=(\S*(?: allx=\w+)?))?$', l)
+        m = re.match(r'RB (\d+)\|(.*?) storage=(\w+) value=(.*?)( shown=.*?)?( len=(\d+) utf16=(\S*(?: allx=\w+)?(?: sha=\w+)?))?$', l)
         if m: d[(int(m.group(1)), m.group(2))] = (m.group(3), m.group(4), m.group(8), (m.group(5) or '').strip()[len('shown='):], m.group(7))
     return d
 loc_ids = ','.join(sorted({str(e['eid']) for e in exp if e['kind'] in ('move', 'rotate', 'absent')})); par = sorted({'%d|%s' % (e['eid'], e['name']) for e in exp if e['kind'] == 'param'})
@@ -61,7 +61,7 @@ for e in exp:
         elif e['type'] == 'String':
             want = ','.join('%X' % ord(c) if ord(c) < 0x10000 else '%X,%X' % (0xD800 + ((ord(c) - 0x10000) >> 10), 0xDC00 + ((ord(c) - 0x10000) & 0x3FF)) for c in e['value'])
             ok = b[2] == want; why = 'utf16 %s' % b[2]
-            if b[2] is not None and b[2].startswith('LONG'): ok = b[1] == e['value'] and b[4] == str(len(e['value'])); why = 'long value (guest prints no code points above 200 chars): text %s, len %s' % (b[1] == e['value'], b[4])
+            if b[2] is not None and b[2].startswith('LONG'): import hashlib; hx = hashlib.sha256(e['value'].encode('utf-16-le')).hexdigest(); ok = b[4] == str(len(e['value'])) and b[2].endswith(' sha=' + hx); why = 'long value: len %s, sha256(UTF-16) match %s; guest %s want %s' % (b[4], b[2].endswith(' sha=' + hx), b[2][-70:], hx)
         else: ok = abs(float(b[1]) - float(e['value'])) < 1e-6; why = 'value %s' % b[1]
     print(('PASS ' if ok else 'FAIL ') + k + ' (' + why + ')'); npass += ok; nfail += not ok
 print('EXPECT-CHECK', {'expectations': len(exp), 'pass': npass, 'fail': nfail})
