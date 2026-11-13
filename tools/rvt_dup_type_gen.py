@@ -20,6 +20,9 @@ except Exception: sys.exit('REFUSED: cannot read the Revit version of the file; 
 if _fy != 2024: sys.exit('REFUSED: duplicate type is only built for Revit 2024 files (this file is %d); nothing written' % _fy)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from rvtballet import edit as _ed
+from rvtballet import save as _sv
+_ws = _sv.worksharing_state(open(seed, 'rb').read())
+if not (_ws or '').startswith('Not enabled') and os.environ.get('RVTBALLET_ALLOW_WORKSHARED') != '1': sys.exit('REFUSED: the model is workshared or its worksharing state is unreadable (%s); worksets are not maintained by the duplicate-type writer; nothing written' % _ws)
 _ed._check_element_name(name)          # Revit's name rules (empty, forbidden chars, control/format chars)
 sys.path[:0] = [os.path.expanduser('~/rvt-research')]
 import rvt_params, rvt_geometry as _G
