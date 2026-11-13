@@ -404,16 +404,6 @@ def _set_link_path(ed, o):
         n = struct.unpack_from('<I', ed.g.bj, l[2])[0]; return bytes(ed.g.bj[l[2] + 4:l[2] + 4 + 2 * n]).decode('utf-16le')
     old = full(olds[0])      # the reader's l[4] is display-truncated (60 chars): using it duplicated the tail of long paths inside the display path
     if not isinstance(old, str) or not old: raise EditError('element %d: existing link path is empty or unreadable: refused' % o['eid'])
-    edits = []
-    for l in log:
-        if l[1] in ('ModelPath.m_path', 'std::pair< AString, AString >.second') and full(l) == old: edits.append((l[2], l[3] - l[2], _u16(o['value'])))
-        if l[1] == 'ExternalResourceRef.m_displayPath':
-            d = full(l)
-            if d.endswith(old): nd = d[:-len(old)] + o['value']      # the stored path is the display path's tail; replace only that, never an equal substring in a folder name
-            elif d.count(old) == 1: nd = d.replace(old, o['value'])
-            else: raise EditError('element %d: old link path occurs %d times in the display path and not at its end: refused' % (o['eid'], d.count(old)))
-            edits.append((l[2], l[3] - l[2], _u16(nd)))
-    if len(edits) < 2: raise EditError('element %d: unexpected link record layout (%d path spans): refused' % (o['eid'], len(edits)))
     # Revit keeps ONE link type per linked file: two link types on one path both fail to load (Revit 2024 VM 2026-11-13, c5x-rvtlink), so refuse a path another link type already has
     try:
         import sys as _sys
@@ -429,6 +419,16 @@ def _set_link_path(ed, o):
                 _n = struct.unpack_from('<I', _body(ed, _e), _l[2])[0]; _op = bytes(_body(ed, _e)[_l[2] + 4:_l[2] + 4 + 2 * _n]).decode('utf-16le', 'replace')
                 if _op.replace('/', '\\').lower() == _nv: raise EditError('link type %d already points at %r: Revit keeps one link type per file (two on one path both fail to load); nothing was changed' % (_e, _op))
                 break
+    edits = []
+    for l in log:
+        if l[1] in ('ModelPath.m_path', 'std::pair< AString, AString >.second') and full(l) == old: edits.append((l[2], l[3] - l[2], _u16(o['value'])))
+        if l[1] == 'ExternalResourceRef.m_displayPath':
+            d = full(l)
+            if d.endswith(old): nd = d[:-len(old)] + o['value']      # the stored path is the display path's tail; replace only that, never an equal substring in a folder name
+            elif d.count(old) == 1: nd = d.replace(old, o['value'])
+            else: raise EditError('element %d: old link path occurs %d times in the display path and not at its end: refused' % (o['eid'], d.count(old)))
+            edits.append((l[2], l[3] - l[2], _u16(nd)))
+    if len(edits) < 2: raise EditError('element %d: unexpected link record layout (%d path spans): refused' % (o['eid'], len(edits)))
     ed._rec_edit(o['eid'], edits)
 
 
@@ -524,7 +524,6 @@ def _rvtedit_pass(a, b, ops):
                     _cls = ed.g.e.trace(o['eid'])[2].get('class')
                     if _cls == 'Viewport' and os.environ.get('RVTBALLET_ENABLE_VIEWPORTMOVE') == '1': _move_viewport(ed, o); continue
                     if _cls not in MOVE_VM_VERIFIED and os.environ.get('RVTBALLET_MOVE_ANY') != '1': raise EditError('element %d is a %s: moving this class has no Revit-verified implementation (verified: %s), so the move is refused' % (o['eid'], _cls, ', '.join(sorted(MOVE_VM_VERIFIED))))
-                    if _cls == 'ImportInstance' and o.get('dz') and os.environ.get('RVTBALLET_MOVE_ANY') != '1': raise EditError('element %d is a CAD link: only horizontal (dx, dy) moves are Revit-verified; a vertical move (dz) is refused until it is' % o['eid'])      # c2x-rvtwrite: dx/dy proven by bbox readback in the 2024 VM, dz not
                     ed.move(o['eid'], o['dx'], o['dy'], o['dz'])
                 except NotImplementedError as ne:
                     if ('class Level' in str(ne) or 'class Grid' in str(ne)) and os.environ.get('RVTBALLET_ENABLE_LEVELMOVE') == '1': _move_datum(ed, dict(o, cls='Level' if 'class Level' in str(ne) else 'Grid')); continue      # view annotations (TextNote): origin in TextElement.m_orig, 2D in the view plane
