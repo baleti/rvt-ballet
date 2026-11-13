@@ -9,7 +9,7 @@ SRC = os.path.expanduser('~/rvtfix/corpus/2024/71_Construction-DefaultMetric.rte
 if not os.path.exists(SRC): print('skip: no template'); sys.exit(0)
 for p in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab'), os.path.expanduser('~/rvt-research/edit-lab')): sys.path.insert(0, p)
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
-ENV = dict(os.environ, SAVEGATE_JOURNAL=J, SAVEGATE_CACHE=C, RVTBALLET_ENABLE_DELETE='1', RVTBALLET_EDIT_BACKEND='rvtedit', RVTBALLET_ALLOW_OVERWRITE='1', SAVEGATE_GATE=_T + '/gate.json')
+ENV = dict(os.environ, SAVEGATE_JOURNAL=J, SAVEGATE_CACHE=C, RVTBALLET_ENABLE_DELETE='1', RVTBALLET_EDIT_BACKEND='rvtedit', RVTBALLET_ALLOW_OVERWRITE='1', RVTBALLET_CUT_RULE='0', SAVEGATE_GATE=_T + '/gate.json')      # this test is about crash atomicity, not the single-span rule: deleting DBViewSchedule 5499 changes a ~68 KB region of Partitions/59 (not one span), which the cut rule (f6e0657) refuses (safe); the rule has its own tests
 json.dump({'rvt': {YEAR: 'open'}}, open(_T + '/gate.json', 'w'))
 os.environ.update(ENV)
 import rvt_params
