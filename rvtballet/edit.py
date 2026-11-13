@@ -404,7 +404,8 @@ def _set_link_path(ed, o):
     if not olds: raise EditError('element %d is not a link type (no ModelPath.m_path): link path edit refused' % o['eid'])
     def full(l):
         n = struct.unpack_from('<I', ed.g.bj, l[2])[0]; return bytes(ed.g.bj[l[2] + 4:l[2] + 4 + 2 * n]).decode('utf-16le')
-    old = full(olds[0])      # the reader's l[4] is display-truncated (60 chars): using it duplicated the tail of long paths inside the display path
+    try: old = full(olds[0])      # the reader's l[4] is display-truncated (60 chars): using it duplicated the tail of long paths inside the display path
+    except (UnicodeDecodeError, struct.error): raise EditError('element %d: the link path bytes do not decode as the verified (2024) layout: refused' % o['eid'])
     if not isinstance(old, str) or not old: raise EditError('element %d: existing link path is empty or unreadable: refused' % o['eid'])
     # Revit 2024 VM 2026-11-13 (c5x-rvtlink, 6 odd-path variants): <>|?*, '..' segments, reserved device names and trailing dot/space opened without repair but gave NotFound/normalised/mismatched paths: refuse them
     import re as _re2
