@@ -5,5 +5,8 @@ sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab/campaign')); os.
 import stages
 r = stages.api_stage(int(sys.argv[1]), sys.argv[2], True, 'pr' + str(os.getpid()))
 print('OPEN', r['ok'], 'cmp', r.get('cmp'), 'dialogs', r.get('dialogs'))
+for k in ('err','phase','lane','attempts','sec'):
+    if r.get(k) is not None: print(k, r[k])
+print('OUT', (r.get('out') or '')[-600:])
 for p in r.get('probe', []): print('PROBE', p)
 for p in r.get('pbind', []): print('PBIND', p)
