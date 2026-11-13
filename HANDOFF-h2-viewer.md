@@ -53,3 +53,10 @@ Limits of all of this: ONE real file with several edit kinds in Revit plus one b
 - Not doable from this host: remote-host sync, CI runner results (no push), node tests, Windows/macOS saving (untested; the worker cap does not exist on Windows), 2025/2026 real files, files >~64 MB with element-level verify (memory), real 2024 open (not upgrade) of real files.
 - Demo caches: `viewer_stamp()` hashes rvtballet/*.py except server.py/cli.py/save.py/edit.py; the reader.py edit moved it once (45954be8 -> bba7ae2b): re-run `--prepare` on the 3 demo models before moving demo-ready (needs the demo files; not done).
 - /tmp (tmpfs, shared) is nearly full again and again: alerts filed in ~/demo-state/ALERTS.txt; the suite uses a throwaway TMPDIR.
+
+## Refresh 2026-11-13 (c3x-viewer)
+- Recent committed work: assembly code echo, grid end hash readback (Grid E +1 ft Revit-verified), link-path duplicate/multi-partition refusals (2389e5d, f324e6c), float-noise move fallback (c1069b2), set_room_bounding opt-in (e2b19b5), pinned-element refusal (8a7f6c4).
+- Source damage on edit: truncated source gives 409 source_damaged (tests/test_edit_truncated_source.py); flips covered by test_save_flipped_source.
+- Re-paging guard (decision 1) unchanged: refusal kept. Note it cites re-paged opens incl. audit ON (gen8 2024, gen3 2026); a real-file gen2+ batch is still the evidence needed to relax.
+- Pending Revit judges (VM lock queue): tag 233172 delete, door 147505 delete/rotate/change_type (see HANDOFF-c5x-rvtmatrix.md in ~/demo-state).
+- tests/run_save.sh at HEAD: last full run failed only test_save_layout (fixed afterwards); not re-run since.
