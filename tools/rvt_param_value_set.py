@@ -7,6 +7,12 @@ src,out,eid,pname,val=sys.argv[1],sys.argv[2],int(sys.argv[3]),sys.argv[4],sys.a
 kind=sys.argv[6] if len(sys.argv)==7 else 'string'
 if kind not in ('string','double','int','yesno','eid'): sys.exit('REFUSED: unknown kind')
 if os.path.realpath(src)==os.path.realpath(out): sys.exit('REFUSED: output path equals the input file; nothing written')
+import re as _re
+sys.path.insert(0,os.path.expanduser('~/rvt-research/write-lab'))
+import cfb as _cfb
+try: _fy=int(_re.search(r'(20[12]\d)',bytes(_cfb.CFB(open(src,'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le','ignore')).group(1))
+except Exception: sys.exit('REFUSED: cannot read the Revit version of the file; nothing written')
+if _fy!=2024 and os.environ.get('RVT_VALUE_ANY_YEAR')!='1': sys.exit('REFUSED: parameter values are only verified on Revit 2024 files (this file is %d; the definition class pointers that encode the data type differ per year); nothing written'%_fy)
 for p in ('~/rvt-research/edit-lab','~/rvt-research/write-lab','~/rvt-research'): sys.path.insert(0,os.path.expanduser(p))
 os.environ.setdefault('RVT_GEOM','1')
 import rvtedit, rvt_xcache
