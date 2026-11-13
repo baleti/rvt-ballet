@@ -70,7 +70,9 @@ def _reg_ops(raw):
     d=dict(ent)
     d[cat]=sorted(d.get(cat,[])+_newpb)
     out=struct.pack('<I',len(d))+b''.join(struct.pack('<qI',kk,len(d[kk]))+b''.join(struct.pack('<Q',i) for i in d[kk]) for kk in sorted(d))
-    ops.append((q2,o-q2,out)); return ops
+    ops.append((q2,o-q2,out))
+    if os.environ.get('RVTGEN_DEBUG'): print('REGOPS', [(a,b,len(c)) for a,b,c in ops], 'guidtable n',n,'catmap count',c,'cats',sorted(d)[:5], file=sys.stderr)
+    return ops
 _CATID=(1<<64)-2000011
 g.latest_edits=[('Latest',lambda raw: genlib2.apply_ops(raw,_reg_ops(raw)))]
 g.itag=itag; g.commit(sys.argv[2]); print('wrote',S.counts)
