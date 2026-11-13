@@ -13,7 +13,7 @@ async def run(orig, keep):
     d0 = R.elements(open(src, 'rb').read()); c0 = [e for e, v in sorted(d0.items()) if e > 1000 and v.startswith('FamilyInstance|')]
     res = {'size_mb': round(os.path.getsize(src) / 1e6, 1), 'candidates': len(c0)}
     if not c0: print(res, 'NO_CANDIDATE'); return
-    e = c0[int(os.environ.get('DEL_IDX', '0'))]; res['eid'] = e; md = tempfile.mkdtemp(dir=_T); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
+    e = int(os.environ['DEL_EID']) if os.environ.get('DEL_EID') else c0[int(os.environ.get('DEL_IDX', '0'))]; res['eid'] = e; md = tempfile.mkdtemp(dir=_T); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
         r = await c.post('/api/m/m/edit', json={'op': 'delete', 'eid': e}); res['edit'] = r.status
