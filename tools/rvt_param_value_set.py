@@ -12,7 +12,8 @@ sys.path.insert(0,os.path.expanduser('~/rvt-research/write-lab'))
 import cfb as _cfb
 try: _fy=int(_re.search(r'(20[12]\d)',bytes(_cfb.CFB(open(src,'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le','ignore')).group(1))
 except Exception: sys.exit('REFUSED: cannot read the Revit version of the file; nothing written')
-if _fy!=2024 and os.environ.get('RVT_VALUE_ANY_YEAR')!='1': sys.exit('REFUSED: parameter values are only verified on Revit 2024 files (this file is %d; the definition class pointers that encode the data type differ per year); nothing written'%_fy)
+PTR={2024:{'text':672,'int':514,'double':680,'yesno':3002},2026:{'text':702,'int':542,'double':710,'yesno':3145}}   # definition class pointers per Revit year (read off Revit-made files)
+if _fy not in PTR: sys.exit('REFUSED: parameter values are only built for Revit 2024/2026 files (this file is %d); nothing written'%_fy)
 for p in ('~/rvt-research/edit-lab','~/rvt-research/write-lab','~/rvt-research'): sys.path.insert(0,os.path.expanduser(p))
 os.environ.setdefault('RVT_GEOM','1')
 import rvtedit, rvt_xcache
@@ -27,10 +28,10 @@ SETS={'string':'ParamValueSetAString.m_paramSet','double':'ParamValueSetDouble.m
 if kind!='string':
     d=(recs[(pid,'ParamElemExternal')] if (pid,'ParamElemExternal') in recs else [v for k,v in recs.items() if (k[0] if isinstance(k,tuple) else k)==pid][0])['fields']['m_pParamDef']['obj']
     _pt=(recs[(pid,'ParamElemExternal')] if (pid,'ParamElemExternal') in recs else [v for k,v in recs.items() if (k[0] if isinstance(k,tuple) else k)==pid][0])['fields']['m_pParamDef']['ptr']   # definition class pointer encodes the data type (Revit-made files: 672 text, 514 int, 680 double, 3002 yes/no, 2916 material)
-    if kind=='yesno' and (_pt!=3002 or val not in ('0','1')): sys.exit('REFUSED: not a Yes/No parameter or value not 0/1; nothing written')
+    if kind=='yesno' and (_pt!=PTR[_fy]['yesno'] or val not in ('0','1')): sys.exit('REFUSED: not a Yes/No parameter or value not 0/1; nothing written')
     if kind=='yesno': kind='int'
-    elif kind=='int' and _pt!=514: sys.exit('REFUSED: parameter definition is not an Integer type; nothing written')
-    if kind=='double' and 'm_specTypeId' not in d: sys.exit('REFUSED: parameter definition is not a Double type; nothing written')
+    elif kind=='int' and _pt!=PTR[_fy]['int']: sys.exit('REFUSED: parameter definition is not an Integer type; nothing written')
+    if kind=='double' and (_pt!=PTR[_fy]['double'] or 'm_specTypeId' not in d): sys.exit('REFUSED: parameter definition is not a Double type; nothing written')
     if kind=='eid': sys.exit('REFUSED: element-id parameter values not verified; nothing written')
     FS={'double':16,'int':12}[kind]
     try: pk=struct.pack('<d',float(val)) if kind=='double' else struct.pack('<i',int(val))
