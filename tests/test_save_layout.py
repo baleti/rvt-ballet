@@ -25,10 +25,10 @@ async def run():
     g0 = os.path.join(_T, 'gen0.rvt'); shutil.copy(RTE, g0); g1 = os.path.join(_T, 'gen1.rvt'); g2 = os.path.join(_T, 'gen2.rvt')
     async with TestClient(TestServer(server.make_app(await session(g0, 'a')))) as c:
         await c.get('/api/m/a/saveinfo'); await c.post('/api/m/a/edit', json=dict(EDIT, eid=24))
-        j = await (await c.post('/api/m/a/saveas', json={'dest': g1})).json(); assert j['ok'] and 'warnings' not in j, j          # generation 1: layout kept, no warning
+        j = await (await c.post('/api/m/a/saveas', json={'dest': g1})).json(); assert j['ok'] and not j.get('warnings'), j          # generation 1: layout kept, no warning
     async with TestClient(TestServer(server.make_app(await session(g1, 'b')))) as c:
         await c.get('/api/m/b/saveinfo'); await c.post('/api/m/b/edit', json=dict(EDIT, eid=25)); h1 = sha(g1)
-        j = await (await c.post('/api/m/b/saveas', json={'dest': g2})).json(); assert j['ok'] and 'warnings' not in j, j     # generation 2: since rvt-research 8f7719a the re-saved partition consumes its own zero pad, layout kept, no warning
+        j = await (await c.post('/api/m/b/saveas', json={'dest': g2})).json(); assert j['ok'] and not j.get('warnings'), j     # generation 2: since rvt-research 8f7719a the re-saved partition consumes its own zero pad, layout kept, no warning
         r = await c.post('/api/m/b/save', json={}); j = await r.json(); assert r.status == 200 and sha(g1) == sha(g2), (r.status, j)  # overwrite of a layout-keeping edit works and equals SAVE AS
     print('save layout OK (gen1 and gen2 keep the layout: no warning, overwrite == SAVE AS)')
 if not os.path.exists(RTE) or not save.SaveSessions().available: print('skip')
