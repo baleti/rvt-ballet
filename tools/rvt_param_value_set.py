@@ -22,11 +22,22 @@ if kind!='string':
     d=(recs[(pid,'ParamElemExternal')] if (pid,'ParamElemExternal') in recs else [v for k,v in recs.items() if (k[0] if isinstance(k,tuple) else k)==pid][0])['fields']['m_pParamDef']['obj']
     if kind=='double' and 'm_specTypeId' not in d: sys.exit('REFUSED: parameter definition is not a Double type; nothing written')
     if kind=='int' and 'm_lowBound' not in d: sys.exit('REFUSED: parameter definition is not an Integer type; nothing written')
-    if kind=='int': sys.exit('REFUSED: int parameter values not Revit-verified; nothing written')
     if kind=='eid': sys.exit('REFUSED: element-id parameter values not verified; nothing written')
     FS={'double':16,'int':12}[kind]
     try: pk=struct.pack('<d',float(val)) if kind=='double' else struct.pack('<i',int(val))
     except ValueError: sys.exit('REFUSED: value does not parse; nothing written')
+if kind=='int' and SETS[kind] not in L:
+    # element has a null Int set pointer: Revit (paired experiment c5xpi) turns the 4-byte null into the 6-byte class pointer ffffffff+tag and appends a new ParamValueSetInt object right after the Double set object
+    ptr=L.get('Element.m_pParamValueSetInt'); dbl=L.get('ParamValueSetDouble.m_paramSet')
+    if not ptr or ptr[3]-ptr[2]!=4 or bytes(ed.g.bj[ptr[2]:ptr[3]])!=b'\0\0\0\0' or not dbl: sys.exit('REFUSED: element %d has no int set and no known place to create one; nothing written'%eid)
+    tag=None
+    for k2,v2 in recs.items():
+        e2=k2[0] if isinstance(k2,tuple) else k2
+        try: l2={l[1]:l for l in ed.g.e.trace(e2)[3]}.get('Element.m_pParamValueSetInt')
+        except Exception: continue
+        if l2 and l2[3]-l2[2]==6: tag=bytes(ed.g.bj[l2[2]:l2[3]]); break
+    if not tag: sys.exit('REFUSED: no element in the file carries an Int set pointer to copy the class tag from; nothing written')
+    ed._rec_edit(eid,[(ptr[2],4,tag),(dbl[3],0,struct.pack('<IQi',1,pid,int(val)))]); ed.save(out); print('wrote',out,'pid',pid,'on',eid,'int (new set object)'); sys.exit(0)
 if SETS[kind] not in L: sys.exit('REFUSED: element %d has no %s value set object to extend; nothing written'%(eid,kind))
 a,b=L[SETS[kind]][2],L[SETS[kind]][3]
 raw=bytes(ed.g.bj[a:b]); n=struct.unpack_from('<I',raw,0)[0]; o=4; ents=[]
