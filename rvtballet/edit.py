@@ -404,6 +404,21 @@ def _set_link_path(ed, o):
             else: raise EditError('element %d: old link path occurs %d times in the display path and not at its end: refused' % (o['eid'], d.count(old)))
             edits.append((l[2], l[3] - l[2], _u16(nd)))
     if len(edits) < 2: raise EditError('element %d: unexpected link record layout (%d path spans): refused' % (o['eid'], len(edits)))
+    # Revit keeps ONE link type per linked file: two link types on one path both fail to load (Revit 2024 VM 2026-11-13, c5x-rvtlink), so refuse a path another link type already has
+    try:
+        import sys as _sys
+        for _pth in ('~/rvt-research', '~/rvt-research/write-lab'):
+            if os.path.expanduser(_pth) not in _sys.path: _sys.path.insert(0, os.path.expanduser(_pth))
+        import rvt_params; _P = rvt_params.params(ed.src)
+        _others = [e for e, d in _P.items() if e != o['eid'] and isinstance(d, dict) and d.get('class') == 'RvtLinkSymbol']
+    except Exception: raise EditError('link path edit refused: cannot list the other link types to check for a duplicate path')
+    _nv = o['value'].replace('/', '\\').lower()
+    for _e in _others:
+        for _l in ed.g.e.trace(_e)[3]:
+            if _l[1] == 'ModelPath.m_path':
+                _n = struct.unpack_from('<I', _body(ed, _e), _l[2])[0]; _op = bytes(_body(ed, _e)[_l[2] + 4:_l[2] + 4 + 2 * _n]).decode('utf-16le', 'replace')
+                if _op.replace('/', '\\').lower() == _nv: raise EditError('link type %d already points at %r: Revit keeps one link type per file (two on one path both fail to load); nothing was changed' % (_e, _op))
+                break
     ed._rec_edit(o['eid'], edits)
 
 
