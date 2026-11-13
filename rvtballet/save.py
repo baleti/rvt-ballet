@@ -296,6 +296,14 @@ for (e, c), r in x['recs'].items():
         for w in f:
             for i in ids(w):
                 if i < 2 ** 32 - 1 and i != e: joined.setdefault(e, set()).add(i); joined.setdefault(i, set()).add(e)
+connected = {}   # element id -> MEP elements named in its own m_pConnectorManager m_arrRefs (Revit 2024 paired run, HVAC fitting move +1 ft: 24 connected duct/fitting records regenerated (GLine origin/endParams, MEPAnalyticalNode); the writer moves only the one instance, leaving the connected curves stale)
+for (e, c), r in x['recs'].items():
+    t = []; find(r.get('fields'), 'm_pConnectorManager', t)
+    for v in t:
+        f = []; find(v, 'm_arrRefs', f)
+        for w in f:
+            for i in ids(w):
+                if i < 2 ** 32 - 1 and i != e: connected.setdefault(e, set()).add(i); connected.setdefault(i, set()).add(e)
 dimmed = {}      # element id -> dimensions whose witness geomRef (m_elemId) names it (a moved wall leaves the dimension value stale until Revit regenerates)
 for (e, c), r in x['recs'].items():
     if 'Dim' not in c: continue
@@ -306,7 +314,7 @@ for (e, c), r in x['recs'].items():
 for (e, c), r in x['recs'].items():
     if e not in want: continue
     d = []; find(r.get('fields'), 'm_designOptionId', d); h = []; find(r.get('fields'), 'm_hostId', h)
-    out.setdefault(str(e), []).append({'cls': c, 'groups': sorted(members.get(e, ())), 'options': [i for v in d for i in ids(v) if i < 2 ** 31], 'hosts': [i for v in h for i in ids(v) if i < 2 ** 32 - 1], 'hosting': len(hosting.get(e, ())), 'nested': sorted(nested.get(e, ())), 'children': sorted(parent_of.get(e, ())), 'joined': len(joined.get(e, ())), 'dimmed': len(dimmed.get(e, ())), 'leveled': len(leveled.get(e, ()))})
+    out.setdefault(str(e), []).append({'cls': c, 'groups': sorted(members.get(e, ())), 'options': [i for v in d for i in ids(v) if i < 2 ** 31], 'hosts': [i for v in h for i in ids(v) if i < 2 ** 32 - 1], 'hosting': len(hosting.get(e, ())), 'nested': sorted(nested.get(e, ())), 'children': sorted(parent_of.get(e, ())), 'joined': len(joined.get(e, ())), 'connected': len(connected.get(e, ())), 'dimmed': len(dimmed.get(e, ())), 'leveled': len(leveled.get(e, ()))})
 print(json.dumps(out))
 """
 
@@ -325,7 +333,7 @@ def membership(buf, eids):
         if r.returncode: raise RuntimeError('group/design-option check failed: ' + (r.stderr.strip().splitlines() or ['?'])[-1][:150])
         res = {}
         for e, recs in json.loads(r.stdout.strip().splitlines()[-1]).items():
-            why = sorted({'group %d' % g for x in recs for g in x['groups']} | {'design option %d' % o for x in recs for o in x['options']} | {'hosted on %d' % h for x in recs for h in x.get('hosts', [])} | {'nested in %d parent(s): %s' % (len(n), ','.join(str(i) for i in n)) for x in recs for n in [x.get('nested', [])] if n} | {'nesting parent of %d sub-component(s)' % len(n) for x in recs for n in [x.get('children', [])] if n} | {'joined to %d element(s)' % n for x in recs for n in [x.get('joined', 0)] if n} | {'hosts %d element(s)' % n for x in recs for n in [x.get('hosting', 0)] if n} | {'dimensioned by %d dimension(s)' % n for x in recs for n in [x.get('dimmed', 0)] if n} | {'level constrains %d element(s)' % n for x in recs for n in [x.get('leveled', 0)] if n and x.get('cls') == 'Level'})
+            why = sorted({'group %d' % g for x in recs for g in x['groups']} | {'design option %d' % o for x in recs for o in x['options']} | {'hosted on %d' % h for x in recs for h in x.get('hosts', [])} | {'nested in %d parent(s): %s' % (len(n), ','.join(str(i) for i in n)) for x in recs for n in [x.get('nested', [])] if n} | {'nesting parent of %d sub-component(s)' % len(n) for x in recs for n in [x.get('children', [])] if n} | {'joined to %d element(s)' % n for x in recs for n in [x.get('joined', 0)] if n} | {'connected to %d MEP element(s)' % n for x in recs for n in [x.get('connected', 0)] if n} | {'hosts %d element(s)' % n for x in recs for n in [x.get('hosting', 0)] if n} | {'dimensioned by %d dimension(s)' % n for x in recs for n in [x.get('dimmed', 0)] if n} | {'level constrains %d element(s)' % n for x in recs for n in [x.get('leveled', 0)] if n and x.get('cls') == 'Level'})
             if why: res[int(e)] = why
         return res
     finally:
