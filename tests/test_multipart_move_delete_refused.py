@@ -11,3 +11,7 @@ for op in ({'op': 'move', 'eid': 1362427, 'dx': 1.0, 'dy': 0.0, 'dz': 0.0}, {'op
     try: edit.apply_full(buf, [edit.validate_op(op)]); raise SystemExit('accepted: %s' % op['op'])
     except edit.EditError as e: assert 'several partitions' in str(e), (op['op'], str(e)[:200])
 print('OK multi-partition move/delete refused')
+for op in ({'op': 'set_string', 'eid': 1362427, 'param': 'Comments', 'value': 'x'}, {'op': 'set_num', 'eid': 1362427, 'param': 'Cost', 'value': 1.0}):
+    try: edit.apply_full(buf, [edit.validate_op(op)]); raise SystemExit('accepted: %s' % op['op'])
+    except edit.EditError as e: assert 'several partitions' in str(e), (op['op'], str(e)[:200])
+print('OK multi-partition set_string/set_num refused')
