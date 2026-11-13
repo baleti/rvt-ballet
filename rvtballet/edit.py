@@ -524,6 +524,7 @@ def _rvtedit_pass(a, b, ops):
                     _cls = ed.g.e.trace(o['eid'])[2].get('class')
                     if _cls == 'Viewport' and os.environ.get('RVTBALLET_ENABLE_VIEWPORTMOVE') == '1': _move_viewport(ed, o); continue
                     if _cls not in MOVE_VM_VERIFIED and os.environ.get('RVTBALLET_MOVE_ANY') != '1': raise EditError('element %d is a %s: moving this class has no Revit-verified implementation (verified: %s), so the move is refused' % (o['eid'], _cls, ', '.join(sorted(MOVE_VM_VERIFIED))))
+                    if _cls == 'ImportInstance' and o.get('dz') and os.environ.get('RVTBALLET_MOVE_ANY') != '1': raise EditError('element %d is a CAD link: only horizontal (dx, dy) moves are Revit-verified; a vertical move (dz) is refused until it is' % o['eid'])      # c2x-rvtwrite: dx/dy proven by bbox readback in the 2024 VM, dz not
                     ed.move(o['eid'], o['dx'], o['dy'], o['dz'])
                 except NotImplementedError as ne:
                     if ('class Level' in str(ne) or 'class Grid' in str(ne)) and os.environ.get('RVTBALLET_ENABLE_LEVELMOVE') == '1': _move_datum(ed, dict(o, cls='Level' if 'class Level' in str(ne) else 'Grid')); continue      # view annotations (TextNote): origin in TextElement.m_orig, 2D in the view plane
