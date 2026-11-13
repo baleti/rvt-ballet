@@ -456,8 +456,11 @@ def _set_link_override(ed, o):
         except Exception: raise EditError('link override edit refused: cannot read the Revit version of the file')
         if fy != 2024: raise EditError('link override edit is only verified on Revit 2024 files (this file is %d): refused' % fy)
     if len(_LINK_OVR_TEMPLATE) != 142: raise EditError('internal: override template size')
+    for _k in ('eid', 'link', 'linked_view'):
+        if type(o.get(_k)) is not int or not 0 <= o[_k] < 2 ** 62: raise EditError('link override: %s must be a non-negative element id (got %r): refused' % (_k, o.get(_k)))
     if o['link'] not in ed.g.e.m.ids: raise EditError('link element %d does not exist' % o['link'])
-    log = ed.g.e.trace(o['eid'])[3]
+    try: log = ed.g.e.trace(o['eid'])[3]
+    except (IndexError, KeyError, StopIteration): raise EditError('element %d does not exist in this file: link override refused' % o['eid'])
     mp = [l for l in log if l[1] == 'RvtLinkOverrides.m_displaySettingsMap']
     if len(mp) != 1: raise EditError('element %d has no RvtLinkOverrides (not a view with link overrides): refused' % o['eid'])
     s, e = mp[0][2], mp[0][3]
