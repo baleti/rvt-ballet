@@ -12,6 +12,7 @@ class FakeEdit:
         raise KeyError(eid)
     def save(self, dst): open(dst, 'wb').write(b'x')
 fake = types.ModuleType('rvtedit'); fake.Edit = FakeEdit; sys.modules['rvtedit'] = fake
+edit._check_member_limit = lambda src, out: None      # fake backend writes non-CFB bytes; the member-size check (c5ae06f) has its own test
 ok = edit.validate_op({'op': 'set_string', 'eid': 1, 'value': 'a'}); bad = edit.validate_op({'op': 'set_string', 'eid': 2, 'value': 'b'})
 assert edit.apply(b'src', [ok]) == b'x'
 try: edit.apply(b'src', [ok, bad]); raise SystemExit('FAIL: no error')
