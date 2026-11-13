@@ -635,7 +635,8 @@ def _pending(ss, mid, d, new_bytes, manifest, light=False):
         if dm and len(cops) == 1 and cops[0].get('op') == 'delete' and os.environ.get('RVTBALLET_CUT_RULE', '1') == '1': mf['member_pure_cut'] = True      # c2x-rvtsave: each changed dirty member must be the source with ONE span removed (a flip inside the declared member was accepted)
     if mf.get('member_span_max') and len(cops) == 1 and cops[0].get('op') in ('move', 'rotate') and os.environ.get('RVTBALLET_DIFF_BUDGET', '1') == '1': mf['member_diff_bytes_max'] = 256 if cops[0].get('op') == 'move' else 768; mf['member_diff_runs_max'] = 16 if cops[0].get('op') == 'move' else 40
     if dm and len(cops) == 1 and cops[0].get('op') == 'set_string' and os.environ.get('RVTBALLET_SPAN_RULE', '1') == '1': mf['member_span_max'] = 8192 + 2 * len(str(cops[0].get('value', '')))      # string edit re-lays the record out: measured prefix/suffix windows: HVAC 1087-2422, Structural 2024 4794-6248 (25 elements in 3 files), 400 same length; widest 6248, a false refusal is the safe direction
-    if mf.get('member_span_max') and len(cops) == 1 and cops[0].get('op') in ('move', 'rotate', 'set_num') and os.environ.get('RVTBALLET_RANGE_RULE', '1') == '1':      # c2x-rvtsave: exact writer byte runs per equal-length dirty member (a flip next to the edit inside the span window was accepted)
+    if mf.get('member_span_max') and len(cops) == 1 and cops[0].get('op') in ('move', 'rotate', 'set_num', 'set_string') and os.environ.get('RVTBALLET_RANGE_RULE', '1') == '1':      # set_string added (c2x-rvtsave item 101: equal-length Mark edit accepted in-member window flips)
+         # c2x-rvtsave: exact writer byte runs per equal-length dirty member (a flip next to the edit inside the span window was accepted)
         from .edit import member_diff_ranges
         mf['member_diff_ranges'] = member_diff_ranges(d.buf, nb, dm)
         from .edit import member_raw_digests

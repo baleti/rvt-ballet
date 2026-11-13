@@ -15,8 +15,9 @@ ops = [edit.validate_op(o) for o in ops]
 good, deleted = edit.apply_full(buf, ops); dm = edit.last_dirty_members(); m = edit.Edits(); m.ops = ops; man = m.manifest(deleted)
 if dm: man['dirty_members'] = dm
 if dm and len(ops) == 1 and ops[0].get('op') in ('move', 'rotate', 'set_num'): man['member_span_max'] = 2048      # mirrors save._pending
-if man.get('member_span_max') and ops[0].get('op') in ('move', 'rotate', 'set_num') and len(ops) == 1: man['member_diff_ranges'] = edit.member_diff_ranges(buf, good, dm)      # mirrors save._pending
-if man.get('member_diff_ranges'): man['member_raw_sha256'] = edit.member_raw_digests(good, dm)
+if dm and len(ops) == 1 and ops[0].get('op') == 'set_string': man['member_span_max'] = 8192 + 2 * len(str(ops[0].get('value', '')))      # moved up (c2x-rvtsave 101e): the digest rule below needs it set
+if man.get('member_span_max') and ops[0].get('op') in ('move', 'rotate', 'set_num', 'set_string') and len(ops) == 1: man['member_diff_ranges'] = edit.member_diff_ranges(buf, good, dm)      # mirrors save._pending
+if man.get('member_diff_ranges') is not None: man['member_raw_sha256'] = edit.member_raw_digests(good, dm)
 ech = save.derived_echoes(buf, good, edit.compose(ops))      # same as save._pending: dependents whose derived readback echoes the edit (e.g. level rename -> 'Level' param of its elements)
 if ech: man['modified'] = sorted(set(man['modified']) | {'el:%d' % i for i in ech})
 if dm and ops and all(o.get('op') in ('move', 'rotate', 'set_string', 'delete') for o in ops):
