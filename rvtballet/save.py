@@ -1225,6 +1225,7 @@ def noop_numeric_warnings(ops):
 
 def save_as(ss, mid, src, dest, overwrite=False, new_bytes=None, manifest=None):
     """SAVE AS: never touches the source. new_bytes defaults to the loaded bytes (identity save)."""
+    if os.path.exists(dest) and (os.path.normcase(os.path.realpath(dest)) == os.path.normcase(os.path.realpath(src)) or os.path.samefile(dest, src)): raise BadDest('destination is the source file (use SAVE to overwrite)')      # library-level guard: SAVE AS must never reach the in-place path (workshared/group/layout gates live in save_overwrite)
     _cloud_gate(src, dest); ss.progress.pop(mid, None); _stage(ss, mid, 'applying edits'); d = ss.doc(mid, src); d.adapter.report = lambda t: _stage(ss, mid, t); _refuse_damaged(d)
     check_memory(src, d.buf)      # TooBig (507) before any work; the UI then offers the labelled limited verification
     gw = group_warning(ss, mid, d.buf) if new_bytes is None else None
