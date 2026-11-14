@@ -17,7 +17,7 @@ sys.path[:0] = [os.path.expanduser('~/rvt-research/write-lab')]
 import re as _re, cfb as _cfb
 try: _fy = int(_re.search(r'(20[12]\d)', bytes(_cfb.CFB(open(seed, 'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le', 'ignore')).group(1))
 except Exception: sys.exit('REFUSED: cannot read the Revit version of the file; nothing written')
-if _fy != 2024: sys.exit('REFUSED: duplicate type is only built for Revit 2024 files (this file is %d); nothing written' % _fy)
+if _fy not in (2024, 2026): sys.exit('REFUSED: duplicate type is only built for Revit 2024 and 2026 files (this file is %d); nothing written' % _fy)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from rvtballet import edit as _ed
 from rvtballet import save as _sv

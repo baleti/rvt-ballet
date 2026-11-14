@@ -1,4 +1,4 @@
-"""duplicate-type generator refuses non-2024 Autodesk samples with the explicit year message and writes nothing (skips if samples absent)."""
+"""duplicate-type generator refuses non-2024-non-2026 Autodesk samples with the explicit year message and writes nothing (skips if samples absent)."""
 import os, subprocess, sys, tempfile, glob
 T = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools", "rvt_dup_type_gen.py")
 d = tempfile.mkdtemp(); n = 0
