@@ -734,10 +734,17 @@ def _set_type_eid(ed, src, o):
     ed._rec_edit(o['eid'], [(off, 8, b) for off, b in sorted(offs.items())])
 
 
+def _check_wall_height_pid(o, pid, log):
+    """c3x-rvtmatrix 2026-11-14 (Revit VM, 2024 Structural wall): the reader names pid -1001105 'Unconnected Height', but a wall that also stores -1001101 reads its Unconnected Height from THAT value in Revit; writing -1001105 saved cleanly, passed the offline read-back and was ignored by Revit (76.75 stayed). Refused until the VM settles which id is the live one."""
+    if pid == -1001105 and o.get('kind') == 'Double' and any(l[1] == 'ParamValueDouble.m_paramId' and _eid_val(l[4]) == -1001101 for l in log):
+        raise EditError('Unconnected Height on element %d is stored under two ids (-1001105 and -1001101) and Revit reads the other one: an edit of the first is ignored by Revit; refused (give pid -1001101 explicitly); nothing was changed' % o['eid'])
+
+
 def _set_num_by_pid(ed, o):
     """overwrite the stored Double/Int value of ONE parameter (exact entry, not rvtedit.set_num's 'previous value within 8 entries', which edits the neighbouring Int for every Int but the first)"""
     import struct
     pid = _resolve_pid(ed, o); log = ed.g.e.trace(o['eid'])[3]
+    _check_wall_height_pid(o, pid, log)
     for l in log:
         if l[1] == 'ParamValue%s.m_paramId' % o['kind'] and _eid_val(l[4]) == pid:
             vn = _value_entry(log, o['kind'], l)
