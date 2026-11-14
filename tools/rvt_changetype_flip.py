@@ -9,7 +9,7 @@ json.dump({'rvt': {str(y): 'open' for y in range(2015, 2030)}}, open(_T + '/gate
 from rvtballet import save
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 src0, out, inst, n, seed = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5])
-src = os.path.join(_T, 'src.rvt'); shutil.copy(src0, src); h0 = sha(src); good = open(out, 'rb').read(); rnd = random.Random(seed); ss = save.SaveSessions(); man = {'modified': ['el:%d' % inst]}
+src = os.path.join(_T, 'src.rvt'); shutil.copy(src0, src); h0 = sha(src); good = open(out, 'rb').read(); rnd = random.Random(seed); ss = save.SaveSessions(); man = json.loads(os.environ['MAN_JSON']) if os.environ.get('MAN_JSON') else {'modified': ['el:%d' % inst]}      # MAN_JSON overrides the manifest, e.g. {"added": ["el:1542917", "el:1542918"]} for a duplicate-type output
 if os.environ.get('DM_JSON'): man['dirty_members'] = json.loads(os.environ['DM_JSON'])      # e.g. {"Partitions/21": [41]}: what the writer reports as rewritten (edit.last_dirty_members)
 T = {'control_true_output': good}
 for k in range(n):
