@@ -41,8 +41,41 @@ class Stream:
             off = a - k * ss; n = min(run * ss - off, b - a)
             out.append(os.pread(fd, n, (s.chain[k] + 1) * ss + off)); a += n
         return b''.join(out)
+    @property
+    def total(s):
+        if s.small is not None: return len(s.small) - (len(s.small) // PAGE_STORED) * (PAGE_STORED - PAGE_PAYLOAD)
+        n = -(-s.size // PAGE_STORED); last = s.size - (n - 1) * PAGE_STORED
+        return (n - 1) * PAGE_PAYLOAD + min(last, PAGE_PAYLOAD)
+    def segments(s, fd):
+        """== elemindex.Part.segments (same walk and resync rule) through pread"""
+        T = s.total; GZ = b'\x1f\x8b\x08\x00'; segs = []; head = s.payload(fd, 0, 64); i = head.find(GZ)
+        if i < 24: return []
+        hdr = i - 24
+        while hdr is not None and hdr + 24 <= T:
+            b = s.payload(fd, hdr, hdr + 28)
+            if len(b) == 28:
+                w = struct.unpack('<6I', b[:24])
+                if b[24:28] == GZ and 18 <= w[2] and hdr + 24 + w[2] <= T and w[0] < 16 and w[3] > 0:
+                    segs.append((hdr + 24, w[2], w[3])); hdr += 24 + w[2]; continue
+            hdr = s._resync(fd, hdr, T)
+        return segs
+    def _resync(s, fd, a, T):
+        GZ = b'\x1f\x8b\x08\x00'; step = 1 << 14
+        while a < T:
+            buf = s.payload(fd, a, min(T, a + step + 28)); p = 0
+            while True:
+                i = buf.find(GZ, p)
+                if i < 0 or i > step: break
+                h = a + i - 24
+                if h >= 0:
+                    w = struct.unpack('<6I', s.payload(fd, h, h + 24))
+                    if w[0] < 16 and 18 <= w[2] and h + 24 + w[2] <= T and w[3] > 0: return h
+                p = i + 1
+            a += step; step = min(step << 1, 1 << 22)
+        return None
     def payload(s, fd, a, b):
         """payload bytes [a, b) (page trailers stripped)"""
+        if b <= a: return b''
         pa = a // PAGE_PAYLOAD; pb = (b - 1) // PAGE_PAYLOAD
         raw = s.stored(fd, pa * PAGE_STORED, pb * PAGE_STORED + PAGE_PAYLOAD)
         buf = b''.join(raw[i * PAGE_STORED: i * PAGE_STORED + PAGE_PAYLOAD] for i in range(pb - pa + 1))
@@ -74,12 +107,15 @@ def _libdeflate():
     _LD.append(lib); return lib
 
 
-def inflate_run(buf, a, segs):
+def inflate_run(buf, a, segs, sizes_out=None):
     """inflated bytes of consecutive segments [(payload offset, stored_len, x)], `buf` = payload bytes from offset `a`. A segment's stored bytes are
     [10-byte gzip header][deflate][CRC32][ISIZE][8-byte footer]: libdeflate inflates straight into one buffer sized from the ISIZE fields (an ISIZE that does
     not match the inflated size falls back to zlib for that segment)"""
     lib = _libdeflate()
-    if lib is None: return b''.join(_inflate(buf[off - a: off - a + ln]) for off, ln, _ in segs)
+    if lib is None:
+        parts = [_inflate(buf[off - a: off - a + ln]) for off, ln, _ in segs]
+        if sizes_out is not None: sizes_out.extend(len(x) for x in parts)
+        return b''.join(parts)
     L, C = lib; d = _G.get('ldd')
     if d is None or _G.get('ldd_pid') != os.getpid(): d = _G['ldd'] = L.libdeflate_alloc_decompressor(); _G['ldd_pid'] = os.getpid()
     sizes = [struct.unpack_from('<I', buf, off - a + ln - 12)[0] if ln >= 34 else 0 for off, ln, _ in segs]
@@ -89,24 +125,25 @@ def inflate_run(buf, a, segs):
         r = L.libdeflate_deflate_decompress_ex(d, ib + off - a + 10, ln - 10, ob + o, sz, C.byref(ai), C.byref(ao)) if sz else 1
         if r != 0 or ao.value != sz: fix.append(i)
         o += sz
-    if not fix: return bytes(out)
+    if not fix:
+        if sizes_out is not None: sizes_out.extend(sizes)
+        return bytes(out)
     parts = []; o = 0                         # rare: rebuild with zlib for the odd segments
     for i, ((off, ln, _), sz) in enumerate(zip(segs, sizes)):
         parts.append(_inflate(buf[off - a: off - a + ln]) if i in fix else bytes(out[o:o + sz])); o += sz
+    if sizes_out is not None: sizes_out.extend(len(x) for x in parts)
     return b''.join(parts)
 
 
-def plan(o, pns, segtab):
-    """tasks (partition, first seg, end seg, overlap end seg) in stream order"""
-    tasks = []; per = TASK_MB * 1e6
-    for pn in pns:
-        segs = segtab[pn]; k = 0
-        while k < len(segs):
-            j = k; n = 0
-            while j < len(segs) and (n < per or j == k): n += segs[j][2]; j += 1
-            m = j; ov = 0
-            while m < len(segs) and ov < OVL: ov += segs[m][2]; m += 1
-            tasks.append((pn, k, j, m)); k = j
+def plan(pi, pn, segs):
+    """decode tasks of one partition in stream order: (key, pn, segment list, number of main segments); the tail of the list is the overlap"""
+    tasks = []; per = TASK_MB * 1e6; k = 0; n_ = 0
+    while k < len(segs):
+        j = k; n = 0
+        while j < len(segs) and (n < per or j == k): n += segs[j][2]; j += 1
+        m = j; ov = 0
+        while m < len(segs) and ov < OVL: ov += segs[m][2]; m += 1
+        tasks.append(((pi, k), pn, segs[k:m], j - k)); k = j
     return tasks
 
 
@@ -117,29 +154,30 @@ def _winit():
     except Exception: pass
 
 
-def _task(t):
-    """-> (task index, records [((eid, class), reduced rec)], headers [(eid, (cat, ownerview, family, classdef))])"""
+def _job(job):
+    """one pool job: ('walk', pi, pn) -> segment table; ('dec', key, pn, segs, nmain, wanted, note_eh, hdr_ids) -> records, headers, header candidates"""
+    if job[0] == 'walk':
+        return job, _G['streams'][job[2]].segments(_G['fd'])
     c0 = time.process_time(); w0 = time.time()
-    ti, (pn, k, j, m) = t; S = _G['streams'][pn]; segs = _G['segtab'][pn]; fd = _G['fd']
-    a = segs[k][0]; b = segs[m - 1][0] + segs[m - 1][1]
-    buf = S.payload(fd, a, b); chunk = inflate_run(buf, a, segs[k:m]); del buf
+    _, key, pn, segs, nmain, wanted, note_eh, hdr_ids = job; S = _G['streams'][pn]; fd = _G['fd']
+    a = segs[0][0]; b = segs[-1][0] + segs[-1][1]
+    buf = S.payload(fd, a, b); sizes = []; chunk = inflate_run(buf, a, segs, sizes); del buf
     from . import fastinfo as FI
-    rd = _G['rd']; recs = []; ehs = []
-    if _G['wanted']:
-        r = rd.extract_chunk(chunk, _G['wanted'], -1, None, [])
+    rd = _G['rd']; recs = []; ehs = []; ehc = None
+    if wanted:
+        r = rd.extract_chunk(chunk, wanted, -1, None, [])
         for (eid, c), rec in r[0]:
             if rec.get('fields'): recs.append(((int(eid), c), FI._reduce(c, rec)))
-    eh_ids = _eh_candidate_ids(chunk) if _G.get('note_eh') else None
-    hi = _G.get('hdr_ids'); hi = hi.get(ti) if isinstance(hi, dict) else hi
-    if hi:
-        r = rd.extract_chunk(chunk, [], _G['EH'], hi, [])
+    if note_eh: ehc = _eh_candidate_ids(chunk, sizes)
+    if hdr_ids:
+        r = rd.extract_chunk(chunk, [], _G['EH'], hdr_ids, [])
         for eid, h in r[1]:
             cd = h.get('m_classDef'); cd = cd.get('m_ref') if isinstance(cd, dict) else cd
             ehs.append((int(eid), (h.get('m_categroryId'), h.get('m_ownerViewId'), h.get('m_familyId'), cd)))
-    return ti, recs, ehs, eh_ids, (time.process_time() - c0, time.time() - w0, os.getpid())
+    return job[:2], (recs, ehs, ehc, (time.process_time() - c0, time.time() - w0, os.getpid()))
 
 
-def _eh_candidate_ids(chunk):
+def _eh_candidate_ids(chunk, seg_sizes=None):
     """ids that have an ElementHeader CANDIDATE in this chunk (same test as the Rust candidate scan: a known id followed by the ElementHeader tag at +8+W or
     +4+W from the id; no decode): a superset of the headers the chunk holds, so a later header pass can skip every task without a candidate for the ids it wants"""
     import numpy as np
@@ -154,8 +192,14 @@ def _eh_candidate_ids(chunk):
         if not len(p): continue
         v = np.zeros(len(p), np.uint64)
         for b in range(W): v |= buf[p + b].astype(np.uint64) << np.uint64(8 * b)
-        ids = _G['ids']; k = np.searchsorted(ids, v); k[k >= len(ids)] = 0; out.append(v[ids[k] == v])
-    return np.unique(np.concatenate(out)) if out else np.zeros(0, np.uint64)
+        ids = _G['ids']; k = np.searchsorted(ids, v); k[k >= len(ids)] = 0; ok = ids[k] == v; out.append((v[ok], p[ok]))
+    if seg_sizes is None:
+        return np.unique(np.concatenate([x[0] for x in out])) if out else np.zeros(0, np.uint64)
+    # -> (ids, index of the segment holding the candidate) sorted by id
+    if not out: return np.zeros(0, np.uint64), np.zeros(0, np.int32)
+    v = np.concatenate([x[0] for x in out]); p = np.concatenate([x[1] for x in out])
+    seg = (np.searchsorted(np.cumsum(seg_sizes), p, side='right')).astype(np.int32)
+    o = np.lexsort((seg, v)); return v[o], seg[o]
 
 
 def _ids_owned(et, W):
@@ -184,8 +228,7 @@ def _setup(path, log):
     t0 = time.time()
     o = olefile.OleFileIO(path); names = ['/'.join(e) for e in o.listdir(streams=True)]
     pns = sorted(n for n in names if n.startswith('Partitions/'))
-    segtab = {pn: EI.Part(o, pn).segments() for pn in pns}
-    log('segment tables: %d partitions, %d segments, %.2fs' % (len(pns), sum(map(len, segtab.values())), time.time() - t0))
+    streams = {pn: Stream(o, pn) for pn in pns}; _G.pop('views', None)
     cls, _ = fp.parse(rvtfmt.inflate_stream(o.openstream('Formats/Latest').read())[1])
     W = S.id_size(cls); sch = D.Schema(cls)
     import numpy as np
@@ -195,7 +238,7 @@ def _setup(path, log):
     rd = F.make_recdecoder(sch, W, es); rd.set_ids(ids.tolist())
     cnames = {i + 12: c['name'] for i, c in enumerate(cls)}
     log('schema + decoder: %.2fs' % (time.time() - t0))
-    _G.update(path=path, o=o, pns=pns, segtab=segtab, streams={pn: Stream(o, pn) for pn in pns}, cls=cls, W=W, sch=sch, rd=rd, ids=ids, owned=owned,
+    _G.update(path=path, o=o, pns=pns, streams=streams, cls=cls, W=W, sch=sch, rd=rd, ids=ids, owned=owned,
               cnames=cnames, EH=sch.by.get('ElementHeader', -999) + 12)
     return _G
 
@@ -212,39 +255,112 @@ def subclasses(cls, root):
     return {names[i] for i in range(len(cls)) if isa(i)}
 
 
-def _run(tasks, workers, log, what, index=None):
-    """run _task over all tasks; -> list of results in task order. index: the global task numbers of `tasks` (keys of a per-task hdr_ids dict)"""
-    t0 = time.time(); out = [None] * len(tasks); index = index or list(range(len(tasks))); items = list(zip(index, tasks)); pos = {g: i for i, g in enumerate(index)}
-    if workers <= 1 or len(tasks) < 2:
-        _winit(); out = [_task(t)[1:4] for t in items]
-    else:
-        import multiprocessing as mp
-        # biggest first: the long tasks do not end up in the tail
-        order = sorted(items, key=lambda t: -(t[1][2] - t[1][1]))
-        with mp.get_context('fork').Pool(workers, initializer=_winit) as pool:
-            st = []
-            for ti, recs, ehs, eids, tm in pool.imap_unordered(_task, order, chunksize=1): out[pos[ti]] = (recs, ehs, eids); st.append(tm)
+class Engine:
+    """one fork pool for the whole query: segment walks (biggest partition first), each partition's decode tasks submitted as soon as its walk is back,
+    later passes reuse the same workers. Results are keyed (partition index, first segment) so first-wins follows stream order."""
+    def __init__(s, workers, log):
+        s.log = log; s.workers = workers; s.pool = None; s.stat = []
+        if workers > 1:
+            import multiprocessing as mp
+            s.pool = mp.get_context('fork').Pool(workers, initializer=_winit)
+        else: _winit()
+    def close(s):
+        if s.pool: s.pool.terminate()
+    def walk_and_decode(s, wanted, note_eh):
+        """-> (segtab {pn: segs}, tasks {key: task}, results {key: (recs, ehs, ehc)})"""
+        t0 = time.time(); pns = _G['pns']; order = sorted(range(len(pns)), key=lambda i: -_G['streams'][pns[i]].size)
+        segtab = {}; tasks = {}; res = {}
+        if s.pool is None:
+            for pi in order:
+                pn = pns[pi]; segtab[pn] = _job(('walk', pi, pn))[1]
+                for t in plan(pi, pn, segtab[pn]): tasks[t[0]] = t; res[t[0]] = _job(('dec',) + t + (wanted, note_eh, None))[1][:3]
+            return segtab, tasks, res
+        import queue
+        q = queue.Queue(); pending = 0
+        def put(r): q.put(r)
+        def err(e): q.put(('error', e))
+        for pi in order: s.pool.apply_async(_job, (('walk', pi, pns[pi]),), callback=put, error_callback=err); pending += 1
+        tw = None
+        while pending:
+            r = q.get(); pending -= 1
+            if r[0] == 'error': raise r[1]
+            head, body = r
+            if head[0] == 'walk':
+                pi, pn = head[1], head[2]; segtab[pn] = body
+                for t in plan(pi, pn, body):
+                    tasks[t[0]] = t; s.pool.apply_async(_job, (('dec',) + t + (wanted, note_eh, None),), callback=put, error_callback=err); pending += 1
+                if len(segtab) == len(pns): tw = time.time() - t0
+            else:
+                res[head[1]] = body[:3]; s.stat.append(body[3])
+        s._report('records', len(tasks), t0, 'walks done at %.2fs, %d segments' % (tw or 0, sum(map(len, segtab.values()))))
+        return segtab, tasks, res
+    def run(s, jobs, what):
+        """[(key, pn, segs, nmain, wanted, note_eh, hdr_ids)] -> {key: (recs, ehs, ehc)}"""
+        t0 = time.time(); out = {}
+        if s.pool is None: out = {j[0]: _job(('dec',) + tuple(j))[1][:3] for j in jobs}
+        else:
+            for head, body in s.pool.imap_unordered(_job, [('dec',) + tuple(j) for j in jobs], chunksize=1): out[head[1]] = body[:3]; s.stat.append(body[3])
+        s._report(what, len(jobs), t0)
+        return out
+    def _report(s, what, n, t0, extra=''):
+        st = s.stat; s.stat = []
+        if st:
             busy = collections.Counter()
             for c, w, pid in st: busy[pid] += w
-            log('  task cpu %.1fs, task wall %.1fs (max %.2fs), worker busy max %.2fs min %.2fs, pool %.2fs' % (sum(x[0] for x in st), sum(x[1] for x in st), max(x[1] for x in st), max(busy.values()), min(busy.values()), time.time() - t0))
-    log('%s: %d tasks, %d workers, %.2fs' % (what, len(tasks), workers, time.time() - t0))
-    return out
+            s.log('  task cpu %.1fs, task wall %.1fs (max %.2fs), worker busy max %.2fs min %.2fs' % (sum(x[0] for x in st), sum(x[1] for x in st), max(x[1] for x in st), max(busy.values()), min(busy.values())))
+        s.log('%s: %d tasks, %d workers, %.2fs%s' % (what, n, s.workers, time.time() - t0, (', ' + extra) if extra else ''))
+
+
+def header_jobs(segtab, tasks, res, want_ids):
+    """header jobs for `want_ids`: only segments that hold an ElementHeader candidate of a wanted id (noted in the record pass), each window from that
+    segment through OVL decoded bytes (the same tail a task has), windows of one task merged; asked for just those ids"""
+    import numpy as np
+    nd = np.array(sorted(int(i) for i in want_ids), np.uint64); jobs = []
+    for key in sorted(res):
+        ehc = res[key][2]
+        if ehc is None or not len(ehc[0]): continue
+        sel = np.isin(ehc[0], nd)
+        if not sel.any(): continue
+        _, pn, tsegs, nmain = tasks[key]; pi, k0 = key; segs = segtab[pn]
+        hit_ids = sorted(set(ehc[0][sel].tolist())); starts = sorted(set((k0 + ehc[1][sel]).tolist()))
+        win = []
+        for st in starts:
+            st = max(0, st - 1)                # from the previous segment: a record's bytes before its id may sit there
+            m = st; ov = 0
+            while m < len(segs) and (m <= st + 1 or ov < OVL): ov += segs[m][2]; m += 1
+            if win and st <= win[-1][1]: win[-1][1] = max(win[-1][1], m)
+            else: win.append([st, m])
+        for a, b in win: jobs.append(((pi, a), pn, segs[a:b], b - a, [], False, hit_ids))
+    return jobs
 
 
 def classes(path, want, header_ids=None, workers=None, log=None):
     """generic primitive: first-wins reduced records of the classes `want` (names, or a predicate on the class name) and, optionally, the ElementHeaders
-    (cat, owner view, family, classdef) of `header_ids`. -> (records {(eid, class): rec}, headers {eid: tuple}, G)"""
+    (cat, owner view, family, classdef) of `header_ids` (callable: ids from the records). -> (records {(eid, class): rec}, headers {eid: tuple}, G)"""
     log = log or (lambda *a: None); workers = workers or _workers()
     G = _setup(path, log); pred = want if callable(want) else (lambda c, w=set(want): c in w)
-    G['wanted'] = sorted(t for t, n in G['cnames'].items() if pred(n)); G['hdr_ids'] = sorted(int(i) for i in header_ids) if header_ids else None; G['note_eh'] = False
-    tasks = plan(G['o'], G['pns'], G['segtab']); res = _run(tasks, workers, log, 'records')
-    recs = {}; hdr = {}
-    for rr, eh, _ in res:
-        for k, v in rr:
-            if k not in recs: recs[k] = v
-        for e, h in eh:
-            if e not in hdr: hdr[e] = h
+    wanted = sorted(t for t, n in G['cnames'].items() if pred(n))
+    E = Engine(workers, log)
+    try:
+        segtab, tasks, res = E.walk_and_decode(wanted, header_ids is not None)
+        recs = {}
+        for key in sorted(res):
+            for k, v in res[key][0]:
+                if k not in recs: recs[k] = v
+        hdr = {}
+        hid = header_ids(recs) if callable(header_ids) else header_ids
+        if hid:
+            hres = E.run(header_jobs(segtab, tasks, res, hid), 'headers')
+            for key in sorted(hres):
+                for e, h in hres[key][1]:
+                    if e not in hdr: hdr[e] = h
+    finally: E.close()
     return recs, hdr, G
+
+
+def _view_classes():
+    if 'views' not in _G: _G['views'] = subclasses(_G['cls'], 'DBView')
+    return _G['views']
 
 
 def _workers():
@@ -257,17 +373,17 @@ def _workers():
 def sheets(path, workers=None, log=None):
     """same list as fastinfo.scan(path)['sheets'] (number, name, issue date, drawn/approved by, revisions, views)"""
     log = log or (lambda *a: None); workers = workers or _workers(); t0 = time.time()
-    G = _setup(path, log)
     # only real views (subclasses of DBView: sheets are DBViewDrafting), their Viewports and the revisions. fastinfo decodes every DBView* class: DBViewInfo,
     # DBViewType, the cutters are not views, and false DBViewInfo candidates (ids < 1000 inside bulk data) cost 128 of 170 CPU seconds on a 984 MB file
     # DBView* prefix as well: fastinfo names views of the DBView* classes only (TableView / PanelScheduleView on a sheet are not listed there either; kept equal)
-    keep = {c for c in subclasses(G['cls'], 'DBView') if c.startswith('DBView')} | {'Viewport', 'ProjectRevision'}
-    G['wanted'] = sorted(t for t, n in G['cnames'].items() if n in keep); G['hdr_ids'] = None; G['note_eh'] = True
-    tasks = plan(G['o'], G['pns'], G['segtab']); res = _run(tasks, workers, log, 'records')
-    full = {}
-    for rr, _, _ in res:
-        for k, v in rr:
-            if k not in full: full[k] = v
+    def want(c, keep=[]):
+        return c.startswith('DBView') and c in _view_classes() or c in ('Viewport', 'ProjectRevision')
+    def need_headers(full):
+        # 2023+ files: a sheet lists no viewports; each Viewport is owned by its sheet (ElementHeader.m_ownerViewId)
+        sheet_lists = [r['fields'].get('m_sheetViewportElemIds') for (e, c), r in full.items() if c == 'DBViewDrafting' and r['fields'].get('m_sheetNumber') and r['fields'].get('m_viewName') is not None]
+        vps = [e for (e, c) in full if c == 'Viewport']
+        return vps if vps and any(not x for x in sheet_lists) else []
+    full, hdr, G = classes(path, want, need_headers, workers, log)
     import numpy as np
     owned = G['owned']; recs = {}; by = collections.defaultdict(list)
     def has_owner(e):
@@ -284,21 +400,8 @@ def sheets(path, workers=None, log=None):
                    'revision_ids': [int(v) for v in (f.get('m_explicitlyPresentRevisionIds') or []) if isinstance(v, (int,)) or hasattr(v, '__int__')],
                    'viewports': [int(v) for v in (f.get('m_sheetViewportElemIds') or [])]})
     vp = {r['id']: int(r['fields'].get('m_dbViewId', -1)) for r in by['Viewport']}
-    need = [v for v in vp] if any(not s['viewports'] for s in sh) and vp else []
     on_sheet = collections.defaultdict(list)
-    if need:                                  # 2023+ files: a sheet lists no viewports; each Viewport is owned by its sheet (ElementHeader.m_ownerViewId)
-        # only the tasks that hold an ElementHeader candidate of a wanted id (noted in the record pass), each asked for just those ids
-        nd = np.array(sorted(need), np.uint64); per = {}
-        for ti, (_, _, eids) in enumerate(res):
-            if eids is not None and len(eids):
-                hit = np.intersect1d(eids, nd, assume_unique=True)
-                if len(hit): per[ti] = hit.tolist()
-        G['wanted'] = []; G['hdr_ids'] = per; G['note_eh'] = False
-        hdr = {}
-        sub = [tasks[ti] for ti in sorted(per)]; tix = sorted(per)
-        for _, eh, _ in _run(sub, workers, log, 'viewport headers (%d of %d tasks)' % (len(sub), len(tasks)), index=tix):
-            for e, h in eh:
-                if e not in hdr: hdr[e] = h
+    if hdr:
         from . import fastinfo as FI
         W = G['W']
         for v, dv in vp.items():
