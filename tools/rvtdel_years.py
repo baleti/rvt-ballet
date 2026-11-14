@@ -18,7 +18,7 @@ for F in sys.argv[1:]:
             except Exception as x: continue
             if nb == buf or not gone: continue
             try: save._readback(buf, nb, [op]); ok = 'honest accepted'
-            except sg.VerifyFailed as x: ok = 'FALSE-REFUSED ' + str(x)[:80]; bad += 1
+            except sg.VerifyFailed as x: ok = 'FALSE-REFUSED ' + str(x)[:int(os.environ.get('RVTDEL_MSG','80'))]; bad += 1
             try: save._readback(buf, buf, [op]); u = 'UNDONE DELETE ACCEPTED'; bad += 1
             except sg.VerifyFailed: u = 'undone delete refused'
             print(tag, e, ok, ';', u, flush=True); n_ok += 1
