@@ -122,7 +122,7 @@ def _main(argv, say=print):
         if a.json: say(json.dumps(r['grids'], indent=1, default=str)); return 0
         for g in r['grids']: say(g)
     elif a.cmd == 'counts':
-        out = {'by_category': r['counts'], 'by_class': r['class_counts'], 'view_owned_elements': r['view_owned'], 'elements': r['stats']['elements_with_header']}
+        out = {'subcategories': sorted((r.get('subcategory_names') or {}).values()), 'by_category': r['counts'], 'by_class': r['class_counts'], 'view_owned_elements': r['view_owned'], 'elements': r['stats']['elements_with_header']}
         if a.json: say(json.dumps(out, indent=1, sort_keys=True)); return 0     # sorted keys: diffable between saves
         say('elements with header: %d (%d owned by a view: 2D annotation/detail)' % (out['elements'], out['view_owned_elements']))
         say('by category:')
@@ -131,6 +131,8 @@ def _main(argv, say=print):
         for k, v in r['counts'].items():
             if k.startswith('(no category: '): kinds[k[14:].split(')')[0]] = kinds.get(k[14:].split(')')[0], 0) + v
         if kinds: say('without a Revit category (Revit API Category is null too): %d = %s' % (sum(kinds.values()), ', '.join('%s %d' % kv for kv in sorted(kinds.items(), key=lambda t: -t[1]))))
+        sn = r.get('subcategory_names') or {}
+        if sn: say('sub/user categories (resolved to their built-in parent above): %d = %s' % (len(sn), ', '.join(sorted(sn.values())[:12]) + (', ...' if len(sn) > 12 else '')))
     elif a.cmd == 'elements':
         z = _elements(path); catn = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'category_names.json'))); cn = [str(x) for x in z['cls_names']]
         n = len(z['id']); n = min(n, a.limit) if a.limit else n
