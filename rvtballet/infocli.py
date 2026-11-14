@@ -127,12 +127,20 @@ def _main(argv, say=print):
         say('elements with header: %d (%d owned by a view: 2D annotation/detail)' % (out['elements'], out['view_owned_elements']))
         say('by category:')
         for k, v in r['counts'].items(): say('  %8d  %s' % (v, k))
+        kinds = {}
+        for k, v in r['counts'].items():
+            if k.startswith('(no category: '): kinds[k[14:].split(')')[0]] = kinds.get(k[14:].split(')')[0], 0) + v
+        if kinds: say('without a Revit category (Revit API Category is null too): %d = %s' % (sum(kinds.values()), ', '.join('%s %d' % kv for kv in sorted(kinds.items(), key=lambda t: -t[1]))))
     elif a.cmd == 'elements':
         z = _elements(path); catn = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'category_names.json'))); cn = [str(x) for x in z['cls_names']]
         n = len(z['id']); n = min(n, a.limit) if a.limit else n
         def row(i):
             c = int(z['cat'][i]); b = z['bbox'][i]; k = int(z['cls'][i])
-            return (int(z['id'][i]), cn[k] if k != 65535 else '', c, catn.get(str(c), ''), int(z['owner_view'][i]), int(z['family'][i]), None if b[0] != b[0] else [float(v) for v in b])
+            nm = catn.get(str(c), '')
+            if c < -(1 << 61):                                         # no category in the file (Revit API Category is null as well): -1 + the explained kind
+                from . import categories as CT
+                c = -1; nm = '(no category: %s)' % CT.kind(cn[k] if k != 65535 else '')
+            return (int(z['id'][i]), cn[k] if k != 65535 else '', c, nm, int(z['owner_view'][i]), int(z['family'][i]), None if b[0] != b[0] else [float(v) for v in b])
         if a.json:
             say('['); 
             for i in range(n):
