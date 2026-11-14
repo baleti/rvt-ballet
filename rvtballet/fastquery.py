@@ -251,6 +251,8 @@ def _lite(c, rec):
     for k in ('m_pParamValueSetDouble', 'm_pParamValueSetInt', 'm_pParamValueSetElementId', 'm_pParamValueSetAString'):
         if f.get(k) is not None: pr.update(_params(f[k]))
     if pr: out['params'] = pr
+    sf = _ob(f.get('m_pSurface'))
+    if c == 'Level' and isinstance(sf, dict) and isinstance(sf.get('m_origin'), (list, tuple)) and len(sf['m_origin']) == 3: out['elevation'] = float(sf['m_origin'][2])
     cs = _ob(f.get('m_pCompoundStructure'))
     if isinstance(cs, dict) and isinstance(cs.get('m_layers'), list):
         out['layers'] = [(_plain(L.get('m_layerWidth')), _plain(L.get('m_layerFunction')), _plain(L.get('m_materialId'))) for L in cs['m_layers'] if isinstance(L, dict)]
@@ -648,10 +650,11 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
     acat = ALIAS_CATS.get(cls if isinstance(cls, str) else (cls[0] if cls and len(cls) == 1 else None))
     tag_of = {n: t for t, n in G['cnames'].items()}
     aux = {'Level', 'CategoryElem', 'FamilySurrogate', 'FamSymSurrogate'}
-    sym = subclasses(G['cls'], 'Symbol')
+    sym = subclasses(G['cls'], 'Symbol') | {'Level'}           # no-STOP decoder: type names (SymbolInfo) and Level elevations (m_pSurface.m_origin) sit behind the geometry stop
     spec = [{'tags': sorted(tag_of[n] for n in (want | aux) - sym if n in tag_of), 'mode': 'lite'}]
     spec = [x for x in spec if x['tags']]
-    if want & sym: spec.append({'tags': sorted(tag_of[n] for n in want & sym if n in tag_of), 'mode': 'lite', 'full': True})      # type names need the no-STOP decoder
+    fl = (want | aux) & sym
+    if fl: spec.append({'tags': sorted(tag_of[n] for n in fl if n in tag_of), 'mode': 'lite', 'full': True})
     E = Engine(workers, log)
     try:
         segtab, tasks, res = E.walk_and_decode(spec, True)
@@ -678,7 +681,7 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
         types = {}
         need = sorted({v for v in tid.values()} - {e for (e, c) in full})
         if names and need:
-            stags = sorted(tag_of[n] for n in sym if n in tag_of)
+            stags = sorted(tag_of[n] for n in sym - {'Level'} if n in tag_of)
             jobs = [t + ([{'tags': stags, 'mode': 'lite', 'full': True, 'only': need}], False, None) for t in (tasks[k] for k in sorted(tasks))]
             for key, (rr, _, _) in sorted(E.run(jobs, 'types by id').items()):
                 for (e, c), r in rr:
@@ -725,7 +728,22 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
 # ---------------------------------------------------------------------------------------------------------------------------------------------------
 # benchmark: walls below a height whose type layers use a material with a red colour in any colour property
 
-WALL_USER_HEIGHT = -1001105        # BuiltInParameter.WALL_USER_HEIGHT_PARAM (Unconnected Height; stored on every wall)
+WALL_USER_HEIGHT = -1001105        # BuiltInParameter.WALL_USER_HEIGHT_PARAM (Unconnected Height; stored on every wall, but stale when the top is constrained)
+WALL_BASE_LEVEL, WALL_BASE_OFFSET, WALL_TOP_LEVEL, WALL_TOP_OFFSET, WALL_TOP_ATTACHED = -1001107, -1001108, -1001103, -1001109, -1001117
+
+
+def wall_height(f, elev):
+    """(height ft, how): Revit's Unconnected Height. Top constrained to a level: top elevation + Top Offset - (base elevation + Base Offset) (the stored value is
+    stale then: equal to Revit for only 170 of 775 walls on 9 samples); unconnected: the stored value. how = 'levels' | 'stored' | None; walls whose top is attached
+    to a roof/floor are marked 'attached' (Revit trims them; not reproduced)"""
+    pr = f.get('params') or {}
+    base = pr.get(WALL_BASE_LEVEL, f.get('m_assocLevelId')); top = pr.get(WALL_TOP_LEVEL, f.get('m_upToLevelId'))
+    bo = pr.get(WALL_BASE_OFFSET, 0.0) or 0.0; to = pr.get(WALL_TOP_OFFSET, 0.0) or 0.0
+    how = 'attached' if pr.get(WALL_TOP_ATTACHED) else None
+    if isinstance(top, int) and top > 0 and top in elev and isinstance(base, int) and base in elev:
+        return elev[top] + to - (elev[base] + bo), how or 'levels'
+    h = pr.get(WALL_USER_HEIGHT)
+    return (h, how or 'stored') if isinstance(h, (int, float)) else (None, None)
 NAMED = {'red': (255, 0, 0), 'dark red': (139, 0, 0), 'brick': (170, 74, 68), 'orange': (255, 165, 0), 'brown': (150, 75, 0), 'pink': (255, 192, 203),
          'yellow': (255, 255, 0), 'green': (0, 128, 0), 'blue': (0, 0, 255), 'purple': (128, 0, 128), 'grey': (128, 128, 128), 'white': (255, 255, 255), 'black': (0, 0, 0)}
 
@@ -766,7 +784,7 @@ def walls_red_material(path, max_height_ft=5 / 0.3048, workers=None, log=None, r
     G = _setup(path, log); tag_of = {n: t for t, n in G['cnames'].items()}; t1 = time.time()
     wall_c = _class_set(G['cls'], 'Wall'); type_c = _class_set(G['cls'], 'WallType'); mat_c = {'MaterialElem'}; ast_c = {'AppearanceAssetElem'}
     spec = [{'tags': sorted(tag_of[n] for n in wall_c if n in tag_of), 'mode': 'lite'},
-            {'tags': sorted(tag_of[n] for n in type_c | mat_c | ast_c if n in tag_of), 'mode': 'lite', 'full': True}]
+            {'tags': sorted(tag_of[n] for n in type_c | mat_c | ast_c | {'Level'} if n in tag_of), 'mode': 'lite', 'full': True}]
     E = Engine(workers, log)
     try: segtab, tasks, res = E.walk_and_decode(spec, False)
     finally: E.close()
@@ -780,16 +798,17 @@ def walls_red_material(path, max_height_ft=5 / 0.3048, workers=None, log=None, r
     for e, m in mats.items():
         cols = material_colors(m, assets); hit = [(p, v) for p, v in cols if is_red(v)]
         if hit: red[e] = hit
-    out = []; nh = 0; nt = 0
+    elev = {e: r['fields']['elevation'] for (e, c), r in full.items() if c == 'Level' and 'elevation' in r['fields']}
+    out = []; nh = 0; nt = 0; hows = collections.Counter()
     for e, w in sorted(walls.items()):
-        f = w['fields']; h = (f.get('params') or {}).get(WALL_USER_HEIGHT)
+        f = w['fields']; h, how = wall_height(f, elev); hows[how] += 1
         if isinstance(h, (int, float)): nh += 1
         t = f.get('m_WallAttributesId'); tr = types.get(t)
         if tr: nt += 1
         if not isinstance(h, (int, float)) or h >= max_height_ft or not tr: continue
         ms = [L[2] for L in tr['fields'].get('layers') or [] if isinstance(L[2], int)]
         if any(m in red for m in ms): out.append({'id': e, 'type_id': t, 'height_ft': h, 'red_materials': sorted({m for m in ms if m in red})})
-    st = {'walls': len(walls), 'walls_with_height': nh, 'walls_with_type': nt, 'wall_types': len(types), 'types_with_layers': sum(1 for r in types.values() if r['fields'].get('layers')),
+    st = {'walls': len(walls), 'walls_with_height': nh, 'height_from': dict(hows), 'walls_with_type': nt, 'wall_types': len(types), 'types_with_layers': sum(1 for r in types.values() if r['fields'].get('layers')),
           'materials': len(mats), 'materials_with_colour': sum(1 for m in mats.values() if material_colors(m, assets)), 'appearance_assets': len(assets),
           'assets_with_colour': sum(1 for a in assets.values() if a['fields'].get('asset_colors')), 'red_materials': len(red), 'count': len(out),
           'seconds': {'setup': round(t1 - t0, 2), 'decode_pass': round(t2 - t1, 2), 'join': round(time.time() - t2, 2), 'total': round(time.time() - t0, 2)}}
