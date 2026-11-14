@@ -8,7 +8,8 @@ if not os.path.exists(SRC) or not save.SaveSessions().available: print('skip'); 
 try:
     src = os.path.join(_T, 's.rvt'); shutil.copy(SRC, src); d = save.SaveSessions().doc('m', src)
     ops = [edit.validate_op({'op': 'delete', 'eid': 1421734})]
-    nb, dl = edit.apply_full(d.buf, ops)
+    try: nb, dl = edit.apply_full(d.buf, ops)
+    except edit.EditError as e: print('OK refused earlier by the edit layer:', str(e)[:100]); sys.exit(0)      # the view-owned guard (added after this test) now stops it before the readback; still a refusal
     try: save._readback(d.buf, nb, ops); raise SystemExit('FAIL: group member delete accepted')
     except Exception as e:
         if isinstance(e, SystemExit): raise
