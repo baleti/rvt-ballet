@@ -3,7 +3,7 @@ import os, sys
 os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from rvtballet.edit import validate_op, compose, EditError
-for bad in (float('nan'), float('inf'), -float('inf'), True, '90', None, 361, -360.5, 360, -360, 0, -0.0, 1e300):
+for bad in (float('nan'), float('inf'), -float('inf'), True, '90', None, 361, -360.5, 360, -360, 0, -0.0, 1e300, 1e-12, 1e-7, 360 - 1e-8):
     try: validate_op({'op': 'rotate', 'eid': 5, 'deg': bad}); raise SystemExit('FAIL accepted %r' % (bad,))
     except EditError: pass
 r = lambda d: validate_op({'op': 'rotate', 'eid': 5, 'deg': d})

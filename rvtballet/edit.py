@@ -115,6 +115,7 @@ def validate_op(op):
         d = op.get('deg')
         if isinstance(d, bool) or not isinstance(d, (int, float)) or d != d or abs(d) > 360: raise EditError('deg must be a finite number of degrees, |deg| <= 360')
         if d % 360 == 0: raise EditError('rotate by a multiple of 360 degrees changes nothing')
+        if min(d % 360, 360 - d % 360) < 1e-6: raise EditError('rotate by %.3g degrees (mod 360) is below the 1e-6 degree resolution: smaller angles can leave the stored transform unchanged (accepted as a silent no-op) or be undetectable by the readback witness' % d)
         return {'op': 'rotate', 'eid': op['eid'], 'deg': float(d)}
     if op['op'] == 'set_link_override':
         if os.environ.get('RVTBALLET_ENABLE_LINKOVERRIDE') != '1': raise EditError('link override edit is disabled (opt-in: RVTBALLET_ENABLE_LINKOVERRIDE=1; Revit-verified on 2024 only)')
