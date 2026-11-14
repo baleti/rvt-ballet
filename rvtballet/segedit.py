@@ -210,6 +210,14 @@ class Session:
         if hs0 not in self.mhs: raise Refused('legacy member layout (no member with record header size %d): not handled by the segment writer' % hs0)
         self.firstrec = self.mhs.index(hs0)
 
+    def known_ids(self):
+        """element ids of Global/ElemTable (elemindex._ids rule)"""
+        if getattr(self, '_known', None) is None:
+            sys.path.insert(0, os.path.expanduser('~/src/rvt-ballet'))
+            from rvtballet import elemindex
+            self._known = set(int(x) for x in elemindex._ids(self.ctx.o, self.ctx.W))
+        return self._known
+
     def member_hs(self, k): return self.ctx.hs - 4 if k < self.firstrec else self.ctx.hs
 
     def ids_occ(self, eids):
@@ -482,7 +490,8 @@ class Session:
             z = sp.payload(sp.plen - delta, delta)
             if z.count(0) != len(z): raise Refused('payload grows by %d bytes beyond the original page layout (no zero pad to consume)' % delta)
         first = patches[0][0] // PAGE_PAYLOAD
-        last = sp.npages() - 1 if delta else (patches[-1][0] + patches[-1][1] - 1) // PAGE_PAYLOAD
+        if delta: plist = range(first, sp.npages())
+        else: plist = sorted({pg for po, ol, nb in patches for pg in range(po // PAGE_PAYLOAD, (po + max(ol, 1) - 1) // PAGE_PAYLOAD + 1)})
         # map new payload offset -> source bytes: walk patches in order
         def new_bytes(a, n):
             """new payload [a, a+n): source bytes with patches applied and the tail adjusted (zero pad / trimmed pad)"""
@@ -503,7 +512,7 @@ class Session:
                 else: out += b'\0' * (hi - lo)
             assert len(out) == min(end, sp.plen) - a, (len(out), a, n)
             return bytes(out)
-        for p in range(first, last + 1):
+        for p in plist:
             cap = sp.page_cap(p); data = new_bytes(p * PAGE_PAYLOAD, cap); N = sp.page_len(p)
             yield p, ecc.parity(data, N)
 
@@ -554,12 +563,18 @@ def clone_file(src, dst):
             fcntl.ioctl(fo.fileno(), 0x40049409, fi.fileno()); return 'reflink'
         except OSError: pass
         n = os.fstat(fi.fileno()).st_size; off = 0
-        while off < n:
-            c = os.copy_file_range(fi.fileno(), fo.fileno(), n - off, off, off)
-            if c <= 0: break
-            off += c
-        if off != n: raise OSError('short copy')
-        return 'copy_file_range'
+        try:
+            while off < n:
+                c = os.copy_file_range(fi.fileno(), fo.fileno(), n - off, off, off)
+                if c <= 0: break
+                off += c
+            if off != n: raise OSError('short copy')
+            return 'copy_file_range'
+        except OSError:      # EXDEV / EINVAL / ENOSYS (other file system, old kernel): plain copy
+            import shutil
+            fi.seek(0); fo.seek(0); fo.truncate(); shutil.copyfileobj(fi, fo, 1 << 22)
+            if fo.tell() != n: raise OSError('short copy')
+            return 'copy'
 
 
 # ---------------------------------------------------------------- verification (scoped)
@@ -644,9 +659,28 @@ def verify_output(sess, out, patches, delta, pages):
     return rep
 
 
+def partition_of(path, eids, workers=None):
+    """the one partition that holds a decodable record of every element in eids (the old product refuses elements with records in several partitions:
+    Revit may read the copy an edit would not change); single-partition files skip the search"""
+    ctx = Ctx(path)
+    if len(ctx.parts) == 1: return ctx.parts[0]
+    where = {e: [] for e in eids}
+    for pn in ctx.parts:
+        try: s = Session(path, part=pn, workers=workers)
+        except Refused: continue
+        for e in eids:
+            try: s.trace(e); where[e].append(pn)
+            except Refused: pass
+    for e, ps in where.items():
+        if len(ps) != 1: raise Refused('element %d has decodable records in %d partitions (%s): refused as by the old editor' % (e, len(ps), ', '.join(ps)))
+    ps = {ps[0] for ps in where.values()}
+    if len(ps) != 1: raise Refused('the edited elements live in different partitions (%s): save them separately' % ', '.join(sorted(ps)))
+    return ps.pop()
+
+
 def apply_ops(path, dest, ops, mode='fit', workers=None):
     """ops: dicts like edit.py's ({'op': 'set_string', 'eid', 'pid' | 'param', 'value', 'expect'?}, {'op': 'move', 'eid', 'dx', 'dy', 'dz'}, {'op': 'rotate', 'eid', 'deg'})"""
-    t0 = time.time(); s = Session(path, workers=workers); seen = set()
+    t0 = time.time(); s = Session(path, part=partition_of(path, sorted({o['eid'] for o in ops}), workers), workers=workers); seen = set()
     for o in ops:
         e = o['eid']
         if o['op'] in ('move', 'rotate'):
@@ -664,9 +698,168 @@ def apply_ops(path, dest, ops, mode='fit', workers=None):
     return info
 
 
+
+# ---------------------------------------------------------------- in-place SAVE! (savegate primitives, fast path)
+def _savegate():
+    p = os.path.expanduser('~/src/savegate')
+    if p not in sys.path: sys.path.insert(0, p)
+    import savegate.core as core, savegate.guard as guard, savegate.atomic as atomic, savegate.backup as backup
+    return core, guard, atomic, backup
+
+
+def file_version(path):
+    """Revit year from BasicFileInfo (the savegate adapter's version key)"""
+    import re, olefile
+    d = olefile.OleFileIO(path).openstream('BasicFileInfo').read()
+    for off in (0, 1):
+        m = re.search(r'(?:Autodesk Revit|Format:)\s*(\d{4})', d[off:].decode('utf-16le', 'ignore'))
+        if m: return m.group(1)
+    raise Refused('cannot read the Revit version from BasicFileInfo')
+
+
+def worksharing(path):
+    import re, olefile
+    d = olefile.OleFileIO(path).openstream('BasicFileInfo').read()
+    for off in (0, 1):
+        m = re.search(r'Worksharing:\s([^\r\n]*)', d[off:].decode('utf-16le', 'ignore'))
+        if m: return re.split(r'Username:|[\x00-\x1f]', m.group(1))[0].strip()
+    return None
+
+
+def _sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for b in iter(lambda: f.read(1 << 22), b''): h.update(b)
+    return h.hexdigest()
+
+
+def group_and_option(sess, eids):
+    """{eid: [reasons]}: group membership (an ElementGroup record lists the element in m_pElemIdsPairSet / m_elementId, the group itself counts) and design
+    option (m_designOptionId of the element's own record is a real id), as save.membership's worker computes them, but from the ElementGroup records only
+    (found by class tag in one parallel pass) instead of a whole-model extraction. Raises Refused when anything cannot be read."""
+    import re
+    c = sess.ctx; out = {}
+    try: gtag = c.sch.by['ElementGroup'] + 12
+    except KeyError: gtag = None
+    ids = lambda v: [int(m) for m in re.findall(r'\d+', str(v))]
+    def find(o, key, res):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if k == key: res.append(v)
+                else: find(v, key, res)
+        elif isinstance(o, list):
+            for v in o: find(v, key, res)
+    members = {}
+    if gtag is not None:
+        pat = struct.pack('<H', gtag); W = c.W; known = sess.known_ids()
+        for k in occurrences(sess.sp, [pat], sess.workers)[pat]:      # tag at i+12+W (long) or i+8+W (short) of a record header whose id field is a known element
+            for short in (False, True):
+                i = k - (12 + W - (4 if short else 0))
+                if i < 0: continue
+                eid = struct.unpack(c.IDF, sess.J.get(i + 4, W))[0]
+                if eid not in known: continue
+                try: r, q, log = sess._decode(i, short, trace=False)
+                except Exception: continue
+                if r.get('class') != 'ElementGroup' or r['fields'].get('m_id') != eid: continue
+                mm = []; find(r.get('fields'), 'm_pElemIdsPairSet', mm); mem = []
+                for v in mm: find(v, 'm_elementId', mem)
+                for m in mem:
+                    for x in ids(m): members.setdefault(x, set()).add(eid)
+                members.setdefault(eid, set()).add(eid)
+    for e in eids:
+        i, r, log, q = sess.trace(e); d = []; find(r.get('fields'), 'm_designOptionId', d)
+        why = sorted({'group %d' % g for g in members.get(e, ())} | {'design option %d' % o for v in d for o in ids(v) if o < 2 ** 31})
+        if why: out[e] = why
+    return out
+
+
+def _clean_dir():
+    return os.environ.get('SEGEDIT_CLEAN_DIR') or os.path.join(os.environ.get('XDG_CACHE_HOME') or os.path.expanduser('~/.cache'), 'rvtballet', 'segclean')
+
+
+def clean_known(sha):
+    return os.path.isfile(os.path.join(_clean_dir(), sha))
+
+
+def clean_mark(sha, why):
+    d = _clean_dir(); os.makedirs(d, exist_ok=True); t = os.path.join(d, sha + '.%d.tmp' % os.getpid())
+    with open(t, 'w') as f: f.write(why + '\n')
+    os.replace(t, os.path.join(d, sha))
+
+
+def save_in_place(path, ops, mode='fit', workers=None, force=False, keep=20):
+    """SAVE! through the segment writer: gate (savegate gate file, per format/version), lock, conflict checks, backup (hash-verified copy), atomic rename,
+    post-commit hash check. The output is built as a temp file next to the source (clone + rewritten sectors) and verified before anything is replaced.
+    Needs RVTBALLET_ALLOW_OVERWRITE=1 and an open gate (SAVEGATE_GATE for tests). Move/rotate in place are refused here: their dependents check
+    (hosted, joined, connected elements) still needs the whole-model extraction (save.membership)."""
+    core, guard, atomic, backup = _savegate(); t0 = time.time(); tm = {}
+    path = os.path.realpath(path)
+    if os.environ.get('RVTBALLET_ALLOW_OVERWRITE') != '1': raise Refused('overwrite is disabled (RVTBALLET_ALLOW_OVERWRITE=1)')
+    cfg = core.Config(allow_overwrite=True)
+    ver = file_version(path)
+    if not core.gate_open('rvt', ver, cfg): raise Refused('overwrite of rvt %s is not enabled: the gate is closed' % ver)
+    ws = worksharing(path)
+    if not (ws or '').startswith('Not enabled'): raise Refused('the model is workshared or of unknown worksharing state (%r)' % ws)
+    if any(o['op'] in ('move', 'rotate') for o in ops) and os.environ.get('RVTBALLET_ALLOW_GROUP_EDIT') != '1': raise Refused('move/rotate in place: the dependents check needs the full model (use SAVE AS, or the full save path)')
+    st = os.stat(path); fp = guard.Fingerprint(st.st_size, st.st_mtime_ns, _sha256_file(path)); tm['hash0'] = round(time.time() - t0, 3)
+    if not clean_known(fp.sha256) or os.environ.get('SEGEDIT_FULL_SOURCE_CHECK') == '1':      # the savegate source gate, once per content (sha256): a file this writer produced from a clean source is clean by construction
+        from savegate.adapters import RvtAdapter
+        with open(path, 'rb') as f: buf = f.read()
+        if hashlib.sha256(buf).hexdigest() != fp.sha256: raise Refused('the file changed while it was being checked')
+        dm = [x for x in RvtAdapter().source_damage(buf) if not x.startswith('the file has ')]; del buf
+        if dm: raise Refused('the file is damaged (%d problem(s), first: %s); overwrite refused, the file was not touched' % (len(dm), dm[0][:160]))
+        clean_mark(fp.sha256, 'savegate source_damage')
+        info0 = 'full'
+    else: info0 = 'cached (content sha256 verified clean earlier)'
+    tm['source_check'] = round(time.time() - t0, 3)
+    s = Session(path, part=partition_of(path, sorted({o['eid'] for o in ops}), workers), workers=workers)
+    if os.environ.get('RVTBALLET_ALLOW_GROUP_EDIT') != '1':
+        mem = group_and_option(s, sorted({o['eid'] for o in ops}))
+        if mem: e0 = sorted(mem)[0]; raise Refused('element %d is part of a group or design option (%s)' % (e0, '; '.join(mem[e0])))
+    for o in ops:
+        if o['op'] == 'set_string': s.set_string_pid(o['eid'], o.get('pid') if o.get('pid') is not None else s.resolve_pid(o['eid'], o['param']), o['value'], o.get('expect'))
+        elif o['op'] == 'move': s.move(o['eid'], o['dx'], o['dy'], o.get('dz', 0.0))
+        elif o['op'] == 'rotate': s.rotate(o['eid'], o['deg'])
+        else: raise Refused('op %s not handled by the segment writer' % o['op'])
+    tm['edit'] = round(time.time() - t0, 3)
+    patches, delta, info = s.build(mode); pages = list(s.new_stream_pages(patches, delta))
+    lk = guard.Lock(path); lk.acquire()
+    try:
+        atomic.sweep_own_temps(path)
+        if not force: guard.check_unchanged(path, fp, rehash=False)
+        import tempfile
+        fd, tmp = tempfile.mkstemp(prefix=atomic._temp_prefix(path), suffix='.sgtmp', dir=os.path.dirname(path)); os.close(fd)
+        try:
+            info['copy'] = clone_file(path, tmp)
+            fd = os.open(tmp, os.O_RDWR)
+            try:
+                written = sum(_pwrite_stream(fd, s.sp, p * PAGE_STORED, b) for p, b in pages); os.fsync(fd)
+            finally: os.close(fd)
+            atomic._step('tmp_written')
+            tm['write'] = round(time.time() - t0, 3)
+            info['verify'] = verify_output(s, tmp, patches, delta, [p for p, _ in pages]); tm['verify'] = round(time.time() - t0, 3)
+            new_sha = _sha256_file(tmp)
+            if not force: guard.check_unchanged(path, fp, rehash=True)
+            bk = backup.make_backup(path, keep, 0, None if force else fp.sha256); tm['backup'] = round(time.time() - t0, 3)
+            if not force: guard.check_unchanged(path, fp, rehash=False)
+            atomic.commit_temp(tmp, path, copy_mode_from=path); tm['commit'] = round(time.time() - t0, 3)
+        except BaseException:
+            try: os.remove(tmp)
+            except OSError: pass
+            raise
+        if _sha256_file(path) != new_sha:
+            try: core._restore(path, None); msg = 'the previous version was restored from its backup'
+            except Exception as e2: msg = 'RESTORE FAILED (%s); backup: %s' % (e2, bk)
+            raise Refused('the saved file is not the verified output; %s' % msg)
+    finally: lk.release()
+    clean_mark(new_sha, 'segedit output of clean %s' % fp.sha256[:16])
+    info.update(pages=[p for p, _ in pages], bytes_written=written, delta=delta, backup=bk, sha256=new_sha, timing=tm, seconds=round(time.time() - t0, 3), version=ver, source_check=info0)
+    return info
+
+
 def main(argv=None):
     import argparse, json, resource
-    ap = argparse.ArgumentParser(prog='segedit'); ap.add_argument('file'); ap.add_argument('-o', '--output', required=True)
+    ap = argparse.ArgumentParser(prog='segedit'); ap.add_argument('file'); ap.add_argument('-o', '--output'); ap.add_argument('--in-place', action='store_true')
     ap.add_argument('--mode', choices=('fit', 'shift'), default='fit'); ap.add_argument('--workers', type=int)
     ap.add_argument('--set-string', nargs=3, action='append', default=[], metavar=('EID', 'PARAM', 'VALUE'))
     ap.add_argument('--move', nargs=4, action='append', default=[], metavar=('EID', 'DX', 'DY', 'DZ'))
@@ -675,7 +868,8 @@ def main(argv=None):
     for e, p, v in a.set_string: ops.append(dict(op='set_string', eid=int(e), value=v, **({'pid': int(p)} if p.lstrip('-').isdigit() else {'param': p})))
     for e, x, y, z in a.move: ops.append(dict(op='move', eid=int(e), dx=float(x), dy=float(y), dz=float(z)))
     for e, d in a.rotate: ops.append(dict(op='rotate', eid=int(e), deg=float(d)))
-    try: info = apply_ops(a.file, a.output, ops, a.mode, a.workers)
+    if bool(a.output) == bool(a.in_place): print('give exactly one of -o OUT / --in-place'); return 2
+    try: info = save_in_place(a.file, ops, a.mode, a.workers) if a.in_place else apply_ops(a.file, a.output, ops, a.mode, a.workers)
     except Refused as e: print('REFUSED: %s (nothing written)' % e); return 2
     ru = resource.getrusage(resource.RUSAGE_SELF); rc = resource.getrusage(resource.RUSAGE_CHILDREN)
     info['cpu'] = round(ru.ru_utime + ru.ru_stime + rc.ru_utime + rc.ru_stime, 2); info['maxrss_mb'] = round(max(ru.ru_maxrss, rc.ru_maxrss) / 1024, 1)
