@@ -498,8 +498,14 @@ class Session:
         if len(new_raw) > max(limit, len(orig)): raise Refused('member %d would exceed the member size limit (%d > %d, original %d): re-split not handled' % (k, len(new_raw), limit, len(orig)))      # a member Revit itself wrote above the limit may keep (or shrink from) its size
         return x1, len(new_raw) - hs * x1
 
-    def build(self, mode='fit'):
-        """-> (payload patches [(payload_off, old_len, new_bytes)], delta, info) for the chosen layout"""
+    def build(self, mode='auto'):
+        """-> (payload patches [(payload_off, old_len, new_bytes)], delta, info) for the chosen layout. auto = fit, or shift when a dirty member does not fit
+        its original compressed size (members an earlier level-9 save already packed tightly)"""
+        if mode == 'auto':
+            try: return self.build('fit')
+            except Refused as e:
+                if 'does not fit its original compressed size' not in str(e): raise
+                r = self.build('shift'); r[2]['fallback'] = str(e); return r
         _paths(); import rvtw
         raws = self.dirty_raws(); sp = self.sp; patches = []; info = dict(dirty=sorted(raws), mode=mode)
         if mode == 'fit': raws = {k: v for k, v in raws.items() if v != self.J.raw(k)}      # an unchanged member keeps Revit's own bytes
@@ -558,7 +564,7 @@ class Session:
             cap = sp.page_cap(p); data = new_bytes(p * PAGE_PAYLOAD, cap); N = sp.page_len(p)
             yield p, ecc.parity(data, N)
 
-    def write(self, dest, mode='fit', verify=True, fsync=True):
+    def write(self, dest, mode='auto', verify=True, fsync=True):
         """write the edited copy to dest (must not exist): reflink/copy of the source + rewritten sectors of the changed pages; verified before the rename"""
         t0 = time.time(); src = self.ctx.path
         if os.path.exists(dest): raise Refused('destination exists')
@@ -759,7 +765,7 @@ def _apply(s, ops):
         else: raise Refused('op %s not handled by the segment writer' % o['op'])
 
 
-def apply_ops(path, dest, ops, mode='fit', workers=None):
+def apply_ops(path, dest, ops, mode='auto', workers=None):
     """ops: dicts like edit.py's ({'op': 'set_string', 'eid', 'pid' | 'param', 'value', 'expect'?}, {'op': 'move', 'eid', 'dx', 'dy', 'dz'}, {'op': 'rotate', 'eid', 'deg'})"""
     ops = _validated(ops); t0 = time.time(); s = Session(path, part=partition_of(path, sorted({o['eid'] for o in ops}), workers), workers=workers)
     _apply(s, ops)
@@ -857,7 +863,7 @@ def clean_mark(sha, why):
     os.replace(t, os.path.join(d, sha))
 
 
-def save_in_place(path, ops, mode='fit', workers=None, force=False, keep=20):
+def save_in_place(path, ops, mode='auto', workers=None, force=False, keep=20):
     """SAVE! through the segment writer: gate (savegate gate file, per format/version), lock, conflict checks, backup (hash-verified copy), atomic rename,
     post-commit hash check. The output is built as a temp file next to the source (clone + rewritten sectors) and verified before anything is replaced.
     Needs RVTBALLET_ALLOW_OVERWRITE=1 and an open gate (SAVEGATE_GATE for tests). Move/rotate in place are refused here: their dependents check
@@ -926,7 +932,7 @@ def save_in_place(path, ops, mode='fit', workers=None, force=False, keep=20):
 def main(argv=None):
     import argparse, json, resource
     ap = argparse.ArgumentParser(prog='segedit'); ap.add_argument('file'); ap.add_argument('-o', '--output'); ap.add_argument('--in-place', action='store_true')
-    ap.add_argument('--mode', choices=('fit', 'shift'), default='fit'); ap.add_argument('--workers', type=int)
+    ap.add_argument('--mode', choices=('auto', 'fit', 'shift'), default='auto'); ap.add_argument('--workers', type=int)
     ap.add_argument('--set-string', nargs=3, action='append', default=[], metavar=('EID', 'PARAM', 'VALUE'))
     ap.add_argument('--move', nargs=4, action='append', default=[], metavar=('EID', 'DX', 'DY', 'DZ'))
     ap.add_argument('--rotate', nargs=2, action='append', default=[], metavar=('EID', 'DEG'))

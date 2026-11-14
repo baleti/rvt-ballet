@@ -183,3 +183,12 @@ def test_set_num_product_guards_apply():
     """segedit runs edit.validate_op: a derived/placeholder parameter and a non-finite value are refused before anything is read"""
     with pytest.raises(segedit.Refused): segedit.apply_ops(SRC, "/nonexistent/x.rvt", [dict(op="set_num", eid=EID, param="Unit weight", value=1.0)])
     with pytest.raises(segedit.Refused): segedit.apply_ops(SRC, "/nonexistent/x.rvt", [dict(op="set_num", eid=EID, param="Area", value=float("nan"))])
+
+
+def test_auto_falls_back_to_shift_on_old_writer_output(tmp_path):
+    """a file saved by the old writer has level-9 members with no room for an exact-size re-encoding: fit refuses, auto takes the shift layout, output gate-clean"""
+    src = os.path.join(ORACLE, "2024_hvac_setstring_mark.rvt")
+    if not os.path.exists(src): pytest.skip("oracle output not present")
+    with pytest.raises(segedit.Refused, match="does not fit"): segedit.apply_ops(src, str(tmp_path / "f.rvt"), [dict(op="move", eid=EID, dx=2.0, dy=0.0, dz=0.0)], mode="fit")
+    info = segedit.apply_ops(src, str(tmp_path / "a.rvt"), [dict(op="move", eid=EID, dx=2.0, dy=0.0, dz=0.0)])
+    assert info["mode"] == "shift" and "fallback" in info and gate_damage(str(tmp_path / "a.rvt")) == []
