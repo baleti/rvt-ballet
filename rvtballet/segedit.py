@@ -58,6 +58,14 @@ class SegPart:
         self.plen = self.full * PAGE_PAYLOAD + self.cap_last
         self._walk()
 
+    def meta(self):
+        return dict(name=self.name, size=self.size, ss=self.ss, chain=self.chain, full=self.full, N_last=self.N_last, cap_last=self.cap_last, plen=self.plen, st0=self.st0, mem=self.mem, offs=self.offs, jlen=self.jlen)
+
+    @classmethod
+    def light(cls, path, meta):
+        """reader from a parent's member table (no FAT parse, no member walk): used by scan workers"""
+        s = cls.__new__(cls); s.__dict__.update(meta); s.path = path; s.fp = open(path, 'rb'); return s
+
     # stored stream bytes / payload bytes
     def stored(self, a, n):
         out = bytearray(); end = min(a + n, self.size); ss = self.ss
@@ -134,9 +142,12 @@ class Joined:
     def __len__(self): return self.sp.jlen
 
 
+_SCAN = {}
+
+
 def _scan_worker(args):
-    path, name, ks, pats = args
-    sp = SegPart(path, name); out = {p: [] for p in pats}; tails = {}
+    ks, pats = args
+    sp = _SCAN['sp']; out = {p: [] for p in pats}; tails = {}
     for k in ks:
         r = sp.member_raw(k); base = sp.offs[k]
         for p in pats:
@@ -148,20 +159,27 @@ def _scan_worker(args):
 
 def occurrences(sp, pats, workers=None):
     """every joined offset (any alignment, overlapping) of each byte pattern in pats, including matches across member boundaries"""
-    n = len(sp.mem); pats = [bytes(p) for p in pats]
-    workers = workers or (min(os.cpu_count() or 2, 12) if n > 400 else 1)
-    chunks = [list(range(i, n, workers)) for i in range(workers)] if workers > 1 else [list(range(n))]
+    return occurrences_in(sp, range(len(sp.mem)), pats, workers)
+
+
+def occurrences_in(sp, members, pats, workers=None):
+    """occurrences restricted to the given members (sorted, consecutive runs); boundary matches between two listed consecutive members included"""
+    members = sorted(members); n = len(sp.mem); pats = [bytes(p) for p in pats]
+    workers = workers or (min(os.cpu_count() or 2, 12) if len(members) > 400 else 1)
+    _SCAN['sp'] = SegPart.light(sp.path, sp.meta())
     if workers > 1:
         import multiprocessing as mp
-        with mp.get_context('fork').Pool(workers) as pool: res = pool.map(_scan_worker, [(sp.path, sp.name, c, pats) for c in chunks])
-    else: res = [_scan_worker((sp.path, sp.name, chunks[0], pats))]
+        step = max(1, -(-len(members) // (workers * 4))); chunks = [members[i:i + step] for i in range(0, len(members), step)]
+        with mp.get_context('fork').Pool(workers) as pool: res = pool.map(_scan_worker, [(c, pats) for c in chunks])
+    else: res = [_scan_worker((members, pats))]
     occ = {p: [] for p in pats}; tails = {}
     for o, t in res:
         for p in pats: occ[p] += o[p]
         tails.update(t)
     for p in pats:      # boundary-straddling matches: last 15 bytes of member k + first 15 of k+1
         L = len(p)
-        for k in range(n - 1):
+        for k in members:
+            if k + 1 not in tails: continue
             s = tails[k][1][-(L - 1):] + tails[k + 1][0][:L - 1]; i = s.find(p)
             while i >= 0:
                 if i < L - 1 and i + L > L - 1: occ[p].append(sp.offs[k + 1] - (L - 1) + i)
@@ -453,7 +471,7 @@ class Session:
             x1 = walk(new_raw)
             if x1 != x1o: raise Refused('member %d: record count would change (%d -> %d)' % (k, x1o, x1))
         limit = 131071 if max(m[2] for m in self.sp.mem) <= 131088 else max(m[2] for m in self.sp.mem)
-        if len(new_raw) > limit: raise Refused('member %d would exceed the member size limit (%d > %d): re-split not handled' % (k, len(new_raw), limit))
+        if len(new_raw) > max(limit, len(orig)): raise Refused('member %d would exceed the member size limit (%d > %d, original %d): re-split not handled' % (k, len(new_raw), limit, len(orig)))      # a member Revit itself wrote above the limit may keep (or shrink from) its size
         return x1, len(new_raw) - hs * x1
 
     def build(self, mode='fit'):
@@ -589,17 +607,17 @@ def verify_output(sess, out, patches, delta, pages):
     for p in pages:
         a = p * PAGE_STORED; b = a + sp.page_len(p)
         for s in range(a // sp.ss, (b - 1) // sp.ss + 1): secs.add(sp.chain[s])
-    A = np.memmap(sess.ctx.path, np.uint8, 'r'); B = np.memmap(out, np.uint8, 'r')
-    if len(A) != len(B): raise Refused('verify: output size differs')
-    ss = sp.ss; mask = np.ones(len(A) // ss, bool)
+    na, nb_ = os.path.getsize(sess.ctx.path), os.path.getsize(out)
+    if na != nb_: raise Refused('verify: output size differs')
+    ss = sp.ss; mask = np.ones(na // ss + 1, bool)
     for s in secs: mask[s + 1] = False
-    diff_secs = []
-    step = 1 << 26
-    for o in range(0, len(A), step):
-        d = np.nonzero(A[o:o + step] != B[o:o + step])[0]
-        if len(d):
-            ds = np.unique((d + o) // ss)
-            bad = ds[mask[ds]] if len(ds) else ds
+    diff_secs = []; step = 1 << 24
+    with open(sess.ctx.path, 'rb') as fa, open(out, 'rb') as fb:
+        for o in range(0, na, step):
+            a_ = os.pread(fa.fileno(), step, o); b_ = os.pread(fb.fileno(), step, o)
+            if a_ == b_: continue
+            d = np.nonzero(np.frombuffer(a_, np.uint8) != np.frombuffer(b_, np.uint8))[0]
+            ds = np.unique((d + o) // ss); bad = ds[mask[ds]]
             if len(bad): raise Refused('verify: sector %d outside the rewritten pages differs from the source' % int(bad[0]))
             diff_secs += ds.tolist()
     rep['changed_sectors'] = len(diff_secs); rep['rewritten_sectors'] = len(secs)
@@ -637,6 +655,11 @@ def verify_output(sess, out, patches, delta, pages):
     # (7) readback of edited records in the OUTPUT
     s2 = Session.__new__(Session); s2.ctx = sess.ctx; s2.pn = sp.name; s2.sp = so; s2.J = Joined(so); s2.workers = sess.workers; s2.edits = []; s2.occ = {}; s2.expect = []
     s2.mhs = sess.mhs; s2.firstrec = sess.firstrec
+    for eid in {e[0] for e in sess.expect}:      # members outside the dirty set are byte-identical (checked above): keep their occurrences, rescan only the dirty ones
+        idb = struct.pack(sess.ctx.IDF, eid); keep = [x for x in sess.occ.get(eid, []) if sp.offs[sess.J.member_of(x)] <= x and sess.J.member_of(x) not in dirty and sess.J.member_of(x) - 1 not in dirty and sess.J.member_of(x + len(idb) - 1) not in dirty]
+        moved = [x - sp.offs[sess.J.member_of(x)] + so.offs[sess.J.member_of(x)] for x in keep]
+        near = sorted({j for k in dirty for j in (k - 1, k, k + 1) if 0 <= j < len(so.mem)})
+        s2.occ[eid] = sorted(set(moved) | set(occurrences_in(so, near, [idb], 1)[idb]))
     rb = []
     for eid, kind, a, b in [(e[0], e[1], e[2], e[3]) for e in sess.expect]:
         i, r, log, q = s2.trace(eid)
