@@ -452,10 +452,10 @@ def _worker(path, items, out):
 def elements_from_index(path, build=False):
     """opt-in fast path (does not touch scan): per-element arrays from the persistent element index (rvtballet.elemindex) in ~20 ms once built.
     -> {id, cat (raw builtin/sub-category id as in the ElementHeader, -1 none), owner_view, family, class_tag, has_header} or None when no up-to-date index exists (cache key = path/size/mtime/inode/ctime)
-    and build is False. Categories are RAW: positive ids are CategoryElem ids that scan() resolves to a builtin parent; use scan() when resolved categories are needed."""
+    and build is False. cat is RAW (positive ids are CategoryElem ids); cat_resolved equals the resolved builtin category of scan() (-2**62 = none) for indexes built after 2026-11-14."""
     from . import elemindex as EI
     try: idx = EI.load(path)
     except (FileNotFoundError, OSError):
         if not build: return None
         idx = EI.build(path)
-    return {"id": idx["id"], "cat": idx["cat"], "owner_view": idx["ownerview"], "family": idx["family"], "class_tag": idx["tag"], "has_header": idx["has_header"]}
+    return {"id": idx["id"], "cat": idx["cat"], "cat_resolved": idx.get("cat_resolved"), "owner_view": idx["ownerview"], "family": idx["family"], "class_tag": idx["tag"], "has_header": idx["has_header"]}

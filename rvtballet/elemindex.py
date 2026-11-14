@@ -215,9 +215,20 @@ def build(path, workers=None, log=None, force=False):
     out = dict(part=a[:, 0].astype(np.int16), id=a[:, 1].astype(np.uint64), seg=a[:, 2].astype(np.int32), off=a[:, 3].astype(np.int32), tag=a[:, 4].astype(np.int32), cat=hv[:, 0], ownerview=hv[:, 1], family=hv[:, 2], has_header=has_hdr, alt=alt,
                pns=np.array(pns))
     for pi, pn in enumerate(pns): out["segtab%d" % pi] = np.array(segtab[pn], dtype=np.int64).reshape(-1, 3)
+    out["cat_resolved"] = _resolved_categories(path, out["id"])
     os.makedirs(CACHE, exist_ok=True); tmp = cp + ".tmp.%d.npz" % os.getpid(); np.savez(tmp, **out); os.replace(tmp, cp)
     say("index built: %d ids, %.1fs" % (len(a), time.time() - t0))
     return load(path)
+
+
+def _resolved_categories(path, ids):
+    """builtin category per id (sub/user categories resolved through CategoryElem parents, as fastinfo.scan does); NOCAT (-2**62) where the file has none. Taken from one fastinfo.scan at build time
+    (that scan stops early once every header is found); ids scan does not know get NOCAT."""
+    from . import fastinfo as FI
+    r = FI.scan(path, want_elements=True)["arrays"]; sid = r["id"]; sc = r["cat"]
+    o = np.argsort(sid); sid = sid[o]; sc = sc[o]; k = np.searchsorted(sid, ids); k[k >= len(sid)] = 0
+    ok = sid[k] == ids; out = np.full(len(ids), -(1 << 62), dtype=np.int64); out[ok] = sc[k][ok]
+    return out
 
 
 def load(path):
