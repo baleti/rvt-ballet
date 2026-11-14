@@ -6,6 +6,7 @@ _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ[
 import atexit; atexit.register(shutil.rmtree, _T, True); os.environ.setdefault('RVT_BALLET_CACHE', _T + '/bc'); os.environ.setdefault('RVT_CORE_CACHE', _T + '/cc'); os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'
 _H = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, os.path.join(_H, '..')); sys.path.insert(0, _H)
 for p in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab'), os.path.expanduser('~/src/savegate')): sys.path.insert(0, p)
+sys.path.append(os.path.expanduser('~/src/rvt-extract'))  # savegate adapters import rvtx.partition (header-id gate, 7e969d6); fail-closed without it
 json.dump({'rvt': {str(y): 'open' for y in range(2015, 2030)}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
 from rvtballet import server
 import rvt_untouched_report as U
