@@ -18,7 +18,7 @@ async def run(orig, keep):
         await c.get('/api/m/m/saveinfo')
         r = await c.post('/api/m/m/edit', json={'op': 'delete', 'eid': e}); res['edit'] = r.status
         if r.status != 200: res['edit_msg'] = (await r.text())[:300]; res['untouched'] = sha(src) == h0; print(res); return
-        r = await c.post('/api/m/m/save', json={}, timeout=__import__('aiohttp').ClientTimeout(total=None)); j = await r.json(); res['save'] = r.status; res['code'] = j.get('code', 'ok')
+        r = await c.post('/api/m/m/save', json={}, timeout=__import__('aiohttp').ClientTimeout(total=None)); j = await r.json(); res['save'] = r.status; res['code'] = j.get('code', 'ok'); res['detail'] = str({k: v for k, v in j.items() if k != 'code'})[:600] if r.status != 200 else ''
         if r.status != 200:
             res['untouched'] = sha(src) == h0; print(res); return
         res['changed'] = sha(src) != h0
