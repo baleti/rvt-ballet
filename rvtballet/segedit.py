@@ -507,7 +507,7 @@ class Session:
                 if 'does not fit its original compressed size' not in str(e): raise
                 r = self.build('shift'); r[2]['fallback'] = str(e); return r
         _paths(); import rvtw
-        raws = self.dirty_raws(); sp = self.sp; patches = []; info = dict(dirty=sorted(raws), mode=mode)
+        raws = self.dirty_raws(); sp = self.sp; patches = []; info = dict(dirty=sorted(raws), mode=mode); self._built_mode = mode
         if mode == 'fit': raws = {k: v for k, v in raws.items() if v != self.J.raw(k)}      # an unchanged member keeps Revit's own bytes
         for k in sorted(raws):
             pos, end, isize, sl = sp.mem[k]; nr = raws[k]; x1, x2 = self._frame_fields(k, nr)
@@ -582,7 +582,10 @@ class Session:
                 if fsync: os.fsync(fd)
             finally: os.close(fd)
             info.update(pages=[p for p, _ in pages], bytes_written=written, delta=delta)
-            if verify: info['verify'] = verify_output(self, tmp, patches, delta, [p for p, _ in pages])
+            if verify:
+                try: info['verify'] = verify_output(self, tmp, patches, delta, [p for p, _ in pages])
+                except Refused: raise
+                except Exception as e: raise Refused('verify could not read the output (%s: %s)' % (type(e).__name__, str(e)[:120]))
             if os.stat(src).st_mtime_ns != st.st_mtime_ns or os.stat(src).st_size != st.st_size: raise Refused('the source changed during the save')
             os.replace(tmp, dest)
             if fsync:
@@ -656,7 +659,9 @@ def verify_output(sess, out, patches, delta, pages):
     bad = [p for p, g in zip(pages, pg) if not ecc.check(g)]
     if bad: raise Refused('verify: page ECC wrong on page(s) %s' % bad[:5])
     if len(so.mem) != len(sp.mem): raise Refused('verify: member run changed (%d -> %d members)' % (len(sp.mem), len(so.mem)))
-    raws = sess.dirty_raws(); sh = 0; dirty = set(raws)
+    raws = sess.dirty_raws(); sh = 0
+    dirty = set(raws) if sess._built_mode == 'shift' else {k for k, v in raws.items() if v != sess.J.raw(k)}      # from the writer's intent, never from the output
+    _check_page_bytes(sp, so, pages, dirty)
     for k in range(len(sp.mem)):
         if k in dirty:
             r = so.member_raw(k)
@@ -763,6 +768,35 @@ def _apply(s, ops):
         elif o['op'] == 'move': s.move(e, o['dx'], o['dy'], o.get('dz', 0.0))
         elif o['op'] == 'rotate': s.rotate(e, o['deg'])
         else: raise Refused('op %s not handled by the segment writer' % o['op'])
+
+
+def _check_page_bytes(sp, so, pages, dirty):
+    """exhaustive: every byte of every rewritten page equals the source byte it maps to (offsets shifted by the size change of the dirty members before it;
+    beyond the source payload: zero pad), except inside the dirty members and their declared frame fields (X1/stored/X2 before, stored after).
+    c9x fault injection 2026-11-14: a corrupted byte in an UNTOUCHED member that starts on an earlier page and runs into a rewritten page escaped (9 of 300)."""
+    allowed = []
+    for k in sorted(dirty):
+        b0, b1 = so.mem[k][0], so.mem[k][1]; allowed.append((b0, b1))
+        allowed.append((24, 36) if k == 0 else (b0 - 32 + 12, b0 - 32 + 24)); allowed.append((b1 + 2, b1 + 6))
+    allowed.sort()
+    grow = [(so.mem[k][1], (so.mem[k][1] - so.mem[k][0]) - (sp.mem[k][1] - sp.mem[k][0])) for k in sorted(dirty)]
+    def src_off(x): return x - sum(g for e, g in grow if e <= x)
+    for p in pages:
+        a = p * PAGE_PAYLOAD; e = a + so.page_cap(p); x = a
+        out = so.payload(a, e - a)
+        cuts = [(max(a, s0), min(e, s1)) for s0, s1 in allowed if s1 > a and s0 < e]
+        segs = []; cur = a
+        for c0, c1 in cuts:
+            if c0 > cur: segs.append((cur, c0))
+            cur = max(cur, c1)
+        if cur < e: segs.append((cur, e))
+        for s0, s1 in segs:      # pieces never straddle a dirty member end, so one source offset per piece
+            so0 = src_off(s0); n = s1 - s0
+            have = out[s0 - a:s1 - a]
+            if so0 >= sp.plen: want = b'\0' * n
+            elif so0 + n > sp.plen: want = sp.payload(so0, sp.plen - so0) + b'\0' * (so0 + n - sp.plen)
+            else: want = sp.payload(so0, n)
+            if have != want: raise Refused('verify: page %d byte %d differs from the source outside the edited members' % (p, s0 - a + next(i for i in range(n) if have[i] != want[i])))
 
 
 def apply_ops(path, dest, ops, mode='auto', workers=None):
@@ -919,7 +953,10 @@ def save_in_place(path, ops, mode='auto', workers=None, force=False, keep=20):
             finally: os.close(fd)
             atomic._step('tmp_written')
             tm['write'] = round(time.time() - t0, 3)
-            info['verify'] = verify_output(s, tmp, patches, delta, [p for p, _ in pages]); tm['verify'] = round(time.time() - t0, 3)
+            try: info['verify'] = verify_output(s, tmp, patches, delta, [p for p, _ in pages])
+            except Refused: raise
+            except Exception as e: raise Refused('verify could not read the output (%s: %s)' % (type(e).__name__, str(e)[:120]))
+            tm['verify'] = round(time.time() - t0, 3)
             new_sha = _sha256_file(tmp)
             if not force: guard.check_unchanged(path, fp, rehash=True)
             bk = backup.make_backup(path, keep, 0, None if force else fp.sha256); tm['backup'] = round(time.time() - t0, 3)

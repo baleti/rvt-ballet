@@ -201,3 +201,17 @@ def test_inplace_move_uses_product_dependents_check(env):
     assert md5(src) == m0
     info = segedit.save_in_place(str(src), [dict(op="move", eid=1421396, dx=1.5, dy=-0.5, dz=0.0)])
     assert md5(info["backup"]) == m0 and gate_damage(str(src)) == [] and info["verify"]["readback"][0][1] == "move"
+
+
+def test_regression_untouched_member_tail_on_rewritten_page(tmp_path, monkeypatch):
+    """SEV-1 regression (c9x fault injection 2026-11-14, 9 of 300 escaped before the fix): a writer bug that flips a byte of an UNTOUCHED member which starts on
+    an earlier page and runs into the rewritten page (page ECC computed over the wrong data, so ECC passes) must be refused"""
+    segedit._paths(); import ecc
+    real = ecc.parity; st = {"done": False}
+    def bad(data, N):
+        if not st["done"]: d = bytearray(data); d[5110] ^= 0x04; data = bytes(d); st["done"] = True
+        return real(data, N)
+    monkeypatch.setattr(ecc, "parity", bad)
+    with pytest.raises(segedit.Refused, match="outside the edited members|untouched member"):
+        segedit.apply_ops(SRC, str(tmp_path / "o.rvt"), [dict(op="set_string", eid=EID, param="Mark", value="x")], mode="fit")
+    assert st["done"] and not os.path.exists(tmp_path / "o.rvt")
