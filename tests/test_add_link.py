@@ -1,4 +1,4 @@
-"""c9x-rvtlink: tools/rvt_add_link.py on the Autodesk 2024 Snowdon HVAC sample (single partition): a duplicated link is exactly 3 new records (RvtLinkSymbol, RvtLinkInstance, detail), no existing record changes, the source is untouched, and the new headers have an EMPTY deletion list (193/183/175 B like Revit-made adds; the first version copied the source's 10/7/2 dependents entries = 413/337/219 B, which fails this test).
+"""# 2026-11-14: passes --same-file because rvt_add_link now refuses a same-file clone by default (VM: Revit 2024 fails to load BOTH link types when the linked file is present); this test checks the record structure only, never open that output in Revit. c9x-rvtlink: tools/rvt_add_link.py on the Autodesk 2024 Snowdon HVAC sample (single partition): a duplicated link is exactly 3 new records (RvtLinkSymbol, RvtLinkInstance, detail), no existing record changes, the source is untouched, and the new headers have an EMPTY deletion list (193/183/175 B like Revit-made adds; the first version copied the source's 10/7/2 dependents entries = 413/337/219 B, which fails this test).
 Revit 2024 VM verdict for the same output: audit open ok, API link types 6->7 and instances 6->7 (ledger 'add Revit link'). Skips when the sample is absent (local only)."""
 import os, sys, subprocess, tempfile, hashlib, struct
 SRC = next((p for p in (os.path.expanduser('~/c5x-link/w/hvac24.rvt'), os.path.expanduser('~/rvt-research/corpus/2024/42_Snowdon_Towers_Sample_HVAC.rvt')) if os.path.exists(p)), None)
@@ -13,7 +13,7 @@ def load(p):
     except Exception: return PT.parse_joined(j, 4)
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 d = tempfile.mkdtemp(); out = d + '/out.rvt'; h0 = sha(SRC)
-r = subprocess.run([sys.executable, os.path.join(HERE, '..', 'tools', 'rvt_add_link.py'), SRC, out, '--src', '1363937'], capture_output=True, text=True)
+r = subprocess.run([sys.executable, os.path.join(HERE, '..', 'tools', 'rvt_add_link.py'), SRC, out, '--src', '1363937', '--same-file'], capture_output=True, text=True)
 assert r.returncode == 0 and os.path.exists(out), (r.stdout[-300:], r.stderr[-300:])
 assert sha(SRC) == h0, 'source modified'
 A, B = load(SRC), load(out)
