@@ -18,7 +18,8 @@ def _paths():
 
 
 def key(path):
-    st = os.stat(path); return hashlib.sha1(("%s|%d|%d" % (os.path.abspath(path), st.st_size, st.st_mtime_ns)).encode()).hexdigest()[:20]
+    # path, size, mtime AND inode + ctime: ctime cannot be restored with utime, so an in-place edit that keeps size and mtime still invalidates; a copy or touch only forces a rebuild
+    st = os.stat(path); return hashlib.sha1(("%s|%d|%d|%d|%d" % (os.path.abspath(path), st.st_size, st.st_mtime_ns, st.st_ino, st.st_ctime_ns)).encode()).hexdigest()[:20]
 
 
 class Part:
