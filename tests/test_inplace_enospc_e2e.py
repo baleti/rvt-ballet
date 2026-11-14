@@ -1,7 +1,16 @@
 """in-place edit with injected ENOSPC (backup write / final rename) on the Autodesk 2024 HVAC sample, private copy, temp gate: target stays the original, no temp left. Slow (~2 min each). python tests/test_inplace_enospc_e2e.py backup|commit"""
+# RVT_TEST_TIMEOUT=3600 (two injected-ENOSPC runs, minutes each on a loaded host)
 import os, sys
 if not os.path.exists(os.path.expanduser("~/rvtfix/corpus/2024/42_Snowdon_Towers_Sample_HVAC.rvt")): print("sample absent: skipped"); sys.exit(0)
 import os, sys, errno, shutil, hashlib, glob
+if len(sys.argv) < 2:      # pytest/conftest runs script tests without arguments: run both injection points here and check the RESULT lines
+    import subprocess
+    for w in ('backup', 'commit'):
+        r = subprocess.run([sys.executable, os.path.abspath(__file__), w], capture_output=True, text=True, timeout=1500)
+        res = [l for l in r.stdout.splitlines() if l.startswith('RESULT')]
+        assert res and ' ORIGINAL ' in res[-1] and ' tmp_left 0 ' in res[-1], (w, r.returncode, (r.stdout + r.stderr)[-800:])
+        print(res[-1])
+    sys.exit(0)
 which = sys.argv[1]
 D = os.path.expanduser('~/c3x-tmp/enospc_' + which); shutil.rmtree(D, ignore_errors=True); os.makedirs(D)
 os.environ.update(SAVEGATE_JOURNAL=D + '/j', SAVEGATE_CACHE=D + '/c', RVTBALLET_ALLOW_OVERWRITE='1', SAVEGATE_GATE=D + '/gate.json')
