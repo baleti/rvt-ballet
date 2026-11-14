@@ -52,13 +52,23 @@ def test_primitives():
     assert any(len(w) > 0 for w, _ in ws)
     print('primitives ok (%d windows)' % len(ws))
 
+def _agree(rc, pc):
+    """header categories agree with the full parser; the scan additionally resolves Family/symbol/surrogate/GStyle/CategoryElem (Revit API: none),
+    maps positive-id user subcategories to their parent built-in and labels the rest "(no category...)": named built-ins never drop, totals are equal"""
+    import json
+    names = {v for k, v in json.load(open(os.path.join(os.path.dirname(os.path.abspath(FI.__file__)), 'data', 'category_names.json'))).items() if int(k) < 0}
+    low = {k: (v, rc.get(k, 0)) for k, v in pc.items() if k in names and rc.get(k, 0) < v}
+    assert not low, 'category counts below the full parser: %s' % low
+    assert sum(rc.values()) == sum(pc.values()), 'element totals differ'
+
+
 def test_sample():
     f = os.path.expanduser('~/rvt-research/corpus/2020/18_rst_basic_sample_project.rvt')
     if not os.path.exists(f): print('sample absent: skipped'); return
     FI._paths(); import rvt_entities as E
     FI.WINDOW = 8 << 20; FI.OVERLAP = 2 << 20
     r = FI.scan(f); p = E.parse(f)
-    assert r['counts'] == p['counts'], 'category counts differ'
+    _agree(r['counts'], p['counts'])
     assert sorted(l['name'] for l in r['levels']) == sorted(l['name'] for l in p['levels'])
     assert r['grids'] == p['grids']
     assert [(s['number'], s['name'], s['views']) for s in r['sheets']] == [(s['number'], s['name'], s['views']) for s in p['sheets']]
@@ -66,7 +76,7 @@ def test_sample():
     i = FI.file_info(f); assert i['info'].get('Format') == '2020' and i['partitions'] >= 1
     rb = os.path.join(HERE, 'bin', 'rvt-ballet')
     out = subprocess.run([rb, 'counts', f, '--json'], capture_output=True, text=True, env=dict(os.environ, RVT_BALLET_CACHE=os.environ.get('TMPDIR', '/tmp') + '/fi-test-cache')); assert out.returncode == 0, out.stderr
-    assert json.loads(out.stdout)['by_category'] == p['counts']
+    _agree(json.loads(out.stdout)['by_category'], p['counts'])
     g = subprocess.run([rb, 'convert', f, '/nonexistent/out'], capture_output=True, text=True, env=dict(os.environ, RVT_BIG_MB='1')); assert g.returncode == 3 and 'rvt-ballet info' in g.stderr, g.stderr
     print('sample ok: %d categories, %d sheets, %d views' % (len(r['counts']), len(r['sheets']), len(r['views'])))
 
