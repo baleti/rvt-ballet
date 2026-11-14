@@ -287,3 +287,48 @@ def verify_partition(o, name):
     if prev_end is None and P.total: prev_end = 0      # stream without any gzip segment (e.g. 291-byte raw partition): all of it is interlude
     if prev_end is not None and prev_end < P.total: g = P.payload(prev_end, P.total - prev_end); inter.update(g); ib += len(g)
     return dict(segments=len(segs), bad=bad, interlude_bytes=ib, interlude_sha1=inter.hexdigest(), deltas=deltas, covered=sum(24 + s[1] for s in segs) + ib == P.total)
+
+
+def _gaps(P, segs):
+    """interlude blocks keyed by the index of the segment they precede (len(segs) = after the last one): {i: bytes}"""
+    out = {}; prev = 0
+    for i, (off, ln, il) in enumerate(segs):
+        if off - 24 > prev: out[i] = P.payload(prev, off - 24 - prev)
+        prev = off + ln
+    if prev < P.total: out[len(segs)] = P.payload(prev, P.total - prev)
+    return out
+
+
+def compare_partitions(orig, out, name):
+    """post-save gate for a writer, per partition: `orig` and `out` are olefile handles. Passes when
+    out passes verify_partition, stream size and segment count are equal, every interlude block of the original is byte-identical in the output
+    (a block may only GROW at the tail: slack left by recompressed shorter segments) and every segment that was not edited inflates to identical bytes.
+    -> dict(ok, reasons (hard failures), warnings, changed_segments [idx], tail_slack, tail_slack_all_zero). Measured on a writer output: the block after the last segment (about 0.5 KB, 340 high-entropy bytes) changes when segments change: reported as a warning, not a failure."""
+    Pa = Part(orig, name); Pb = Part(out, name); sa = Pa.segments(); sb = Pb.segments(); reasons = []; warnings = []
+    v = verify_partition(out, name)
+    if v["bad"]: reasons.append("output segments bad: %s" % v["bad"][:3])
+    if not v["covered"]: reasons.append("output tiling inexact")
+    if Pa.e.size != Pb.e.size: reasons.append("stream size %d -> %d" % (Pa.e.size, Pb.e.size))
+    if len(sa) != len(sb): reasons.append("segment count %d -> %d" % (len(sa), len(sb)))
+    ga = _gaps(Pa, sa); gb = _gaps(Pb, sb); slack = b""
+    for i, blk in ga.items():
+        o = gb.get(i, b"")
+        if i == len(sa):        # tail block: the original non-zero content must come first and unchanged; everything the output adds must be zero padding (slack of shorter recompressed segments)
+            core = blk.rstrip(b"\x00")
+            if not o.startswith(core):
+                warnings.append("tail block (%d B, %d non-zero) differs from the original (%d non-zero): a high-entropy trailer after the last segment changed; meaning unknown (digest?), VM-check it" % (len(o), len(o) - o.count(0), len(blk) - blk.count(0)))
+                slack = b""
+            else:
+                slack = o[len(core):]
+                if slack.count(0) != len(slack): reasons.append("tail slack is not all zero")
+        elif o != blk: reasons.append("interlude before segment %d changed" % i)
+    for i in gb:
+        if i not in ga and i != len(sb): reasons.append("new interlude before segment %d" % i)
+    if len(sb) in gb and len(sa) not in ga:
+        slack = gb[len(sb)]
+        if slack.count(0) != len(slack): reasons.append("new tail block is not all zero")
+    changed = []
+    if len(sa) == len(sb):
+        for i, (x, y) in enumerate(zip(sa, sb)):
+            if Pa.inflate(x) != Pb.inflate(y): changed.append(i)
+    return dict(ok=not reasons, reasons=reasons, warnings=warnings, changed_segments=changed, tail_slack=len(slack) - (len(ga.get(len(sa), b'')) - len(ga.get(len(sa), b'').rstrip(b'\x00'))), tail_slack_all_zero=(slack.count(0) == len(slack)))
