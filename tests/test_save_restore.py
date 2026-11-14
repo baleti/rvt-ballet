@@ -20,14 +20,14 @@ async def run():
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
         assert await (await c.get('/api/m/m/backups')).json() == []
-        for k in range(3):                                   # three overwrites with (identity) content: 3 backups
+        for k in range(3):                                   # three identity overwrites: savegate 16fa3f6 reuses the newest identical backup, so ONE backup
             r = await c.post('/api/m/m/save', json={}); assert r.status == 200, await r.text()
-        bl = await (await c.get('/api/m/m/backups')).json(); assert len(bl) == 3 and all(b['size'] == os.path.getsize(src) for b in bl), bl
+        bl = await (await c.get('/api/m/m/backups')).json(); assert len(bl) == 1 and all(b['size'] == os.path.getsize(src) for b in bl), bl
         with open(src, 'ab') as f: f.write(b'garbage')       # damage the source outside the viewer
         assert (await c.post('/api/m/m/restore', json={})).status == 400          # confirm required
         j = await (await c.post('/api/m/m/restore', json={'confirm': True, 'n': 0})).json(); assert j['ok'], j
         assert sha(src) == h0 and j['sha256'] == h0[:12], 'restore not byte-identical'
-        assert len(await (await c.get('/api/m/m/backups')).json()) == 4          # the damaged file was backed up first
+        assert len(await (await c.get('/api/m/m/backups')).json()) == 2          # reused identical backup + the damaged file backed up first
         j = await (await c.post('/api/m/m/restore', json={'confirm': True, 'n': 99})).json(); assert not j['ok'] and 'does not exist' in j['error'], j
         assert await (await c.get('/api/recover')).json() == []                   # our own live session is not 'crashed'
     # crash: a server process killed with SIGKILL leaves an unfinished journal
