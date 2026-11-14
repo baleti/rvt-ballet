@@ -154,3 +154,32 @@ def test_inplace_kill9_never_leaves_a_partial_file(env):
         seen[h] += 1
     assert gate_damage(str(src)) == [] or md5(src) == m0
     print('kill outcomes: original %d, complete %d' % (seen[m0], seen[m1]))
+
+
+STRUCT = os.path.expanduser("~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt")
+NUM_OP = dict(op="set_num", eid=2888, param="Detail Level", kind="Int", value=3)      # VM PASS with the old writer (ledger, c5x-rvttype)
+
+
+@pytest.mark.skipif(not os.path.exists(STRUCT), reason="Structural sample not present")
+def test_set_num_shift_equals_old_writer(tmp_path):
+    os.environ["RVTBALLET_EDIT_BACKEND"] = "rvtedit"
+    from rvtballet import edit
+    ob, _ = edit.apply_full(open(STRUCT, "rb").read(), [edit.validate_op(NUM_OP)])
+    (tmp_path / "old.rvt").write_bytes(ob)
+    out = str(tmp_path / "seg.rvt"); info = segedit.apply_ops(STRUCT, out, [NUM_OP], mode="shift")
+    assert info["verify"]["readback"][0][2] == 3
+    A, B = streams(str(tmp_path / "old.rvt")), streams(out); assert [k for k in A if A[k] != B[k]] == []
+
+
+@pytest.mark.skipif(not os.path.exists(STRUCT), reason="Structural sample not present")
+def test_set_num_in_place_fit(tmp_path, monkeypatch):
+    src = tmp_path / "s.rvt"; shutil.copy(STRUCT, src); (tmp_path / "gate.json").write_text("{\"rvt\": {\"2024\": \"open\"}}")
+    for k, v in (("SAVEGATE_GATE", str(tmp_path / "gate.json")), ("RVTBALLET_ALLOW_OVERWRITE", "1"), ("SAVEGATE_BACKUPS", "cache"), ("XDG_DATA_HOME", str(tmp_path / "d")), ("SEGEDIT_CLEAN_DIR", str(tmp_path / "c"))): monkeypatch.setenv(k, v)
+    m0 = md5(src); info = segedit.save_in_place(str(src), [NUM_OP])
+    assert md5(info["backup"]) == m0 and len(info["pages"]) <= 2 and gate_damage(str(src)) == []
+
+
+def test_set_num_product_guards_apply():
+    """segedit runs edit.validate_op: a derived/placeholder parameter and a non-finite value are refused before anything is read"""
+    with pytest.raises(segedit.Refused): segedit.apply_ops(SRC, "/nonexistent/x.rvt", [dict(op="set_num", eid=EID, param="Unit weight", value=1.0)])
+    with pytest.raises(segedit.Refused): segedit.apply_ops(SRC, "/nonexistent/x.rvt", [dict(op="set_num", eid=EID, param="Area", value=float("nan"))])

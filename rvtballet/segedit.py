@@ -364,6 +364,30 @@ class Session:
                 self.expect.append((eid, 'astr', pid, value)); return
         raise Refused('string parameter %d not stored on %d' % (pid, eid))
 
+    def set_num(self, o):
+        """edit.py _set_num_by_pid on a validated op (edit.validate_op): the Double/Int value entry contiguous with the ParamValue<kind>.m_paramId entry"""
+        _paths(); sys.path.insert(0, os.path.expanduser('~/src/rvt-ballet'))
+        from rvtballet.edit import _eid_val, _value_entry, _check_wall_height_pid, EditError
+        eid, kind = o['eid'], o['kind']; i, r, log, q = self.trace(eid)
+        lg = [(l[0], l[1], l[2], l[3], l[4]) for l in log]
+        pid = o['pid'] if o.get('pid') is not None else None
+        if pid is None:
+            stored = {_eid_val(l[4]) for l in lg if l[1] == 'ParamValue%s.m_paramId' % kind}
+            hit = [c for c in o['pids'] if c in stored]
+            if len(hit) != 1: raise Refused('parameter %r: %d candidate ids stored as %s on element %d' % (o.get('param'), len(hit), kind, eid))
+            pid = hit[0]
+        try: _check_wall_height_pid(o, pid, lg)
+        except EditError as e: raise Refused(str(e))
+        for l in lg:
+            if l[1] == 'ParamValue%s.m_paramId' % kind and _eid_val(l[4]) == pid:
+                vn = _value_entry(lg, kind, l)
+                if vn is None: break
+                nb = struct.pack('<d' if kind == 'Double' else '<i', o['value'])
+                if len(nb) != vn[3] - vn[2]: raise Refused('value size mismatch')
+                self._modify(i, q, r, [(vn[2], vn[3] - vn[2], nb)], 'set_num %d' % eid)
+                self.expect.append((eid, 'num', (kind, pid), o['value'])); return
+        raise Refused('param %d (%s) not stored on %d' % (pid, kind, eid))
+
     def resolve_pid(self, eid, name, kind='AString'):
         _paths(); sys.path.insert(0, os.path.expanduser('~/src/rvt-ballet'))
         from rvtballet.edit import _pid_for, _eid_val
@@ -676,6 +700,14 @@ def verify_output(sess, out, patches, delta, pages):
             o0 = struct.unpack_from('<3d', T['rec'], L0[nm]); l1 = [l for l in log if l[1] == nm][0]; o1 = struct.unpack('<3d', s2.J.get(l1[2], 24))
             if any(abs(o1[j] - o0[j] - a[j]) > 1e-9 for j in range(3)): raise Refused('verify: element %d origin %r, expected %r + %r' % (eid, o1, o0, a))
             rb.append((eid, 'move', o1))
+        elif kind == 'num':
+            sys.path.insert(0, os.path.expanduser('~/src/rvt-ballet')); from rvtballet.edit import _eid_val, _value_entry
+            k_, pid_ = a; lg = [(l[0], l[1], l[2], l[3], l[4]) for l in log]
+            ent = [l for l in lg if l[1] == 'ParamValue%s.m_paramId' % k_ and _eid_val(l[4]) == pid_]
+            vn = _value_entry(lg, k_, ent[0]) if ent else None
+            got = struct.unpack('<d' if k_ == 'Double' else '<i', s2.J.get(vn[2], vn[3] - vn[2]))[0] if vn else None
+            if got != b: raise Refused('verify: element %d %s reads back %r, expected %r' % (eid, k_, got, b))
+            rb.append((eid, 'num', got))
         elif kind == 'rotate':
             rb.append((eid, 'rotate', [l[4] for l in log if l[1] == 'FamilyInstance.m_RefDir'][:1]))
     rep['readback'] = rb; rep['seconds'] = round(time.time() - t0, 3)
@@ -701,21 +733,36 @@ def partition_of(path, eids, workers=None):
     return ps.pop()
 
 
-def apply_ops(path, dest, ops, mode='fit', workers=None):
-    """ops: dicts like edit.py's ({'op': 'set_string', 'eid', 'pid' | 'param', 'value', 'expect'?}, {'op': 'move', 'eid', 'dx', 'dy', 'dz'}, {'op': 'rotate', 'eid', 'deg'})"""
-    t0 = time.time(); s = Session(path, part=partition_of(path, sorted({o['eid'] for o in ops}), workers), workers=workers); seen = set()
+def _validated(ops):
+    """run every op through the product's own validation (edit.validate_op: text rules, numeric/enum/derived-parameter refusals)"""
+    sys.path.insert(0, os.path.expanduser('~/src/rvt-ballet')); os.environ.setdefault('RVTBALLET_EDIT_BACKEND', 'rvtedit')
+    from rvtballet import edit
+    out = []
+    for o in ops:
+        try: v = edit.validate_op(dict(o, **({'dz': o.get('dz', 0.0)} if o['op'] == 'move' else {})))
+        except edit.EditError as e: raise Refused(str(e))
+        out.append(v if o['op'] in ('set_num',) else o)
+    return out
+
+
+def _apply(s, ops):
+    seen = set()
     for o in ops:
         e = o['eid']
         if o['op'] in ('move', 'rotate'):
             if e in seen: raise Refused('element %d: one geometric op per element and save' % e)
             seen.add(e)
-        if o['op'] == 'set_string':
-            pid = o.get('pid')
-            if pid is None: pid = s.resolve_pid(e, o['param'])
-            s.set_string_pid(e, pid, o['value'], o.get('expect'))
+        if o['op'] == 'set_string': s.set_string_pid(e, o['pid'] if o.get('pid') is not None else s.resolve_pid(e, o['param']), o['value'], o.get('expect'))
+        elif o['op'] == 'set_num': s.set_num(o)
         elif o['op'] == 'move': s.move(e, o['dx'], o['dy'], o.get('dz', 0.0))
         elif o['op'] == 'rotate': s.rotate(e, o['deg'])
         else: raise Refused('op %s not handled by the segment writer' % o['op'])
+
+
+def apply_ops(path, dest, ops, mode='fit', workers=None):
+    """ops: dicts like edit.py's ({'op': 'set_string', 'eid', 'pid' | 'param', 'value', 'expect'?}, {'op': 'move', 'eid', 'dx', 'dy', 'dz'}, {'op': 'rotate', 'eid', 'deg'})"""
+    ops = _validated(ops); t0 = time.time(); s = Session(path, part=partition_of(path, sorted({o['eid'] for o in ops}), workers), workers=workers)
+    _apply(s, ops)
     info = s.write(dest, mode=mode)
     info['total_seconds'] = round(time.time() - t0, 3); info['members_inflated'] = len(s.J.touched); info['members_total'] = len(s.sp.mem)
     return info
@@ -815,7 +862,7 @@ def save_in_place(path, ops, mode='fit', workers=None, force=False, keep=20):
     post-commit hash check. The output is built as a temp file next to the source (clone + rewritten sectors) and verified before anything is replaced.
     Needs RVTBALLET_ALLOW_OVERWRITE=1 and an open gate (SAVEGATE_GATE for tests). Move/rotate in place are refused here: their dependents check
     (hosted, joined, connected elements) still needs the whole-model extraction (save.membership)."""
-    core, guard, atomic, backup = _savegate(); t0 = time.time(); tm = {}
+    core, guard, atomic, backup = _savegate(); t0 = time.time(); tm = {}; ops = _validated(ops)
     path = os.path.realpath(path)
     if os.environ.get('RVTBALLET_ALLOW_OVERWRITE') != '1': raise Refused('overwrite is disabled (RVTBALLET_ALLOW_OVERWRITE=1)')
     cfg = core.Config(allow_overwrite=True)
@@ -839,11 +886,7 @@ def save_in_place(path, ops, mode='fit', workers=None, force=False, keep=20):
     if os.environ.get('RVTBALLET_ALLOW_GROUP_EDIT') != '1':
         mem = group_and_option(s, sorted({o['eid'] for o in ops}))
         if mem: e0 = sorted(mem)[0]; raise Refused('element %d is part of a group or design option (%s)' % (e0, '; '.join(mem[e0])))
-    for o in ops:
-        if o['op'] == 'set_string': s.set_string_pid(o['eid'], o.get('pid') if o.get('pid') is not None else s.resolve_pid(o['eid'], o['param']), o['value'], o.get('expect'))
-        elif o['op'] == 'move': s.move(o['eid'], o['dx'], o['dy'], o.get('dz', 0.0))
-        elif o['op'] == 'rotate': s.rotate(o['eid'], o['deg'])
-        else: raise Refused('op %s not handled by the segment writer' % o['op'])
+    _apply(s, ops)
     tm['edit'] = round(time.time() - t0, 3)
     patches, delta, info = s.build(mode); pages = list(s.new_stream_pages(patches, delta))
     lk = guard.Lock(path); lk.acquire()
@@ -887,10 +930,13 @@ def main(argv=None):
     ap.add_argument('--set-string', nargs=3, action='append', default=[], metavar=('EID', 'PARAM', 'VALUE'))
     ap.add_argument('--move', nargs=4, action='append', default=[], metavar=('EID', 'DX', 'DY', 'DZ'))
     ap.add_argument('--rotate', nargs=2, action='append', default=[], metavar=('EID', 'DEG'))
+    ap.add_argument('--set-num', nargs=3, action='append', default=[], metavar=('EID', 'PARAM', 'VALUE'))
+    ap.add_argument('--kind', choices=('Double', 'Int'), default='Double')
     a = ap.parse_args(argv); ops = []
     for e, p, v in a.set_string: ops.append(dict(op='set_string', eid=int(e), value=v, **({'pid': int(p)} if p.lstrip('-').isdigit() else {'param': p})))
     for e, x, y, z in a.move: ops.append(dict(op='move', eid=int(e), dx=float(x), dy=float(y), dz=float(z)))
     for e, d in a.rotate: ops.append(dict(op='rotate', eid=int(e), deg=float(d)))
+    for e, p, v in a.set_num: ops.append(dict(op='set_num', eid=int(e), kind=a.kind, value=(int(v) if a.kind == 'Int' else float(v)), **({'pid': int(p)} if p.lstrip('-').isdigit() else {'param': p})))
     if bool(a.output) == bool(a.in_place): print('give exactly one of -o OUT / --in-place'); return 2
     try: info = save_in_place(a.file, ops, a.mode, a.workers) if a.in_place else apply_ops(a.file, a.output, ops, a.mode, a.workers)
     except Refused as e: print('REFUSED: %s (nothing written)' % e); return 2
