@@ -7,7 +7,7 @@ Why it is fast (measured on a 984 MB project file, see docs/rvt-fast-query.md):
   task is small; each worker reads its stored bytes with os.pread over contiguous sector runs (own fd, no shared file offset after fork);
 - the Rust decoder is asked for the query classes only and for no ElementHeader (ElementHeader trees are what made the generic scan slow);
   headers are decoded in a second pass restricted to the few ids that need one (only_ids).
-Results equal fastinfo.scan for the same query (first-wins in stream order, same reductions): tests/test_fastquery.py.
+Read-only: the file is opened once with O_RDONLY and never written; a file that changes while it is read raises FileChanged instead of returning an answer.
 """
 import os, sys, struct, zlib, time, collections
 
@@ -18,8 +18,26 @@ _G = {}
 
 
 def _paths():
-    from . import fastinfo as FI
-    FI._paths()
+    from . import rvtfile as RF
+    RF._paths()
+
+
+from .stable import FileChanged            # one exception type for every torn-read check (stable.py: fingerprint/quiet period/snapshot)
+
+
+def _stamp(st): return (st.st_size, st.st_mtime_ns, st.st_ino, st.st_dev)
+
+
+def consistent(G=None):
+    """raise FileChanged when the file under the query differs from the one opened at _setup: size/mtime of the open handle (written in place) or of the
+    path (replaced by a rename, the usual way an application saves). Called after every query, so an answer is only returned when the file did not change
+    between opening and the last read. Without a stat change, gzip CRC failures are reported as damage (G['damaged'])."""
+    G = G or _G; st0 = G.get('st0')
+    if st0 is None: return
+    try: a = _stamp(os.fstat(G['fd'])); b = _stamp(os.stat(G['path']))
+    except OSError as ex: raise FileChanged(G['path'], 'cannot stat it any more: %s' % ex)
+    if a[:2] != st0[:2]: raise FileChanged(G['path'], 'size/modification time of the open file changed')
+    if b[:2] != st0[:2] or (b[2] and st0[2] and b[2] != st0[2]): raise FileChanged(G['path'], 'the path now points at a different file')
 
 
 class Stream:
@@ -105,17 +123,23 @@ def _libdeflate():
             except OSError: continue
             L.libdeflate_alloc_decompressor.restype = ctypes.c_void_p
             L.libdeflate_deflate_decompress_ex.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(ctypes.c_size_t)]
+            L.libdeflate_crc32.restype = ctypes.c_uint32; L.libdeflate_crc32.argtypes = [ctypes.c_uint32, ctypes.c_void_p, ctypes.c_size_t]
             lib = (L, ctypes); break
     _LD.append(lib); return lib
 
 
-def inflate_run(buf, a, segs, sizes_out=None):
+def inflate_run(buf, a, segs, sizes_out=None, bad_out=None):
     """inflated bytes of consecutive segments [(payload offset, stored_len, x)], `buf` = payload bytes from offset `a`. A segment's stored bytes are
     [10-byte gzip header][deflate][CRC32][ISIZE][8-byte footer]: libdeflate inflates straight into one buffer sized from the ISIZE fields (an ISIZE that does
     not match the inflated size falls back to zlib for that segment)"""
     lib = _libdeflate()
     if lib is None:
-        parts = [_inflate(buf[off - a: off - a + ln]) for off, ln, _ in segs]
+        parts = []
+        for off, ln, _ in segs:
+            try: x = _inflate(buf[off - a: off - a + ln])
+            except zlib.error: x = b''
+            if bad_out is not None and (ln < 34 or zlib.crc32(x) & 0xffffffff != struct.unpack_from('<I', buf, off - a + ln - 16)[0]): bad_out.append(off)
+            parts.append(x)
         if sizes_out is not None: sizes_out.extend(len(x) for x in parts)
         return b''.join(parts)
     L, C = lib; d = _G.get('ldd')
@@ -127,19 +151,29 @@ def inflate_run(buf, a, segs, sizes_out=None):
         r = L.libdeflate_deflate_decompress_ex(d, ib + off - a + 10, ln - 10, ob + o, sz, C.byref(ai), C.byref(ao)) if sz else 1
         if r != 0 or ao.value != sz: fix.append(i)
         o += sz
+    if bad_out is not None:              # gzip CRC32 of every segment (libdeflate_crc32): a torn or damaged segment never decodes silently
+        o = 0
+        for i, ((off, ln, _), sz) in enumerate(zip(segs, sizes)):
+            if i not in fix and L.libdeflate_crc32(0, ob + o, sz) != struct.unpack_from('<I', buf, off - a + ln - 16)[0]: bad_out.append(off)
+            o += sz
     if not fix:
         if sizes_out is not None: sizes_out.extend(sizes)
         return bytes(out)
     parts = []; o = 0                         # rare: rebuild with zlib for the odd segments
     for i, ((off, ln, _), sz) in enumerate(zip(segs, sizes)):
-        parts.append(_inflate(buf[off - a: off - a + ln]) if i in fix else bytes(out[o:o + sz])); o += sz
+        if i in fix:
+            try: x = _inflate(buf[off - a: off - a + ln])
+            except zlib.error: x = b''
+            if bad_out is not None and (ln < 34 or zlib.crc32(x) & 0xffffffff != struct.unpack_from('<I', buf, off - a + ln - 16)[0]): bad_out.append(off)
+        else: x = bytes(out[o:o + sz])
+        parts.append(x); o += sz
     if sizes_out is not None: sizes_out.extend(len(x) for x in parts)
     return b''.join(parts)
 
 
-def plan(pi, pn, segs):
+def plan(pi, pn, segs, task_mb=None, ovl=None):
     """decode tasks of one partition in stream order: (key, pn, segment list, number of main segments); the tail of the list is the overlap"""
-    tasks = []; per = TASK_MB * 1e6; k = 0; n_ = 0
+    tasks = []; per = (task_mb or TASK_MB) * 1e6; k = 0; n_ = 0; OVL = ovl or globals()['OVL']
     while k < len(segs):
         j = k; n = 0
         while j < len(segs) and (n < per or j == k): n += segs[j][2]; j += 1
@@ -150,7 +184,7 @@ def plan(pi, pn, segs):
 
 
 def _winit():
-    _G['fd'] = os.open(_G['path'], os.O_RDONLY)
+    if _G.get('fd') is None: _G['fd'] = os.open(_G['path'], os.O_RDONLY)      # normally inherited from _setup (one handle: every worker reads the same file version)
     try:      # task buffers are ~10 MB: above glibc's mmap threshold every one is a fresh mmap that is zeroed and page-faulted (sys time 2.8 -> 8 s); keep them on the heap
         import ctypes; libc = ctypes.CDLL('libc.so.6'); libc.mallopt(-3, 64 << 20); libc.mallopt(-1, 256 << 20)       # M_MMAP_THRESHOLD, M_TRIM_THRESHOLD
     except Exception: pass
@@ -163,8 +197,9 @@ def _job(job):
     c0 = time.process_time(); w0 = time.time()
     _, key, pn, segs, nmain, wanted, note_eh, hdr_ids = job; S = _G['streams'][pn]; fd = _G['fd']
     a = segs[0][0]; b = segs[-1][0] + segs[-1][1]
-    buf = S.payload(fd, a, b); sizes = []; chunk = inflate_run(buf, a, segs, sizes); del buf
-    from . import fastinfo as FI
+    buf = S.payload(fd, a, b); sizes = []; bad = []; chunk = inflate_run(buf, a, segs, sizes, bad); del buf
+    bad = [x for x in bad if x <= segs[nmain - 1][0]] if 0 < nmain <= len(segs) else bad      # a segment counts in the task that owns it (overlap segments belong to the next task)
+    from . import rvtfile as FI
     rd = _G['rd']; recs = []; ehs = []; ehc = None
     specs = wanted if isinstance(wanted, list) and wanted and isinstance(wanted[0], dict) else ([{'tags': wanted}] if wanted else [])
     for sp in specs:              # {'tags', 'mode': 'fi' (fastinfo._reduce) | 'lite' (_lite), 'full': no-STOP decoder (type names), 'only': ids}
@@ -175,11 +210,17 @@ def _job(job):
             if rec.get('fields'): recs.append(((int(eid), c), _lite(c, rec) if lite and c not in FI_REDUCED else FI._reduce(c, rec)))
     if note_eh: ehc = _eh_candidate_ids(chunk, sizes)
     if hdr_ids:
-        r = rd.extract_chunk(chunk, [], _G['EH'], hdr_ids, [])
+        allh = hdr_ids == 'all'
+        r = rd.extract_chunk(chunk, [], _G['EH'], None if allh else hdr_ids, [])
         for eid, h in r[1]:
             cd = h.get('m_classDef'); cd = cd.get('m_ref') if isinstance(cd, dict) else cd
-            ehs.append((int(eid), (h.get('m_categroryId'), h.get('m_ownerViewId'), h.get('m_familyId'), cd)))
-    return job[:2], (recs, ehs, ehc, (time.process_time() - c0, time.time() - w0, os.getpid()))
+            t = (h.get('m_categroryId'), h.get('m_ownerViewId'), h.get('m_familyId'), cd)
+            if allh:
+                pb = _ob(h.get('m_pBBox')); mm = pb.get('m_minmax') if isinstance(pb, dict) else None
+                t += ((tuple(map(float, mm[0])) + tuple(map(float, mm[1]))) if mm and len(mm) == 2 else None,)
+            ehs.append((int(eid), t))
+        del r
+    return job[:2], (recs, ehs, ehc, (time.process_time() - c0, time.time() - w0, os.getpid(), len(bad)))
 
 
 FI_REDUCED = ('CategoryElem', 'FamilySurrogate', 'FamSymSurrogate', 'GStyleElem')
@@ -331,11 +372,18 @@ def _ids_owned(et, W):
 
 
 def _setup(path, log):
-    FI = __import__('rvtballet.fastinfo', fromlist=['x']); FI._tune(); FI._paths()
+    from . import rvtfile as FI
+    FI._tune(); FI._paths()
     import olefile, rvt_scan as S, rvt_decode as D, fmt_parser as fp, rvtfmt, rvt_fast as F
     from . import elemindex as EI
-    t0 = time.time()
-    o = olefile.OleFileIO(path); names = ['/'.join(e) for e in o.listdir(streams=True)]
+    t0 = time.time(); _G['st0'] = None
+    if _G.get('fd') is not None:
+        try: os.close(_G['fd'])
+        except OSError: pass
+        _G['fd'] = None
+    fd = os.open(path, os.O_RDONLY); st0 = _stamp(os.fstat(fd))           # read-only, the only handle: olefile and every forked worker read through it
+    _G.update(path=path, fd=fd, st0=st0)                                     # set first: an error while parsing a file that is being saved is reported as a change
+    o = olefile.OleFileIO(os.fdopen(os.dup(fd), 'rb')); names = ['/'.join(e) for e in o.listdir(streams=True)]
     pns = sorted(n for n in names if n.startswith('Partitions/'))
     streams = {pn: Stream(o, pn) for pn in pns}; _G.pop('views', None); _G.pop('groups', None)
     cls, _ = fp.parse(rvtfmt.inflate_stream(o.openstream('Formats/Latest').read())[1])
@@ -344,16 +392,22 @@ def _setup(path, log):
     et = rvtfmt.inflate_stream(o.openstream('Global/ElemTable').read())[1]; ids, owned = _ids_owned(et, W); del et
     try: es = F.es_load(path)[0]
     except Exception: es = {}
-    rd = F.make_recdecoder(sch, W, es); rd.set_ids(ids.tolist())
+    # the geometry STOP list is given explicitly: rvt_decode derives it from RVT_GEOM at import time and rvt_fast sets RVT_GEOM=1 on import, so a child
+    # process of an earlier query inherited a different decoder (2024 HVAC sample: 7 vs 53 sub/user category names, other category counts)
+    rd = F._rc().RecDecoder(sch.c, W, ['GeomStepList', 'GeomTable'], D.STRCAP, D.EID, D.Desync)
+    if es: rd.set_es(es)
+    rd.set_ids(ids.tolist())
     # second decoder WITHOUT the geometry STOP list: the stop at GeomStepList/GeomTable also drops what follows it, e.g. SymbolInfo.m_name (type names): 0 of 199
-    # type names on the 2024 HVAC sample with STOP, 199 of 199 without. Used only for type records (fields would be slower for instances).
+    # type names on the 2024 HVAC sample with STOP, 199 of 199 without; Level elevations.
+    # Used only for those record classes (FULL_DECODE; fields would be slower for instances).
     rd_full = F._rc().RecDecoder(sch.c, W, [], D.STRCAP, D.EID, D.Desync)
     if es: rd_full.set_es(es)
     rd_full.set_ids(ids.tolist())
     cnames = {i + 12: c['name'] for i, c in enumerate(cls)}
     log('schema + decoder: %.2fs' % (time.time() - t0))
-    _G.update(path=path, o=o, pns=pns, streams=streams, cls=cls, W=W, sch=sch, rd=rd, rd_full=rd_full, ids=ids, owned=owned,
+    _G.update(path=path, fd=fd, st0=st0, damaged=0, o=o, pns=pns, streams=streams, cls=cls, W=W, sch=sch, rd=rd, rd_full=rd_full, ids=ids, owned=owned,
               cnames=cnames, EH=sch.by.get('ElementHeader', -999) + 12)
+    consistent()
     return _G
 
 
@@ -373,13 +427,17 @@ class Engine:
     """one fork pool for the whole query: segment walks (biggest partition first), each partition's decode tasks submitted as soon as its walk is back,
     later passes reuse the same workers. Results are keyed (partition index, first segment) so first-wins follows stream order."""
     def __init__(s, workers, log):
-        s.log = log; s.workers = workers; s.pool = None; s.stat = []
+        s.log = log; s.workers = workers; s.pool = None; s.stat = []; s.hdr = None; s.plan_kw = {}      # hdr = 'all': every task also decodes every ElementHeader (scan)
         if workers > 1:
             import multiprocessing as mp
             s.pool = mp.get_context('fork').Pool(workers, initializer=_winit)
         else: _winit()
     def close(s):
-        if s.pool: s.pool.terminate()
+        """stop the workers, then check the file did not change while it was read (FileChanged replaces any error a torn read caused)"""
+        if s.pool:
+            t = time.time(); s.pool.terminate(); s.log('pool terminate %.2fs' % (time.time() - t)); s.pool = None
+        consistent()
+        if _G.get('damaged'): s.log('WARNING: %d gzip segments fail their CRC (file damaged?)' % _G['damaged'])
     def walk_and_decode(s, wanted, note_eh):
         """-> (segtab {pn: segs}, tasks {key: task}, results {key: (recs, ehs, ehc)})"""
         t0 = time.time(); pns = _G['pns']; order = sorted(range(len(pns)), key=lambda i: -_G['streams'][pns[i]].size)
@@ -387,7 +445,8 @@ class Engine:
         if s.pool is None:
             for pi in order:
                 pn = pns[pi]; segtab[pn] = _job(('walk', pi, pn))[1]
-                for t in plan(pi, pn, segtab[pn]): tasks[t[0]] = t; res[t[0]] = _job(('dec',) + t + (wanted, note_eh, None))[1][:3]
+                for t in plan(pi, pn, segtab[pn], **s.plan_kw):
+                    tasks[t[0]] = t; b = _job(('dec',) + t + (wanted, note_eh, s.hdr))[1]; res[t[0]] = b[:3]; _G['damaged'] = _G.get('damaged', 0) + b[3][3]
             return segtab, tasks, res
         import queue
         q = queue.Queue(); pending = 0
@@ -399,18 +458,18 @@ class Engine:
         pi0 = order[0]; pn0 = pns[pi0]; sent = set()
         def early(segs):
             nonlocal pending
-            for t in plan(pi0, pn0, segs):
+            for t in plan(pi0, pn0, segs, **s.plan_kw):
                 if t[0] in sent: continue
                 if t[0][1] + len(t[2]) >= len(segs): break            # its overlap may still grow: wait
-                sent.add(t[0]); tasks[t[0]] = t; s.pool.apply_async(_job, (('dec',) + t + (wanted, note_eh, None),), callback=put, error_callback=err); pending += 1
+                sent.add(t[0]); tasks[t[0]] = t; s.pool.apply_async(_job, (('dec',) + t + (wanted, note_eh, s.hdr),), callback=put, error_callback=err); pending += 1
         fd = os.open(_G['path'], os.O_RDONLY)
         try: segtab[pn0] = _G['streams'][pn0].segments(fd, every=512, cb=early)
         finally: os.close(fd)
-        for t in plan(pi0, pn0, segtab[pn0]):
+        for t in plan(pi0, pn0, segtab[pn0], **s.plan_kw):
             if t[0] in sent:
                 assert tasks[t[0]] == t, 'early task differs from plan()'
                 continue
-            tasks[t[0]] = t; s.pool.apply_async(_job, (('dec',) + t + (wanted, note_eh, None),), callback=put, error_callback=err); pending += 1
+            tasks[t[0]] = t; s.pool.apply_async(_job, (('dec',) + t + (wanted, note_eh, s.hdr),), callback=put, error_callback=err); pending += 1
         if len(segtab) == len(pns): tw = time.time() - t0
         else: tw = None
         while pending:
@@ -419,11 +478,11 @@ class Engine:
             head, body = r
             if head[0] == 'walk':
                 pi, pn = head[1], head[2]; segtab[pn] = body
-                for t in plan(pi, pn, body):
-                    tasks[t[0]] = t; s.pool.apply_async(_job, (('dec',) + t + (wanted, note_eh, None),), callback=put, error_callback=err); pending += 1
+                for t in plan(pi, pn, body, **s.plan_kw):
+                    tasks[t[0]] = t; s.pool.apply_async(_job, (('dec',) + t + (wanted, note_eh, s.hdr),), callback=put, error_callback=err); pending += 1
                 if len(segtab) == len(pns): tw = time.time() - t0
             else:
-                res[head[1]] = body[:3]; s.stat.append(body[3])
+                res[head[1]] = body[:3]; s.stat.append(body[3]); _G['damaged'] = _G.get('damaged', 0) + body[3][3]
         s._report('records', len(tasks), t0, 'walks done at %.2fs, %d segments' % (tw or 0, sum(map(len, segtab.values()))))
         return segtab, tasks, res
     def run(s, jobs, what):
@@ -438,7 +497,7 @@ class Engine:
         st = s.stat; s.stat = []
         if st:
             busy = collections.Counter()
-            for c, w, pid in st: busy[pid] += w
+            for x in st: busy[x[2]] += x[1]
             s.log('  task cpu %.1fs, task wall %.1fs (max %.2fs), worker busy max %.2fs min %.2fs' % (sum(x[0] for x in st), sum(x[1] for x in st), max(x[1] for x in st), max(busy.values()), min(busy.values())))
         s.log('%s: %d tasks, %d workers, %.2fs%s' % (what, n, s.workers, time.time() - t0, (', ' + extra) if extra else ''))
 
@@ -510,31 +569,28 @@ def _workers():
     return max(1, min((os.cpu_count() or 2) - 1, 20, int((budget - 250) // 70)))
 
 
-def sheets(path, workers=None, log=None, rule='last'):
-    """same list as fastinfo.scan(path)['sheets'] (number, name, issue date, drawn/approved by, revisions, views).
-    rule='last' (default): last record in stream order wins for a sheet id with several records, and a sheet is skipped only when its ElemTable column +28
-    points at a group / group type. 984 MB project file: 412 listed, 412 equal Revit's export by number and title, 0 extra. Identical to the reader rule on
-    every Autodesk sample 2017-2026. rule='reader': exactly fastinfo.scan (first-wins, skip every id with a +28 value: 393 listed, 391 equal on that file)"""
+def sheets(path, workers=None, log=None):
+    """sheets (number, name, issue date, drawn/approved by, revisions, views), the same list scan() gives, decoding only views, viewports, revisions and groups.
+    Rule: the last record in stream order wins for a sheet id with several records, and a sheet is skipped only when its ElemTable column +28 points at a
+    group / group type. 984 MB project file: 412 listed, 412 equal Revit's export by number and title, 0 extra (the old first-wins reader that skipped every id
+    with a +28 value: 393 listed, 391 equal). Same list as the old reader on every Autodesk sample 2017-2026."""
     log = log or (lambda *a: None); workers = workers or _workers(); t0 = time.time()
     # only real views (subclasses of DBView: sheets are DBViewDrafting), their Viewports and the revisions. fastinfo decodes every DBView* class: DBViewInfo,
     # DBViewType, the cutters are not views, and false DBViewInfo candidates (ids < 1000 inside bulk data) cost 128 of 170 CPU seconds on a 984 MB file
     # DBView* prefix as well: fastinfo names views of the DBView* classes only (TableView / PanelScheduleView on a sheet are not listed there either; kept equal)
     def want(c, keep=[]):
-        return c.startswith('DBView') and c in _view_classes() or c in ('Viewport', 'ProjectRevision') or rule == 'last' and c in _group_classes()
+        return c.startswith('DBView') and c in _view_classes() or c in ('Viewport', 'ProjectRevision') or c in _group_classes()
     def need_headers(full):
         # 2023+ files: a sheet lists no viewports; each Viewport is owned by its sheet (ElementHeader.m_ownerViewId)
         sheet_lists = [r['fields'].get('m_sheetViewportElemIds') for (e, c), r in full.items() if c == 'DBViewDrafting' and r['fields'].get('m_sheetNumber') and r['fields'].get('m_viewName') is not None]
         vps = [e for (e, c) in full if c == 'Viewport']
         return vps if vps and any(not x for x in sheet_lists) else []
-    full, hdr, G = classes(path, want, need_headers, workers, log, last_wins=(rule == 'last'))
+    full, hdr, G = classes(path, want, need_headers, workers, log, last_wins=True)
     import numpy as np
-    owned = G['owned']; recs = {}; by = collections.defaultdict(list)
+    recs = {}; by = collections.defaultdict(list)
     groups = {e for (e, c) in full if c in _group_classes()}
-    def has_owner(e):
-        k = int(np.searchsorted(owned, np.uint64(e))); return k < len(owned) and int(owned[k]) == e
     for (eid, c), r in full.items():
-        if rule != 'last' and c in ('Level', 'Grid', 'RoomElem', 'DBViewDrafting') and has_owner(eid): continue
-        if rule == 'last' and c == 'DBViewDrafting' and owner_of(eid) in groups: continue        # a copy inside a group type (2024 HVAC sample: 'Unnamed' sheet)
+        if c == 'DBViewDrafting' and owner_of(eid) in groups: continue        # a copy inside a group type (2024 HVAC sample: 'Unnamed' sheet)
         by[c].append(r); recs.setdefault(eid, r)
     nm = lambda i: (recs[i]['fields'].get('m_text') or recs[i]['fields'].get('m_viewName') or recs[i]['fields'].get('m_name') or '') if i in recs else ''
     sh = []
@@ -547,7 +603,7 @@ def sheets(path, workers=None, log=None, rule='last'):
     vp = {r['id']: int(r['fields'].get('m_dbViewId', -1)) for r in by['Viewport']}
     on_sheet = collections.defaultdict(list)
     if hdr:
-        from . import fastinfo as FI
+        from . import rvtfile as FI
         W = G['W']
         for v, dv in vp.items():
             h = hdr.get(v)
@@ -816,7 +872,149 @@ def walls_red_material(path, max_height_ft=5 / 0.3048, workers=None, log=None, r
     return dict(st, rows=out, red=red, _types={e: r['fields'].get('layers') for e, r in types.items()}, _colors={e: material_colors(m, assets) for e, m in mats.items()})
 
 
-READY = {'views': {'cls': 'View'}, 'levels': {'cls': 'Level'}, 'grids': {'cls': 'Grid'}, 'walls': {'cls': 'Wall'}, 'wall-types': {'cls': 'WallType'},
+# ---------------------------------------------------------------------------------------------------------------------------------------------------
+# scan: the model summary (sheets, views, levels, grids, revisions, phases, counts by category / class, per-element header table) in one cold pass.
+# Replaced fastinfo.scan (2026-11-14): same result shape, the corrected sheet rule, the parallel engine.
+
+FULL_DECODE = ('Level',)
+# CategoryElem stays on the STOP decoder: without the stop it yields more sub/user category names (2024 HVAC sample 53 vs 7) and parents, but per-element
+# categories then agree with Revit's API dump less often (5 samples 2020-2023: 87.8 vs 88.1 percent of 94080 elements): Revit reports the subcategory itself
+ADMIN = ('FamilySurrogate', 'FamSymSurrogate', 'GStyleElem', 'CategoryElem', 'Level', 'Grid', 'ProjectPhase', 'ProjectInfo', 'Viewport', 'ProjectRevision', 'ViewSheetSet')
+NOCAT = -(1 << 62)
+
+
+def scan(path, log=None, want_elements=False, counts=True, workers=None):
+    """-> dict: levels, grids, views, sheets, revisions, phases, subcategory_names, stats and (counts=True) counts (by category), class_counts, view_owned,
+    plus arrays (want_elements: per element id, cat, owner_view, family, bbox, cls, cls_names). counts=False skips the ElementHeader pass (sheets/views/levels/grids
+    only). Rules: the last record in stream order wins for an id with several records; Level / Grid / sheet records inside a group (type) are skipped."""
+    log = log or (lambda *a: None); workers = workers or _workers(); t0 = time.time()
+    G = _setup(path, log); W = G['W']; cls = G['cls']
+    vw = _view_classes(); gr = _group_classes()
+    pred = lambda c: c in ADMIN or (c.startswith('DBView') and c in vw) or c in gr
+    tag_of = {n: t for t, n in G['cnames'].items()}
+    wanted = [{'tags': sorted(t for t, n in G['cnames'].items() if pred(n) and n not in FULL_DECODE)},
+              {'tags': sorted(tag_of[n] for n in FULL_DECODE if n in tag_of), 'full': True}]      # Level elevation, CategoryElem name/parent: behind the geometry stop
+    E = Engine(workers, log); E.hdr = 'all' if counts else None
+    if counts: E.plan_kw = {'task_mb': float(os.environ.get('RVT_Q_HDR_TASK_MB', '1')), 'ovl': int(os.environ.get('RVT_Q_HDR_OVERLAP_KB', '512')) << 10}
+    # a worker holds the decoded ElementHeader trees of one task: 984 MB file, 20 workers: 8 MB tasks 11-13 s / 6.0 GB PSS, 2 MB 7.0 s / 3.5 GB, 1 MB 7.7 s / 2.6 GB (same result)      # every task also decodes its ElementHeaders: they are scattered (984 MB file: in 4 to 14 of the tasks of a big partition, with gaps)
+    try:
+        segtab, tasks, res = E.walk_and_decode(wanted, not counts)
+        full = {}
+        for key in sorted(res):
+            for k, v in res[key][0]: full[k] = v          # last wins (across tasks; inside one task the decoder keeps the first)
+        hdr = {}
+        if counts:
+            for key in sorted(res):
+                for e, h in res[key][1]:
+                    if e not in hdr: hdr[e] = h
+        else:              # sheets of 2023+ files list no viewports: each Viewport is owned by its sheet (ElementHeader.m_ownerViewId)
+            vps = [e for (e, c) in full if c == 'Viewport']
+            if vps:
+                for key, (_, ehs, _) in sorted(E.run(header_jobs(segtab, tasks, res, vps), 'headers').items()):
+                    for e, h in ehs:
+                        if e not in hdr: hdr[e] = h
+    finally: E.close()
+    from . import rvtfile as RF, categories as CT
+    import numpy as np
+    groups = {e for (e, c) in full if c in gr}
+    recs = {}; by = collections.defaultdict(list)
+    owned = G['owned']
+    def has_owner(e):
+        k = int(np.searchsorted(owned, np.uint64(e))); return k < len(owned) and int(owned[k]) == e
+    for (eid, c), r in full.items():
+        if eid == 0 and not any(v not in (None, '', 0) for v in r['fields'].values()): continue   # an empty id-0 record: a false candidate (a revision, a nameless level on samples)
+        if c in ('Level', 'Grid') and has_owner(eid): continue          # copies: a level with an ElemTable +28 value is not in Revit's list (Technical school 2021-23: 1 each)
+        if c == 'DBViewDrafting' and owner_of(eid) in groups: continue   # sheets: only copies inside a group type (the +28 rule dropped 20 real sheets on a 984 MB file)
+        by[c].append(r); recs.setdefault(eid, r)
+    nm = lambda i: (recs[i]['fields'].get('m_text') or recs[i]['fields'].get('m_viewName') or recs[i]['fields'].get('m_name') or '') if i in recs else ''
+    def sid(v):
+        return RF._sc(v, W) if v is not None and RF._plausible(v, W) else None
+    out = {}
+    out['levels'] = sorted([{'id': r['id'], 'name': r['fields'].get('m_text', ''), 'elevation_ft': ((_ob(r['fields'].get('m_pSurface')) or {}).get('m_origin') or [None] * 3)[2]} for r in by['Level']],
+                           key=lambda l: (l['elevation_ft'] is None, l['elevation_ft'] if l['elevation_ft'] is not None else 0, l['name'], l['id']))
+    out['grids'] = sorted(r['fields'].get('m_text', '') for r in by['Grid'])
+    views = []; sh = []
+    for c, lst in by.items():
+        if not c.startswith('DBView'): continue
+        for r in lst:
+            f = r['fields']; n = f.get('m_viewName')
+            if n is None: continue
+            if c == 'DBViewDrafting' and f.get('m_sheetNumber'):
+                sh.append({'id': r['id'], 'number': f.get('m_sheetNumber'), 'name': n, 'issue_date': f.get('m_issueDate'), 'drawn_by': f.get('m_drawnBy'), 'approved_by': f.get('m_approvedBy'),
+                           'revision_ids': [int(v) for v in (f.get('m_explicitlyPresentRevisionIds') or []) if isinstance(v, int) or hasattr(v, '__int__')],
+                           'viewports': [int(v) for v in (f.get('m_sheetViewportElemIds') or [])]})
+            else: views.append({'id': r['id'], 'name': n, 'class': c, 'template': bool(f.get('m_isTemplate')), 'scale': f.get('m_scale')})
+    vp = {r['id']: int(r['fields'].get('m_dbViewId', -1)) for r in by['Viewport']}
+    on_sheet = collections.defaultdict(list)
+    for v, dv in vp.items():
+        h = hdr.get(v); ov = sid(h[1]) if h else None
+        if ov not in (None, -1, 0): on_sheet[ov].append(dv)
+    for s in sh:
+        ids_ = [vp[v] for v in s.pop('viewports') if v in vp]
+        s['views'] = [nm(d) for d in ids_ if d in recs] if ids_ else sorted(nm(d) for d in on_sheet.get(s['id'], []) if d in recs)
+    out['views'] = sorted(views, key=lambda v: (v['class'], v['name'], v['id'])); out['sheets'] = sorted(sh, key=lambda s: (str(s['number']), s['id']))
+    revs = {r['id']: r['fields'] for r in by['ProjectRevision']}
+    out['revisions'] = sorted(({'id': i, 'sequence': f.get('m_sequenceNumber'), 'number': f.get('m_numberStr'), 'description': f.get('m_description'), 'date': f.get('m_date'), 'issued_by': f.get('m_issuedBy')} for i, f in revs.items()),
+                              key=lambda r: (r['sequence'] is None, r['sequence'] or 0, r['id']))
+    for s in out['sheets']: s['revisions'] = [{'number': revs[i].get('m_numberStr'), 'description': revs[i].get('m_description'), 'date': revs[i].get('m_date')} for i in sorted(s.get('revision_ids') or [], key=lambda i: revs.get(i, {}).get('m_sequenceNumber') or 0) if i in revs]
+    out['phases'] = [r['fields'].get('m_name') for r in by['ProjectPhase']]
+    # saved sheet sets (print/publish sets, ViewSheetSet): members are drawing ids (m_orderedViewSheetList.m_dbDrawingIds) that sheets and views carry as m_dbDrawingId
+    drw = {}
+    for (eid, c), r in full.items():
+        d = r['fields'].get('m_dbDrawingId') if c.startswith('DBView') else None
+        if d is not None and eid in recs: drw[int(d)] = (eid, c, r['fields'])
+    sets = []
+    for r in by['ViewSheetSet']:
+        f = r['fields']; ol = _ob(f.get('m_orderedViewSheetList')); mem = [int(x) for x in (ol.get('m_dbDrawingIds') or [])] if isinstance(ol, dict) else []
+        shs = []; vws = []; unk = 0
+        for d in mem:
+            x = drw.get(d)
+            if x is None: unk += 1
+            elif x[1] == 'DBViewDrafting' and x[2].get('m_sheetNumber'): shs.append(x[2]['m_sheetNumber'])
+            else: vws.append(x[2].get('m_viewName') or '')
+        sets.append({'id': r['id'], 'name': f.get('m_name'), 'members': len(mem), 'sheets': shs, 'views': vws, 'unresolved': unk})
+    out['sheet_sets'] = sorted(sets, key=lambda x: (str(x['name']), x['id']))
+    out['subcategory_names'] = CT.subcategory_names(full)
+    out['stats'] = {'damaged_members': _G.get('damaged', 0), 'members': sum(len(v) for v in segtab.values()), 'partitions': len(G['pns']), 'tasks': len(tasks),
+                    'decoded_mb': round(sum(x[2] for v in segtab.values() for x in v) / 1e6), 'seconds': round(time.time() - t0, 2), 'workers': workers}
+    if counts:
+        idarr = G['ids']; N = len(idarr); ENDX = len(cls)
+        seen = np.zeros(N, bool); a_cat = np.full(N, NOCAT, np.int64); a_ov = np.full(N, -1, np.int64); a_fam = np.full(N, -1, np.int64)
+        a_bb = np.full((N, 6), np.nan, np.float32); a_cls = np.full(N, 65535, np.uint16); cn_ix = {}; cnames_l = []
+        he = np.array(sorted(hdr), np.uint64); ks = np.searchsorted(idarr, he); ks[ks >= N] = 0; ok = idarr[ks] == he
+        for e, k in zip(he[ok].tolist(), ks[ok].tolist()):
+            cid, ov, fam, cd, bb = hdr[e]; seen[k] = True
+            if isinstance(cd, int) and 12 <= cd < 12 + ENDX:
+                n_ = cls[cd - 12]['name']; ci = cn_ix.get(n_)
+                if ci is None: ci = cn_ix[n_] = len(cnames_l); cnames_l.append(n_)
+                a_cls[k] = ci
+            x = sid(cid)
+            if x is not None: a_cat[k] = x
+            x = sid(ov)
+            if x is not None: a_ov[k] = x
+            x = sid(fam)
+            if x is not None: a_fam[k] = x
+            if bb: a_bb[k] = bb
+        a_cat = CT.resolve(a_cat, a_cls, np.array(cnames_l or ['']), idarr, full, W)
+        cat = _cat_table(); cc = collections.Counter()
+        u, n = np.unique(a_cat[seen], return_counts=True)
+        for v, c in zip(u.tolist(), n.tolist()):
+            if v != NOCAT: cc[cat.get(v, '(built-in id %s, not in the category table)' % v if v < -1 else '(user category id %s)' % v)] += c
+        m_ = seen & (a_cat == NOCAT); un, nn = np.unique(a_cls[m_], return_counts=True)
+        for i_, c in zip(un.tolist(), nn.tolist()): cc['(no category: %s) %s' % (CT.kind(cnames_l[i_]) if i_ != 65535 else 'other', cnames_l[i_] if i_ != 65535 else '?')] += c
+        out['counts'] = dict(cc.most_common())
+        u, n = np.unique(a_cls[seen & (a_cls != 65535)], return_counts=True)
+        out['class_counts'] = dict(sorted(((cnames_l[int(i)], int(c)) for i, c in zip(u, n)), key=lambda t: -t[1]))
+        out['view_owned'] = int(((a_ov != -1) & seen).sum())
+        out['stats'].update(elements_with_header=int(seen.sum()), primary_elements=N)
+        if want_elements:
+            out['arrays'] = {'id': idarr[seen], 'cat': a_cat[seen], 'owner_view': a_ov[seen], 'family': a_fam[seen], 'bbox': a_bb[seen], 'cls': a_cls[seen], 'cls_names': np.array(cnames_l or [''], dtype=str)}
+    out['stats']['seconds'] = round(time.time() - t0, 2)
+    log('scan: %d sheets, %d views, %d levels, %s headers, %.2fs' % (len(out['sheets']), len(out['views']), len(out['levels']), out['stats'].get('elements_with_header', '-'), time.time() - t0))
+    return out
+
+
+READY = {'walls': {'cls': 'Wall'}, 'wall-types': {'cls': 'WallType'},
          'floors': {'cls': 'Floor'}, 'floor-types': {'cls': 'FloorType'}, 'roofs': {'cls': 'RoofBase'}, 'ceilings': {'cls': 'Ceiling'}, 'stairs': {'cls': 'Stairs'},
          'railings': {'cls': 'Railing'}, 'rooms': {'cls': 'Room'}, 'doors': {'category': 'Doors'}, 'windows': {'category': 'Windows'},
          'furniture': {'category': 'Furniture'}, 'generic-models': {'category': 'Generic Models'}, 'columns': {'category': 'Structural Columns'},
@@ -825,42 +1023,182 @@ READY = {'views': {'cls': 'View'}, 'levels': {'cls': 'Level'}, 'grids': {'cls': 
          'text-notes': {'cls': 'TextNote'}, 'dimensions': {'cls': 'Dimension'}, 'curtain-panels': {'category': 'Curtain Panels'}}
 
 
-def main(argv):
-    import argparse, json
-    ap = argparse.ArgumentParser(prog='rvt-ballet query', description='cold targeted queries on a .rvt (no index): sheets, collect, or a ready command: ' + ', '.join(sorted(READY)))
-    ap.add_argument('cmd', choices=('sheets', 'collect', 'walls-red-material') + tuple(sorted(READY))); ap.add_argument('file')
+SUMMARY = ('sheets', 'sheet-sets', 'views', 'levels', 'grids', 'counts', 'elements')
+HELP = {
+    'sheets': 'all sheets: number, title, issue date, revisions, placed views (decodes views/viewports/revisions only)',
+    'sheet-sets': 'saved sheet sets (print/publish sets) with their member sheet numbers and views',
+    'views': 'all views by class (templates counted, not listed); --json includes templates and scale',
+    'levels': 'levels with elevation (ft and m)',
+    'grids': 'grid names',
+    'counts': 'element counts by category and by class (every ElementHeader is decoded)',
+    'elements': 'one row per element: id, class, category, owner view, family, bounding box (ft)',
+    'collect': 'general collector: --class (Revit API or schema class) and/or --category, like FilteredElementCollector',
+    'walls-red-material': 'benchmark: walls below 5 m whose type has a layer material with a red colour in any colour property',
+}
+for _k, _v in READY.items(): HELP.setdefault(_k, 'collect ' + ', '.join('%s=%s' % kv for kv in _v.items()))
+EPILOG = """examples:
+  rvt-ballet sheets FILE.rvt                       (same as: rvt-ballet query sheets FILE.rvt)
+  rvt-ballet query walls FILE.rvt --tsv
+  rvt-ballet query collect FILE.rvt --class Wall --fields m_assocLevelId --json
+  rvt-ballet query collect FILE.rvt --category Doors --where level=Level 1
+  rvt-ballet query counts FILE.rvt --json
+Every command reads the file cold (no index, no cache), read-only, in about 2-4 s for a 1 GB model with the default memory budget
+(RVT_Q_MEM_GB=3, about 20 worker processes; RVT_Q_WORKERS=N to set them). Lengths are Revit internal feet unless a field says otherwise.
+If the file changes while it is read (Revit saving it), the query is retried (RVT_Q_RETRIES, default 2) and otherwise fails with
+'changed during read: retry' (exit 75): an answer is never built from a torn read. Agent guide: docs/agent-queries.md"""
+
+
+def _cmd_list():
+    w = max(len(k) for k in HELP)
+    return '\n'.join('  %-*s  %s' % (w, k, HELP[k]) for k in list(SUMMARY) + ['collect', 'walls-red-material'] + sorted(READY))
+
+
+def _parser():
+    import argparse
+    ap = argparse.ArgumentParser(prog='rvt-ballet query', formatter_class=argparse.RawDescriptionHelpFormatter,
+                                 description='cold read-only queries on a .rvt file (no index, no conversion). Commands:\n' + _cmd_list(), epilog=EPILOG)
+    ap.add_argument('cmd', metavar='COMMAND', choices=SUMMARY + ('collect', 'walls-red-material') + tuple(sorted(READY))); ap.add_argument('file', metavar='FILE.rvt')
     ap.add_argument('--class', dest='cls', help='collect: Revit API or schema class name(s), comma separated (subclasses included)')
-    ap.add_argument('--category', help='collect: built-in category name or id'); ap.add_argument('--fields', default='', help='extra raw fields, comma separated')
-    ap.add_argument('--where', action='append', default=[], help='KEY=VALUE equality filter on a row key (repeatable)')
-    ap.add_argument('--json', action='store_true'); ap.add_argument('--tsv', action='store_true'); ap.add_argument('--verbose', action='store_true')
-    ap.add_argument('--workers', type=int, default=0); ap.add_argument('--rule', choices=('reader', 'last', 'first'), default=None, help='sheets: last (default, equals Revit on the 984 MB file) or reader (= rvt-ballet sheets); collect: last (default) or first')
-    a = ap.parse_args(argv)
-    log = (lambda m: print(m, file=sys.stderr)) if a.verbose else None
+    ap.add_argument('--category', help='collect: built-in category name or id'); ap.add_argument('--fields', default='', help='collect: extra raw fields, comma separated')
+    ap.add_argument('--where', action='append', default=[], help='collect: KEY=VALUE equality filter on a row key (repeatable)')
+    ap.add_argument('--json', action='store_true', help='JSON output'); ap.add_argument('--tsv', action='store_true', help='tab separated rows with a header line')
+    ap.add_argument('--limit', type=int, default=0, help='elements: first N rows only'); ap.add_argument('--verbose', action='store_true', help='timings on stderr')
+    ap.add_argument('--workers', type=int, default=0, help='worker processes (default from RVT_Q_MEM_GB)')
+    ap.add_argument('--refresh', action='store_true', help=argparse.SUPPRESS)          # accepted for old scripts: there is no cache any more
+    return ap
+
+
+def _fmt_ft(v): return '' if v is None else '%.3f ft (%.3f m)' % (v, v * 0.3048)
+
+
+def _tsv(cols, rows, say):
+    say('\t'.join(cols))
+    for r in rows: say('\t'.join('' if r.get(k) is None else (', '.join(map(str, r[k])) if isinstance(r[k], list) else str(r[k])) for k in cols))
+
+
+def _summary(a, say, log):
+    import json
     if a.cmd == 'sheets':
-        sh = sheets(a.file, workers=a.workers or None, log=log, rule=a.rule or 'last')
-        if a.json: print(json.dumps(sh, indent=1, default=str)); return 0
-        print('Sheets (%d):' % len(sh))
-        for s in sh: print('  %-8s %s%s%s | views: %s' % (s['number'], s['name'], ('  (issued %s)' % s['issue_date']) if s.get('issue_date') else '', ('  rev %s' % '; '.join('%s %s' % (x['number'], x['description']) for x in s['revisions'])) if s.get('revisions') else '', ', '.join(s['views']) or '-'))
-        return 0
+        r = {'sheets': sheets(a.file, workers=a.workers or None, log=log)}
+    else: r = scan(a.file, log=log, want_elements=a.cmd == 'elements', counts=a.cmd in ('counts', 'elements'), workers=a.workers or None)
+    if _G.get('damaged'): print('rvt-ballet: WARNING: %d compressed blocks of this file fail their checksum: the file looks damaged and the result may be incomplete' % _G['damaged'], file=sys.stderr)
+    if a.cmd == 'sheets':
+        sh = r['sheets']
+        if a.json: say(json.dumps(sh, indent=1, default=str)); return 0
+        if a.tsv: _tsv(['id', 'number', 'name', 'issue_date', 'drawn_by', 'approved_by', 'views'], sh, say); return 0
+        say('Sheets (%d):' % len(sh))
+        for s in sh: say('  %-8s %s%s%s | views: %s' % (s['number'], s['name'], ('  (issued %s)' % s['issue_date']) if s.get('issue_date') else '', ('  rev %s' % '; '.join('%s %s' % (x['number'], x['description']) for x in s['revisions'])) if s.get('revisions') else '', ', '.join(s['views']) or '-'))
+    elif a.cmd == 'sheet-sets':
+        ss = r['sheet_sets']
+        if a.json: say(json.dumps(ss, indent=1, default=str)); return 0
+        if a.tsv: _tsv(['id', 'name', 'members', 'sheets', 'views', 'unresolved'], ss, say); return 0
+        say('Sheet sets (%d):' % len(ss))
+        for x in ss: say('  %s: %d members, sheets: %s%s%s' % (x['name'], x['members'], ', '.join(map(str, x['sheets'])) or '-', ('; views: ' + ', '.join(x['views'])) if x['views'] else '', ('; %d not resolved' % x['unresolved']) if x['unresolved'] else ''))
+    elif a.cmd == 'views':
+        if a.json: say(json.dumps(r['views'], indent=1, default=str)); return 0
+        if a.tsv: _tsv(['id', 'class', 'name', 'template', 'scale'], r['views'], say); return 0
+        vv = [v for v in r['views'] if not v['template']]; say('Views (%d, %d templates not listed):' % (len(vv), len(r['views']) - len(vv)))
+        for v in vv: say('  %-18s %s' % (v['class'].replace('DBView', ''), v['name']))
+    elif a.cmd == 'levels':
+        if a.json: say(json.dumps(r['levels'], indent=1, default=str)); return 0
+        if a.tsv: _tsv(['id', 'name', 'elevation_ft'], r['levels'], say); return 0
+        for l in r['levels']: say('%-30s %s' % (l['name'], _fmt_ft(l['elevation_ft'])))
+    elif a.cmd == 'grids':
+        if a.json: say(json.dumps(r['grids'], indent=1, default=str)); return 0
+        for g in r['grids']: say(g)
+    elif a.cmd == 'counts':
+        out = {'subcategories': sorted((r.get('subcategory_names') or {}).values()), 'by_category': r['counts'], 'by_class': r['class_counts'], 'view_owned_elements': r['view_owned'], 'elements': r['stats']['elements_with_header']}
+        if a.json: say(json.dumps(out, indent=1, sort_keys=True)); return 0     # sorted keys: diffable between saves
+        if a.tsv:
+            say('kind\tname\tcount')
+            for k, v in r['counts'].items(): say('category\t%s\t%d' % (k, v))
+            for k, v in r['class_counts'].items(): say('class\t%s\t%d' % (k, v))
+            return 0
+        say('elements with header: %d (%d owned by a view: 2D annotation/detail)' % (out['elements'], out['view_owned_elements']))
+        say('by category:')
+        for k, v in r['counts'].items(): say('  %8d  %s' % (v, k))
+        kinds = {}
+        for k, v in r['counts'].items():
+            if k.startswith('(no category: '): kinds[k[14:].split(')')[0]] = kinds.get(k[14:].split(')')[0], 0) + v
+        if kinds: say('without a Revit category (Revit API Category is null too): %d = %s' % (sum(kinds.values()), ', '.join('%s %d' % kv for kv in sorted(kinds.items(), key=lambda t: -t[1]))))
+        sn = r.get('subcategory_names') or {}
+        if sn: say('sub/user categories (resolved to their built-in parent above): %d = %s' % (len(sn), ', '.join(sorted(sn.values())[:12]) + (', ...' if len(sn) > 12 else '')))
+    elif a.cmd == 'elements':
+        for x in element_rows(r['arrays'], a.limit, json_=a.json): say(x)
+    return 0
+
+
+def element_rows(z, limit=0, json_=False):
+    """text lines of the element table (TSV with a header, or a JSON array one element per line) from scan(...)['arrays']"""
+    import json
+    from . import categories as CT
+    catn = _cat_table(); cn = [str(x) for x in z['cls_names']]
+    n = len(z['id']); n = min(n, limit) if limit else n
+    def row(i):
+        c = int(z['cat'][i]); b = z['bbox'][i]; k = int(z['cls'][i])
+        nm = catn.get(c, '')
+        if c < -(1 << 61): c = -1; nm = '(no category: %s)' % CT.kind(cn[k] if k != 65535 else '')       # no category in the file (Revit API Category is null as well)
+        return (int(z['id'][i]), cn[k] if k != 65535 else '', c, nm, int(z['owner_view'][i]), int(z['family'][i]), None if b[0] != b[0] else [float(v) for v in b])
+    if json_:
+        yield '['
+        for i in range(n): yield json.dumps(dict(zip(('id', 'class', 'category_id', 'category', 'owner_view', 'family', 'bbox_ft'), row(i)))) + (',' if i + 1 < n else '')
+        yield ']'; return
+    yield 'id\tclass\tcategory\towner_view\tfamily\tbbox_ft(min xyz, max xyz)'
+    for i in range(n):
+        x = row(i); yield '%s\t%s\t%s\t%s\t%s\t%s' % (x[0], x[1], x[3] or x[2], '' if x[4] == -1 else x[4], '' if x[5] == -1 else x[5], ' '.join('%.3f' % v for v in x[6]) if x[6] else '')
+
+
+def _query(a, say, log):
+    import json
+    if a.cmd in SUMMARY: return _summary(a, say, log)
     if a.cmd == 'walls-red-material':
         r = walls_red_material(a.file, workers=a.workers or None, log=log)
-        if a.json: print(json.dumps({k: v for k, v in r.items() if k != 'red'}, indent=1, default=str)); return 0
-        print('walls below 5 m with a red material: %d' % r['count']); print(json.dumps({k: v for k, v in r.items() if k not in ('rows', 'red')}, default=str)); return 0
+        if a.json: say(json.dumps({k: v for k, v in r.items() if k != 'red'}, indent=1, default=str)); return 0
+        say('walls below 5 m with a red material: %d' % r['count']); say(json.dumps({k: v for k, v in r.items() if k not in ('rows', 'red', '_types', '_colors')}, default=str)); return 0
     q = dict(READY.get(a.cmd, {}))
     if a.cls: q['cls'] = a.cls.split(',')
     if a.category: q['category'] = a.category
+    if a.cmd == 'collect' and not (a.cls or a.category): print('rvt-ballet query collect: give --class and/or --category', file=sys.stderr); return 2
     flds = [x for x in a.fields.split(',') if x]
     where = dict(w.split('=', 1) for w in a.where)
-    rows = collect(a.file, q.get('cls'), q.get('category'), flds, where or None, workers=a.workers or None, log=log, rule=a.rule or 'last')
+    rows = collect(a.file, q.get('cls'), q.get('category'), flds, where or None, workers=a.workers or None, log=log)
     cols = ['id', 'class', 'name', 'type_name', 'level', 'category'] + [k for k in flds if k not in ('id', 'class', 'name')]
-    if a.json: print(json.dumps(rows, indent=1, default=str)); return 0
-    if a.tsv:
-        print('\t'.join(cols))
-        for r in rows: print('\t'.join('' if r.get(k) is None else str(r.get(k)) for k in cols))
-        return 0
-    print('%s (%d):' % (a.cmd, len(rows)))
-    for r in rows: print('  ' + ' | '.join('' if r.get(k) is None else str(r.get(k)) for k in cols))
+    if a.json: say(json.dumps(rows, indent=1, default=str)); return 0
+    if a.tsv: _tsv(cols, rows, say); return 0
+    say('%s (%d):' % (a.cmd, len(rows)))
+    for r in rows: say('  ' + ' | '.join('' if r.get(k) is None else str(r.get(k)) for k in cols))
     return 0
+
+
+def main(argv, say=print):
+    from . import stable; return stable.run(argv, _main, say)
+
+
+def _main(argv, say=print):
+    """rvt-ballet query COMMAND FILE [options]; exit 0 ok, 1 unreadable, 2 usage, 75 file changed during read (after RVT_Q_RETRIES retries)"""
+    a = _parser().parse_args(argv)
+    if not os.path.isfile(a.file): print('rvt-ballet: no such file: %s' % a.file, file=sys.stderr); return 2
+    log = (lambda m: print(m, file=sys.stderr, flush=True)) if a.verbose else None
+    tries = int(os.environ.get('RVT_Q_RETRIES', '2')); t0 = time.time()
+    for k in range(tries + 1):
+        lines = []
+        try:
+            rc = _query(a, lines.append, log)
+        except FileChanged as ex:
+            if k < tries: print('rvt-ballet: %s (retry %d of %d in 2 s)' % (ex, k + 1, tries), file=sys.stderr); time.sleep(2); continue
+            print('rvt-ballet: %s' % ex, file=sys.stderr); return 75
+        except (SystemExit, KeyboardInterrupt): raise
+        except Exception as ex:
+            if isinstance(ex, ValueError) and any(t in str(ex) for t in ('needs --class', 'unknown category', 'no schema class')): print('rvt-ballet: %s' % ex, file=sys.stderr); return 2
+            try: consistent()                  # an error caused by a file being saved is a change, not damage
+            except FileChanged as ex2:
+                if k < tries: print('rvt-ballet: %s (retry %d of %d in 2 s)' % (ex2, k + 1, tries), file=sys.stderr); time.sleep(2); continue
+                print('rvt-ballet: %s' % ex2, file=sys.stderr); return 75
+            if os.environ.get('RVT_Q_TRACE'): raise
+            print('rvt-ballet: cannot read %s: %s: %s' % (os.path.basename(a.file), type(ex).__name__, str(ex)[:300]), file=sys.stderr); return 1
+        for x in lines: say(x)          # printed only after the file was found unchanged: a torn read never reaches stdout
+        if log: log('total %.2fs' % (time.time() - t0))
+        return rc
 
 
 if __name__ == '__main__': sys.exit(main(sys.argv[1:]))
