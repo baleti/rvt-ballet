@@ -1,4 +1,5 @@
 """c2x-rvtsave regression (severity 1): a one-byte flip within 32 B of the edit INSIDE a declared dirty member of a move output (outside the writer's own changed runs but inside the span window) (valid re-encode, so ECC/CRC are fine) used to be accepted by the gate.
+# RVT_TEST_TIMEOUT=3600 (flip tool re-verifies a 22 MB project per flip; the default 900 s is exceeded on a loaded host)
 Runs tools/rvt_edit_flip.py (delete of Viewport 101016 on the Autodesk 2024 HVAC sample, 4 in-member flips per dirty member, no random flips): the true output must be ACCEPTED (control) and every flip refused. Fails without member_pure_cut (savegate adapters + save._pending). Slow (minutes)."""
 import os, sys, subprocess
 SRC = os.path.expanduser('~/rvt-research/corpus/2024/42_Snowdon_Towers_Sample_HVAC.rvt')
