@@ -1,4 +1,4 @@
-"""c3x-rvtlink: two moves of the SAME element in one edit session must compose or be refused, never silently save a wrong value (edit-lab SEV2: +1 then -1 ft saved -1). Product path, 2024 Snowdon Structural column 606069. Compares the +1,-1 result with a single -1 move."""
+"""# RVT_TEST_TIMEOUT=3000 (slow by design: real HVAC sample, many gate runs). c3x-rvtlink: two moves of the SAME element in one edit session must compose or be refused, never silently save a wrong value (edit-lab SEV2: +1 then -1 ft saved -1). Product path, 2024 Snowdon Structural column 606069. Compares the +1,-1 result with a single -1 move."""
 import os, sys, asyncio, tempfile, hashlib, shutil, json, sqlite3
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; os.environ['RVTBALLET_ENABLE_DELETE'] = '1'; json.dump({'rvt': {'2024': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'

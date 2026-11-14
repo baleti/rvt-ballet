@@ -1,4 +1,4 @@
-"""c2x-rvtsave regression (severity 1): a one-byte flip on a byte the writer itself changed inside a declared dirty member of a ROTATE output (outside member_diff_ranges was already refused; flips inside the writer runs passed until member_raw_sha256). Autodesk 2024 HVAC sample, window flips, control accepted, all flips refused."""
+"""# RVT_TEST_TIMEOUT=3000 (slow by design: real HVAC sample, many gate runs). c2x-rvtsave regression (severity 1): a one-byte flip on a byte the writer itself changed inside a declared dirty member of a ROTATE output (outside member_diff_ranges was already refused; flips inside the writer runs passed until member_raw_sha256). Autodesk 2024 HVAC sample, window flips, control accepted, all flips refused."""
 import os, sys, subprocess
 SRC = os.path.expanduser('~/rvt-research/corpus/2024/42_Snowdon_Towers_Sample_HVAC.rvt')
 if not os.path.exists(SRC): print('skip'); sys.exit(0)
