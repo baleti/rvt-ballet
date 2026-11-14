@@ -54,7 +54,7 @@ def test_compare_partitions_identical_ok_and_interlude_flip_detected(work):
     try:
         oa = X._open(a); n = [e for e in ("/".join(x) for x in oa.listdir(streams=True)) if e.startswith("Partitions/")][0]
         assert X.compare_partitions(oa, X._open(b), n)["ok"]
-        P = X.Part(oa, n); segs = P.segments(); gaps = X._gaps(P, segs); first = min(i for i in gaps if i < len(segs))
+        P = X.Part(oa, n); segs = P.segments(); gaps = X._gaps(P, segs); first = min(i for i in gaps if 0 < i < len(segs))
         pos = segs[first][0] - 24 - 1                                  # last byte of the interlude before segment `first`, payload offset -> stored offset
         pg, po = divmod(pos, X.PAGE_PAYLOAD); stored = pg * X.PAGE_STORED + po
         ent = oa.direntries[oa._find(n)]; ss = oa.sectorsize; k = stored // ss

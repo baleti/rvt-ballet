@@ -299,48 +299,68 @@ def _gaps(P, segs):
     return out
 
 
-def compare_partitions(orig, out, name):
-    """post-save gate for a writer, per partition: `orig` and `out` are olefile handles. Passes when
-    out passes verify_partition, stream size and segment count are equal, every interlude block of the original is byte-identical in the output
-    (a block may only GROW at the tail: slack left by recompressed shorter segments) and every segment that was not edited inflates to identical bytes.
-    -> dict(ok, reasons (hard failures), warnings, changed_segments [idx], tail_slack, tail_slack_all_zero). Measured on a writer output: the block after the last segment (about 0.5 KB, 340 high-entropy bytes) changes when segments change: reported as a warning, not a failure."""
+def _seg_hashes(P, segs):
+    return [hashlib.sha1(P.payload(off, ln)).digest() for off, ln, il in segs]
+
+
+def compare_partitions(orig, out, name, allow_added=True):
+    """post-save gate for a writer, one partition: `orig`, `out` olefile handles. Segments are aligned by the sha1 of their stored bytes (difflib), so insertions and edits are told apart.
+    Hard failures: output segments bad / tiling inexact; a segment of the original REMOVED (or replaced by fewer); segments added while allow_added is False; an interlude block between two
+    unchanged segments changed; tail slack not all zero; partition head changed other than its element count; head count delta != ElemTable row-count delta (head u32 at +14 counts this
+    partition; across partitions heads do NOT sum to the ElemTable count in multi-partition files, but deltas agree: measured on an add writer output, +1 in both).
+    -> dict(ok, reasons, warnings, changed_segments [out idx], added_segments [out idx], tail_slack, tail_slack_all_zero)"""
+    import difflib
     Pa = Part(orig, name); Pb = Part(out, name); sa = Pa.segments(); sb = Pb.segments(); reasons = []; warnings = []
     v = verify_partition(out, name)
     if v["bad"]: reasons.append("output segments bad: %s" % v["bad"][:3])
     if not v["covered"]: reasons.append("output tiling inexact")
     if Pa.e.size != Pb.e.size: reasons.append("stream size %d -> %d" % (Pa.e.size, Pb.e.size))
-    if len(sa) != len(sb): reasons.append("segment count %d -> %d" % (len(sa), len(sb)))
-    ga = _gaps(Pa, sa); gb = _gaps(Pb, sb); slack = b""
-    for i, blk in ga.items():
-        o = gb.get(i, b"")
-        if i == len(sa):        # tail block: the original non-zero content must come first and unchanged; everything the output adds must be zero padding (slack of shorter recompressed segments)
-            core = blk.rstrip(b"\x00")
-            if not o.startswith(core):
-                warnings.append("tail block (%d B, %d non-zero) differs from the original (%d non-zero): a high-entropy trailer after the last segment changed; meaning unknown (digest?), VM-check it" % (len(o), len(o) - o.count(0), len(blk) - blk.count(0)))
-                slack = b""
-            else:
-                slack = o[len(core):]
-                if slack.count(0) != len(slack): reasons.append("tail slack is not all zero")
-        elif i == 0 and o != blk and len(blk) == 20 and len(o) == 20 and blk[:14] == o[:14] and blk[18:] == o[18:]:
-            # the 20-byte partition head holds this partition's element count (u32 at +14; the counts of all partitions sum to the Global/ElemTable header row count):
-            # adding or deleting elements changes it. Accepted only when the output's heads sum to the output's ElemTable count.
-            _paths(); import rvtfmt
-            n_out = struct.unpack_from("<I", rvtfmt.inflate_stream(out.openstream("Global/ElemTable").read())[1], 2)[0]; tot = 0
-            for e_ in out.listdir(streams=True):
-                nm_ = "/".join(e_)
-                if nm_.startswith("Partitions/"):
-                    h_ = Part(out, nm_).payload(0, 20)
-                    if len(h_) == 20 and struct.unpack_from("<I", h_, 0)[0] == 9: tot += struct.unpack_from("<I", h_, 14)[0]
-            if tot != n_out: reasons.append("partition head counts sum to %d != ElemTable rows %d" % (tot, n_out))
-            else: warnings.append("partition head count changed %d -> %d (heads sum to the ElemTable count %d)" % (struct.unpack_from("<I", blk, 14)[0], struct.unpack_from("<I", o, 14)[0], n_out))
-        elif o != blk: reasons.append("interlude before segment %d changed" % i)
-    for i in gb:
-        if i not in ga and i != len(sb): reasons.append("new interlude before segment %d" % i)
-    if len(sb) in gb and len(sa) not in ga:
-        slack = gb[len(sb)]
-        if slack.count(0) != len(slack): reasons.append("new tail block is not all zero")
-    changed = []
-    if len(sa) == len(sb):
-        for i, (x, y) in enumerate(zip(sa, sb)):
-            if Pa.inflate(x) != Pb.inflate(y): changed.append(i)
-    return dict(ok=not reasons, reasons=reasons, warnings=warnings, changed_segments=changed, tail_slack=len(slack) - (len(ga.get(len(sa), b'')) - len(ga.get(len(sa), b'').rstrip(b'\x00'))), tail_slack_all_zero=(slack.count(0) == len(slack)))
+    ha = _seg_hashes(Pa, sa); hb = _seg_hashes(Pb, sb)
+    ops = difflib.SequenceMatcher(None, ha, hb, autojunk=False).get_opcodes()
+    changed = []; added = []; match = {}                     # match: orig idx -> out idx for identical stored bytes
+    for tag, i1, i2, j1, j2 in ops:
+        if tag == "equal":
+            for k in range(i2 - i1): match[i1 + k] = j1 + k
+        elif tag == "replace":
+            m = min(i2 - i1, j2 - j1)
+            changed += list(range(j1, j1 + m))
+            if j2 - j1 > m: added += list(range(j1 + m, j2))
+            if i2 - i1 > m: reasons.append("%d original segment(s) removed near orig %d" % (i2 - i1 - m, i1 + m))
+        elif tag == "insert": added += list(range(j1, j2))
+        elif tag == "delete": reasons.append("%d original segment(s) removed at orig %d" % (i2 - i1, i1))
+    if added and not allow_added: reasons.append("%d segment(s) added" % len(added))
+    if added: warnings.append("%d segment(s) added (out idx %s...)" % (len(added), added[:4]))
+    ga = _gaps(Pa, sa); gb = _gaps(Pb, sb)
+    head_a = ga.get(0, b""); head_b = gb.get(0, b"")
+    for i, j in match.items():                               # interlude before an unchanged segment must be identical unless the previous neighbour was edited/added
+        prev_ok = (i - 1) in match and match[i - 1] == j - 1 or i == 0 and j == 0
+        if not prev_ok: continue
+        blk_a = ga.get(i, b""); blk_b = gb.get(j, b"")
+        if i == 0:
+            if blk_a != blk_b:
+                if len(blk_a) == 20 and len(blk_b) == 20 and blk_a[:14] == blk_b[:14] and blk_a[18:] == blk_b[18:]:
+                    _paths(); import rvtfmt
+                    n_a = struct.unpack_from("<I", rvtfmt.inflate_stream(orig.openstream("Global/ElemTable").read())[1], 2)[0]
+                    n_b = struct.unpack_from("<I", rvtfmt.inflate_stream(out.openstream("Global/ElemTable").read())[1], 2)[0]
+                    d_h = struct.unpack_from("<I", blk_b, 14)[0] - struct.unpack_from("<I", blk_a, 14)[0]
+                    tot_a = tot_b = 0
+                    for e_ in out.listdir(streams=True):
+                        nm_ = "/".join(e_)
+                        if nm_.startswith("Partitions/"):
+                            for o_, key in ((orig, "a"), (out, "b")):
+                                try: h_ = Part(o_, nm_).payload(0, 20)
+                                except Exception: continue
+                                if len(h_) == 20 and struct.unpack_from("<I", h_, 0)[0] == 9:
+                                    if key == "a": tot_a += struct.unpack_from("<I", h_, 14)[0]
+                                    else: tot_b += struct.unpack_from("<I", h_, 14)[0]
+                    if tot_b - tot_a != n_b - n_a: reasons.append("partition head counts changed by %d but ElemTable rows by %d" % (tot_b - tot_a, n_b - n_a))
+                    else: warnings.append("partition head count changed by %d (ElemTable rows %d -> %d)" % (d_h, n_a, n_b))
+                else: reasons.append("partition head changed beyond its element count")
+        elif blk_a != blk_b: reasons.append("interlude before unchanged segment %d changed" % i)
+    ta = ga.get(len(sa), b""); tb = gb.get(len(sb), b""); slack = b""
+    core = ta.rstrip(b"\x00")
+    if tb.startswith(core): slack = tb[len(core):]
+    else:
+        warnings.append("tail block (%d B, %d non-zero) differs from the original (%d non-zero): a high-entropy trailer after the last segment changed; meaning unknown, VM-check it" % (len(tb), len(tb) - tb.count(0), len(ta) - ta.count(0)))
+    if slack.count(0) != len(slack): reasons.append("tail slack is not all zero")
+    return dict(ok=not reasons, reasons=reasons, warnings=warnings, changed_segments=changed, added_segments=added, tail_slack=len(slack), tail_slack_all_zero=(slack.count(0) == len(slack)))
