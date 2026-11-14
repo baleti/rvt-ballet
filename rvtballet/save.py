@@ -1213,6 +1213,10 @@ def group_warning(ss, mid, buf):
     if not ops: return None
     try: mem = risky_membership(membership(buf, {o['eid'] for o in ops}), ops)
     except Exception as e: return 'could not check whether the edited elements belong to a group or design option (%s): verify the copy in Revit' % e
+    jm = sorted(e for e, why in mem.items() if any(x.startswith('joined to ') for x in why) and e in {o['eid'] for o in ops if o.get('op') in ('move', 'rotate')})
+    if jm:      # Revit VM oracle (Snowdon Structural 2024 column 606069, joined to 4): the copy opens clean but the API shows shift 0, the edit is silently ignored/regenerated away
+        from .edit import EditError
+        raise EditError('element %d: move/rotate refused, it is joined to other elements; Revit opens the copy but ignores the new location (VM readback shift 0, measured). Unjoin it first, or move a non-joined element' % jm[0])
     if not mem: return None
     e0 = sorted(mem)[0]
     return 'element %d is part of a group or design option, or is a moved element with dependents (hosted doors/windows, dimensions, level-relative elements) (%s): Revit opens such a copy without complaint, but a group member then differs from the other instances of its group type, a moved window/door can end up off its host wall, and dimensions or level-relative elements are not updated; check the copy in Revit before relying on it' % (e0, '; '.join(mem[e0]))
