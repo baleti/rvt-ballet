@@ -1,4 +1,4 @@
-"""c1x-rvtlink item 7 (offline witness): lab Edit.add_copy of an existing RvtLinkInstance (HVAC 2024 sample) must add exactly one element record and change/remove none. NOT a VM verdict and NOT wired into rvtballet (link add stays unavailable until the Revit VM opens it clean). Fails if the clone mutates or drops any other record."""
+"""c1x-rvtlink item 7 (offline witness): lab Edit.add_copy of an existing RvtLinkInstance (HVAC 2024 sample) must add exactly one element record and change/remove none. NOT a VM verdict (the VM verdict is FAIL: Revit 2024 CorruptModelException on this exact output, 2026-11-14) and NOT wired into rvtballet (link add stays unavailable until the Revit VM opens it clean). Fails if the clone mutates or drops any other record."""
 import os, sys, glob, shutil, tempfile
 for p in (os.path.expanduser('~/rvt-research/edit-lab'), os.path.expanduser('~/rvt-research'), os.path.expanduser('~/src/savegate')): sys.path.insert(0, p)
 c = glob.glob(os.path.expanduser('~/rvt-research/corpus/2024/*HVAC.rvt'))
