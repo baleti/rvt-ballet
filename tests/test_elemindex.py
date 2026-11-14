@@ -64,3 +64,30 @@ def test_compare_partitions_identical_ok_and_interlude_flip_detected(work):
         r = X.compare_partitions(X._open(a), X._open(b), n)
         assert not r["ok"] and any("interlude" in x for x in r["reasons"])
     finally: shutil.rmtree(d, ignore_errors=True)
+
+
+def _flip_payload_byte(path, name, pos, mask=0xFF):
+    ob = X._open(path); P = X.Part(ob, name); pg, po = divmod(pos, X.PAGE_PAYLOAD); st = pg * X.PAGE_STORED + po; ss = ob.sectorsize
+    fo = (P.chain[st // ss] + 1) * ss + st % ss
+    with open(path, "r+b") as f: f.seek(fo); c = f.read(1); f.seek(fo); f.write(bytes([c[0] ^ mask]))
+
+
+@pytest.mark.parametrize("mutation", ["segment_data", "gzip_crc", "interlude", "head_count_only", "head_marker", "footer_len", "footer_tag", "first_bytes_after_header"])
+def test_gate_catches_corruption(mutation):
+    """ESCAPE hunt: each single-spot corruption of a copy must fail compare_partitions (hard reason), the untouched copy must pass"""
+    d = tempfile.mkdtemp(prefix="elemindex-esc-"); a = os.path.join(d, "a.rvt"); b = os.path.join(d, "b.rvt"); shutil.copyfile(SAMPLE, a); shutil.copyfile(SAMPLE, b)
+    try:
+        oa = X._open(a); n = [e for e in ("/".join(x) for x in oa.listdir(streams=True)) if e.startswith("Partitions/")][0]
+        P = X.Part(oa, n); segs = P.segments(); gaps = X._gaps(P, segs); mid = len(segs) // 2
+        off, ln, il = segs[mid]
+        if mutation == "segment_data": _flip_payload_byte(b, n, off + ln // 2)                  # inside the deflate stream
+        elif mutation == "gzip_crc": _flip_payload_byte(b, n, off + ln - 16)                     # CRC32 of the member
+        elif mutation == "footer_len": _flip_payload_byte(b, n, off + ln - 6)                    # u32 stored_len copy in the 8-byte segment footer
+        elif mutation == "footer_tag": _flip_payload_byte(b, n, off + ln - 8)
+        elif mutation == "first_bytes_after_header": _flip_payload_byte(b, n, off + 3)         # gzip header MTIME byte (not covered by the CRC)
+        elif mutation == "interlude": _flip_payload_byte(b, n, segs[min(i for i in gaps if 0 < i < len(segs))][0] - 24 - 1)
+        elif mutation == "head_count_only": _flip_payload_byte(b, n, 14, 0x01)                   # element count of the partition head without touching ElemTable
+        elif mutation == "head_marker": _flip_payload_byte(b, n, 0, 0x01)
+        r = X.compare_partitions(oa, X._open(b), n)
+        assert not r["ok"], (mutation, r)
+    finally: shutil.rmtree(d, ignore_errors=True)
