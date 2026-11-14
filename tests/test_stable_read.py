@@ -239,17 +239,14 @@ def test_small_future_skew_waits_like_recent(d):
     with pytest.raises(S.InUse): S.wait_quiet(f, quiet=5, retries=0, settle=0)
 
 
-@pytest.mark.xfail(reason='OPEN (c3x-rvtsavesafe handoff): stable.run does not yet turn this into exit 75; see HANDOFF-c3x-rvtsavesafe.md', strict=False)
 def test_run_file_deleted_during_read(d, capsys):
-    f = mk(d); os.environ[S.ENV_QUIET] = '0'
+    f = os.path.join(d, 'm.rvt'); open(f, 'wb').write(mini_cfb()); t = time.time() - 100; os.utime(f, (t, t)); os.environ[S.ENV_QUIET] = '0'
     try:
-        def fn(argv, say): os.remove(f); return 0
         S._ACTIVE.clear(); rc = S.run([f, '--quiet-secs', '0'], lambda a, s: (os.remove(f), 0)[1])
     finally: os.environ.pop(S.ENV_QUIET, None)
     assert rc == 75 and 'changed' in capsys.readouterr().err
 
 
-@pytest.mark.xfail(reason='OPEN (c3x-rvtsavesafe handoff): stable.run does not yet turn this into exit 75; see HANDOFF-c3x-rvtsavesafe.md', strict=False)
 def test_run_snapshot_source_vanishes(d, capsys, monkeypatch):
     f = os.path.join(d, 'm.rvt'); open(f, 'wb').write(mini_cfb()); t = time.time() - 100; os.utime(f, (t, t))
     real = open

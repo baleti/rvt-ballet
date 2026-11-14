@@ -268,5 +268,8 @@ def run(argv, fn, say=print):
         print('rvt-ballet: %s' % ex, file=sys.stderr); return 75
     except Damaged as ex:
         print('rvt-ballet: %s' % ex, file=sys.stderr); return 1
+    except (FileNotFoundError, PermissionError) as ex:
+        # the file vanished or became unreadable while a save/replace was under way: same class as a change during the read
+        print('rvt-ballet: file changed during read (%s), retry' % ex.__class__.__name__, file=sys.stderr); return 75
     finally:
         _ACTIVE.pop()
