@@ -215,3 +215,35 @@ def test_regression_untouched_member_tail_on_rewritten_page(tmp_path, monkeypatc
     with pytest.raises(segedit.Refused, match="outside the edited members|untouched member"):
         segedit.apply_ops(SRC, str(tmp_path / "o.rvt"), [dict(op="set_string", eid=EID, param="Mark", value="x")], mode="fit")
     assert st["done"] and not os.path.exists(tmp_path / "o.rvt")
+
+
+def _ss_with(src, op):
+    os.environ["RVTBALLET_EDIT_BACKEND"] = "rvtedit"
+    from rvtballet import save
+    ss = save.SaveSessions(); ss.doc("m", str(src)); ss.edits("m").add(op); return ss
+
+
+def test_product_hook_saves_and_clears_edits(env, monkeypatch):
+    tmp, src = env; m0 = md5(src); monkeypatch.setenv("RVTBALLET_SEGEDIT", "1")
+    ss = _ss_with(src, dict(op="set_string", eid=EID, param="Mark", value="hook-1"))
+    r = segedit.product_save(ss, "m", str(src))
+    assert r and r["writer"] == "segedit" and md5(r["backup"]) == m0 and gate_damage(str(src)) == []
+    assert ss.edits("m").ops == [] and "m" not in ss.docs
+
+
+def test_product_hook_uses_load_time_fingerprint(env, monkeypatch):
+    """the file changes on disk AFTER the session loaded it: refused (conflict), nothing written, caller falls back (which refuses too)"""
+    tmp, src = env; monkeypatch.setenv("RVTBALLET_SEGEDIT", "1")
+    ss = _ss_with(src, dict(op="set_string", eid=EID, param="Mark", value="hook-2"))
+    with open(src, "r+b") as f: f.seek(os.path.getsize(src) - 200000); f.write(b"X")
+    m1 = md5(src)
+    assert segedit.product_save(ss, "m", str(src)) is None and "changed on disk" in ss.segedit_fallback["m"] and md5(src) == m1
+
+
+def test_product_hook_falls_back_for_unsupported_op_and_when_off(env, monkeypatch):
+    tmp, src = env
+    ss = _ss_with(src, dict(op="set_string", eid=EID, param="Mark", value="hook-3"))
+    monkeypatch.delenv("RVTBALLET_SEGEDIT", raising=False); assert segedit.product_save(ss, "m", str(src)) is None
+    monkeypatch.setenv("RVTBALLET_SEGEDIT", "1"); monkeypatch.setenv("RVTBALLET_ENABLE_DELETE", "1")
+    ss2 = _ss_with(src, dict(op="delete", eid=EID))
+    assert segedit.product_save(ss2, "m", str(src)) is None and "not handled" in ss2.segedit_fallback["m"]

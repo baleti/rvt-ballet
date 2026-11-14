@@ -897,7 +897,7 @@ def clean_mark(sha, why):
     os.replace(t, os.path.join(d, sha))
 
 
-def save_in_place(path, ops, mode='auto', workers=None, force=False, keep=20):
+def save_in_place(path, ops, mode='auto', workers=None, force=False, keep=20, expect_sha=None):
     """SAVE! through the segment writer: gate (savegate gate file, per format/version), lock, conflict checks, backup (hash-verified copy), atomic rename,
     post-commit hash check. The output is built as a temp file next to the source (clone + rewritten sectors) and verified before anything is replaced.
     Needs RVTBALLET_ALLOW_OVERWRITE=1 and an open gate (SAVEGATE_GATE for tests). Move/rotate in place are refused here: their dependents check
@@ -922,6 +922,7 @@ def save_in_place(path, ops, mode='auto', workers=None, force=False, keep=20):
         if mem: e0 = sorted(mem)[0]; raise Refused('element %d is part of a group or design option, or has dependents (%s): in-place move/rotate refused, use SAVE AS' % (e0, '; '.join(mem[e0])))
         tm['dependents'] = round(time.time() - t0, 3)
     st = os.stat(path); fp = guard.Fingerprint(st.st_size, st.st_mtime_ns, _sha256_file(path)); tm['hash0'] = round(time.time() - t0, 3)
+    if expect_sha and not force and fp.sha256 != expect_sha: raise Refused('the file changed on disk since it was loaded (content hash differs); reload it, nothing was written')      # load-time fingerprint of the product session
     if not clean_known(fp.sha256) or os.environ.get('SEGEDIT_FULL_SOURCE_CHECK') == '1':      # the savegate source gate, once per content (sha256): a file this writer produced from a clean source is clean by construction
         from savegate.adapters import RvtAdapter
         with open(path, 'rb') as f: buf = f.read()
@@ -974,6 +975,44 @@ def save_in_place(path, ops, mode='auto', workers=None, force=False, keep=20):
     clean_mark(new_sha, 'segedit output of clean %s' % fp.sha256[:16])
     info.update(pages=[p for p, _ in pages], bytes_written=written, delta=delta, backup=bk, sha256=new_sha, timing=tm, seconds=round(time.time() - t0, 3), version=ver, source_check=info0)
     return info
+
+
+SEG_OPS = ('set_string', 'set_num', 'move', 'rotate')
+
+
+def product_save(ss, mid, src, dest=None, force=False):
+    """hook for rvtballet.save (save_overwrite when dest is None, save_as otherwise), active only with RVTBALLET_SEGEDIT=1. Returns a result dict shaped like
+    save.result_json, or None: the caller then continues on its own path (unsupported op, or any segedit refusal; the reason is kept in ss.segedit_fallback[mid]).
+    Uses the session's LOAD-TIME fingerprint for the conflict check, the product's cloud/network gates, and clears the applied edits like save_overwrite."""
+    if os.environ.get('RVTBALLET_SEGEDIT') != '1': return None
+    sys.path.insert(0, os.path.expanduser('~/src/rvt-ballet'))
+    from rvtballet import save as _save
+    from rvtballet.edit import compose
+    fb = ss.__dict__.setdefault('segedit_fallback', {}); fb.pop(mid, None)
+    ops = compose(list(ss.edits(mid).ops))
+    if not ops or any(o.get('op') not in SEG_OPS for o in ops) or any(o['op'] == 'set_string' and o.get('kind') != 'AString' for o in ops):
+        fb[mid] = 'op not handled by the segment writer'; return None
+    t0 = time.time()
+    try:
+        if dest is None:
+            _save._cloud_gate(src); _save._network_gate(src)
+            d = ss.doc(mid, src); path = os.path.realpath(d.path)
+            info = save_in_place(path, ops, force=force, expect_sha=d.fingerprint.sha256)
+            out_path, out_sha, bk = path, info['sha256'], info['backup']
+        else:
+            _save._cloud_gate(src, dest); _save.check_dest(dest, src)
+            info = apply_ops(src, dest, ops); out_path, bk = dest, None; out_sha = _sha256_file(dest)
+    except Refused as e:
+        fb[mid] = str(e); return None
+    r = {'ok': True, 'dest': out_path, 'size': os.path.getsize(out_path), 'sha256': out_sha[:12], 'backup': bk, 'version': info.get('version') or file_version(out_path),
+         'elapsed': round(time.time() - t0, 3), 'verify': info.get('verify'), 'writer': 'segedit', 'segedit': {k: info.get(k) for k in ('mode', 'pages', 'bytes_written', 'timing', 'source_check', 'fallback')}}
+    w = _save.noop_numeric_warnings(ops)
+    if w: r['warnings'] = w
+    if dest is None:
+        del ss.edits(mid).ops[:]
+        from rvtballet import editstore; editstore.sync(src, [], None)
+        ss.close(mid)      # the loaded document and its fingerprint describe the old file: reopen on next use
+    return r
 
 
 def main(argv=None):
