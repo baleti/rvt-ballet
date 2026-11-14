@@ -52,3 +52,8 @@ def kind(cls_name):
     for k, keys in _KINDS:
         if any(s in cls_name for s in keys): return k
     return "other"
+
+
+def subcategory_names(full):
+    """{CategoryElem id: m_name} for sub/user categories (the names behind positive header category ids, e.g. SH01_...); same input as resolve()."""
+    return {int(e): f["m_name"] for (e, c), r in full.items() if c == "CategoryElem" for f in (r["fields"],) if isinstance(f.get("m_name"), str) and f["m_name"]}

@@ -20,3 +20,9 @@ def run():
 
 if __name__ == '__main__': run()
 def test_resolve(): run()
+
+
+def test_subcategory_names():
+    from rvtballet import categories as C
+    full = {(3, "CategoryElem"): {"id": 3, "fields": {"m_name": "SH01_x"}}, (4, "CategoryElem"): {"id": 4, "fields": {}}, (5, "Level"): {"id": 5, "fields": {"m_name": "L"}}}
+    assert C.subcategory_names(full) == {3: "SH01_x"}
