@@ -334,7 +334,7 @@ def header_jobs(segtab, tasks, res, want_ids):
     return jobs
 
 
-def classes(path, want, header_ids=None, workers=None, log=None):
+def classes(path, want, header_ids=None, workers=None, log=None, last_wins=False):
     """generic primitive: first-wins reduced records of the classes `want` (names, or a predicate on the class name) and, optionally, the ElementHeaders
     (cat, owner view, family, classdef) of `header_ids` (callable: ids from the records). -> (records {(eid, class): rec}, headers {eid: tuple}, G)"""
     log = log or (lambda *a: None); workers = workers or _workers()
@@ -346,7 +346,7 @@ def classes(path, want, header_ids=None, workers=None, log=None):
         recs = {}
         for key in sorted(res):
             for k, v in res[key][0]:
-                if k not in recs: recs[k] = v
+                if last_wins or k not in recs: recs[k] = v          # last_wins: across tasks (inside one task the decoder keeps the first)
         hdr = {}
         hid = header_ids(recs) if callable(header_ids) else header_ids
         if hid:
@@ -370,8 +370,10 @@ def _workers():
     return max(1, min((os.cpu_count() or 2) - 1, int(budget * 1024 // 150)))
 
 
-def sheets(path, workers=None, log=None):
-    """same list as fastinfo.scan(path)['sheets'] (number, name, issue date, drawn/approved by, revisions, views)"""
+def sheets(path, workers=None, log=None, rule='reader'):
+    """same list as fastinfo.scan(path)['sheets'] (number, name, issue date, drawn/approved by, revisions, views).
+    rule='last' (EXPERIMENTAL, see demo-state NEEDS-FROM-RVTSHEETS 2026-11-14): last-wins on duplicate records and no ElemTable-owner skip; on a 984 MB project
+    file it lists 413 sheets of which 412 equal Revit's 412 (the reader rule: 393 listed, 391 equal)"""
     log = log or (lambda *a: None); workers = workers or _workers(); t0 = time.time()
     # only real views (subclasses of DBView: sheets are DBViewDrafting), their Viewports and the revisions. fastinfo decodes every DBView* class: DBViewInfo,
     # DBViewType, the cutters are not views, and false DBViewInfo candidates (ids < 1000 inside bulk data) cost 128 of 170 CPU seconds on a 984 MB file
@@ -383,13 +385,13 @@ def sheets(path, workers=None, log=None):
         sheet_lists = [r['fields'].get('m_sheetViewportElemIds') for (e, c), r in full.items() if c == 'DBViewDrafting' and r['fields'].get('m_sheetNumber') and r['fields'].get('m_viewName') is not None]
         vps = [e for (e, c) in full if c == 'Viewport']
         return vps if vps and any(not x for x in sheet_lists) else []
-    full, hdr, G = classes(path, want, need_headers, workers, log)
+    full, hdr, G = classes(path, want, need_headers, workers, log, last_wins=(rule == 'last'))
     import numpy as np
     owned = G['owned']; recs = {}; by = collections.defaultdict(list)
     def has_owner(e):
         k = int(np.searchsorted(owned, np.uint64(e))); return k < len(owned) and int(owned[k]) == e
     for (eid, c), r in full.items():
-        if c in ('Level', 'Grid', 'RoomElem', 'DBViewDrafting') and has_owner(eid): continue
+        if rule != 'last' and c in ('Level', 'Grid', 'RoomElem', 'DBViewDrafting') and has_owner(eid): continue
         by[c].append(r); recs.setdefault(eid, r)
     nm = lambda i: (recs[i]['fields'].get('m_text') or recs[i]['fields'].get('m_viewName') or recs[i]['fields'].get('m_name') or '') if i in recs else ''
     sh = []
@@ -422,10 +424,10 @@ def sheets(path, workers=None, log=None):
 def main(argv):
     import argparse
     ap = argparse.ArgumentParser(prog='rvt-ballet-q'); ap.add_argument('cmd', choices=('sheets',)); ap.add_argument('file'); ap.add_argument('--json', action='store_true'); ap.add_argument('--verbose', action='store_true')
-    ap.add_argument('--workers', type=int, default=0)
+    ap.add_argument('--workers', type=int, default=0); ap.add_argument('--rule', choices=('reader', 'last'), default='reader', help='last: experimental duplicate/owner rule (see sheets())')
     a = ap.parse_args(argv)
     log = (lambda m: print(m, file=sys.stderr)) if a.verbose else None
-    sh = sheets(a.file, workers=a.workers or None, log=log)
+    sh = sheets(a.file, workers=a.workers or None, log=log, rule=a.rule)
     if a.json:
         import json; print(json.dumps(sh, indent=1, default=str)); return 0
     print('Sheets (%d):' % len(sh))
