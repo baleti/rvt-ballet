@@ -46,8 +46,8 @@ class Stream:
         if s.small is not None: return len(s.small) - (len(s.small) // PAGE_STORED) * (PAGE_STORED - PAGE_PAYLOAD)
         n = -(-s.size // PAGE_STORED); last = s.size - (n - 1) * PAGE_STORED
         return (n - 1) * PAGE_PAYLOAD + min(last, PAGE_PAYLOAD)
-    def segments(s, fd):
-        """== elemindex.Part.segments (same walk and resync rule) through pread"""
+    def segments(s, fd, every=None, cb=None):
+        """== elemindex.Part.segments (same walk and resync rule) through pread; cb(segs so far) every `every` segments (the master plans tasks while it walks)"""
         T = s.total; GZ = b'\x1f\x8b\x08\x00'; segs = []; head = s.payload(fd, 0, 64); i = head.find(GZ)
         if i < 24: return []
         hdr = i - 24
@@ -56,7 +56,9 @@ class Stream:
             if len(b) == 28:
                 w = struct.unpack('<6I', b[:24])
                 if b[24:28] == GZ and 18 <= w[2] and hdr + 24 + w[2] <= T and w[0] < 16 and w[3] > 0:
-                    segs.append((hdr + 24, w[2], w[3])); hdr += 24 + w[2]; continue
+                    segs.append((hdr + 24, w[2], w[3])); hdr += 24 + w[2]
+                    if cb and len(segs) % every == 0: cb(segs)
+                    continue
             hdr = s._resync(fd, hdr, T)
         return segs
     def _resync(s, fd, a, T):
@@ -164,10 +166,13 @@ def _job(job):
     buf = S.payload(fd, a, b); sizes = []; chunk = inflate_run(buf, a, segs, sizes); del buf
     from . import fastinfo as FI
     rd = _G['rd']; recs = []; ehs = []; ehc = None
-    if wanted:
-        r = rd.extract_chunk(chunk, wanted, -1, None, [])
+    specs = wanted if isinstance(wanted, list) and wanted and isinstance(wanted[0], dict) else ([{'tags': wanted}] if wanted else [])
+    for sp in specs:              # {'tags', 'mode': 'fi' (fastinfo._reduce) | 'lite' (_lite), 'full': no-STOP decoder (type names), 'only': ids}
+        d_ = _G['rd_full'] if sp.get('full') else rd
+        r = d_.extract_chunk(chunk, sp['tags'], -1, sp.get('only'), [])
+        lite = sp.get('mode') == 'lite'
         for (eid, c), rec in r[0]:
-            if rec.get('fields'): recs.append(((int(eid), c), FI._reduce(c, rec)))
+            if rec.get('fields'): recs.append(((int(eid), c), _lite(c, rec) if lite and c not in FI_REDUCED else FI._reduce(c, rec)))
     if note_eh: ehc = _eh_candidate_ids(chunk, sizes)
     if hdr_ids:
         r = rd.extract_chunk(chunk, [], _G['EH'], hdr_ids, [])
@@ -175,6 +180,37 @@ def _job(job):
             cd = h.get('m_classDef'); cd = cd.get('m_ref') if isinstance(cd, dict) else cd
             ehs.append((int(eid), (h.get('m_categroryId'), h.get('m_ownerViewId'), h.get('m_familyId'), cd)))
     return job[:2], (recs, ehs, ehc, (time.process_time() - c0, time.time() - w0, os.getpid()))
+
+
+FI_REDUCED = ('CategoryElem', 'FamilySurrogate', 'FamSymSurrogate', 'GStyleElem')
+
+
+def _plain(v, depth=0):
+    """EID -> int, numbers/strings kept, short numeric vectors kept, pointers to an object with a name -> that name; everything else dropped (None)"""
+    if type(v).__name__ == 'EID':                 # an int subclass: check it first (ids are unsigned on disk, -1 = none)
+        x = int(v); return x - (1 << 64) if x >= 1 << 63 else x
+    if v is None or isinstance(v, (bool, int, float, str)): return v
+    if isinstance(v, (list, tuple)):
+        if len(v) <= 16 and all(isinstance(x, (int, float)) or type(x).__name__ == 'EID' for x in v): return [_plain(x) for x in v]
+        if depth == 0 and len(v) <= 64 and all(isinstance(x, (list, tuple)) and len(x) <= 4 for x in v): return [_plain(x, 1) for x in v]
+        return None
+    if isinstance(v, dict) and depth < 2:
+        o = v.get('obj', v)
+        if isinstance(o, dict) and isinstance(o.get('m_name'), str) and len(o) <= 3: return o['m_name']
+    return None
+
+
+def _lite(c, rec):
+    """light record: top-level scalar / id / string / short-vector fields, plus 'name' when the record carries one (DatumPlane m_text, DBView m_viewName,
+    SymbolInfo.m_name of a type, m_name)"""
+    f = rec['fields']; out = {}
+    for k, v in f.items():
+        if k in ('m_pParamValueSetDouble', 'm_pParamValueSetInt', 'm_pParamValueSetAString', 'm_pParamValueSetElementId', 'm_geomSteps', 'm_pGeomTable', 'm_docAccess'): continue
+        x = _plain(v)
+        if x is not None: out[k] = x
+    for k in ('m_text', 'm_viewName', 'm_symbolInfo', 'm_name'):
+        if isinstance(out.get(k), str) and out[k]: out['name'] = out[k]; break
+    return {'id': rec['id'], 'fields': out}
 
 
 def _eh_candidate_ids(chunk, seg_sizes=None):
@@ -236,9 +272,14 @@ def _setup(path, log):
     try: es = F.es_load(path)[0]
     except Exception: es = {}
     rd = F.make_recdecoder(sch, W, es); rd.set_ids(ids.tolist())
+    # second decoder WITHOUT the geometry STOP list: the stop at GeomStepList/GeomTable also drops what follows it, e.g. SymbolInfo.m_name (type names): 0 of 199
+    # type names on the 2024 HVAC sample with STOP, 199 of 199 without. Used only for type records (fields would be slower for instances).
+    rd_full = F._rc().RecDecoder(sch.c, W, [], D.STRCAP, D.EID, D.Desync)
+    if es: rd_full.set_es(es)
+    rd_full.set_ids(ids.tolist())
     cnames = {i + 12: c['name'] for i, c in enumerate(cls)}
     log('schema + decoder: %.2fs' % (time.time() - t0))
-    _G.update(path=path, o=o, pns=pns, streams=streams, cls=cls, W=W, sch=sch, rd=rd, ids=ids, owned=owned,
+    _G.update(path=path, o=o, pns=pns, streams=streams, cls=cls, W=W, sch=sch, rd=rd, rd_full=rd_full, ids=ids, owned=owned,
               cnames=cnames, EH=sch.by.get('ElementHeader', -999) + 12)
     return _G
 
@@ -279,8 +320,26 @@ class Engine:
         q = queue.Queue(); pending = 0
         def put(r): q.put(r)
         def err(e): q.put(('error', e))
-        for pi in order: s.pool.apply_async(_job, (('walk', pi, pns[pi]),), callback=put, error_callback=err); pending += 1
-        tw = None
+        for pi in order[1:]: s.pool.apply_async(_job, (('walk', pi, pns[pi]),), callback=put, error_callback=err); pending += 1
+        # the biggest partition (75 percent of a big file) is walked HERE while the workers walk and decode the others; its tasks are submitted as soon as
+        # the prefix fixes them (a task whose overlap is complete before the walk position is identical to the one plan() makes from the full table)
+        pi0 = order[0]; pn0 = pns[pi0]; sent = set()
+        def early(segs):
+            nonlocal pending
+            for t in plan(pi0, pn0, segs):
+                if t[0] in sent: continue
+                if t[0][1] + len(t[2]) >= len(segs): break            # its overlap may still grow: wait
+                sent.add(t[0]); tasks[t[0]] = t; s.pool.apply_async(_job, (('dec',) + t + (wanted, note_eh, None),), callback=put, error_callback=err); pending += 1
+        fd = os.open(_G['path'], os.O_RDONLY)
+        try: segtab[pn0] = _G['streams'][pn0].segments(fd, every=512, cb=early)
+        finally: os.close(fd)
+        for t in plan(pi0, pn0, segtab[pn0]):
+            if t[0] in sent:
+                assert tasks[t[0]] == t, 'early task differs from plan()'
+                continue
+            tasks[t[0]] = t; s.pool.apply_async(_job, (('dec',) + t + (wanted, note_eh, None),), callback=put, error_callback=err); pending += 1
+        if len(segtab) == len(pns): tw = time.time() - t0
+        else: tw = None
         while pending:
             r = q.get(); pending -= 1
             if r[0] == 'error': raise r[1]
@@ -421,17 +480,199 @@ def sheets(path, workers=None, log=None, rule='reader'):
     return sh
 
 
+# ---------------------------------------------------------------------------------------------------------------------------------------------------
+# collect: FilteredElementCollector-like primitive (OfClass / OfCategory + simple field filters), cold, no index
+
+# Revit API class (or a common name) -> schema root classes; every subclass of a root is included. Any schema class name works too.
+ALIASES = {
+    'View': ('DBView',), 'ViewPlan': ('DBViewPlan',), 'ViewSection': ('DBViewSection',), 'View3D': ('DBView3d',), 'ViewDrafting': ('DBViewDrafting',),
+    'ViewSheet': ('DBViewDrafting',), 'ViewSchedule': ('DBViewSchedule',), 'ViewFamilyType': ('DBViewType',),
+    'Level': ('Level',), 'Grid': ('Grid',), 'Wall': ('ArcWall', 'SWall', 'FaceWall'), 'WallType': ('WallType',),
+    'Floor': ('Floor',), 'FloorType': ('FloorAttributes',), 'Ceiling': ('Ceiling',), 'CeilingType': ('CeilingAttributes', 'CeilingType'),
+    'RoofBase': ('RoofBase',), 'Roof': ('RoofBase',), 'RoofType': ('RoofAttributesBase',), 'Stairs': ('Stairs',), 'StairsType': ('StairsSym',),
+    'Railing': ('BaseRailing', 'Railing'), 'RailingType': ('BaseRailingSym', 'BaseRailingAttr'), 'FamilyInstance': ('FamilyInstance',),
+    'FamilySymbol': ('FamilySymbol',), 'ElementType': ('Symbol',), 'Family': ('Family',), 'Material': ('MaterialElem',), 'Room': ('RoomElem',),
+    'TextNote': ('TextNote',), 'Dimension': ('Dimension',), 'IndependentTag': ('IndependentTag', 'TagElem'), 'RevitLinkInstance': ('LinkInstance',),
+    'Revision': ('ProjectRevision',), 'Viewport': ('Viewport',), 'Phase': ('ProjectPhase',), 'Group': ('ElementGroup',), 'GroupType': ('ElementGroupType',),
+    'CurtainGridLine': ('CurtainWallGridLine',), 'Mullion': ('Mullion',), 'Panel': ('Panel',),
+}
+# categories answered without a class: candidate classes (the ElementHeader category then filters exactly). Loadable-family categories -> FamilyInstance.
+CATEGORY_CLASSES = {
+    'Walls': ('ArcWall', 'SWall', 'FaceWall'), 'Floors': ('Floor',), 'Ceilings': ('Ceiling',), 'Roofs': ('RoofBase',), 'Stairs': ('Stairs', 'MultistoryStairs'),
+    'Railings': ('BaseRailing', 'Railing'), 'Rooms': ('RoomElem',), 'Levels': ('Level',), 'Grids': ('Grid',), 'Views': ('DBView',), 'Sheets': ('DBViewDrafting',),
+    'Text Notes': ('TextNote',), 'Dimensions': ('Dimension',), 'Materials': ('MaterialElem',), 'Curtain Wall Mullions': ('Mullion', 'FamilyInstance'),
+    'Curtain Panels': ('Panel', 'FamilyInstance', 'ArcWall'), 'RVT Links': ('LinkInstance',),
+}
+LOADABLE = ('Doors', 'Windows', 'Furniture', 'Furniture Systems', 'Generic Models', 'Casework', 'Plumbing Fixtures', 'Lighting Fixtures', 'Electrical Fixtures',
+            'Electrical Equipment', 'Mechanical Equipment', 'Specialty Equipment', 'Structural Columns', 'Columns', 'Structural Framing', 'Structural Foundations',
+            'Planting', 'Entourage', 'Site', 'Parking', 'Lighting Devices', 'Communication Devices', 'Data Devices', 'Fire Alarm Devices', 'Security Devices',
+            'Sprinklers', 'Air Terminals', 'Duct Fittings', 'Pipe Fittings', 'Pipe Accessories', 'Duct Accessories', 'Food Service Equipment', 'Medical Equipment',
+            'Signage', 'Mass', 'Detail Items', 'Generic Annotations', 'Title Blocks')
+TYPE_FIELDS = ('m_masterSymbolId', 'm_WallAttributesId', 'm_floorAttributesId', 'm_ceilingAttributesId', 'm_roofAttributesId', 'm_attrId', 'm_symbolId', 'm_typeId', 'm_dbViewTypeId')
+
+
+def _class_set(cls, names):
+    allc = {c['name'] for c in cls}; out = set()
+    for n in ([names] if isinstance(names, str) else names):
+        roots = ALIASES.get(n, (n,))
+        for r in roots:
+            if r in allc: out |= subclasses(cls, r)
+    return out
+
+
+def _cat_table():
+    import json
+    if 'catnames' not in _G:
+        _G['catnames'] = {int(k): v for k, v in json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'category_names.json'))).items()}
+    return _G['catnames']
+
+
+def _cat_id(category):
+    if isinstance(category, int) or (isinstance(category, str) and category.lstrip('-').isdigit()): return int(category)
+    t = _cat_table(); hits = [k for k, v in t.items() if v.lower() == str(category).lower()]
+    if not hits: raise ValueError('unknown category %r' % category)
+    return hits[0]
+
+
+def _sid(v, W=8):
+    if v is None: return None
+    try: v = int(v)
+    except Exception: return None
+    b = 8 * W
+    if v >= 1 << (b - 1): v -= 1 << b
+    return v if -(1 << 31) <= v < (1 << 31) else None
+
+
+def collect(path, cls=None, category=None, fields=None, where=None, workers=None, log=None, rule='last', names=True):
+    """rows of every element of class `cls` (Revit API or schema class name / list; subclasses included) and/or `category` (built-in name or id), like
+    FilteredElementCollector(doc).OfClass(..).OfCategory(..). Each row: id, class, name, type_id, type_name, level_id, level, category_id, category,
+    owner_view_id, plus the raw fields in `fields` (light values: ids, numbers, strings, short vectors). where: {field: value} equality filters on row keys.
+    rule: 'last' (default) = last record in stream order wins for an id with several records (sheets: 412/412 vs 391), 'first' = fastinfo's first-wins."""
+    log = log or (lambda *a: None); workers = workers or _workers(); t0 = time.time()
+    G = _setup(path, log); W = G['W']
+    want = set()
+    if cls: want = _class_set(G['cls'], cls)
+    cat = _cat_id(category) if category is not None else None
+    if cat is not None and not cls:
+        nm = _cat_table().get(cat, '')
+        roots = CATEGORY_CLASSES.get(nm) or (('FamilyInstance',) if nm in LOADABLE else None)
+        if roots is None: raise ValueError('category %r needs --class (no class map for it yet)' % category)
+        want = _class_set(G['cls'], roots)
+    if not want: raise ValueError('no schema class matches %r' % (cls,))
+    tag_of = {n: t for t, n in G['cnames'].items()}
+    aux = {'Level', 'CategoryElem', 'FamilySurrogate', 'FamSymSurrogate'}
+    sym = subclasses(G['cls'], 'Symbol')
+    spec = [{'tags': sorted(tag_of[n] for n in (want | aux) - sym if n in tag_of), 'mode': 'lite'}]
+    spec = [x for x in spec if x['tags']]
+    if want & sym: spec.append({'tags': sorted(tag_of[n] for n in want & sym if n in tag_of), 'mode': 'lite', 'full': True})      # type names need the no-STOP decoder
+    E = Engine(workers, log)
+    try:
+        segtab, tasks, res = E.walk_and_decode(spec, True)
+        full = {}
+        for key in sorted(res):
+            for k, v in res[key][0]:
+                if rule == 'last' or k not in full: full[k] = v
+        rows = {}
+        for (eid, c), r in full.items():
+            if c in want: rows[eid] = (c, r)
+        # ElementHeaders of the result ids: category, owner view, family
+        hdr = {}
+        if rows:
+            for key, (_, ehs, _) in sorted(E.run(header_jobs(segtab, tasks, res, list(rows)), 'headers').items()):
+                for e, h in ehs:
+                    if e not in hdr: hdr[e] = h
+        # type records (names) by id: only type classes, no-STOP decoder, only the referenced ids
+        tid = {}
+        for e, (c, r) in rows.items():
+            f = r['fields']
+            for k in TYPE_FIELDS:
+                v = f.get(k)
+                if isinstance(v, int) and v > 0: tid[e] = v; break
+        types = {}
+        need = sorted({v for v in tid.values()} - {e for (e, c) in full})
+        if names and need:
+            stags = sorted(tag_of[n] for n in sym if n in tag_of)
+            jobs = [t + ([{'tags': stags, 'mode': 'lite', 'full': True, 'only': need}], False, None) for t in (tasks[k] for k in sorted(tasks))]
+            for key, (rr, _, _) in sorted(E.run(jobs, 'types by id').items()):
+                for (e, c), r in rr:
+                    if rule == 'last' or e not in types: types[e] = (c, r)
+        tv = set(tid.values())
+        for (e, c), r in full.items():
+            if e in tv and e not in types: types[e] = (c, r)
+    finally: E.close()
+    # categories: header id, sub/user categories through CategoryElem parents (as fastinfo / categories.resolve)
+    from . import categories as CT
+    parent = {}
+    for (e, c), r in full.items():
+        if c == 'CategoryElem' and r['fields'].get('m_parentCategoryId') is not None: parent[e] = _sid(r['fields']['m_parentCategoryId'], W)
+    def builtin(v):
+        for _ in range(4):
+            if v is None: return None
+            if v < -1: return v
+            if v > 0 and v in parent: v = parent[v]
+            else: return None
+        return None
+    levels = {e: r['fields'].get('m_text') for (e, c), r in full.items() if c == 'Level'}
+    ct = _cat_table(); out = []
+    for e, (c, r) in sorted(rows.items()):
+        f = r['fields']; h = hdr.get(e)
+        craw = _sid(h[0], W) if h else None; cb = builtin(craw)
+        if cat is not None and cb != cat and craw != cat: continue
+        t = tid.get(e); tr = types.get(t)
+        lv = f.get('m_assocLevelId'); lv = lv if isinstance(lv, int) and lv > 0 else None
+        row = {'id': e, 'class': c, 'name': f.get('name'), 'type_id': t, 'type_name': tr[1]['fields'].get('name') if tr else None,
+               'level_id': lv, 'level': levels.get(lv), 'category_id': cb if cb is not None else craw, 'category': ct.get(cb) if cb is not None else None,
+               'owner_view_id': _sid(h[1], W) if h else None}
+        if row['owner_view_id'] in (-1, 0): row['owner_view_id'] = None
+        if row['name'] is None and row['type_name']: row['name'] = row['type_name']           # Revit: Element.Name of an instance is its type name
+        for k in (fields or ()):
+            if k not in row: row[k] = f.get(k)
+        if where and any(str(row.get(k)) != str(v) for k, v in where.items()): continue
+        out.append(row)
+    log('collect: %d rows, %.2fs' % (len(out), time.time() - t0))
+    return out
+
+
+READY = {'views': {'cls': 'View'}, 'levels': {'cls': 'Level'}, 'grids': {'cls': 'Grid'}, 'walls': {'cls': 'Wall'}, 'wall-types': {'cls': 'WallType'},
+         'floors': {'cls': 'Floor'}, 'floor-types': {'cls': 'FloorType'}, 'roofs': {'cls': 'RoofBase'}, 'ceilings': {'cls': 'Ceiling'}, 'stairs': {'cls': 'Stairs'},
+         'railings': {'cls': 'Railing'}, 'rooms': {'cls': 'Room'}, 'doors': {'category': 'Doors'}, 'windows': {'category': 'Windows'},
+         'furniture': {'category': 'Furniture'}, 'generic-models': {'category': 'Generic Models'}, 'columns': {'category': 'Structural Columns'},
+         'framing': {'category': 'Structural Framing'}, 'family-instances': {'cls': 'FamilyInstance'}, 'types': {'cls': 'FamilySymbol'}, 'families': {'cls': 'Family'},
+         'materials': {'cls': 'Material'}, 'revisions': {'cls': 'Revision'}, 'schedules': {'cls': 'ViewSchedule'}, 'links': {'cls': 'RevitLinkInstance'},
+         'text-notes': {'cls': 'TextNote'}, 'dimensions': {'cls': 'Dimension'}, 'curtain-panels': {'category': 'Curtain Panels'}}
+
+
 def main(argv):
-    import argparse
-    ap = argparse.ArgumentParser(prog='rvt-ballet-q'); ap.add_argument('cmd', choices=('sheets',)); ap.add_argument('file'); ap.add_argument('--json', action='store_true'); ap.add_argument('--verbose', action='store_true')
-    ap.add_argument('--workers', type=int, default=0); ap.add_argument('--rule', choices=('reader', 'last'), default='reader', help='last: experimental duplicate/owner rule (see sheets())')
+    import argparse, json
+    ap = argparse.ArgumentParser(prog='rvt-ballet query', description='cold targeted queries on a .rvt (no index): sheets, collect, or a ready command: ' + ', '.join(sorted(READY)))
+    ap.add_argument('cmd', choices=('sheets', 'collect') + tuple(sorted(READY))); ap.add_argument('file')
+    ap.add_argument('--class', dest='cls', help='collect: Revit API or schema class name(s), comma separated (subclasses included)')
+    ap.add_argument('--category', help='collect: built-in category name or id'); ap.add_argument('--fields', default='', help='extra raw fields, comma separated')
+    ap.add_argument('--where', action='append', default=[], help='KEY=VALUE equality filter on a row key (repeatable)')
+    ap.add_argument('--json', action='store_true'); ap.add_argument('--tsv', action='store_true'); ap.add_argument('--verbose', action='store_true')
+    ap.add_argument('--workers', type=int, default=0); ap.add_argument('--rule', choices=('reader', 'last', 'first'), default=None, help='sheets: reader (default, = rvt-ballet sheets) or last; collect: last (default) or first')
     a = ap.parse_args(argv)
     log = (lambda m: print(m, file=sys.stderr)) if a.verbose else None
-    sh = sheets(a.file, workers=a.workers or None, log=log, rule=a.rule)
-    if a.json:
-        import json; print(json.dumps(sh, indent=1, default=str)); return 0
-    print('Sheets (%d):' % len(sh))
-    for s in sh: print('  %-8s %s%s%s | views: %s' % (s['number'], s['name'], ('  (issued %s)' % s['issue_date']) if s.get('issue_date') else '', ('  rev %s' % '; '.join('%s %s' % (x['number'], x['description']) for x in s['revisions'])) if s.get('revisions') else '', ', '.join(s['views']) or '-'))
+    if a.cmd == 'sheets':
+        sh = sheets(a.file, workers=a.workers or None, log=log, rule=a.rule or 'reader')
+        if a.json: print(json.dumps(sh, indent=1, default=str)); return 0
+        print('Sheets (%d):' % len(sh))
+        for s in sh: print('  %-8s %s%s%s | views: %s' % (s['number'], s['name'], ('  (issued %s)' % s['issue_date']) if s.get('issue_date') else '', ('  rev %s' % '; '.join('%s %s' % (x['number'], x['description']) for x in s['revisions'])) if s.get('revisions') else '', ', '.join(s['views']) or '-'))
+        return 0
+    q = dict(READY.get(a.cmd, {}))
+    if a.cls: q['cls'] = a.cls.split(',')
+    if a.category: q['category'] = a.category
+    flds = [x for x in a.fields.split(',') if x]
+    where = dict(w.split('=', 1) for w in a.where)
+    rows = collect(a.file, q.get('cls'), q.get('category'), flds, where or None, workers=a.workers or None, log=log, rule=a.rule or 'last')
+    cols = ['id', 'class', 'name', 'type_name', 'level', 'category'] + [k for k in flds if k not in ('id', 'class', 'name')]
+    if a.json: print(json.dumps(rows, indent=1, default=str)); return 0
+    if a.tsv:
+        print('\t'.join(cols))
+        for r in rows: print('\t'.join('' if r.get(k) is None else str(r.get(k)) for k in cols))
+        return 0
+    print('%s (%d):' % (a.cmd, len(rows)))
+    for r in rows: print('  ' + ' | '.join('' if r.get(k) is None else str(r.get(k)) for k in cols))
     return 0
 
 

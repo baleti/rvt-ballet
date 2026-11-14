@@ -103,3 +103,32 @@ def test_sheets_equal_fastinfo_on_samples():
 if __name__ == '__main__':
     for n, f in list(globals().items()):
         if n.startswith('test_'): f(); print('ok', n)
+
+
+def test_collect_covers_full_scan_and_names_types():
+    """collect('Level'/'Grid'/'View') finds every level, grid and view the full scan lists (it may add group-owned copies the scan skips: at most 2 per sample);
+    wall types carry their SymbolInfo names (no-STOP decoder)"""
+    import collections
+    from rvtballet import fastinfo as FI
+    p = os.path.join(CORPUS, '2019/15_rac_advanced_sample_project.rvt')
+    if not os.path.exists(p):
+        import pytest; pytest.skip('Autodesk corpus absent')
+    a = FI.scan(p)
+    lv = Q.collect(p, 'Level', workers=4); gr = Q.collect(p, 'Grid', workers=4); vw = Q.collect(p, 'View', workers=4)
+    A = collections.Counter(l['name'] for l in a['levels']); B = collections.Counter(r['name'] for r in lv)
+    assert not (A - B) and sum((B - A).values()) <= 2
+    assert not (collections.Counter(a['grids']) - collections.Counter(r['name'] for r in gr))
+    Av = collections.Counter((v['name'], v['class']) for v in a['views']) + collections.Counter((s['name'], 'DBViewDrafting') for s in a['sheets'])
+    assert not (Av - collections.Counter((r['name'], r['class']) for r in vw))
+    wt = Q.collect(p, 'WallType', workers=4)
+    assert wt and all(r['name'] for r in wt)
+    walls = Q.collect(p, 'Wall', workers=4)
+    assert walls and sum(1 for r in walls if r['type_name']) >= 0.95 * len(walls) and all(r['category'] == 'Walls' for r in walls)
+    doors = Q.collect(p, category='Doors', workers=4)
+    assert doors and all(r['class'] == 'FamilyInstance' and r['category'] == 'Doors' for r in doors)
+
+
+def test_plain_values():
+    class EID(int): pass
+    assert Q._plain(EID((1 << 64) - 1)) == -1 and Q._plain([1.0, 2.0, 3.0]) == [1.0, 2.0, 3.0]
+    assert Q._plain({'handle': 1, 'ptr': 2, 'obj': {'m_name': 'T1'}}) == 'T1' and Q._plain({'a': {'b': 1}}) is None
