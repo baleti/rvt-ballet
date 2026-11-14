@@ -76,7 +76,7 @@ try {
     var cst = t.Commit(); log.AppendLine("OP commit " + cst); }
   d.SaveAs(@"C:\\wl\\out\\%(t)s_after%(ext)s", so); log.AppendLine("SAVED after");
   d.Close(false);
-} catch (Exception ex) { log.AppendLine("RESULT fail " + ex.Message.Replace("\\n", " ")); }
+} catch (Exception ex) { log.AppendLine("RESULT fail " + ex.Message.Replace("\\n", " ")); log.AppendLine("EXTRACE " + ex.GetType().Name + " " + (ex.StackTrace ?? "").Replace("\\n", " | ")); }
 Console.WriteLine(log.ToString());
 ''' % {'f': file.replace('\\', '\\\\'), 't': tag, 'ext': os.path.splitext(file)[1] or '.rvt', 'b': '\n    '.join(body)}
 
