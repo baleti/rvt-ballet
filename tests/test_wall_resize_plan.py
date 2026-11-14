@@ -9,3 +9,8 @@ def test_plan_finds_both_signs():
 def test_collision_with_height_refused():
     assert P.collisions({'x1': 10.0, 'y1': 0.0}, [10.0, 0.5]) == ['x1']
     assert P.collisions({'x1': 11.0, 'y1': 0.0}, [10.0, 0.5]) == []
+def test_missing_coordinate_refused():
+    t = _tpl(0.0, 11.0)
+    h = P.plan(t, {'x1': 11.0, 'y1': 5.0})
+    assert P.missing_coords(h, {'x1': 11.0, 'y1': 5.0}) == ['y1']
+    assert P.missing_coords(h, {'x1': 11.0, 'y1': 0.0}) == []

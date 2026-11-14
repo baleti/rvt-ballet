@@ -19,6 +19,9 @@ def collisions(vals, others, tol=1e-6):
     """names of end coordinates that equal (in magnitude) another dimension of the wall (height, thickness, base offset...):
     their hits cannot be told from the other dimension, so the planner must refuse"""
     return [n for n, t in vals.items() if t and any(abs(abs(t) - abs(o)) < tol for o in others)]
+def missing_coords(hits, vals):
+    """nonzero end coordinates with no stored double: a partial patch would leave the wall inconsistent"""
+    return [n for n, t in vals.items() if t and not hits.get(n)]
 def main(path, eid, x1, y1, wl=None):
     wl = wl or os.path.expanduser('~/rvt-research/write-lab')
     os.chdir(wl); sys.path.insert(0, '.'); import rvtgen
@@ -28,6 +31,8 @@ def main(path, eid, x1, y1, wl=None):
     bad = collisions(vals, others)
     if bad: print('refuse: end coordinate collides with another wall dimension:', bad); return 2
     h = plan(tpl, vals)
+    missing = missing_coords(h, vals)
+    if missing: print('refuse: end coordinate not stored in the wall own records (curve lives elsewhere):', missing); return 2
     for n, l in h.items(): print(n, len(l), 'fields', l[:6])
     if not h: print('no match: refuse'); return 2
     return 0
