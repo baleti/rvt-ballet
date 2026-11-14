@@ -13,7 +13,7 @@ try {
     try { var c = e.Category; if (c != null) { cid = c.Id.ToString(); cn = c.Name; var pc = c.Parent; if (pc != null) cn = pc.Name + ":" + cn; } } catch (Exception) { cid = "err"; }
     eh.AppendLine("CAT " + e.Id.ToString() + " " + e.GetType().Name + " " + cid + " " + cn.Replace(" ", "_")); n++;
   }
-  if ("__ENUM__" == "1") foreach (var v in Enum.GetValues(typeof(BuiltInCategory))) eh.AppendLine("BIC " + ((int)v).ToString() + " " + v.ToString());
+  if ("__ENUM__" == "1") foreach (Category c in d.Settings.Categories) { eh.AppendLine("BIC " + c.Id.ToString() + " " + c.Name.Replace(" ", "_")); try { foreach (Category sc in c.SubCategories) eh.AppendLine("BIC " + sc.Id.ToString() + " " + c.Name.Replace(" ", "_") + ":" + sc.Name.Replace(" ", "_")); } catch (Exception) { } }
   d.Close(false);
   System.IO.Directory.CreateDirectory(@"C:\wl\out"); System.IO.File.WriteAllText(@"C:\wl\out\__OUTNAME__.txt", eh.ToString());
   log.AppendLine("COUNT " + n);
