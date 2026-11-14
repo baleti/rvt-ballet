@@ -679,6 +679,13 @@ def _set_type_num(ed, src, o):
         pid = hit[0]
     log = ed.g.e.trace(o['eid'])[3]; n = [k for k, l in enumerate(log) if l[1] == 'NamedParam.m_paramId' and _eid_val(l[4]) == pid]
     if len(n) != 1: raise EditError('element %d has %d NamedParam entries for parameter %d (need exactly 1; is it a type?)' % (o['eid'], len(n), pid))
+    k = n[0]
+    for j in range(k - 1, max(k - 12, -1), -1):
+        if log[j][1] == 'NamedParam.m_value':
+            try: same = float(log[j][4]) == float(o['value'])
+            except (TypeError, ValueError): same = False
+            if same: raise EditError('type parameter %r of element %d already has value %r: nothing to change, refused (no needless rewrite)' % (o['param'], o['eid'], o['value']))
+            break
     ed.set_type_param(o['eid'], pid, o['value'])
 
 
