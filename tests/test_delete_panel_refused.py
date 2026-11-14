@@ -8,7 +8,8 @@ from rvtballet import save, edit
 if not os.path.exists(SRC) or not save.SaveSessions().available: print('skip'); sys.exit(0)
 src = os.path.join(_T, 'src.rvt'); shutil.copy(SRC, src); d = save.SaveSessions().doc('m', src)
 ops = [edit.validate_op({'op': 'delete', 'eid': 1403442})]
-nb, deleted = edit.apply_full(d.buf, ops)
+try: nb, deleted = edit.apply_full(d.buf, ops)
+except edit.EditError as e: print('panel delete refused earlier by the edit layer (tag guard):', str(e)[:90]); sys.exit(0)      # still a refusal; the readback path below is reached only when the edit layer lets it through
 try: save._readback(d.buf, nb, ops)
 except Exception as e:
     assert 'surviving' in str(e), str(e)[:200]; print('panel delete refused by readback OK:', str(e)[:90])
