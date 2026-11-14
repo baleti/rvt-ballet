@@ -1526,6 +1526,12 @@ def write_summary(outdir, meta, src=None):
     json.dump(sm, open(os.path.join(outdir, 'summary.json'), 'w'))
 
 def convert(path, outdir, log=print, workers=None):
+    """viewer conversion, guarded against a torn read (the file saved by Revit while it is converted): FileChanged / InUse instead of a model built from two versions"""
+    from . import stable
+    with stable.guard(path): return _convert(path, outdir, log=log, workers=workers)
+
+
+def _convert(path, outdir, log=print, workers=None):
     """rvt -> outdir. Stages (progress.json): reading (reader), tables (+sqlite), preview (boxes only: meta.json phase=preview + preview.glb, usable at once), geometry (parallel,
     cached), packing (model.glb, final meta.json phase=done)."""
     import pickle
