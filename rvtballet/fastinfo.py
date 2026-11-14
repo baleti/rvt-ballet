@@ -10,7 +10,7 @@ import os, sys, re, struct, zlib, io, zipfile, collections, json, time
 PAGE_STORED = 65249; PAGE_PAYLOAD = 64896; GZ = b'\x1f\x8b\x08\x00'
 WINDOW = int(os.environ.get('RVT_INFO_WINDOW_MB', '3')) << 20
 OVERLAP = int(os.environ.get("RVT_INFO_OVERLAP_KB", "1024")) << 10
-FULL_CLASSES = ('Level', 'Grid', 'ProjectPhase', 'ProjectInfo', 'Viewport', 'ProjectRevision')
+FULL_CLASSES = ('FamilySurrogate', 'FamSymSurrogate', 'GStyleElem', 'CategoryElem', 'Level', 'Grid', 'ProjectPhase', 'ProjectInfo', 'Viewport', 'ProjectRevision')
 FULL_PREFIX = ('DBView',)
 MAX_MEMBER = 1 << 30
 STATS = {'crc_bad': 0, 'members': 0}      # damaged-block counters (reset by scan); a bad gzip CRC/size trailer on a member that inflated to its end = real damage
@@ -186,7 +186,7 @@ def editors(o):
     except Exception: return []
 
 
-_KEEP = {'ProjectRevision': ('m_description', 'm_date', 'm_numberStr', 'm_sequenceNumber', 'm_issuedBy', 'm_issuedTo', 'm_issued'), 'Level': ('m_text',), 'Grid': ('m_text',), 'ProjectPhase': ('m_name',), 'ProjectInfo': ('m_text', 'm_name'), 'Viewport': ('m_dbViewId',)}
+_KEEP = {'ProjectRevision': ('m_description', 'm_date', 'm_numberStr', 'm_sequenceNumber', 'm_issuedBy', 'm_issuedTo', 'm_issued'), 'Level': ('m_text',), 'Grid': ('m_text',), 'ProjectPhase': ('m_name',), 'ProjectInfo': ('m_text', 'm_name'), 'Viewport': ('m_dbViewId',), 'FamilySurrogate': ('m_categoryId', 'm_elemId'), 'FamSymSurrogate': ('m_categoryId', 'm_elemId'), 'GStyleElem': ('m_categoryId',), 'CategoryElem': ('m_ownerId',)}
 _KEEP_VIEW = ('m_viewName', 'm_sheetNumber', 'm_issueDate', 'm_drawnBy', 'm_sheetViewportElemIds', 'm_isTemplate', 'm_scale', 'm_text', 'm_name', 'm_approvedBy', 'm_explicitlyPresentRevisionIds', 'm_revNumMap')
 
 
@@ -194,6 +194,9 @@ def _reduce(c, rec):
     """keep only the fields the lists need: DBView/ViewSchedule records are large trees (the retained full records were ~250 MB of the baseline RSS on a 900 MB file)"""
     f = rec['fields']; keep = _KEEP_VIEW if c.startswith('DBView') else _KEEP.get(c, ())
     out = {k: f[k] for k in keep if k in f}
+    if c == 'CategoryElem':
+        pc = f.get('m_pCategory'); pc = pc.get('obj', pc) if isinstance(pc, dict) else pc
+        if isinstance(pc, dict): out['m_parentCategoryId'] = pc.get('m_parentCategoryId'); out['m_name'] = pc.get('m_name')
     if c == 'Level':
         ps = f.get('m_pSurface'); ps = ps.get('obj', ps) if isinstance(ps, dict) else ps
         if isinstance(ps, dict) and 'm_origin' in ps: out['m_pSurface'] = {'m_origin': list(ps['m_origin'])}
@@ -393,6 +396,8 @@ def scan(path, log=None, want_elements=False, progress=None, _seg=None, _out=Non
         return None
     res = {'stats': {'damaged_members': STATS['crc_bad'], 'members': STATS['members'], 'stopped_early': early, 'primary_elements': nprim, 'primary_with_header': int((seen & prim).sum()), 'partitions': len(pns), 'windows': nwin, 'max_window_mb': round(maxwin / 1e6, 1), 'decoded_mb': round(nb / 1e6), 'elements_with_header': int(seen.sum()), 'seconds': round(time.time() - t0, 2)}}
     cat = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'category_names.json')))
+    from . import categories as CT
+    a_cat = CT.resolve(a_cat, a_cls, np.array(cnames_l or ['']), idarr, full, W)
     u, n = np.unique(a_cat[seen], return_counts=True)
     cc = collections.Counter()
     for v, c in zip(u.tolist(), n.tolist()): cc[cat.get(str(v), 'cat %s' % (v if v != NOCAT else 'none'))] += c
