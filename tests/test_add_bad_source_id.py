@@ -9,4 +9,9 @@ class BadSrc(unittest.TestCase):
             with tempfile.TemporaryDirectory() as d:
                 out = os.path.join(d, 'o.rvt'); r = subprocess.run([sys.executable, TOOL, F, out, '--src', sid], capture_output=True, text=True)
                 self.assertNotEqual(r.returncode, 0, sid); self.assertNotIn('Traceback', r.stderr, sid); self.assertEqual(os.listdir(d), [], sid)
+    def test_output_dir_missing_refused_early(self):
+        import time
+        with tempfile.TemporaryDirectory() as d:
+            t = time.time(); r = subprocess.run([sys.executable, TOOL, F, os.path.join(d, 'nodir', 'o.rvt'), '--src', '1377544'], capture_output=True, text=True)
+            self.assertNotEqual(r.returncode, 0); self.assertIn('output directory', r.stdout + r.stderr); self.assertLess(time.time() - t, 60); self.assertEqual(os.listdir(d), [])
 if __name__ == '__main__': unittest.main()
