@@ -32,6 +32,7 @@ async def main(src, n, seed):
             if cur != flipped: c['ORIG_CHANGED'] += 1; bad.append((i, hex(pos), 'original changed'))
         else:
             c['SAVED'] += 1; saved_pos.append((i, hex(pos), len(data)))
+            if os.environ.get('KEEP_DIR') and os.path.exists(dest): os.makedirs(os.environ['KEEP_DIR'], exist_ok=True); shutil.copy(dest, '%s/%s_s%s_i%d%s' % (os.environ['KEEP_DIR'], os.path.basename(src)[:-len(ext)], seed, i, ext))
             try:
                 out = rvt_params.params(dest)
                 lost = [e for e in (ref or {}) if g(out.get(e, {})) != g(ref[e])] + [e for e in out if ref is not None and e not in ref]
