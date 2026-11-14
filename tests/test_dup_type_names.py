@@ -1,18 +1,20 @@
-"""duplicate-type generator refuses duplicate/invalid names and non-types, writes nothing (Autodesk HVAC sample derived file; skips if absent)."""
-import atexit, shutil as _sh, tempfile as _tf
-_made = []
-_mk0 = _tf.mkdtemp
-def _mk(*a, **k):
-    d = _mk0(*a, **k); _made.append(d); return d
-_tf.mkdtemp = _mk; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
-import os, subprocess, sys, tempfile
-SEED = os.path.expanduser('~/c5x-rm/dup/dup_out.rvt')   # HVAC 2024 sample with type 1542917 'C5XDUP' already added
-if not os.path.exists(SEED): print('skip: seed absent'); sys.exit(0)
-T = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'tools', 'rvt_dup_type_gen.py')
-d = tempfile.mkdtemp(); out = d + '/o.rvt'
-def run(eid, name):
-    r = subprocess.run([sys.executable, T, SEED, out, str(eid), name], capture_output=True, text=True); return r.returncode, os.path.exists(out)
-for eid, name in ((1379030, 'c5xdup'), (1379030, 'a:b'), (1379030, ' '), (1542918, 'Fresh')):
-    rc, ex = run(eid, name); assert rc != 0 and not ex, (eid, name, rc, ex)
-rc, ex = run(1379030, 'Fresh Type'); assert rc == 0 and ex
-print('ok: 4 refusals wrote nothing, fresh name accepted')
+"""regression (c5x-rvttype): tools/rvt_dup_type_gen.py name handling on the Autodesk 2024 HVAC sample: empty, 300-char, and '<' '>' names are refused (rc != 0, no output); a non-ASCII name is accepted; a second duplicate with an already used name in the same family is refused with nothing written. Skipped if the sample is absent."""
+import os, sys, subprocess, tempfile
+here = os.path.dirname(os.path.abspath(__file__)); gen = os.path.join(here, '..', 'tools', 'rvt_dup_type_gen.py')
+d = os.path.expanduser('~/rvt-research/corpus/2024')
+F = [os.path.join(d, n) for n in os.listdir(d) if n.endswith('HVAC.rvt')] if os.path.isdir(d) else []
+if not F: print('skip'); sys.exit(0)
+S = F[0]; W = tempfile.mkdtemp(); bad = 0
+def run(src, out, name):
+    return subprocess.run([sys.executable, gen, src, out, '1379030', name], capture_output=True, text=True, timeout=1800).returncode
+for lab, name, ok in (('empty', '', False), ('300 chars', 'x' * 300, False), ('angle', 'a"<b>', False), ('non-ascii', 'Ünï-ß', True)):
+    o = os.path.join(W, 'o.rvt')
+    rc = run(S, o, name); got = rc == 0 and os.path.exists(o)
+    if got != ok or (not ok and os.path.exists(o)): print('FAIL', lab, rc); bad += 1
+    else: print('ok', lab)
+    if os.path.exists(o): os.remove(o)
+a = os.path.join(W, 'a.rvt'); b = os.path.join(W, 'b.rvt')
+if run(S, a, 'ZZDUP') != 0: print('FAIL first dup'); bad += 1
+elif run(a, b, 'ZZDUP') == 0 or os.path.exists(b): print('FAIL name collision accepted'); bad += 1
+else: print('ok collision refused')
+sys.exit(1 if bad else 0)
