@@ -361,13 +361,13 @@ def _apply_rvtedit(a, b, ops):
             for o in ops:
                 try:
                     pn = (getattr(probe, 'latest_partition', lambda e: None)(o['eid']) or probe.g.e.trace(o['eid'])[0])
-                    if o['op'] != 'set_link_path' and isinstance(o.get('eid'), int) and len({q for q, *_ in probe.g.e.m.find(o['eid'])}) > 1 and os.environ.get('RVTBALLET_MULTIPART_OK') != '1':      # c5x-rvtlink 2026-11-13: the episode heuristic picked the copy Revit ignores for a 2026 link type (silent no-op the witness cannot see)
+                    if o['op'] != 'set_link_path' and not (o['op'] in ('set_string', 'set_num') and o.get('kind') in ('AString', 'Double', 'Int') and os.environ.get('RVTBALLET_MULTIPART_PARAM') == '1') and isinstance(o.get('eid'), int) and len({q for q, *_ in probe.g.e.m.find(o['eid'])}) > 1 and os.environ.get('RVTBALLET_MULTIPART_OK') != '1':      # c5x-rvtlink 2026-11-13: the episode heuristic picked the copy Revit ignores for a 2026 link type (silent no-op the witness cannot see)
                         raise EditError('element %d has records in several partitions (Revit may read a copy this edit would not change; 2026 Electrical sample: 19%% of sampled elements, 2024 Facades: 0%%): %s refused' % (o['eid'], o['op']))
                     if o['op'] == 'rotate' and pn != probe.g.e.trace(o['eid'])[0]:      # older copy elsewhere: the reader sees the OLD copy, so the rotation could not be verified (QUEUE 59e)
                         raise EditError('element %d has records in several partitions (the edit would go to the newest copy, which the viewer cannot read back): rotate refused' % o['eid'])
                 except EditError: raise
                 except Exception: pn = None
-                if o['op'] == 'set_link_path':      # c5x-rvtlink: edit EVERY partition copy of the link type (2026 Electrical: 39 and 41, Revit reads 41); one pass per partition
+                if o['op'] == 'set_link_path' or (o['op'] in ('set_string', 'set_num') and o.get('kind') in ('AString', 'Double', 'Int') and os.environ.get('RVTBALLET_MULTIPART_PARAM') == '1'):      # c5x-rvtlink: edit EVERY partition copy of the link type (2026 Electrical: 39 and 41, Revit reads 41); one pass per partition
                     try: _ps = sorted({str(q) for q, *_ in probe.g.e.m.find(o['eid'])})
                     except Exception: _ps = []
                     if len(_ps) > 1:
