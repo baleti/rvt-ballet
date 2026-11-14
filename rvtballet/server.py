@@ -156,6 +156,8 @@ def make_app(models):
         except Exception: raise web.HTTPBadRequest(text='JSON body required')
         if not isinstance(body, dict): raise web.HTTPBadRequest(text='JSON object required')
         dest = body.get('dest')
+        for k in ('target_year', 'target_version', 'revit_year', 'convert_year'):      # Save As to another Revit year needs the real Revit upgrade/downgrade; we only ever write the source's own year
+            if body.get(k) not in (None, ''): return web.json_response({'ok': False, 'code': 'year_conversion_unsupported', 'error': 'saving to another Revit year is not supported (only the real Revit can convert); nothing was written'}, status=422)
         if need_dest and (not isinstance(dest, str) or not dest): raise web.HTTPBadRequest(text='dest required; the model file was not touched')
         if body.get('force') and body.get('confirm') is not True: raise web.HTTPBadRequest(text='force needs confirm=true')
         if body.get('overwrite') and body.get('confirm') is not True: raise web.HTTPBadRequest(text='overwrite of an existing destination needs confirm=true')
