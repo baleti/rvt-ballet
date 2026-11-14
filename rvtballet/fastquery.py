@@ -188,7 +188,10 @@ FI_REDUCED = ('CategoryElem', 'FamilySurrogate', 'FamSymSurrogate', 'GStyleElem'
 def _plain(v, depth=0):
     """EID -> int, numbers/strings kept, short numeric vectors kept, pointers to an object with a name -> that name; everything else dropped (None)"""
     if type(v).__name__ == 'EID':                 # an int subclass: check it first (ids are unsigned on disk, -1 = none)
-        x = int(v); return x - (1 << 64) if x >= 1 << 63 else x
+        x = int(v)
+        if x >= 1 << 63: return x - (1 << 64)
+        if 0xFF000000 <= x < 1 << 32: return x - (1 << 32)        # 4-byte-id files (2019 and older): -1 and built-in parameter ids as unsigned 32-bit
+        return x
     if v is None or isinstance(v, (bool, int, float, str)): return v
     if isinstance(v, (list, tuple)):
         if len(v) <= 16 and all(isinstance(x, (int, float)) or type(x).__name__ == 'EID' for x in v): return [_plain(x) for x in v]
@@ -198,6 +201,40 @@ def _plain(v, depth=0):
         o = v.get('obj', v)
         if isinstance(o, dict) and isinstance(o.get('m_name'), str) and len(o) <= 3: return o['m_name']
     return None
+
+
+def _ob(o): return o.get('obj', o) if isinstance(o, dict) else o
+
+
+def _params(v):
+    """{parameter id: value} of a ParamValueSet pointer (instance/type parameter values stored on the element)"""
+    o = _ob(v); out = {}
+    if isinstance(o, dict):
+        for e in o.get('m_paramSet') or []:
+            if isinstance(e, dict) and 'm_paramId' in e:
+                k = _plain(e['m_paramId']); x = _plain(e.get('m_value'))
+                if isinstance(k, int) and x is not None: out[k] = x
+    return out
+
+
+def asset_colors(asset, path='', depth=0, out=None):
+    """[(property path, [r, g, b, a])] of every 4-float property of an appearance asset tree, connected assets (textures, tints) included"""
+    out = [] if out is None else out
+    if not isinstance(asset, dict) or depth > 6: return out
+    for pr in asset.get('m_aAProperties') or []:
+        x = _ob(pr)
+        if not isinstance(x, dict): continue
+        nm = '%s/%s' % (path, x.get('m_sName')); v = x.get('m_value')
+        if isinstance(v, list) and len(v) == 4 and all(isinstance(t, float) for t in v): out.append((nm, v))
+        for k in ('m_aConnected', 'm_aChild'):
+            for sub in (x.get(k) or []) if isinstance(x.get(k), list) else []:
+                asset_colors(_ob(sub), nm, depth + 1, out)
+    return out
+
+
+def _rgb(v):
+    """Revit stores colours as an int 0x00BBGGRR"""
+    return None if not isinstance(v, int) or v < 0 else (v & 255, (v >> 8) & 255, (v >> 16) & 255)
 
 
 def _lite(c, rec):
@@ -210,6 +247,23 @@ def _lite(c, rec):
         if x is not None: out[k] = x
     for k in ('m_text', 'm_viewName', 'm_symbolInfo', 'm_name'):
         if isinstance(out.get(k), str) and out[k]: out['name'] = out[k]; break
+    pr = {}
+    for k in ('m_pParamValueSetDouble', 'm_pParamValueSetInt', 'm_pParamValueSetElementId', 'm_pParamValueSetAString'):
+        if f.get(k) is not None: pr.update(_params(f[k]))
+    if pr: out['params'] = pr
+    cs = _ob(f.get('m_pCompoundStructure'))
+    if isinstance(cs, dict) and isinstance(cs.get('m_layers'), list):
+        out['layers'] = [(_plain(L.get('m_layerWidth')), _plain(L.get('m_layerFunction')), _plain(L.get('m_materialId'))) for L in cs['m_layers'] if isinstance(L, dict)]
+    m = _ob(f.get('m_pMaterial'))
+    if isinstance(m, dict):
+        out['name'] = m.get('m_name') if isinstance(m.get('m_name'), str) else out.get('name')
+        out['material'] = {k: _rgb(m.get(k)) for k in ('m_color', 'm_cutPatternColor', 'm_cutBackgroundPatternColor', 'm_surfacePatternColor', 'm_surfaceBackgroundPatternColor') if k in m}
+        out['appearance_asset_id'] = _plain(m.get('m_appearanceAssetId'))
+        out['owned_asset_colors'] = [x for oa in (m.get('m_assetMap') or {}).get('m_ownedAssets') or [] for x in asset_colors(_ob(oa), 'owned')]
+    a = _ob(f.get('m_pAppearanceAsset'))
+    if isinstance(a, dict):
+        if isinstance(a.get('m_Name'), str): out['name'] = a['m_Name']
+        out['asset_color'] = _rgb(a.get('m_color')); out['asset_colors'] = asset_colors(a.get('m_Asset') if isinstance(a.get('m_Asset'), dict) else None, 'app')
     return {'id': rec['id'], 'fields': out}
 
 
@@ -445,10 +499,13 @@ def _view_classes():
 
 
 def _workers():
+    """RVT_Q_WORKERS, else from a memory budget RVT_Q_MEM_GB (default 3) in PSS terms: measured on the 984 MB file ~250 MB master + ~70 MB per forked worker
+    (4 workers 478 MB PSS 3.5 s, 8 workers 758 MB 2.3 s, 20 workers 1363 MB 2.0 s); capped at 20 (no gain beyond on a 28-thread box) and cpus - 1.
+    For the 900 MB suite cap use RVT_Q_MEM_GB=0.9 (8 workers)."""
     n = int(os.environ.get('RVT_Q_WORKERS', '0') or 0)
     if n: return n
-    budget = float(os.environ.get('RVT_Q_MEM_GB', '3'))                 # per-worker peak measured ~150 MB (schema + decoder + one task)
-    return max(1, min((os.cpu_count() or 2) - 1, int(budget * 1024 // 150)))
+    budget = float(os.environ.get('RVT_Q_MEM_GB', '3')) * 1024
+    return max(1, min((os.cpu_count() or 2) - 1, 20, int((budget - 250) // 70)))
 
 
 def sheets(path, workers=None, log=None, rule='last'):
@@ -658,6 +715,81 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
     return out
 
 
+# ---------------------------------------------------------------------------------------------------------------------------------------------------
+# benchmark: walls below a height whose type layers use a material with a red colour in any colour property
+
+WALL_USER_HEIGHT = -1001105        # BuiltInParameter.WALL_USER_HEIGHT_PARAM (Unconnected Height; stored on every wall)
+NAMED = {'red': (255, 0, 0), 'dark red': (139, 0, 0), 'brick': (170, 74, 68), 'orange': (255, 165, 0), 'brown': (150, 75, 0), 'pink': (255, 192, 203),
+         'yellow': (255, 255, 0), 'green': (0, 128, 0), 'blue': (0, 0, 255), 'purple': (128, 0, 128), 'grey': (128, 128, 128), 'white': (255, 255, 255), 'black': (0, 0, 0)}
+
+
+def is_red(rgb, hue=15.0, sat=0.4, val=0.25):
+    """the benchmark's rule: HSV hue within +-hue degrees of 0, saturation >= sat, value >= val (rgb 0-255 ints or 0-1 floats)"""
+    import colorsys
+    if rgb is None: return False
+    r, g, b = rgb[:3]
+    if max(r, g, b) > 1.0 or all(isinstance(x, int) for x in (r, g, b)) and max(r, g, b) > 1: r, g, b = r / 255.0, g / 255.0, b / 255.0
+    h, s_, v = colorsys.rgb_to_hsv(max(0.0, min(1.0, r)), max(0.0, min(1.0, g)), max(0.0, min(1.0, b)))
+    h *= 360.0
+    return (h <= hue or h >= 360.0 - hue) and s_ >= sat and v >= val
+
+
+def nearest_name(rgb):
+    if rgb is None: return None
+    r, g, b = [x * 255.0 if max(rgb[:3]) <= 1.0 else x for x in rgb[:3]]
+    return min(NAMED, key=lambda k: sum((a - c) ** 2 for a, c in zip((r, g, b), NAMED[k])))
+
+
+def material_colors(mat, assets):
+    """[(property, rgb)] of one MaterialElem: graphics colour, cut/surface pattern foreground/background, owned assets, appearance asset (its own colour
+    + every 4-float property of its tree)"""
+    f = mat['fields']; out = [(k, v) for k, v in (f.get('material') or {}).items() if v is not None]
+    out += [(p, v) for p, v in f.get('owned_asset_colors') or []]
+    a = assets.get(f.get('appearance_asset_id'))
+    if a:
+        if a['fields'].get('asset_color') is not None: out.append(('asset m_color', a['fields']['asset_color']))
+        out += [(p, v) for p, v in a['fields'].get('asset_colors') or []]
+    return out
+
+
+def walls_red_material(path, max_height_ft=5 / 0.3048, workers=None, log=None, rule='last'):
+    """-> dict(count, walls, ...): walls with Unconnected Height < max_height_ft whose wall type has a compound-structure layer whose material has a red colour
+    (is_red) in any colour property. One cold pass: walls (geometry STOP decoder), wall types + materials + appearance assets (no-STOP decoder), joins in memory."""
+    log = log or (lambda *a: None); workers = workers or _workers(); t0 = time.time()
+    G = _setup(path, log); tag_of = {n: t for t, n in G['cnames'].items()}; t1 = time.time()
+    wall_c = _class_set(G['cls'], 'Wall'); type_c = _class_set(G['cls'], 'WallType'); mat_c = {'MaterialElem'}; ast_c = {'AppearanceAssetElem'}
+    spec = [{'tags': sorted(tag_of[n] for n in wall_c if n in tag_of), 'mode': 'lite'},
+            {'tags': sorted(tag_of[n] for n in type_c | mat_c | ast_c if n in tag_of), 'mode': 'lite', 'full': True}]
+    E = Engine(workers, log)
+    try: segtab, tasks, res = E.walk_and_decode(spec, False)
+    finally: E.close()
+    t2 = time.time(); full = {}
+    for key in sorted(res):
+        for k, v in res[key][0]:
+            if rule == 'last' or k not in full: full[k] = v
+    walls = {e: r for (e, c), r in full.items() if c in wall_c}; types = {e: r for (e, c), r in full.items() if c in type_c}
+    mats = {e: r for (e, c), r in full.items() if c in mat_c}; assets = {e: r for (e, c), r in full.items() if c in ast_c}
+    red = {}
+    for e, m in mats.items():
+        cols = material_colors(m, assets); hit = [(p, v) for p, v in cols if is_red(v)]
+        if hit: red[e] = hit
+    out = []; nh = 0; nt = 0
+    for e, w in sorted(walls.items()):
+        f = w['fields']; h = (f.get('params') or {}).get(WALL_USER_HEIGHT)
+        if isinstance(h, (int, float)): nh += 1
+        t = f.get('m_WallAttributesId'); tr = types.get(t)
+        if tr: nt += 1
+        if not isinstance(h, (int, float)) or h >= max_height_ft or not tr: continue
+        ms = [L[2] for L in tr['fields'].get('layers') or [] if isinstance(L[2], int)]
+        if any(m in red for m in ms): out.append({'id': e, 'type_id': t, 'height_ft': h, 'red_materials': sorted({m for m in ms if m in red})})
+    st = {'walls': len(walls), 'walls_with_height': nh, 'walls_with_type': nt, 'wall_types': len(types), 'types_with_layers': sum(1 for r in types.values() if r['fields'].get('layers')),
+          'materials': len(mats), 'materials_with_colour': sum(1 for m in mats.values() if material_colors(m, assets)), 'appearance_assets': len(assets),
+          'assets_with_colour': sum(1 for a in assets.values() if a['fields'].get('asset_colors')), 'red_materials': len(red), 'count': len(out),
+          'seconds': {'setup': round(t1 - t0, 2), 'decode_pass': round(t2 - t1, 2), 'join': round(time.time() - t2, 2), 'total': round(time.time() - t0, 2)}}
+    log('walls_red_material: %s' % st)
+    return dict(st, rows=out, red=red)
+
+
 READY = {'views': {'cls': 'View'}, 'levels': {'cls': 'Level'}, 'grids': {'cls': 'Grid'}, 'walls': {'cls': 'Wall'}, 'wall-types': {'cls': 'WallType'},
          'floors': {'cls': 'Floor'}, 'floor-types': {'cls': 'FloorType'}, 'roofs': {'cls': 'RoofBase'}, 'ceilings': {'cls': 'Ceiling'}, 'stairs': {'cls': 'Stairs'},
          'railings': {'cls': 'Railing'}, 'rooms': {'cls': 'Room'}, 'doors': {'category': 'Doors'}, 'windows': {'category': 'Windows'},
@@ -670,7 +802,7 @@ READY = {'views': {'cls': 'View'}, 'levels': {'cls': 'Level'}, 'grids': {'cls': 
 def main(argv):
     import argparse, json
     ap = argparse.ArgumentParser(prog='rvt-ballet query', description='cold targeted queries on a .rvt (no index): sheets, collect, or a ready command: ' + ', '.join(sorted(READY)))
-    ap.add_argument('cmd', choices=('sheets', 'collect') + tuple(sorted(READY))); ap.add_argument('file')
+    ap.add_argument('cmd', choices=('sheets', 'collect', 'walls-red-material') + tuple(sorted(READY))); ap.add_argument('file')
     ap.add_argument('--class', dest='cls', help='collect: Revit API or schema class name(s), comma separated (subclasses included)')
     ap.add_argument('--category', help='collect: built-in category name or id'); ap.add_argument('--fields', default='', help='extra raw fields, comma separated')
     ap.add_argument('--where', action='append', default=[], help='KEY=VALUE equality filter on a row key (repeatable)')
@@ -684,6 +816,10 @@ def main(argv):
         print('Sheets (%d):' % len(sh))
         for s in sh: print('  %-8s %s%s%s | views: %s' % (s['number'], s['name'], ('  (issued %s)' % s['issue_date']) if s.get('issue_date') else '', ('  rev %s' % '; '.join('%s %s' % (x['number'], x['description']) for x in s['revisions'])) if s.get('revisions') else '', ', '.join(s['views']) or '-'))
         return 0
+    if a.cmd == 'walls-red-material':
+        r = walls_red_material(a.file, workers=a.workers or None, log=log)
+        if a.json: print(json.dumps({k: v for k, v in r.items() if k != 'red'}, indent=1, default=str)); return 0
+        print('walls below 5 m with a red material: %d' % r['count']); print(json.dumps({k: v for k, v in r.items() if k not in ('rows', 'red')}, default=str)); return 0
     q = dict(READY.get(a.cmd, {}))
     if a.cls: q['cls'] = a.cls.split(',')
     if a.category: q['category'] = a.category

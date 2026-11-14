@@ -133,3 +133,22 @@ def test_plain_values():
     class EID(int): pass
     assert Q._plain(EID((1 << 64) - 1)) == -1 and Q._plain([1.0, 2.0, 3.0]) == [1.0, 2.0, 3.0]
     assert Q._plain({'handle': 1, 'ptr': 2, 'obj': {'m_name': 'T1'}}) == 'T1' and Q._plain({'a': {'b': 1}}) is None
+
+
+def test_red_rule_and_colours():
+    assert Q.is_red((200, 30, 30)) and Q.is_red((0.8, 0.1, 0.15, 1.0)) and not Q.is_red((128, 128, 128)) and not Q.is_red((200, 120, 30))
+    assert not Q.is_red((60, 10, 10)) and Q.nearest_name((250, 5, 5)) == 'red'
+    assert Q._rgb(6907050) == (170, 100, 105)                    # Revit colour int 0x00BBGGRR (sample brick material)
+    tree = {'m_aAProperties': [{'obj': {'m_sName': 'generic_diffuse', 'm_value': [0.9, 0.1, 0.1, 1.0],
+                                        'm_aConnected': [{'obj': {'m_aAProperties': [{'obj': {'m_sName': 'tint', 'm_value': [0.2, 0.2, 0.2, 1.0]}}]}}]}},
+                               {'obj': {'m_sName': 'other', 'm_value': 3}}]}
+    got = Q.asset_colors(tree)
+    assert [p for p, _ in got] == ['/generic_diffuse', '/generic_diffuse/tint']
+
+
+def test_walls_red_material_decodes_everything_on_a_sample():
+    p = os.path.join(CORPUS, '2024/46_Snowdon_Towers_Sample_Facades.rvt')
+    if not os.path.exists(p):
+        import pytest; pytest.skip('Autodesk corpus absent')
+    r = Q.walls_red_material(p, workers=4)
+    assert r['walls'] and r['walls_with_height'] == r['walls'] and r['walls_with_type'] == r['walls'] and r['materials_with_colour'] == r['materials']
