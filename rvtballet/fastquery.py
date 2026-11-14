@@ -238,6 +238,21 @@ def _eh_candidate_ids(chunk, seg_sizes=None):
     o = np.lexsort((seg, v)); return v[o], seg[o]
 
 
+def _owner_map(ids, vals):
+    """ElemTable column at +28 (+24 for 4-byte ids) per id: fastinfo calls it the owner and skips such Level/Grid/sheet records as group copies. Measured on the
+    984 MB file: the 20 sheets it drops point at DBViewDrafting, VarSketch, DBDrawing, Viewer, DBViewPlan, ExtrusionElem and one ElementGroupType, so it is
+    not group ownership in general; sheets(rule='last') skips only ids whose value is a group / group type"""
+    import numpy as np
+    o = np.argsort(ids, kind='stable'); _G['own_ids'] = ids[o]; _G['own_vals'] = vals[o]
+
+
+def owner_of(e):
+    import numpy as np
+    a = _G.get('own_ids')
+    if a is None or not len(a): return None
+    k = int(np.searchsorted(a, np.uint64(e))); return int(_G['own_vals'][k]) if k < len(a) and int(a[k]) == e else None
+
+
 def _ids_owned(et, W):
     """(sorted unique ElemTable ids as the decoder sees them, sorted ids that have an owner): same as elemindex._ids / fastinfo.scan, numpy only"""
     import numpy as np
@@ -248,12 +263,14 @@ def _ids_owned(et, W):
         n = min(nh, (len(et) - 6) // 28) if nh else (len(et) - 6) // 28
         r = np.frombuffer(et, np.uint8, count=n * 28, offset=6).reshape(n, 28)
         a = r[:, :4].copy().view('<u4').ravel().astype(np.uint64); ow = r[:, 24:28].copy().view('<u4').ravel()
+        sel = ow != 0xffffffff; _owner_map(a[sel], ow[sel].astype(np.uint64))
         return uniq(a), uniq(a[ow != 0xffffffff])
     n = (len(et) - 6) // 40
     if 0 < nh <= n: n = nh
     r = np.frombuffer(et, np.uint8, count=n * 40, offset=6).reshape(n, 40)
     a = r[:, :8].copy().view('<u8').ravel(); b = r[:, 20:28].copy().view('<u8').ravel(); ow = r[:, 28:36].copy().view('<u8').ravel()
     top = int(a.max()) + 16
+    sel = ow != 0xffffffffffffffff; _owner_map(a[sel], ow[sel])
     return uniq(np.concatenate([a, b[(b > 0) & (b < top)]])), uniq(a[ow != 0xffffffffffffffff])
 
 
@@ -264,7 +281,7 @@ def _setup(path, log):
     t0 = time.time()
     o = olefile.OleFileIO(path); names = ['/'.join(e) for e in o.listdir(streams=True)]
     pns = sorted(n for n in names if n.startswith('Partitions/'))
-    streams = {pn: Stream(o, pn) for pn in pns}; _G.pop('views', None)
+    streams = {pn: Stream(o, pn) for pn in pns}; _G.pop('views', None); _G.pop('groups', None)
     cls, _ = fp.parse(rvtfmt.inflate_stream(o.openstream('Formats/Latest').read())[1])
     W = S.id_size(cls); sch = D.Schema(cls)
     import numpy as np
@@ -417,6 +434,11 @@ def classes(path, want, header_ids=None, workers=None, log=None, last_wins=False
     return recs, hdr, G
 
 
+def _group_classes():
+    if 'groups' not in _G: _G['groups'] = subclasses(_G['cls'], 'ElementGroupType') | subclasses(_G['cls'], 'ElementGroup')
+    return _G['groups']
+
+
 def _view_classes():
     if 'views' not in _G: _G['views'] = subclasses(_G['cls'], 'DBView')
     return _G['views']
@@ -429,16 +451,17 @@ def _workers():
     return max(1, min((os.cpu_count() or 2) - 1, int(budget * 1024 // 150)))
 
 
-def sheets(path, workers=None, log=None, rule='reader'):
+def sheets(path, workers=None, log=None, rule='last'):
     """same list as fastinfo.scan(path)['sheets'] (number, name, issue date, drawn/approved by, revisions, views).
-    rule='last' (EXPERIMENTAL, see demo-state NEEDS-FROM-RVTSHEETS 2026-11-14): last-wins on duplicate records and no ElemTable-owner skip; on a 984 MB project
-    file it lists 413 sheets of which 412 equal Revit's 412 (the reader rule: 393 listed, 391 equal)"""
+    rule='last' (default): last record in stream order wins for a sheet id with several records, and a sheet is skipped only when its ElemTable column +28
+    points at a group / group type. 984 MB project file: 412 listed, 412 equal Revit's export by number and title, 0 extra. Identical to the reader rule on
+    every Autodesk sample 2017-2026. rule='reader': exactly fastinfo.scan (first-wins, skip every id with a +28 value: 393 listed, 391 equal on that file)"""
     log = log or (lambda *a: None); workers = workers or _workers(); t0 = time.time()
     # only real views (subclasses of DBView: sheets are DBViewDrafting), their Viewports and the revisions. fastinfo decodes every DBView* class: DBViewInfo,
     # DBViewType, the cutters are not views, and false DBViewInfo candidates (ids < 1000 inside bulk data) cost 128 of 170 CPU seconds on a 984 MB file
     # DBView* prefix as well: fastinfo names views of the DBView* classes only (TableView / PanelScheduleView on a sheet are not listed there either; kept equal)
     def want(c, keep=[]):
-        return c.startswith('DBView') and c in _view_classes() or c in ('Viewport', 'ProjectRevision')
+        return c.startswith('DBView') and c in _view_classes() or c in ('Viewport', 'ProjectRevision') or rule == 'last' and c in _group_classes()
     def need_headers(full):
         # 2023+ files: a sheet lists no viewports; each Viewport is owned by its sheet (ElementHeader.m_ownerViewId)
         sheet_lists = [r['fields'].get('m_sheetViewportElemIds') for (e, c), r in full.items() if c == 'DBViewDrafting' and r['fields'].get('m_sheetNumber') and r['fields'].get('m_viewName') is not None]
@@ -447,10 +470,12 @@ def sheets(path, workers=None, log=None, rule='reader'):
     full, hdr, G = classes(path, want, need_headers, workers, log, last_wins=(rule == 'last'))
     import numpy as np
     owned = G['owned']; recs = {}; by = collections.defaultdict(list)
+    groups = {e for (e, c) in full if c in _group_classes()}
     def has_owner(e):
         k = int(np.searchsorted(owned, np.uint64(e))); return k < len(owned) and int(owned[k]) == e
     for (eid, c), r in full.items():
         if rule != 'last' and c in ('Level', 'Grid', 'RoomElem', 'DBViewDrafting') and has_owner(eid): continue
+        if rule == 'last' and c == 'DBViewDrafting' and owner_of(eid) in groups: continue        # a copy inside a group type (2024 HVAC sample: 'Unnamed' sheet)
         by[c].append(r); recs.setdefault(eid, r)
     nm = lambda i: (recs[i]['fields'].get('m_text') or recs[i]['fields'].get('m_viewName') or recs[i]['fields'].get('m_name') or '') if i in recs else ''
     sh = []
@@ -650,11 +675,11 @@ def main(argv):
     ap.add_argument('--category', help='collect: built-in category name or id'); ap.add_argument('--fields', default='', help='extra raw fields, comma separated')
     ap.add_argument('--where', action='append', default=[], help='KEY=VALUE equality filter on a row key (repeatable)')
     ap.add_argument('--json', action='store_true'); ap.add_argument('--tsv', action='store_true'); ap.add_argument('--verbose', action='store_true')
-    ap.add_argument('--workers', type=int, default=0); ap.add_argument('--rule', choices=('reader', 'last', 'first'), default=None, help='sheets: reader (default, = rvt-ballet sheets) or last; collect: last (default) or first')
+    ap.add_argument('--workers', type=int, default=0); ap.add_argument('--rule', choices=('reader', 'last', 'first'), default=None, help='sheets: last (default, equals Revit on the 984 MB file) or reader (= rvt-ballet sheets); collect: last (default) or first')
     a = ap.parse_args(argv)
     log = (lambda m: print(m, file=sys.stderr)) if a.verbose else None
     if a.cmd == 'sheets':
-        sh = sheets(a.file, workers=a.workers or None, log=log, rule=a.rule or 'reader')
+        sh = sheets(a.file, workers=a.workers or None, log=log, rule=a.rule or 'last')
         if a.json: print(json.dumps(sh, indent=1, default=str)); return 0
         print('Sheets (%d):' % len(sh))
         for s in sh: print('  %-8s %s%s%s | views: %s' % (s['number'], s['name'], ('  (issued %s)' % s['issue_date']) if s.get('issue_date') else '', ('  rev %s' % '; '.join('%s %s' % (x['number'], x['description']) for x in s['revisions'])) if s.get('revisions') else '', ', '.join(s['views']) or '-'))

@@ -96,8 +96,9 @@ def test_sheets_equal_fastinfo_on_samples():
     if not ss:
         import pytest; pytest.skip('Autodesk corpus absent')
     for p in ss:
-        a = FI.scan(p)['sheets']; b = Q.sheets(p, workers=4)
+        a = FI.scan(p)['sheets']; b = Q.sheets(p, workers=4, rule='reader'); c = Q.sheets(p, workers=4)
         assert json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str), p
+        assert json.dumps(a, sort_keys=True, default=str) == json.dumps(c, sort_keys=True, default=str), p      # the default rule changes nothing on the samples
 
 
 if __name__ == '__main__':
