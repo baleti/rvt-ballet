@@ -148,7 +148,8 @@ def header_region(pn, segs, stop=30):
         r = _G["rd"].extract_chunk(ch, _G["wanted"], _G["EH"], None, _G["wanted"]); n = 0
         for e, h in r[1]:
             e = int(e)
-            if e not in out: out[e] = (_i(h.get("m_categroryId")), _i(h.get("m_ownerViewId")), _i(h.get("m_familyId"))); n += 1
+            if e not in out: cd = h.get("m_classDef"); cd = cd.get("m_ref") if isinstance(cd, dict) else cd
+            out[e] = (_i(h.get("m_categroryId")), _i(h.get("m_ownerViewId")), _i(h.get("m_familyId")), cd if isinstance(cd, int) else -1); n += 1
         empty = 0 if n else empty + 1
         if empty >= stop and out: break
     return out
@@ -180,8 +181,12 @@ def build(path, workers=None, log=None, force=False):
                 rows.extend((pi,) + x for x in r)
     a = np.array(rows, dtype=np.int64).reshape(-1, 5)
     order = np.lexsort((a[:, 3], a[:, 2], a[:, 0], a[:, 1]))     # first-wins in file order, same rule as fastinfo.scan
-    a = a[order]; _, first = np.unique(a[:, 1], return_index=True); a = a[first]
-    hv = np.array([hdr.get(int(e), (-1, -1, -1)) for e in a[:, 1]], dtype=np.int64).reshape(-1, 3)
+    a = a[order]
+    want = np.array([hdr.get(int(e), (0, 0, 0, -1))[3] for e in a[:, 1]], dtype=np.int64)
+    miss = (a[:, 4] != want).astype(np.int64)        # candidates whose class tag equals the header's class tag sort first (removes reference look-alikes)
+    order = np.lexsort((a[:, 3], a[:, 2], a[:, 0], miss, a[:, 1])); a = a[order]
+    _, first = np.unique(a[:, 1], return_index=True); a = a[first]
+    hv = np.array([hdr.get(int(e), (-1, -1, -1, -1)) for e in a[:, 1]], dtype=np.int64).reshape(-1, 4)
     has_hdr = np.array([int(e) in hdr for e in a[:, 1]])
     out = dict(part=a[:, 0].astype(np.int16), id=a[:, 1].astype(np.uint64), seg=a[:, 2].astype(np.int32), off=a[:, 3].astype(np.int32), tag=a[:, 4].astype(np.int32), cat=hv[:, 0], ownerview=hv[:, 1], family=hv[:, 2], has_header=has_hdr,
                pns=np.array(pns))
