@@ -238,7 +238,7 @@ def load(path):
 class Reader:
     """one-id lookup: touches one segment (plus a 96 KB tail of the next) of one partition"""
     def __init__(s, path, idx=None):
-        s.path = path; s.idx = idx or build(path); _winit(path); s.sorted = np.argsort(s.idx["id"]); s.ids = s.idx["id"][s.sorted]; s.segs = {}
+        s.path = path; s.idx = idx or build(path); s.sorted = np.argsort(s.idx["id"]); s.ids = s.idx["id"][s.sorted]; s.segs = {}
     def locate(s, eid):
         k = int(np.searchsorted(s.ids, eid))
         if k >= len(s.ids) or int(s.ids[k]) != eid: return None
@@ -246,6 +246,7 @@ class Reader:
     def get(s, eid):
         j = s._row(eid)
         if j is None: return None
+        if _G.get("path") != s.path: _winit(s.path)      # lazy: category/locate-only use never pays the ~230 ms schema and decoder load
         loc = {c: int(s.idx[c][j]) for c in ("part", "seg", "off", "tag", "cat", "ownerview")}; loc["tries"] = 0; loc["record"] = None
         for pi, k, off in s.idx["alt"][j].tolist():
             if pi < 0: break
