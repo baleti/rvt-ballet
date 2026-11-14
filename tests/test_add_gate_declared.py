@@ -26,5 +26,5 @@ class GateDeclared(unittest.TestCase):
             new = [k for k in b if k not in a]; self.assertEqual(len(new), 1)
             for m in ({}, {'added': ['el:1']}):
                 with self.assertRaises(Exception): core._verify(doc, nb, m)
-            core._verify(doc, nb, {'added': new})
+            core._verify(doc, nb, {'added': new, 'modified': ['el:1447768']})      # the tagged element's own record also changes (record_identity: every changed record must be declared); an 'added'-only manifest is refused since the record_identity rule
 if __name__ == '__main__': unittest.main()
