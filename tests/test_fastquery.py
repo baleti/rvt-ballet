@@ -1,5 +1,5 @@
 """fastquery: (1) synthetic primitives (no .rvt bytes): Stream pread over a scattered CFB chain, inflate_run (libdeflate and zlib) == zlib per segment,
-ElementHeader candidate ids are a superset of planted header positions; (2) Autodesk samples 2018-2026: fastquery.sheets == fastinfo.scan()['sheets'] exactly
+ElementHeader candidate ids are a superset of planted header positions; (2) Autodesk samples 2018-2026: fastquery.sheets == fastquery.scan()['sheets'] exactly
 (skipped when the corpus is absent). Run: python -m pytest tests/test_fastquery.py"""
 import os, sys, io, zlib, struct, json, random, tempfile
 import numpy as np
@@ -90,15 +90,14 @@ def _samples():
     return [os.path.join(CORPUS, s) for s in SAMPLES if os.path.exists(os.path.join(CORPUS, s))]
 
 
-def test_sheets_equal_fastinfo_on_samples():
-    from rvtballet import fastinfo as FI
+def test_sheets_equal_scan_on_samples():
+    """sheets() (views/viewports/revisions/groups only) == scan()['sheets'] (the summary pass) on every sample year"""
     ss = _samples()
     if not ss:
         import pytest; pytest.skip('Autodesk corpus absent')
     for p in ss:
-        a = FI.scan(p)['sheets']; b = Q.sheets(p, workers=4, rule='reader'); c = Q.sheets(p, workers=4)
+        a = Q.scan(p, counts=False, workers=4)['sheets']; b = Q.sheets(p, workers=4)
         assert json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str), p
-        assert json.dumps(a, sort_keys=True, default=str) == json.dumps(c, sort_keys=True, default=str), p      # the default rule changes nothing on the samples
 
 
 if __name__ == '__main__':
@@ -110,11 +109,10 @@ def test_collect_covers_full_scan_and_names_types():
     """collect('Level'/'Grid'/'View') finds every level, grid and view the full scan lists (it may add group-owned copies the scan skips: at most 2 per sample);
     wall types carry their SymbolInfo names (no-STOP decoder)"""
     import collections
-    from rvtballet import fastinfo as FI
     p = os.path.join(CORPUS, '2019/15_rac_advanced_sample_project.rvt')
     if not os.path.exists(p):
         import pytest; pytest.skip('Autodesk corpus absent')
-    a = FI.scan(p)
+    a = Q.scan(p, counts=False, workers=4)
     lv = Q.collect(p, 'Level', workers=4); gr = Q.collect(p, 'Grid', workers=4); vw = Q.collect(p, 'View', workers=4)
     A = collections.Counter(l['name'] for l in a['levels']); B = collections.Counter(r['name'] for r in lv)
     assert not (A - B) and sum((B - A).values()) <= 2
