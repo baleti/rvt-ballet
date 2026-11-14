@@ -18,7 +18,10 @@ ss = save.SaveSessions()
 p = T + '/m.rte'; shutil.copy(S, p); h0 = sha(p); d = ss.doc('m', p)
 for dx in (49999.0, 1e-9, -49999.0):
     shutil.copy(S, p); h0 = sha(p); d = ss.doc('m%s' % dx, p)
-    nb, _ = edit.apply_full(d.buf, [edit.validate_op({'op': 'move', 'eid': 301595, 'dx': dx, 'dy': -dx, 'dz': dx / 2})])
+    try: nb, _ = edit.apply_full(d.buf, [edit.validate_op({'op': 'move', 'eid': 301595, 'dx': dx, 'dy': -dx, 'dz': dx / 2})])
+    except edit.EditError as e:
+        assert abs(dx) < 1e-6, 'large move refused at edit stage: %s' % e
+        assert sha(p) == h0; print(dx, 'REFUSED at edit stage (below 1e-6 ft witness resolution) - original intact'); continue
     try:
         save.save_overwrite(ss, 'm%s' % dx, p, new_bytes=nb, manifest={'modified': ['el:301595']})
         assert sha(p) == hashlib.sha256(nb).hexdigest(); print(dx, 'ACCEPTED, file == edited bytes')
