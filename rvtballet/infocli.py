@@ -1,29 +1,30 @@
-"""rvt-ballet info | sheets | views | levels | grids | counts | elements FILE [--json] [--refresh]: administrative data of a .rvt WITHOUT conversion.
-Streamed (fastinfo.py), never starts the geometry pipeline, runs under a hard memory cap (RVT_INFO_MEM_GB, default 0.9) and caches its result per file
-(path, size, mtime) so the next subcommand is instant. `info` alone never touches the partitions (BasicFileInfo, project information, editors: about a second)."""
+"""rvt-ballet info | diff | check | counts --by FILE: file information and before/after checks of a .rvt WITHOUT conversion.
+`info` alone never touches the partitions (BasicFileInfo, project information, editors: about a second). diff and counts --by read the model through
+fastquery.scan (cached per file: path, size, mtime, code) and decode full records only for the ids asked. The query commands (sheets, views, levels, grids,
+counts, elements, walls, collect, ...) are fastquery.main: main() forwards them, so old callers of infocli.main keep working."""
 import os, sys, json, argparse, hashlib, time, collections
 from . import plat, reader
 
-CMDS = ('info', 'sheets', 'views', 'levels', 'grids', 'counts', 'elements', 'diff', 'check')
-VERSION = 'fi1'
+CMDS = ('info', 'counts', 'diff', 'check')
+VERSION = 'fq1'
 ALLREC_MB = float(os.environ.get('RVT_ALLREC_MB', '120'))
 
 
 def cache_file(path):
     st = os.stat(path)
-    from . import fastinfo
-    code = hashlib.md5(open(fastinfo.__file__, 'rb').read()).hexdigest()[:8]          # a reader change must never reuse an older result
-    key = hashlib.md5(('%s|%d|%s|%s|%s|%s|%s' % (os.path.abspath(path), st.st_size, st.st_mtime, VERSION, code, fastinfo.WINDOW, fastinfo.OVERLAP)).encode()).hexdigest()[:16]
+    from . import fastquery, rvtfile, categories
+    code = hashlib.md5(b''.join(open(m.__file__, 'rb').read() for m in (fastquery, rvtfile, categories))).hexdigest()[:8]          # a reader change must never reuse an older result
+    key = hashlib.md5(('%s|%d|%s|%s|%s' % (os.path.abspath(path), st.st_size, st.st_mtime, VERSION, code)).encode()).hexdigest()[:16]
     return os.path.join(reader.CACHE_DIR, 'info-' + key + '.json')
 
 
 def _scan_cached(path, refresh=False, say=lambda m: None):
-    from . import fastinfo
+    from . import fastquery
     fn = cache_file(path)
     if not refresh and os.path.exists(fn):
         try: return json.load(open(fn))
         except Exception: pass
-    r = fastinfo.scan(path, log=say, want_elements=True)
+    r = fastquery.scan(path, log=say, want_elements=True)
     os.makedirs(reader.CACHE_DIR, exist_ok=True)
     import numpy as np
     arr = r.pop('arrays'); nf = fn[:-5] + '.npz'; tmp = nf + '.%d.tmp.npz' % os.getpid(); np.savez_compressed(tmp, **arr); os.replace(tmp, nf)
@@ -44,11 +45,15 @@ def _capped(argv):
     if os.environ.get('RVT_CAPPED') or os.environ.get('RVT_NO_CAP'): return None
     gb = float(os.environ.get('RVT_INFO_MEM_GB', '0.9'))
     code = "import sys; sys.path.insert(0,%r); from rvtballet.infocli import main; sys.exit(main(sys.argv[1:]))" % os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    p = plat.proc.popen_capped([sys.executable, '-c', code] + list(argv), mem_gb=gb, env=dict(os.environ, RVT_CAPPED='1'))
+    env = dict(os.environ, RVT_CAPPED='1'); env.setdefault('RVT_Q_MEM_GB', str(gb))          # the query engine sizes its worker pool to the same cap
+    p = plat.proc.popen_capped([sys.executable, '-c', code] + list(argv), mem_gb=gb, env=env)
     return p.wait()
 
 
 def _main(argv, say=print):
+    from . import fastquery
+    if argv and (argv[0] in fastquery.SUMMARY + ('collect', 'walls-red-material') + tuple(fastquery.READY)) and not (argv[0] == 'counts' and '--by' in argv):
+        return fastquery.main(argv, say)
     ap = argparse.ArgumentParser(prog='rvt-ballet'); ap.add_argument('cmd', choices=CMDS); ap.add_argument('file'); ap.add_argument('file2', nargs='?'); ap.add_argument('--deep', default='', help='diff: comma list of element ids whose FULL records are decoded in both files and compared field by field'); ap.add_argument('--all-records', action='store_true', help='diff: decode EVERY record of both files and compare field by field (small files only: %d MB, needs ~3 GB)' % ALLREC_MB); ap.add_argument('--by', choices=('level', 'phase'), help='counts: elements per level / created phase (full records: small files only)'); ap.add_argument('--ops', help='diff --all-records: JSON list of requested edits [{"id":N,"path":".field[0]","new":V,"old":V?}]; passes only if the record diff equals exactly these'); ap.add_argument('--allow', default='', help='diff: comma list of element ids expected to change')
     ap.add_argument('--json', action='store_true'); ap.add_argument('--refresh', action='store_true', help='ignore the cached result')
     ap.add_argument('--views', action='store_true'); ap.add_argument('--levels', action='store_true'); ap.add_argument('--grids', action='store_true')
@@ -72,7 +77,7 @@ def _main(argv, say=print):
         os.environ.setdefault('RVT_INFO_MEM_GB', '3.5')
     rc = _capped(argv)
     if rc is not None: return rc
-    from . import fastinfo
+    from . import rvtfile as fastinfo, fastquery
     path = os.path.abspath(a.file)
     if a.cmd == 'check': return _check(path, a, say)
     lg = (lambda m: print(m, file=sys.stderr, flush=True)) if a.verbose else (lambda m: None)
@@ -91,13 +96,12 @@ def _main(argv, say=print):
         say('  File modified    %s' % r['mtime'])
         for k, v in r['project'].items(): say('  %-16s %s' % (k, v))
         if r['editors']: say('  Editors (increment table): %s' % ', '.join(r['editors'][:12]))
-        say('  rvt-ballet sheets|views|levels|grids|counts|elements FILE for the model data (streamed, no conversion)')
+        say('  rvt-ballet query --help lists the model queries (sheets, views, levels, grids, counts, elements, walls, doors, rooms, collect, ...)')
         return 0
     if a.cmd == 'counts' and a.by: return _by(path, r_ := _scan_cached(path, a.refresh, lg), a, say)
     if a.cmd == 'diff': return _diff(path, os.path.abspath(a.file2), a, say, lg)
-    r = _scan_cached(path, a.refresh, lg)
-    if r['stats'].get('damaged_members'): print('rvt-ballet: WARNING: %d of %d compressed blocks of this file fail their checksum: the file looks damaged and the numbers below may be incomplete' % (r['stats']['damaged_members'], r['stats'].get('members', 0)), file=sys.stderr)
     if a.cmd == 'info':
+        r = fastquery.scan(path, log=lg, counts=False)
         out = {k: r[k] for k in ('levels', 'grids', 'views') if getattr(a, k)}
         say(json.dumps(out, indent=1, default=str) if a.json else '')
         if not a.json:
@@ -107,51 +111,7 @@ def _main(argv, say=print):
             if a.views:
                 for v in r['views']: say('  %s %s' % (v['class'].replace('DBView', ''), v['name']))
         return 0
-    if a.cmd == 'sheets':
-        if a.json: say(json.dumps(r['sheets'], indent=1, default=str)); return 0
-        say('Sheets (%d):' % len(r['sheets']))
-        for s in r['sheets']: say('  %-8s %s%s%s | views: %s' % (s['number'], s['name'], ('  (issued %s)' % s['issue_date']) if s.get('issue_date') else '', ('  rev %s' % '; '.join('%s %s' % (x['number'], x['description']) for x in s['revisions'])) if s.get('revisions') else '', ', '.join(s['views']) or '-'))
-    elif a.cmd == 'views':
-        if a.json: say(json.dumps(r['views'], indent=1, default=str)); return 0
-        vv = [v for v in r['views'] if not v['template']]; say('Views (%d, %d templates not listed):' % (len(vv), len(r['views']) - len(vv)))
-        for v in vv: say('  %-18s %s' % (v['class'].replace('DBView', ''), v['name']))
-    elif a.cmd == 'levels':
-        if a.json: say(json.dumps(r['levels'], indent=1, default=str)); return 0
-        for l in r['levels']: say('%-30s %s' % (l['name'], _fmt_ft(l['elevation_ft'])))
-    elif a.cmd == 'grids':
-        if a.json: say(json.dumps(r['grids'], indent=1, default=str)); return 0
-        for g in r['grids']: say(g)
-    elif a.cmd == 'counts':
-        out = {'subcategories': sorted((r.get('subcategory_names') or {}).values()), 'by_category': r['counts'], 'by_class': r['class_counts'], 'view_owned_elements': r['view_owned'], 'elements': r['stats']['elements_with_header']}
-        if a.json: say(json.dumps(out, indent=1, sort_keys=True)); return 0     # sorted keys: diffable between saves
-        say('elements with header: %d (%d owned by a view: 2D annotation/detail)' % (out['elements'], out['view_owned_elements']))
-        say('by category:')
-        for k, v in r['counts'].items(): say('  %8d  %s' % (v, k))
-        kinds = {}
-        for k, v in r['counts'].items():
-            if k.startswith('(no category: '): kinds[k[14:].split(')')[0]] = kinds.get(k[14:].split(')')[0], 0) + v
-        if kinds: say('without a Revit category (Revit API Category is null too): %d = %s' % (sum(kinds.values()), ', '.join('%s %d' % kv for kv in sorted(kinds.items(), key=lambda t: -t[1]))))
-        sn = r.get('subcategory_names') or {}
-        if sn: say('sub/user categories (resolved to their built-in parent above): %d = %s' % (len(sn), ', '.join(sorted(sn.values())[:12]) + (', ...' if len(sn) > 12 else '')))
-    elif a.cmd == 'elements':
-        z = _elements(path); catn = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'category_names.json'))); cn = [str(x) for x in z['cls_names']]
-        n = len(z['id']); n = min(n, a.limit) if a.limit else n
-        def row(i):
-            c = int(z['cat'][i]); b = z['bbox'][i]; k = int(z['cls'][i])
-            nm = catn.get(str(c), '')
-            if c < -(1 << 61):                                         # no category in the file (Revit API Category is null as well): -1 + the explained kind
-                from . import categories as CT
-                c = -1; nm = '(no category: %s)' % CT.kind(cn[k] if k != 65535 else '')
-            return (int(z['id'][i]), cn[k] if k != 65535 else '', c, nm, int(z['owner_view'][i]), int(z['family'][i]), None if b[0] != b[0] else [float(v) for v in b])
-        if a.json:
-            say('['); 
-            for i in range(n):
-                x = row(i); say(json.dumps(dict(zip(('id', 'class', 'category_id', 'category', 'owner_view', 'family', 'bbox_ft'), x))) + (',' if i + 1 < n else ''))
-            say(']'); return 0
-        say('id\tclass\tcategory\towner_view\tfamily\tbbox_ft(min xyz, max xyz)')
-        for i in range(n):
-            x = row(i); say('%s\t%s\t%s\t%s\t%s\t%s' % (x[0], x[1], x[3] or x[2], '' if x[4] == -1 else x[4], '' if x[5] == -1 else x[5], ' '.join('%.3f' % v for v in x[6]) if x[6] else ''))
-    return 0
+    return 2
 
 
 def _diff(pa, pb, a, say, lg):
@@ -204,7 +164,7 @@ def _walk(x, path, out, lim=60):
 
 def _deep(pa, pb, ids):
     """full records of `ids` (rvt_fast.extract only_ids, fields flattened) in both files -> {id: {'class':..., 'changed': {path: [a, b]}, 'only_a': n, 'only_b': n}}"""
-    from . import fastinfo; fastinfo._tune(); fastinfo._paths(); import rvt_fast as F
+    from . import rvtfile as fastinfo; fastinfo._tune(); fastinfo._paths(); import rvt_fast as F
     R = []
     for p in (pa, pb):
         x = F.extract(p, only_ids=ids, want_all=True); d = {}
@@ -222,7 +182,7 @@ def _deep(pa, pb, ids):
 
 def _allrec(pa, pb):
     """every record of both files (rvt_fast.extract want_all) compared field by field: -> {'records': n, 'only_a', 'only_b', 'differing': {id: {class, fields_changed, changed(first 20)}}}"""
-    from . import fastinfo; fastinfo._tune(); fastinfo._paths(); import rvt_fast as F
+    from . import rvtfile as fastinfo; fastinfo._tune(); fastinfo._paths(); import rvt_fast as F
     xa = F.extract(pa, want_all=True)['recs']; xb = F.extract(pb, want_all=True)['recs']
     ka = set(xa); kb = set(xb); diff = {}
     for k in ka & kb:
@@ -235,7 +195,7 @@ def _allrec(pa, pb):
 
 def _by(path, r, a, say):
     """elements per level (m_assocLevelId) or created phase (m_createdPhaseId) from the full records; -1 = none"""
-    from . import fastinfo; fastinfo._tune(); fastinfo._paths(); import rvt_fast as F
+    from . import rvtfile as fastinfo; fastinfo._tune(); fastinfo._paths(); import rvt_fast as F
     x = F.extract(path, want_all=True)['recs']; key = 'm_assocLevelId' if a.by == 'level' else 'm_createdPhaseId'
     W = 8; cnt = collections.Counter(); seen = set()
     for (eid, c), rec in x.items():
@@ -277,10 +237,13 @@ def _ops(allrec, ops):
 
 def main(argv, say=print):
     """_main with a one-line message instead of a traceback for unreadable / damaged files (exit 1)"""
-    try: return _main(argv, say)
+    from . import stable
+    try: return stable.run(argv, _main, say)
     except (SystemExit, KeyboardInterrupt): raise
     except MemoryError: print('rvt-ballet: out of memory while reading this file', file=sys.stderr); return 1
     except Exception as ex:
+        from . import fastquery
+        if isinstance(ex, fastquery.FileChanged): print('rvt-ballet: %s' % ex, file=sys.stderr); return 75
         from . import cli
         if os.environ.get('RVT_INFO_TRACE'): raise
         print('rvt-ballet: cannot read %s: %s' % (os.path.basename(argv[1]) if len(argv) > 1 else 'file', cli.friendly_error(ex)), file=sys.stderr); return 1
@@ -288,7 +251,7 @@ def main(argv, say=print):
 
 def _check(path, a, say):
     """integrity check with the SAVE GATE's own damage detector (page ECC, gzip CRC/size, inflate, container walk): the question 'is this file safe to edit / was it damaged in transit?'. Files <= RVT_CHECK_MB (the whole file is read). Exit 0 = nothing found, 1 = problems."""
-    from . import fastinfo; fastinfo._paths()
+    from . import rvtfile; rvtfile._paths()
     sg = os.path.expanduser('~/src/savegate')
     if sg not in sys.path: sys.path.append(sg)
     try: from savegate import adapters

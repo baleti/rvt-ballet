@@ -123,14 +123,39 @@ def prepare(files):
     for l in summary:
         if l.get('model') != 'FAILED': print('\nREADY: %s %s --sheets' % (os.path.join(here, 'bin', 'rvt-ballet'), l['file']))
 
-SUBCOMMANDS = ('open', 'convert', 'serve', 'info', 'edit', 'doctor', 'sheets', 'views', 'levels', 'grids', 'counts', 'elements', 'diff', 'check')
+QUERY = ('sheets', 'sheet-sets', 'views', 'levels', 'grids', 'counts', 'elements', 'collect', 'walls-red-material', 'walls', 'wall-types', 'floors', 'floor-types', 'roofs',
+         'ceilings', 'stairs', 'railings', 'rooms', 'doors', 'windows', 'furniture', 'generic-models', 'columns', 'framing', 'family-instances', 'types',
+         'families', 'materials', 'revisions', 'schedules', 'links', 'text-notes', 'dimensions', 'curtain-panels')       # == fastquery commands (tests/test_query_cli.py checks)
+SUBCOMMANDS = ('open', 'convert', 'serve', 'info', 'edit', 'doctor', 'query', 'diff', 'check', 'install-skill') + QUERY
+HELP = """rvt-ballet: read, query, view and (preliminarily) edit Revit .rvt files.
+
+query (cold, read-only, no conversion, about 2-4 s on a 1 GB model; `rvt-ballet query --help` for every command and option):
+  rvt-ballet sheets FILE.rvt                 sheets: number, title, issue date, revisions, placed views
+  rvt-ballet sheet-sets FILE                 saved sheet sets with their member sheet numbers
+  rvt-ballet views | levels | grids FILE     views by class, levels with elevation, grid names
+  rvt-ballet counts FILE [--json]            element counts by category and class
+  rvt-ballet elements FILE [--tsv]           one row per element: id, class, category, owner view, family, bbox
+  rvt-ballet walls | doors | rooms | ... FILE  ready element lists (see query --help); --json / --tsv / --fields / --where
+  rvt-ballet query collect FILE --class Wall | --category Doors   general collector (FilteredElementCollector-like)
+  rvt-ballet query walls-red-material FILE   benchmark compound query
+  (`rvt-ballet query CMD FILE` and `rvt-ballet CMD FILE` are the same)
+file:
+  rvt-ballet info FILE [--save]              version, worksharing, project information, editors (header only, about 1 s)
+  rvt-ballet check FILE                      integrity check (page ECC, gzip checksums)
+  rvt-ballet diff A.rvt B.rvt [--deep IDS]   before/after comparison at element-header level
+edit and view:
+  rvt-ballet edit FILE OPS -o OUT | --list-ops
+  rvt-ballet FILE.rvt [--sheets] | open | convert | serve | doctor
+agents:
+  rvt-ballet install-skill                   install the Claude skill (rvt-query) into every ~/.claude* config dir; docs/agent-queries.md
+"""
 BIG_MB = float(os.environ.get('RVT_BIG_MB', '300'))
 
 
 def normalize_argv(argv):
     """`rvt-ballet A.rvt B.rvt --sheets` is `rvt-ballet open A.rvt B.rvt --sheets`: anything that is not a subcommand (or -h/--help) opens"""
     argv = list(argv)
-    if argv and argv[0] not in SUBCOMMANDS and argv[0] not in ('-h', '--help'): argv = ['open'] + argv
+    if argv and argv[0] not in SUBCOMMANDS and argv[0] not in ('-h', '--help', 'help'): argv = ['open'] + argv
     return argv
 
 
@@ -139,7 +164,17 @@ def main(argv=None):
     if argv and argv[0] == 'info' and '--save' in argv:        # the save-gate report (opens the model through the server code)
         from . import editcli
         sys.exit(editcli.info_main([x for x in argv[1:] if x != '--save']))
-    if argv and argv[0] in ('info', 'sheets', 'views', 'levels', 'grids', 'counts', 'elements', 'diff', 'check'):       # streamed admin data, bounded memory, never the geometry pipeline
+    if not argv or argv[0] in ('-h', '--help', 'help'): print(HELP); sys.exit(0)
+    if argv[0] == 'query':
+        argv = argv[1:]
+        if not argv or argv[0] in ('-h', '--help'): argv = ['--help']
+    if argv and argv[0] == 'install-skill':
+        from . import skill
+        sys.exit(skill.main(argv[1:]))
+    if argv and (argv[0] in QUERY or argv[0] == '--help') and not (argv[0] == 'counts' and '--by' in argv):      # cold read-only queries (fastquery), never the geometry pipeline
+        from . import fastquery
+        sys.exit(fastquery.main(argv))
+    if argv and argv[0] in ('info', 'counts', 'diff', 'check'):       # file information, counts --by, before/after diff, integrity check
         from . import infocli
         sys.exit(infocli.main(argv))
     if argv and argv[0] == 'doctor':
@@ -164,7 +199,7 @@ def main(argv=None):
     if a.cmd in ('open', 'convert') and not a.force and not os.environ.get('RVT_FORCE_BIG'):
         big = [f for f in (a.files if a.cmd == 'open' else [a.file]) if os.path.exists(f) and os.path.getsize(f) > BIG_MB * 1e6]
         if big:
-            for f in big: print('rvt-ballet: %s is %.0f MB (> %.0f MB): geometry conversion needs many GB of RAM and can run for hours. Use `rvt-ballet info|sheets|views|levels|grids|counts|elements FILE` (streamed, no conversion), or add --force.' % (os.path.basename(f), os.path.getsize(f) / 1e6, BIG_MB), file=sys.stderr)
+            for f in big: print('rvt-ballet: %s is %.0f MB (> %.0f MB): geometry conversion needs many GB of RAM and can run for hours. Use `rvt-ballet info|sheets|views|levels|grids|counts|elements|walls|... FILE` (cold queries, no conversion; rvt-ballet --help), or add --force.' % (os.path.basename(f), os.path.getsize(f) / 1e6, BIG_MB), file=sys.stderr)
             if a.cmd == 'convert' or len(big) == len(a.files): sys.exit(3)
             a.files = [f for f in a.files if f not in big]
     if a.cmd == 'open' and a.prepare: return prepare(a.files)

@@ -5,7 +5,7 @@
 
     rvt-ballet FILE.rvt [FILE2.rvt ...] [--sheets] [--hide A,B] [--workspace N] [--no-browser] [--port N]   # opens the viewer directly (`open` still works)
     rvt-ballet info FILE.rvt                      # Revit year/build, worksharing, central path, last saved by/when, project info (about a second, any size)
-    rvt-ballet sheets|views|levels|grids|counts|elements FILE.rvt [--json]   # admin data without converting (streamed, capped memory, cached; docs/fast-info.md)
+    rvt-ballet sheets|sheet-sets|views|levels|grids|counts|elements|walls|doors|rooms|... FILE.rvt [--json|--tsv]   # cold read-only queries, 2-4 s on 1 GB (rvt-ballet query --help; docs/agent-queries.md)
     rvt-ballet diff BEFORE.rvt AFTER.rvt [--deep IDS] [--all-records] [--ops ops.json]   # before/after check of an edit (pre-filter, not the Revit verdict)
     rvt-ballet info FILE.rvt --save               # the save-gate report: can it be edited/saved
     rvt-ballet check FILE.rvt                     # integrity check (page ECC, gzip checksums) with the save gate's damage detector
