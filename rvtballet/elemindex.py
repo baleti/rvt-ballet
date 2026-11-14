@@ -240,10 +240,15 @@ class Reader:
             if pi < 0: break
             pn = str(s.idx["pns"][pi]); P = _part(pn); segs = s.segs.get(pn)
             if segs is None: segs = s.segs[pn] = [tuple(int(x) for x in r) for r in s.idx["segtab%d" % pi]]
-            chunk = P.inflate(segs[k]) + (P.inflate(segs[k + 1])[:TAIL] if k + 1 < len(segs) else b"")
-            r = _G["rd"].extract_chunk(chunk, _G["wanted"], _G["EH"], [eid], _G["wanted"]); loc["tries"] += 1
-            rec = next((c for (e, c), _ in r[0] if int(e) == eid), None)
-            if rec: loc.update(part=pi, seg=k, off=off, record=rec); break
+            cur = P.inflate(segs[k]); rec = None
+            for extra in (TAIL, 1 << 20, 4 << 20):         # a record longer than the tail (images, big schedules) is cut: widen the window to following segments until it is complete
+                nxt = b""; j = k + 1
+                while len(nxt) < extra and j < len(segs): nxt += P.inflate(segs[j]); j += 1
+                r = _G["rd"].extract_chunk(cur + nxt[:extra], _G["wanted"], _G["EH"], [eid], _G["wanted"]); loc["tries"] += 1
+                hit = next((v for (e, c), v in r[0] if int(e) == eid), None)
+                if hit is not None: rec = (hit.get("class") or hit and c); loc["complete"] = hit.get("complete")
+                if hit is None or hit.get("complete") or not nxt: break
+            if rec: loc.update(part=pi, seg=k, off=off, record=next((c for (e, c), v in r[0] if int(e) == eid), None)); break
         return loc
     def _row(s, eid):
         k = int(np.searchsorted(s.ids, eid))
