@@ -876,7 +876,17 @@ def save_in_place(path, ops, mode='auto', workers=None, force=False, keep=20):
     if not core.gate_open('rvt', ver, cfg): raise Refused('overwrite of rvt %s is not enabled: the gate is closed' % ver)
     ws = worksharing(path)
     if not (ws or '').startswith('Not enabled'): raise Refused('the model is workshared or of unknown worksharing state (%r)' % ws)
-    if any(o['op'] in ('move', 'rotate') for o in ops) and os.environ.get('RVTBALLET_ALLOW_GROUP_EDIT') != '1': raise Refused('move/rotate in place: the dependents check needs the full model (use SAVE AS, or the full save path)')
+    geo = [o for o in ops if o['op'] in ('move', 'rotate')]
+    if geo and os.environ.get('RVTBALLET_ALLOW_GROUP_EDIT') != '1':      # the product's own dependents check (hosted, joined, connected, dimensioned, groups, options): whole-model extraction, so bounded by size
+        lim = int(os.environ.get('SEGEDIT_DEPENDENTS_MAX_MB', '150')) << 20
+        if os.path.getsize(path) > lim: raise Refused('move/rotate in place: the dependents check needs the whole model and this file is above %d MB (use SAVE AS)' % (lim >> 20))
+        sys.path.insert(0, os.path.expanduser('~/src/rvt-ballet')); from rvtballet import save as _save
+        with open(path, 'rb') as f: buf = f.read()
+        try: mem = _save.risky_membership(_save.membership(buf, {o['eid'] for o in geo}), ops)
+        except Exception as e: raise Refused('move/rotate in place: the dependents check failed (%s)' % str(e)[:150])
+        del buf
+        if mem: e0 = sorted(mem)[0]; raise Refused('element %d is part of a group or design option, or has dependents (%s): in-place move/rotate refused, use SAVE AS' % (e0, '; '.join(mem[e0])))
+        tm['dependents'] = round(time.time() - t0, 3)
     st = os.stat(path); fp = guard.Fingerprint(st.st_size, st.st_mtime_ns, _sha256_file(path)); tm['hash0'] = round(time.time() - t0, 3)
     if not clean_known(fp.sha256) or os.environ.get('SEGEDIT_FULL_SOURCE_CHECK') == '1':      # the savegate source gate, once per content (sha256): a file this writer produced from a clean source is clean by construction
         from savegate.adapters import RvtAdapter

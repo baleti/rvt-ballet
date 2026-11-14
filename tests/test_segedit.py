@@ -192,3 +192,12 @@ def test_auto_falls_back_to_shift_on_old_writer_output(tmp_path):
     with pytest.raises(segedit.Refused, match="does not fit"): segedit.apply_ops(src, str(tmp_path / "f.rvt"), [dict(op="move", eid=EID, dx=2.0, dy=0.0, dz=0.0)], mode="fit")
     info = segedit.apply_ops(src, str(tmp_path / "a.rvt"), [dict(op="move", eid=EID, dx=2.0, dy=0.0, dz=0.0)])
     assert info["mode"] == "shift" and "fallback" in info and gate_damage(str(tmp_path / "a.rvt")) == []
+
+
+def test_inplace_move_uses_product_dependents_check(env):
+    """in-place move: an MEP-connected element is refused by the product rule (save.risky_membership); a dependent-free instance is saved, backup exact"""
+    tmp, src = env; m0 = md5(src)
+    with pytest.raises(segedit.Refused, match="dependents"): segedit.save_in_place(str(src), [dict(op="move", eid=EID, dx=2.0, dy=0.0, dz=0.0)])
+    assert md5(src) == m0
+    info = segedit.save_in_place(str(src), [dict(op="move", eid=1421396, dx=1.5, dy=-0.5, dz=0.0)])
+    assert md5(info["backup"]) == m0 and gate_damage(str(src)) == [] and info["verify"]["readback"][0][1] == "move"
