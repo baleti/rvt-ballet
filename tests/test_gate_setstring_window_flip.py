@@ -1,4 +1,5 @@
 """c2x-rvtsave regression (severity 1): a one-byte flip on a byte the writer itself changed inside a declared dirty member of a SET_STRING (equal-length Mark) output (outside member_diff_ranges was already refused; flips inside the writer runs passed until member_raw_sha256). Autodesk 2024 HVAC sample, window flips, control accepted, all flips refused."""
+# RVT_TEST_TIMEOUT=3600 (flip tool re-verifies a 22 MB project per flip; the default 900 s is exceeded on a loaded host)
 import os, sys, subprocess
 SRC = os.path.expanduser('~/rvt-research/corpus/2024/42_Snowdon_Towers_Sample_HVAC.rvt')
 if not os.path.exists(SRC): print('skip'); sys.exit(0)
