@@ -1,12 +1,13 @@
-"""duplicate-type generator refuses non-2024-non-2026 Autodesk samples with the explicit year message and writes nothing (skips if samples absent)."""
-import os, subprocess, sys, tempfile, glob
-T = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools", "rvt_dup_type_gen.py")
-d = tempfile.mkdtemp(); n = 0
-for y in (2023, 2025):
-    fs = sorted(glob.glob(os.path.expanduser("~/rvt-research/corpus/%d/*.rvt" % y)))
-    if not fs: continue
-    out = "%s/o%d.rvt" % (d, y)
-    r = subprocess.run([sys.executable, T, fs[0], out, "1", "YrGuard"], capture_output=True, text=True)
-    assert r.returncode != 0 and not os.path.exists(out) and "only built for Revit 2024" in (r.stdout + r.stderr), (y, r.stderr[-200:])
-    n += 1
-print("ok: %d non-2024 samples refused by the year guard, nothing written" % n if n else "skip: no samples")
+"""c5x-rvttype item 59: tools/rvt_dup_type_gen.py must refuse Revit 2020/2023/2025 files and write NO output file. Autodesk samples only; each year skipped if the sample is absent."""
+import os, sys, glob, subprocess, tempfile
+H = os.path.dirname(os.path.abspath(__file__)); gen = os.path.join(H, '..', 'tools', 'rvt_dup_type_gen.py')
+bad = 0; ran = 0
+for y in (2020, 2023, 2025):
+    fs = sorted(glob.glob(os.path.expanduser('~/rvt-research/corpus/%d/*.rvt' % y)))
+    if not fs: print('skip', y); continue
+    out = os.path.join(tempfile.mkdtemp(), 'o.rvt'); ran += 1
+    r = subprocess.run([sys.executable, gen, fs[0], out, '1000', 'ZZ'], capture_output=True, text=True, timeout=600)
+    msg = (r.stdout + r.stderr)
+    if r.returncode == 0 or os.path.exists(out) or 'REFUSED' not in msg or str(y) not in msg: print('FAIL', y, r.returncode, msg[-150:]); bad += 1
+    else: print('refused', y)
+sys.exit(1 if bad else 0)
