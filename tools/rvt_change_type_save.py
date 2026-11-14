@@ -16,7 +16,8 @@ async def main(src, inst, typ):
     work = os.path.join(_T, 'w.rvt'); shutil.copy(src, work); h0 = sha(work); pr = rvt_params.params(work)
     models = server.Models(); md = os.path.join(_T, 'm'); os.makedirs(md); models.m['m'] = {'dir': md, 'name': 'f', 'src': work}
     async with TestClient(TestServer(server.make_app(models)), timeout=aiohttp.ClientTimeout(total=None)) as c:
-        assert (await (await c.get('/api/m/m/saveinfo')).json()).get('open')
+        si = await (await c.get('/api/m/m/saveinfo')).json()
+        if not si.get('open'): print('REFUSED: save is not open for this file:', {k: v for k, v in si.items() if k != 'open'}.__repr__()[:300], '; nothing written'); return
         r = await c.post('/api/m/m/edit', json={'op': 'change_type', 'eid': inst, 'type_eid': typ}); j = await r.json(); print('edit', r.status, str(j.get('error') or '')[:160])
         if r.status != 200: return
         out = os.path.join(_T, 'o.rvt'); t0 = time.time(); r = await c.post('/api/m/m/saveas', json={'dest': out}); j = await r.json(); print('saveas', r.status, round(time.time() - t0, 1), 's', j.get('code'), str(j.get('error') or '')[:300])
