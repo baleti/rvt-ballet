@@ -321,12 +321,18 @@ def compare_partitions(orig, out, name):
             else:
                 slack = o[len(core):]
                 if slack.count(0) != len(slack): reasons.append("tail slack is not all zero")
-        elif i == 0 and len(blk) == 20 and len(o) == 20 and blk[:14] == o[:14] and blk[18:] == o[18:]:
-            # the 20-byte partition head holds the ElemTable row count (u32 at +14): adding or deleting elements must change it, and it must equal the output's Global/ElemTable header count
+        elif i == 0 and o != blk and len(blk) == 20 and len(o) == 20 and blk[:14] == o[:14] and blk[18:] == o[18:]:
+            # the 20-byte partition head holds this partition's element count (u32 at +14; the counts of all partitions sum to the Global/ElemTable header row count):
+            # adding or deleting elements changes it. Accepted only when the output's heads sum to the output's ElemTable count.
             _paths(); import rvtfmt
-            n_out = struct.unpack_from("<I", rvtfmt.inflate_stream(out.openstream("Global/ElemTable").read())[1], 2)[0]
-            if struct.unpack_from("<I", o, 14)[0] != n_out: reasons.append("partition head row count %d != ElemTable rows %d" % (struct.unpack_from("<I", o, 14)[0], n_out))
-            else: warnings.append("partition head row count changed %d -> %d (matches ElemTable)" % (struct.unpack_from("<I", blk, 14)[0], n_out))
+            n_out = struct.unpack_from("<I", rvtfmt.inflate_stream(out.openstream("Global/ElemTable").read())[1], 2)[0]; tot = 0
+            for e_ in out.listdir(streams=True):
+                nm_ = "/".join(e_)
+                if nm_.startswith("Partitions/"):
+                    h_ = Part(out, nm_).payload(0, 20)
+                    if len(h_) == 20 and struct.unpack_from("<I", h_, 0)[0] == 9: tot += struct.unpack_from("<I", h_, 14)[0]
+            if tot != n_out: reasons.append("partition head counts sum to %d != ElemTable rows %d" % (tot, n_out))
+            else: warnings.append("partition head count changed %d -> %d (heads sum to the ElemTable count %d)" % (struct.unpack_from("<I", blk, 14)[0], struct.unpack_from("<I", o, 14)[0], n_out))
         elif o != blk: reasons.append("interlude before segment %d changed" % i)
     for i in gb:
         if i not in ga and i != len(sb): reasons.append("new interlude before segment %d" % i)
