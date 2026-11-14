@@ -12,4 +12,6 @@ print('elements A %d B %d; differing %d; only-in-A %d; only-in-B %d' % (len(a), 
 bad = diff - allowed
 print('differing ids outside the allowed list: %d' % len(bad), sorted(bad)[:10])
 print('untouched elements identical in Revit view: %.4f %%' % (100.0 * (len(a.keys() & b.keys()) - len(diff)) / max(1, len(a.keys() & b.keys()))))
-sys.exit(0 if not bad and not only_a and not only_b and a and b else 1)
+bad_a = only_a - allowed  # a deleted element must be declared in the allowed list
+if bad_a: print('missing in B and not allowed (undeclared delete):', sorted(bad_a)[:10])
+sys.exit(0 if not bad and not bad_a and not only_b and a and b else 1)
