@@ -441,7 +441,7 @@ def _set_link_path(ed, o):
         import re as _re, cfb as _cfb
         try: fy = int(_re.search(r'(20[12]\d)', bytes(_cfb.CFB(open(ed.src, 'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le', 'ignore')).group(1))
         except Exception: raise EditError('link path edit refused: cannot read the Revit version of the file')
-        if fy != 2024: raise EditError('link path edit is only verified on Revit 2024 files (this file is %d): refused' % fy)
+        if fy not in (2024, 2025, 2026): raise EditError('link path edit is only verified on Revit 2024/2025/2026 files (this file is %d): refused' % fy)
     try: log = ed.g.e.trace(o['eid'])[3]
     except (IndexError, KeyError, StopIteration, OverflowError, TypeError, ValueError): raise EditError('element %r does not exist in this file: link path edit refused' % (o['eid'],))
     olds = [l for l in log if l[1] == 'ModelPath.m_path']

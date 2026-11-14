@@ -8,5 +8,5 @@ import rvtedit
 from rvtballet import edit
 edit._set_link_path(rvtedit.Edit(A), {'eid': 1363937, 'value': 'C:\\a\\b.rvt'})
 try: edit._set_link_path(rvtedit.Edit(B), {'eid': 1, 'value': 'C:\\a.rvt'}); raise SystemExit('2020 file was not refused')
-except edit.EditError as e: assert 'only verified on Revit 2024' in str(e), e
+except edit.EditError as e: assert 'only verified on Revit 2024/2025/2026' in str(e), e
 print('OK')
