@@ -777,7 +777,7 @@ def material_colors(mat, assets):
     return out
 
 
-def walls_red_material(path, max_height_ft=5 / 0.3048, workers=None, log=None, rule='last'):
+def walls_red_material(path, max_height_ft=5 / 0.3048, workers=None, log=None, rule='last', pred=None):
     """-> dict(count, walls, ...): walls with Unconnected Height < max_height_ft whose wall type has a compound-structure layer whose material has a red colour
     (is_red) in any colour property. One cold pass: walls (geometry STOP decoder), wall types + materials + appearance assets (no-STOP decoder), joins in memory."""
     log = log or (lambda *a: None); workers = workers or _workers(); t0 = time.time()
@@ -796,7 +796,7 @@ def walls_red_material(path, max_height_ft=5 / 0.3048, workers=None, log=None, r
     mats = {e: r for (e, c), r in full.items() if c in mat_c}; assets = {e: r for (e, c), r in full.items() if c in ast_c}
     red = {}
     for e, m in mats.items():
-        cols = material_colors(m, assets); hit = [(p, v) for p, v in cols if is_red(v)]
+        cols = material_colors(m, assets); hit = [(p, v) for p, v in cols if (pred or is_red)(v)]
         if hit: red[e] = hit
     elev = {e: r['fields']['elevation'] for (e, c), r in full.items() if c == 'Level' and 'elevation' in r['fields']}
     out = []; nh = 0; nt = 0; hows = collections.Counter()
@@ -813,7 +813,7 @@ def walls_red_material(path, max_height_ft=5 / 0.3048, workers=None, log=None, r
           'assets_with_colour': sum(1 for a in assets.values() if a['fields'].get('asset_colors')), 'red_materials': len(red), 'count': len(out),
           'seconds': {'setup': round(t1 - t0, 2), 'decode_pass': round(t2 - t1, 2), 'join': round(time.time() - t2, 2), 'total': round(time.time() - t0, 2)}}
     log('walls_red_material: %s' % st)
-    return dict(st, rows=out, red=red)
+    return dict(st, rows=out, red=red, _types={e: r['fields'].get('layers') for e, r in types.items()}, _colors={e: material_colors(m, assets) for e, m in mats.items()})
 
 
 READY = {'views': {'cls': 'View'}, 'levels': {'cls': 'Level'}, 'grids': {'cls': 'Grid'}, 'walls': {'cls': 'Wall'}, 'wall-types': {'cls': 'WallType'},
