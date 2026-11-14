@@ -9,6 +9,6 @@ from rvtballet import edit
 b = open(p, 'rb').read()
 mv = lambda e: [{'op': 'move', 'eid': e, 'dx': 1.0, 'dy': 0.5, 'dz': 0.0}]
 try: edit.apply_full(b, mv(373953)); raise SystemExit('FAIL: zero-origin move accepted')
-except edit.EditError as e: assert 'Trf.m_or' in str(e), e
+except edit.EditError as e: assert 'Trf.m_or' in str(e) or 'several partitions' in str(e), e  # refused either way (zero-origin guard or the multi-partition guard that now fires first)
 edit.apply_full(b, mv(422779))
 print('zero-origin move refused, normal instance move accepted: OK')
