@@ -10,6 +10,7 @@ import numpy as np
 PAGE_STORED = 65249; PAGE_PAYLOAD = 64896; TAIL = 96 * 1024
 CACHE = os.environ.get("RVT_ELEMINDEX_CACHE", os.path.expanduser("~/.cache/rvt-elemindex"))
 _G = {}
+GZ_HEADER = bytes.fromhex("1f8b080000000000000b")      # identical on all 18046 segments of 20 Autodesk samples 2018-2026 (MTIME 0, XFL 0, OS 0x0b); a flip there is not covered by the CRC
 
 
 def _paths():
@@ -287,6 +288,7 @@ def verify_partition(o, name):
         gap_a = prev_end if prev_end is not None else 0
         if hdr > gap_a: g = P.payload(gap_a, hdr - gap_a); inter.update(g); ib += len(g)
         raw = P.payload(off, ln)
+        if raw[:10] != GZ_HEADER: bad.append((i, "gzip header %s is not the constant Revit header" % raw[:10].hex())); prev_end = off + ln; continue
         try:
             d = zlib.decompressobj(-15); out = d.decompress(raw[10:], 1 << 28)
             t = d.unused_data; deltas[len(out) // 1024] = deltas.get(len(out) // 1024, 0) + 1      # NOTE: header word 3 is NOT the inflated length (an earlier +64 relation was an artefact of capping the inflate at il+64)
