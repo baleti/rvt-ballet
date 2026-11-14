@@ -1206,6 +1206,9 @@ def risky_membership(mem, ops):
     return out
 
 
+CONNECTED_MOVE_REFUSE = 10      # connected-MEP count from which a move/rotate is refused (23 hung Revit, 3 passed; 4..9 unmeasured, so the bound is a guess between)
+
+
 def group_warning(ss, mid, buf):
     """warning text when a pending edit touches a group member / group instance / design-option element (None otherwise). Revit evidence (rac_advanced 2024, in-place move of one array-group member): the file opens, audits and regenerates cleanly, but that instance no longer matches the other 15 instances of its group type, so the copy is not what the user meant."""
     from .edit import compose
@@ -1217,6 +1220,10 @@ def group_warning(ss, mid, buf):
     if jm:      # Revit VM oracle (Snowdon Structural 2024 column 606069, joined to 4): the copy opens clean but the API shows shift 0, the edit is silently ignored/regenerated away
         from .edit import EditError
         raise EditError('element %d: move/rotate refused, it is joined to other elements; Revit opens the copy but ignores the new location (VM readback shift 0, measured). Unjoin it first, or move a non-joined element' % jm[0])
+    cm = sorted((int(x.split()[2]), e) for e, why in mem.items() if e in {o['eid'] for o in ops if o.get('op') in ('move', 'rotate')} for x in why if x.startswith('connected to '))
+    if cm and cm[-1][0] >= CONNECTED_MOVE_REFUSE:      # Revit 2025 VM (Snowdon Electrical): a move of eid 1403442 (connected to 23 MEP elements) was accepted by the gate but Revit hung/crashed 3/3 at dx 0.25 and 2.0 (dx 0.01 opened); instances connected to 3 passed. Revit regenerates the connected network, the writer moves one record
+        from .edit import EditError
+        raise EditError('element %d: move/rotate refused, it is connected to %d MEP elements; Revit regenerates the whole connected network and a copy with only this record moved hung Revit in the VM (measured). Move a less connected element' % (cm[-1][1], cm[-1][0]))
     if not mem: return None
     e0 = sorted(mem)[0]
     return 'element %d is part of a group or design option, or is a moved element with dependents (hosted doors/windows, dimensions, level-relative elements) (%s): Revit opens such a copy without complaint, but a group member then differs from the other instances of its group type, a moved window/door can end up off its host wall, and dimensions or level-relative elements are not updated; check the copy in Revit before relying on it' % (e0, '; '.join(mem[e0]))
