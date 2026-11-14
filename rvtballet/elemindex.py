@@ -25,12 +25,14 @@ class Part:
     """random access to the payload bytes of one partition stream through the CFB sector chain (only the pages asked for are read)"""
     def __init__(s, o, name):
         s.o = o; s.e = o.direntries[o._find(name)]; s.name = name; s.ss = o.sectorsize; s.fat = o.fat; s.fp = o.fp
+        s.small = o.openstream(name).read() if s.e.size < o.minisectorcutoff else None      # ministream stream (< 4096 bytes): not a sector chain
         s.chain = []; c = s.e.isectStart
-        while 0 <= c < len(s.fat) and len(s.chain) <= len(s.fat): s.chain.append(c); c = s.fat[c]
+        while s.small is None and 0 <= c < len(s.fat) and len(s.chain) <= len(s.fat): s.chain.append(c); c = s.fat[c]
         s.npages = -(-s.e.size // PAGE_STORED)
         last = s.e.size - (s.npages - 1) * PAGE_STORED
         s.total = (s.npages - 1) * PAGE_PAYLOAD + min(last, PAGE_PAYLOAD)
     def stored(s, a, n):
+        if s.small is not None: return s.small[max(a, 0):a + n]
         ss = s.ss; out = bytearray(); a = max(a, 0); end = min(a + n, s.e.size)
         while a < end:
             k = a // ss; off = a % ss; s.fp.seek((s.chain[k] + 1) * ss + off); take = min(ss - off, end - a)
