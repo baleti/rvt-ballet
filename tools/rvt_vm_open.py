@@ -4,7 +4,9 @@ Row: agent, short id, year, class tag, revit_open, cmp, dialogs, failures (no pa
 import os, sys, hashlib
 sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab/campaign')); os.environ['STAGEB'] = '1'
 import stages
-year = int(sys.argv[1]); out = os.path.expanduser('~/c3x-rvtmatrix-work/vm_rows.tsv')
+year = int(sys.argv[1])
+if year < 2020: sys.exit('refused: no Revit oracle for %d (revit-ballet add-in supports 2020-2026; 2017-2019 dropped, would only burn a lane)' % year)
+out = os.path.expanduser('~/c3x-rvtmatrix-work/vm_rows.tsv')
 def _sid(f): return hashlib.sha256(open(f, 'rb').read()).hexdigest()[:6]
 if os.environ.get('RVT_WARM') == '1' and len(sys.argv) > 3:      # portfix: one lane lock + warm Revit for the whole batch
     files = sys.argv[2:]
