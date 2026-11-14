@@ -12,4 +12,11 @@ class T(unittest.TestCase):
             time.sleep(40); self.assertIsNone(p.poll(), 'build finished before the kill; sample too small for this test')
             p.send_signal(signal.SIGKILL); p.wait()
             self.assertFalse(os.path.exists(o))
+    def test_sigterm_leaves_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            o = os.path.join(d, 'a.rvt')
+            p = subprocess.Popen([sys.executable, TOOL, S, o, '--src', SRC], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(40); self.assertIsNone(p.poll(), 'build finished before the kill; sample too small for this test')
+            p.send_signal(signal.SIGTERM); p.wait(timeout=60)
+            self.assertEqual(os.listdir(d), [])
 if __name__ == '__main__': unittest.main()
