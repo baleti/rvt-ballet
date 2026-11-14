@@ -441,6 +441,7 @@ def scan(path, log=None, want_elements=False, progress=None, _seg=None, _out=Non
     res['revisions'] = sorted(({'id': i, 'sequence': f.get('m_sequenceNumber'), 'number': f.get('m_numberStr'), 'description': f.get('m_description'), 'date': f.get('m_date'), 'issued_by': f.get('m_issuedBy')} for i, f in revs.items()), key=lambda r: (r['sequence'] is None, r['sequence'] or 0, r['id']))
     for sh in res['sheets']: sh['revisions'] = [{'number': revs[i].get('m_numberStr'), 'description': revs[i].get('m_description'), 'date': revs[i].get('m_date')} for i in sorted(sh.get('revision_ids') or [], key=lambda i: revs.get(i, {}).get('m_sequenceNumber') or 0) if i in revs]
     res['phases'] = [r['fields'].get('m_name') for r in by['ProjectPhase']]
+    res['subcategory_names'] = CT.subcategory_names(full)      # CategoryElem id -> name (sub/user categories)
     if want_elements:
         m = seen; res['arrays'] = {'id': idarr[m], 'cat': a_cat[m], 'owner_view': a_ov[m], 'family': a_fam[m], 'bbox': a_bb[m], 'cls': a_cls[m], 'cls_names': np.array(cnames_l or [''], dtype=str)}
     return res
