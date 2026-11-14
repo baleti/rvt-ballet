@@ -43,7 +43,7 @@ def edited(p):
     try: return any(l[1] == 'SymbolInfo.m_name' and l[4] == 'KillEveryCall' for l in wledit.Editor(q).trace(0)[3])
     except Exception: return False
     finally: os.remove(q)
-side = tempfile.mkdtemp(); open(side + '/c.json', 'w').write('{"allow_overwrite": true}'); open(side + '/g.json', 'w').write('{"rvt": {"*": "open"}}')
+side = tempfile.mkdtemp(); import atexit; atexit.register(shutil.rmtree, side, True); open(side + '/c.json', 'w').write('{"allow_overwrite": true}'); open(side + '/g.json', 'w').write('{"rvt": {"*": "open"}}')
 env = dict(os.environ, PYTHONPATH=os.path.expanduser('~/src/savegate'), SAVEGATE_JOURNAL=side + '/j', SAVEGATE_CACHE=side + '/c', DWG_BALLET_CONFIG=side + '/c.json', SAVEGATE_GATE=side + '/g.json', RVTBALLET_ALLOW_OVERWRITE='1', RVTBALLET_ALLOW_LAYOUT_CHANGE=os.environ.get('RVTBALLET_ALLOW_LAYOUT_CHANGE', ''), RVTBALLET_EDIT_BACKEND=os.environ.get('RVTBALLET_EDIT_BACKEND', 'rvtedit' if os.environ.get('KILL_OP') else ''))
 sha = lambda x: hashlib.sha256(open(x, 'rb').read()).hexdigest()
 def run(stop):
