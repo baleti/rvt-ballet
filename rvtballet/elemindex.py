@@ -321,6 +321,12 @@ def compare_partitions(orig, out, name):
             else:
                 slack = o[len(core):]
                 if slack.count(0) != len(slack): reasons.append("tail slack is not all zero")
+        elif i == 0 and len(blk) == 20 and len(o) == 20 and blk[:14] == o[:14] and blk[18:] == o[18:]:
+            # the 20-byte partition head holds the ElemTable row count (u32 at +14): adding or deleting elements must change it, and it must equal the output's Global/ElemTable header count
+            _paths(); import rvtfmt
+            n_out = struct.unpack_from("<I", rvtfmt.inflate_stream(out.openstream("Global/ElemTable").read())[1], 2)[0]
+            if struct.unpack_from("<I", o, 14)[0] != n_out: reasons.append("partition head row count %d != ElemTable rows %d" % (struct.unpack_from("<I", o, 14)[0], n_out))
+            else: warnings.append("partition head row count changed %d -> %d (matches ElemTable)" % (struct.unpack_from("<I", blk, 14)[0], n_out))
         elif o != blk: reasons.append("interlude before segment %d changed" % i)
     for i in gb:
         if i not in ga and i != len(sb): reasons.append("new interlude before segment %d" % i)
