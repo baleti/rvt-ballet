@@ -163,7 +163,8 @@ def main(argv=None):
     argv = normalize_argv(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == 'info' and '--save' in argv:        # the save-gate report (opens the model through the server code)
         from . import editcli
-        sys.exit(editcli.info_main([x for x in argv[1:] if x != '--save']))
+        from . import stable      # read-only report: guarded against a save under way (edit is not wrapped: it writes files, the gate has its own checks)
+        sys.exit(stable.run([x for x in argv[1:] if x != '--save'], editcli.info_main, print))
     if not argv or argv[0] in ('-h', '--help', 'help'): print(HELP); sys.exit(0)
     if argv[0] == 'query':
         argv = argv[1:]

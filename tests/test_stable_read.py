@@ -282,3 +282,14 @@ def test_full_hash_catches_write_between_samples(d, monkeypatch):
     with open(f2, 'r+b') as o: o.seek(gap); o.write(b'X')
     os.utime(f2, ns=(st.st_atime_ns, st.st_mtime_ns))
     assert 'sampled content' in a.diff(S.fingerprint(f2))
+
+
+def test_info_save_is_guarded(d, monkeypatch, capsys):
+    from rvtballet import cli, editcli
+    f = os.path.join(d, 'm.rvt'); open(f, 'wb').write(mini_cfb()); t = time.time() - 100; os.utime(f, (t, t))
+    seen = []
+    def fake(argv, say=print):
+        seen.append(argv); st = os.stat(f); os.utime(f, ns=(st.st_atime_ns, st.st_mtime_ns + 10 ** 9)); return 0
+    monkeypatch.setattr(editcli, 'info_main', fake)
+    with pytest.raises(SystemExit) as e: cli.main(['info', '--save', f, '--quiet-secs', '0'])
+    assert seen and e.value.code == 75 and 'changed' in capsys.readouterr().err
