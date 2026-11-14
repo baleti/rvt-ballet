@@ -4,7 +4,7 @@ SCENARIO: none | move | param | both (param+move, same element) | delete | none_
 import os, sys, asyncio, tempfile, shutil, hashlib, json
 W = os.path.expanduser('~/rvtsave-work'); os.makedirs(W, exist_ok=True)
 _T = tempfile.mkdtemp(dir=W); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
-json.dump({'rvt': {'2024': 'open', '2026': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
+json.dump({'rvt': {'2024': 'open', '2026': 'open', **({sys.argv[2]: 'open'} if len(sys.argv) > 2 and os.environ.get('RVTSAVE_OPEN_YEAR') else {})}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 async def save(src, scen, eid):
@@ -59,6 +59,6 @@ def main(src, year, scen, eid=0):
     if eid and scen != 'none': os.environ['PROBE_EIDS'] = str(eid)      # API readback of the edited element (location, Comments, Mark, wall height) in the VM, logged as PROBE lines
     import stages
     r = stages.api_stage(int(year), out, True, 'rs%s' % _T[-6:])
-    print('\t'.join(['c3x-rvtsave', os.path.basename(src)[:8], year, scen, 'saved', 'eid=%s' % eid, 'revit_open=%s' % r['ok'], 'cmp=%s' % (r.get('cmp'),), 'dialogs=%s' % r.get('dialogs'), 'failures=%s' % r.get('failures'), (r.get('err') or '')[:100]]))
+    print('\t'.join(['c3x-rvtsave', os.path.basename(src)[:8], year, scen, 'saved', 'eid=%s' % eid, 'revit_open=%s' % r['ok'], 'cmp=%s' % (r.get('cmp'),), 'dialogs=%s' % r.get('dialogs'), 'failures=%s' % r.get('failures'), (r.get("err") or "")[:400]]))
     for pl in r.get('probe') or []: print('PROBE', pl)      # compare with the same probe on the unedited source (RVTSAVE control) to prove the edit landed
 if __name__ == '__main__': main(*sys.argv[1:])
