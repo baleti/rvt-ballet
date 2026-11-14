@@ -180,6 +180,12 @@ def _seg_job2(job):
 
 
 def build(path, workers=None, log=None, force=False):
+    """element index of one file, refused (FileChanged / InUse) when the file is being saved or changes while it is indexed"""
+    from . import stable
+    with stable.guard(path): return _build(path, workers=workers, log=log, force=force)
+
+
+def _build(path, workers=None, log=None, force=False):
     """build (or load) the index"""
     import multiprocessing as mp
     t0 = time.time(); say = log or (lambda *a: None)

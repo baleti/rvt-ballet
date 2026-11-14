@@ -25,3 +25,14 @@ def test_convert_unchanged_passes(monkeypatch):
     monkeypatch.setattr(build, '_convert', lambda *a, **k: 'ok')
     try: assert build.convert(f, d + '/out') == 'ok'
     finally: shutil.rmtree(d, ignore_errors=True)
+
+
+def test_elemindex_build_torn_refused(monkeypatch):
+    from rvtballet import elemindex
+    d = tempfile.mkdtemp(); f = mkfile(d); monkeypatch.setenv(stable.ENV_QUIET, '0'); monkeypatch.setattr(stable, 'cfb_check', lambda *a, **k: None)
+    def fake(path, **k):
+        with open(path, 'r+b') as o: o.write(b'torn')
+    monkeypatch.setattr(elemindex, '_build', fake)
+    try:
+        with pytest.raises(stable.FileChanged): elemindex.build(f)
+    finally: shutil.rmtree(d, ignore_errors=True)
