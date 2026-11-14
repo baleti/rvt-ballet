@@ -55,7 +55,7 @@ def fmt(v):
     return v if isinstance(v, (int, str, type(None))) else str(v)[:60]
 
 
-def joined_runs(fa, fb, pns, maxruns=12, ctx=0):
+def joined_runs(fa, fb, pns, maxruns=int(os.environ.get('RVT_DIFF_MAXRUNS', 12)), ctx=0):
     """byte runs that differ in the decompressed ('joined') partition bodies; catches changes the header/record walker cannot see (zone items, instance bodies)"""
     out = {}
     ma, mb = wledit.Editor(fa).m, wledit.Editor(fb).m
