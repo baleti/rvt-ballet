@@ -402,7 +402,7 @@ def scan(path, log=None, want_elements=False, progress=None, _seg=None, _out=Non
     cc = collections.Counter()
     from . import categories as CT
     for v, c in zip(u.tolist(), n.tolist()):
-        if v != NOCAT: cc[cat.get(str(v), 'cat %s' % v)] += c
+        if v != NOCAT: cc[cat.get(str(v), '(built-in id %s, not in the category table)' % v if v < -1 else '(user category id %s)' % v)] += c
     nm_ = seen & (a_cat == NOCAT); un, nn = np.unique(a_cls[nm_], return_counts=True)       # no category in the file (Revit API Category is null too): explained per class
     for i_, c in zip(un.tolist(), nn.tolist()): cc['(no category: %s) %s' % (CT.kind(cnames_l[i_]) if i_ != 65535 else 'other', cnames_l[i_] if i_ != 65535 else '?')] += c
     res['counts'] = dict(cc.most_common())
