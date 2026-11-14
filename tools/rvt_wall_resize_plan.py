@@ -15,11 +15,19 @@ def plan(tpl, vals, tol=1e-6):
             for name, t in vals.items():
                 if t and (abs(v - t) < tol or abs(v + t) < tol): hits[name].append((k, o, v))
     return dict(hits)
+def collisions(vals, others, tol=1e-6):
+    """names of end coordinates that equal (in magnitude) another dimension of the wall (height, thickness, base offset...):
+    their hits cannot be told from the other dimension, so the planner must refuse"""
+    return [n for n, t in vals.items() if t and any(abs(abs(t) - abs(o)) < tol for o in others)]
 def main(path, eid, x1, y1, wl=None):
     wl = wl or os.path.expanduser('~/rvt-research/write-lab')
     os.chdir(wl); sys.path.insert(0, '.'); import rvtgen
     tpl = rvtgen.Gen(path).template(int(eid))
-    h = plan(tpl, {'x1': float(x1), 'y1': float(y1)})
+    vals = {'x1': float(x1), 'y1': float(y1)}
+    others = [float(v) for v in os.environ.get('WALL_OTHER_DIMS', '').split(',') if v]
+    bad = collisions(vals, others)
+    if bad: print('refuse: end coordinate collides with another wall dimension:', bad); return 2
+    h = plan(tpl, vals)
     for n, l in h.items(): print(n, len(l), 'fields', l[:6])
     if not h: print('no match: refuse'); return 2
     return 0
