@@ -229,10 +229,9 @@ def _build(path, workers=None, log=None, force=False):
 
 
 def _resolved_categories(path, ids):
-    """builtin category per id (sub/user categories resolved through CategoryElem parents, as fastinfo.scan does); NOCAT (-2**62) where the file has none. Taken from one fastinfo.scan at build time
-    (that scan stops early once every header is found); ids scan does not know get NOCAT."""
-    from . import fastinfo as FI
-    r = FI.scan(path, want_elements=True)["arrays"]; sid = r["id"]; sc = r["cat"]
+    """builtin category per id (sub/user categories resolved through CategoryElem parents, as fastquery.scan does); NOCAT (-2**62) where the file has none. Taken from one fastquery.scan at build time; ids scan does not know get NOCAT."""
+    from . import fastquery as Q
+    r = Q.scan(path, want_elements=True)["arrays"]; sid = r["id"]; sc = r["cat"]
     o = np.argsort(sid); sid = sid[o]; sc = sc[o]; k = np.searchsorted(sid, ids); k[k >= len(sid)] = 0
     ok = sid[k] == ids; out = np.full(len(ids), -(1 << 62), dtype=np.int64); out[ok] = sc[k][ok]
     return out
@@ -381,6 +380,8 @@ def compare_partitions(orig, out, name, allow_added=True):
     core = ta.rstrip(b"\x00")
     if tb.startswith(core): slack = tb[len(core):]
     else:
+        nz_a = len(ta) - ta.count(0); nz_b = len(tb) - tb.count(0)
+        if nz_a and nz_b < 0.9 * nz_a: reasons.append("trailer damaged: %d non-zero bytes -> %d (a zeroed trailer run made Revit 2024 refuse the file; legit saves keep the count)" % (nz_a, nz_b))
         warnings.append("tail block (%d B, %d non-zero) differs from the original (%d non-zero): a high-entropy trailer after the last segment changed; meaning unknown, VM-check it" % (len(tb), len(tb) - tb.count(0), len(ta) - ta.count(0)))
     if slack.count(0) != len(slack): reasons.append("tail slack is not all zero")
     return dict(ok=not reasons, reasons=reasons, warnings=warnings, changed_segments=changed, added_segments=added, tail_slack=len(slack), tail_slack_all_zero=(slack.count(0) == len(slack)))

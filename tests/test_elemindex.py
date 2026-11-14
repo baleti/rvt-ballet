@@ -93,3 +93,12 @@ def test_gate_catches_corruption(mutation):
         r = X.compare_partitions(oa, X._open(b), n)
         assert not r["ok"], (mutation, r)
     finally: shutil.rmtree(d, ignore_errors=True)
+
+
+def test_gate_rejects_zeroed_trailer():
+    """Revit 2024 refuses a file whose partition trailer run is zeroed (CorruptModelException, VM-judged 2026-11-14); compare_partitions must hard-fail it, while a 1-bit flip (opens clean) stays a warning"""
+    orig = os.path.expanduser("~/demo-state/c3x-codexlab-oracle/2024_hvac_original.rvt"); z = os.path.expanduser("~/c9x-var24/tail_zero.rvt"); fl = os.path.expanduser("~/c9x-var24/tail_flip1.rvt")
+    if not all(os.path.exists(p) for p in (orig, z, fl)): pytest.skip("trailer variants not available")
+    X._paths(); a = X._open(orig)
+    assert not X.compare_partitions(a, X._open(z), "Partitions/21")["ok"]
+    assert X.compare_partitions(a, X._open(fl), "Partitions/21")["ok"]
