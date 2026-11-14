@@ -51,7 +51,7 @@ def run(stop):
     pr = subprocess.Popen([sys.executable, '-c', CH, HERE, p, str(stop)], env=env, stdout=subprocess.PIPE, stderr=(None if os.environ.get("KILL_DEBUG") else subprocess.DEVNULL), text=True); calls = []
     for line in pr.stdout:
         calls.append(line.split()[1:] if line.startswith('CALL') else line.strip())
-        if stop and line.startswith('CALL %d ' % stop): pr.send_signal(signal.SIGKILL); break
+        if stop and line.startswith('CALL %d ' % stop): pr.send_signal(getattr(signal, os.environ.get("KILL_SIG", "SIGKILL"))); break
     pr.wait(); return w, p, calls
 w, p, calls = run(0); shutil.rmtree(w, True); w, p, calls = run(0); names = [c[1] for c in calls if isinstance(c, list)]; total = len(names); assert total > 0, 'the warm save made no fsync/replace/rename call (child crashed or refused): %r' % calls[:3]; print('calls in a warm full save:', total, names[:40], [c for c in calls if isinstance(c, str) and c.startswith('REFUSED')]); shutil.rmtree(w, True)
 bad = 0; res = {}
