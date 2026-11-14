@@ -15,7 +15,7 @@ What is checked, in order, for every .rvt/.rte/.rfa argument:
 the copy only when the source fingerprint is equal before and after and the copy matches size and sampled blocks, query the copy, delete it.
 
 Measured overhead, unchanged 22 MB HVAC sample: guard 2 ms (fingerprint 0.7 ms, header/FAT check 4.5 ms); both are independent of file size
-except the FAT read (1 MB per GB). Not measured on 1 GB.
+except the FAT read (1 MB per GB). Measured on a 1 GB random file on local disk, page cache warm: fingerprint 0.6 to 1.2 ms per call (two per query), so well under 0.1 s; cold-cache and 9p cost not measured.
 
 Not guaranteed: a writer that rewrites bytes BETWEEN the sampled blocks without changing size or mtime_ns and finishes inside one query is only
 caught by `--snapshot` (which compares size and samples, not every byte either); a file system with coarse mtime (FAT, some 9p/SMB caches) weakens
