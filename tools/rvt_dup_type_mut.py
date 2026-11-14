@@ -1,4 +1,4 @@
-"""TEST TOOL: rvt_dup_type_gen.py with an env MUT hook that builds deliberately WRONG duplicate-type outputs (MUT=sur_wrong | row_junk | hdr_id) for gate escape hunts. usage: MUT=row_junk tools/rvt_dup_type_mut.py SEED.rvt OUT.rvt SYMBOL_EID NAME  (Autodesk samples only)"""
+"""TEST TOOL: rvt_dup_type_gen.py with an env MUT hook that builds deliberately WRONG duplicate-type outputs (MUT=sur_wrong | row_junk | hdr_id | no_latest | no_et) for gate escape hunts. usage: MUT=row_junk tools/rvt_dup_type_mut.py SEED.rvt OUT.rvt SYMBOL_EID NAME  (Autodesk samples only)"""
 import sys, struct, os; sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab')); sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 os.environ['RVT_GEOM'] = '1'
 import rvtgen
@@ -64,4 +64,6 @@ for Tm, i, is_sym in ((T, nid, True), (S, nsur, False)):
     if M == 'row_junk' and not is_sym: row = bytes(row[:-4]) + bytes(4 * [0xEE])      # ElemTable row tail corrupted
     if M == 'hdr_id' and is_sym: hdr = bytes(hdr).replace(b(i), b(i + 7))      # element header carries another id
     g.new.append((hdr, rec, item, i)); g.rows.append(row)
+if os.environ.get('MUT') == 'no_latest': g.latest_edits = []      # new ids never added to the Global/Latest id-lists
+if os.environ.get('MUT') == 'no_et': g.skip_elemtable = True      # no ElemTable rows for the new elements
 g.commit(out); print('ok', out)
