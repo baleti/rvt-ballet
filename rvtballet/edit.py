@@ -43,7 +43,7 @@ def _check_text(v):
     if any(ord(ch) > 0xFFFF for ch in v): raise EditError('characters outside the Basic Multilingual Plane (emoji, rare CJK) are not supported in values yet; nothing was changed')
 
 
-_OP_KEYS = {'set_string': {'op', 'eid', 'param', 'value', 'match', 'field', 'pid', 'pids', 'kind', 'expect'}, 'move': {'op', 'eid', 'dx', 'dy', 'dz'}, 'set_num': {'op', 'eid', 'param', 'pid', 'pids', 'value', 'kind'}, 'delete': {'op', 'eid'}, 'rotate': {'op', 'eid', 'deg'}, 'change_type': {'op', 'eid', 'type_eid'}, 'set_type_num': {'op', 'eid', 'param', 'pid', 'value'}, 'set_type_eid': {'op', 'eid', 'pid', 'target'}, 'set_type_material': {'op', 'eid', 'target'}, 'set_link_path': {'op', 'eid', 'value'}, 'set_link_override': {'op', 'eid', 'link', 'linked_view'}, 'set_room_bounding': {'op', 'eid', 'value'}}      # strict key sets only for ops whose optional keys are safety guards
+_OP_KEYS = {'set_string': {'op', 'eid', 'param', 'value', 'match', 'field', 'pid', 'pids', 'kind', 'expect'}, 'move': {'op', 'eid', 'dx', 'dy', 'dz'}, 'set_num': {'op', 'eid', 'param', 'pid', 'pids', 'value', 'kind'}, 'delete': {'op', 'eid'}, 'rotate': {'op', 'eid', 'deg'}, 'change_type': {'op', 'eid', 'type_eid'}, 'set_type_num': {'op', 'eid', 'param', 'pid', 'value'}, 'set_type_eid': {'op', 'eid', 'pid', 'target'}, 'set_type_material': {'op', 'eid', 'target'}, 'set_link_path': {'op', 'eid', 'value'}, 'set_link_load': {'op', 'eid', 'value'}, 'set_link_override': {'op', 'eid', 'link', 'linked_view'}, 'set_room_bounding': {'op', 'eid', 'value'}}      # strict key sets only for ops whose optional keys are safety guards
 
 
 # VM-measured (c6x-rvtwrite, 2024 and 2025 Snowdon HVAC): writing the stored ParamValueInt of these does not change what the Revit API reports
@@ -63,7 +63,7 @@ REVIT_IGNORES_STORED_INT = {'Return Airflow', 'Power Load Units', 'Lighting Load
 
 
 def validate_op(op):
-    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate', 'change_type', 'set_link_override', 'set_type_num', 'set_type_eid', 'set_type_material', 'set_link_path', 'set_room_bounding'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
+    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate', 'change_type', 'set_link_override', 'set_type_num', 'set_type_eid', 'set_type_material', 'set_link_path', 'set_link_load', 'set_room_bounding'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
     if not isinstance(op.get('eid'), int) or isinstance(op.get('eid'), bool): raise EditError('eid (element id) must be an integer')
     _ok = _OP_KEYS.get(op['op'])
     if _ok is not None and set(op) - _ok: raise EditError('unknown key(s) %s for %s (a misspelt guard such as match would be silently dropped): nothing was changed' % (sorted(set(op) - _ok), op['op']))
@@ -123,6 +123,11 @@ def validate_op(op):
         for k in ('link', 'linked_view'):
             if not isinstance(op.get(k), int) or isinstance(op.get(k), bool) or op[k] <= 0: raise EditError('%s must be a positive element id' % k)
         return {'op': 'set_link_override', 'eid': op['eid'], 'link': op['link'], 'linked_view': op['linked_view']}
+    if op['op'] == 'set_link_load':
+        if os.environ.get('RVTBALLET_ENABLE_LINKLOAD') != '1': raise EditError('link load-state edit is disabled (opt-in: RVTBALLET_ENABLE_LINKLOAD=1; Revit-verified on 2024 and 2026 only)')
+        if BACKEND() != 'rvtedit': raise EditError('link load-state edit needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
+        if not isinstance(op.get('value'), bool): raise EditError('value must be true (load) or false (unload)')
+        return {'op': 'set_link_load', 'eid': op['eid'], 'value': op['value']}
     if op['op'] == 'set_link_path':
         if os.environ.get('RVTBALLET_ENABLE_LINKPATH') != '1': raise EditError('link path edit is disabled (opt-in: RVTBALLET_ENABLE_LINKPATH=1; Revit-verified on 2024 only)')
         if BACKEND() != 'rvtedit': raise EditError('link path edit needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
@@ -199,6 +204,7 @@ def compose(ops):
         elif o['op'] == 'set_room_bounding': k = ('set_room_bounding', e)      # the last value wins
         elif o['op'] == 'set_type_material': k = ('set_type_material', e)
         elif o['op'] == 'change_type': k = ('change_type', e)      # the last type wins
+        elif o['op'] == 'set_link_load': k = ('set_link_load', e)      # the last value wins
         elif o['op'] == 'set_link_path': k = ('set_link_path', e)      # the last path wins
         elif o['op'] == 'set_link_override': k = ('set_link_override', e, o['link'])      # the last setting wins
         if k is None: out.append(o); continue
@@ -361,13 +367,13 @@ def _apply_rvtedit(a, b, ops):
             for o in ops:
                 try:
                     pn = (getattr(probe, 'latest_partition', lambda e: None)(o['eid']) or probe.g.e.trace(o['eid'])[0])
-                    if o['op'] != 'set_link_path' and not (o['op'] in ('set_string', 'set_num') and o.get('kind') in ('AString', 'Double', 'Int') and os.environ.get('RVTBALLET_MULTIPART_PARAM') == '1') and isinstance(o.get('eid'), int) and len({q for q, *_ in probe.g.e.m.find(o['eid'])}) > 1 and os.environ.get('RVTBALLET_MULTIPART_OK') != '1':      # c5x-rvtlink 2026-11-13: the episode heuristic picked the copy Revit ignores for a 2026 link type (silent no-op the witness cannot see)
+                    if o['op'] not in ('set_link_path', 'set_link_load') and not (o['op'] in ('set_string', 'set_num') and o.get('kind') in ('AString', 'Double', 'Int') and os.environ.get('RVTBALLET_MULTIPART_PARAM') == '1') and isinstance(o.get('eid'), int) and len({q for q, *_ in probe.g.e.m.find(o['eid'])}) > 1 and os.environ.get('RVTBALLET_MULTIPART_OK') != '1':      # c5x-rvtlink 2026-11-13: the episode heuristic picked the copy Revit ignores for a 2026 link type (silent no-op the witness cannot see)
                         raise EditError('element %d has records in several partitions (Revit may read a copy this edit would not change; 2026 Electrical sample: 19%% of sampled elements, 2024 Facades: 0%%): %s refused' % (o['eid'], o['op']))
                     if o['op'] == 'rotate' and pn != probe.g.e.trace(o['eid'])[0]:      # older copy elsewhere: the reader sees the OLD copy, so the rotation could not be verified (QUEUE 59e)
                         raise EditError('element %d has records in several partitions (the edit would go to the newest copy, which the viewer cannot read back): rotate refused' % o['eid'])
                 except EditError: raise
                 except Exception: pn = None
-                if o['op'] == 'set_link_path' or (o['op'] in ('set_string', 'set_num') and o.get('kind') in ('AString', 'Double', 'Int') and os.environ.get('RVTBALLET_MULTIPART_PARAM') == '1'):      # c5x-rvtlink: edit EVERY partition copy of the link type (2026 Electrical: 39 and 41, Revit reads 41); one pass per partition
+                if o['op'] in ('set_link_path', 'set_link_load') or (o['op'] in ('set_string', 'set_num') and o.get('kind') in ('AString', 'Double', 'Int') and os.environ.get('RVTBALLET_MULTIPART_PARAM') == '1'):      # c5x-rvtlink: edit EVERY partition copy of the link type (2026 Electrical: 39 and 41, Revit reads 41); one pass per partition
                     try: _ps = sorted({str(q) for q, *_ in probe.g.e.m.find(o['eid'])})
                     except Exception: _ps = []
                     if len(_ps) > 1:
@@ -497,6 +503,25 @@ def _set_link_path(ed, o):
 _LINK_OVR_TEMPLATE = bytes.fromhex('01000000e1cf14000000000000000000000000001ae501000000000000000000ffffffffffffffffffffffffffffffff00000000010000000100000000000000010000000100000000000000010000000100000001000000010000000100000001000000010000000100000001000000000000000100000001000000010000000100000001000000000000000000')
 
 
+def _set_link_load(ed, o):
+    """RvtLinkSymbol.m_shouldLoadSource 1 byte (Revit VM: 2024 HVAC and 2026 Structural, unload = IsLoaded True->False, other links unchanged; the TransmissionData DesiredLoadState copy is not needed). 2025 and older years are not VM-verified: refused. Link types with records in several partitions are refused."""
+    import struct
+    import re as _re, cfb as _cfb
+    try: fy = int(_re.search(r'(20[12]\d)', bytes(_cfb.CFB(open(ed.src, 'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le', 'ignore')).group(1))
+    except Exception: raise EditError('link load-state edit refused: cannot read the Revit version of the file')
+    if fy not in (2024, 2026): raise EditError('link load-state edit is only verified on Revit 2024/2026 files (this file is %d): refused' % fy)
+    try: log = ed.g.e.trace(o['eid'])[3]
+    except (IndexError, KeyError, StopIteration, OverflowError, TypeError, ValueError): raise EditError('element %r does not exist in this file: link load-state edit refused' % (o['eid'],))
+    ls = [l for l in log if l[1] == 'RvtLinkSymbol.m_shouldLoadSource']
+    if len(ls) != 1 or ls[0][3] - ls[0][2] != 1: raise EditError('element %d is not a link type with a one-byte load flag: refused' % o['eid'])
+    try: _parts = {pn for pn, *_ in ed.g.e.m.find(o['eid'])}
+    except Exception: _parts = set()
+    if len(_parts) > 1 and not os.environ.get('PART'): raise EditError('element %d has records in several partitions: Revit may read a copy this edit does not change: link load-state edit refused' % o['eid'])
+    b = _body(ed, o['eid'])
+    if b[ls[0][2]] not in (0, 1): raise EditError('element %d: unexpected load flag value %d: refused' % (o['eid'], b[ls[0][2]]))
+    ed._rec_edit(o['eid'], [(ls[0][2], 1, bytes([1 if o['value'] else 0]))])
+
+
 def _set_link_override(ed, o):
     """View link override 'by linked view': inserts one entry into RvtLinkOverrides.m_displaySettingsMap of a view record (Revit 2024 VM: the only change Revit made to the file is this 142-byte replacement of the map count in the view record). v1 handles the EMPTY map only (refuses a view that already has overrides) and needs the view to have RvtLinkOverrides; the link must be a RvtLinkSymbol/type of the file."""
     import struct
@@ -619,6 +644,7 @@ def _rvtedit_pass(a, b, ops):
                 ed.rotate(o['eid'], o['deg'])
             elif o['op'] == 'change_type': _change_type(ed, o)
             elif o['op'] == 'set_link_path': _set_link_path(ed, o)
+            elif o['op'] == 'set_link_load': _set_link_load(ed, o)
             elif o['op'] == 'set_link_override': _set_link_override(ed, o)
             elif o['op'] == 'set_num': _set_num_by_pid(ed, o)
             elif o['op'] == 'set_type_num': _set_type_num(ed, a, o)
