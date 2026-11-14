@@ -1,0 +1,6 @@
+# HANDOFF c3x-viewer (2026-11-14, account cap)
+Done: queue items 1-14, 16-25, 28 (see ~/demo-state/c3x-viewer-queue.md). Item 25: tests/test_save_double_move.py corrected (+1/-1 composes to no op; joined 606069 single move refused, double equals the no-edit save), passes, already in history (88a8b52). segedit set_num tests (4) pass.
+Also took over the rvtdel track (queue ~/demo-state/c3x-c3x-rvtdel-queue.md): 65c control done (unedited 2026 HVAC shows the same 5 Space DocWarns as the DBViewSchedule/IndependentTag delete outputs).
+Open: item 26/68: pid 1081340 `rvt_elemhash_readback.py 2026` (base + del_DBViewSchedule_1420970 + del_IndependentTag_1487204), waiting on the shared VM lock; log ~/c3x-rvtdel-work/y26b/eh.log, hashes in y26b/eh/. On finish: diff base vs outputs; if only the deleted element is gone, allowlist both classes for 2026 in rvtballet/edit.py _delete and record PASS (rvt-edit-record). Do not record before.
+Then item 27: VM open + readback of a segedit set_num Double edit on 2024 HVAC; item 15: Windows/mac smoke when an image exists.
+Uncommitted in tree and NOT mine: rvtballet/segedit.py, tools/rvt_changetype_flip.py, tools/rvt_import_bbox_readback.*, untracked tests/tools/HANDOFF lastscreen files.
