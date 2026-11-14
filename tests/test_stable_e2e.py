@@ -68,3 +68,17 @@ def test_continuous_writer_always_refused(ref, kind):
     try: rc, out, err = run(f)
     finally: stop.set(); th.join()
     assert rc == 75 and not out.strip(), 'rc=%s out=%r err=%r' % (rc, out[:100], err[:200])
+
+
+def test_snapshot_under_continuous_writer_refuses_and_cleans(ref, tmp_path):
+    """--snapshot while the source keeps changing: no answer (exit 75), and no private copy left in the temp dir"""
+    d, good = ref; f = os.path.join(d, 's.rvt'); shutil.copyfile(SRC, f); stop = threading.Event()
+    before = {n for n in os.listdir(tempfile.gettempdir()) if n.startswith('rvtsnap-')}
+    def w():
+        while not stop.is_set(): os.utime(f, None); time.sleep(0.02)
+    th = threading.Thread(target=w); th.start()
+    try: rc, out, err = run(f, '--snapshot')
+    finally: stop.set(); th.join()
+    assert rc == 75 and not out.strip(), 'rc=%s out=%r err=%r' % (rc, out[:100], err[:200])
+    left = [n for n in os.listdir(tempfile.gettempdir()) if n.startswith('rvtsnap-') and n not in before]
+    assert not left, left
