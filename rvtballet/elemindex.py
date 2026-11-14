@@ -185,10 +185,14 @@ def build(path, workers=None, log=None, force=False):
     want = np.array([hdr.get(int(e), (0, 0, 0, -1))[3] for e in a[:, 1]], dtype=np.int64)
     miss = (a[:, 4] != want).astype(np.int64)        # candidates whose class tag equals the header's class tag sort first (removes reference look-alikes)
     order = np.lexsort((a[:, 3], a[:, 2], a[:, 0], miss, a[:, 1])); a = a[order]
-    _, first = np.unique(a[:, 1], return_index=True); a = a[first]
+    _, first, cnt = np.unique(a[:, 1], return_index=True, return_counts=True)
+    NC = 4; alt = np.full((len(first), NC, 3), -1, dtype=np.int32)        # up to NC ranked candidates per id: (partition, segment, offset); the reader tries them until one decodes
+    for c in range(NC):
+        m = cnt > c; alt[m, c, 0] = a[first[m] + c, 0]; alt[m, c, 1] = a[first[m] + c, 2]; alt[m, c, 2] = a[first[m] + c, 3]
+    a = a[first]
     hv = np.array([hdr.get(int(e), (-1, -1, -1, -1)) for e in a[:, 1]], dtype=np.int64).reshape(-1, 4)
     has_hdr = np.array([int(e) in hdr for e in a[:, 1]])
-    out = dict(part=a[:, 0].astype(np.int16), id=a[:, 1].astype(np.uint64), seg=a[:, 2].astype(np.int32), off=a[:, 3].astype(np.int32), tag=a[:, 4].astype(np.int32), cat=hv[:, 0], ownerview=hv[:, 1], family=hv[:, 2], has_header=has_hdr,
+    out = dict(part=a[:, 0].astype(np.int16), id=a[:, 1].astype(np.uint64), seg=a[:, 2].astype(np.int32), off=a[:, 3].astype(np.int32), tag=a[:, 4].astype(np.int32), cat=hv[:, 0], ownerview=hv[:, 1], family=hv[:, 2], has_header=has_hdr, alt=alt,
                pns=np.array(pns))
     for pi, pn in enumerate(pns): out["segtab%d" % pi] = np.array(segtab[pn], dtype=np.int64).reshape(-1, 3)
     os.makedirs(CACHE, exist_ok=True); tmp = cp + ".tmp.%d.npz" % os.getpid(); np.savez(tmp, **out); os.replace(tmp, cp)
@@ -209,12 +213,18 @@ class Reader:
         if k >= len(s.ids) or int(s.ids[k]) != eid: return None
         j = int(s.sorted[k]); return {c: int(s.idx[c][j]) for c in ("part", "seg", "off", "tag", "cat", "ownerview")}
     def get(s, eid):
-        loc = s.locate(eid)
-        if loc is None: return None
-        pn = str(s.idx["pns"][loc["part"]]); P = _part(pn)
-        segs = s.segs.get(pn)
-        if segs is None: segs = s.segs[pn] = [tuple(int(x) for x in r) for r in s.idx["segtab%d" % loc["part"]]]
-        k = loc["seg"]; cur = P.inflate(segs[k]); chunk = cur + (P.inflate(segs[k + 1])[:TAIL] if k + 1 < len(segs) else b"")
-        r = _G["rd"].extract_chunk(chunk, _G["wanted"], _G["EH"], [eid], _G["wanted"])
-        loc["record"] = next((c for (e, c), _ in r[0] if int(e) == eid), None)      # class name of the body record decoded from the one segment
+        j = s._row(eid)
+        if j is None: return None
+        loc = {c: int(s.idx[c][j]) for c in ("part", "seg", "off", "tag", "cat", "ownerview")}; loc["tries"] = 0; loc["record"] = None
+        for pi, k, off in s.idx["alt"][j].tolist():
+            if pi < 0: break
+            pn = str(s.idx["pns"][pi]); P = _part(pn); segs = s.segs.get(pn)
+            if segs is None: segs = s.segs[pn] = [tuple(int(x) for x in r) for r in s.idx["segtab%d" % pi]]
+            chunk = P.inflate(segs[k]) + (P.inflate(segs[k + 1])[:TAIL] if k + 1 < len(segs) else b"")
+            r = _G["rd"].extract_chunk(chunk, _G["wanted"], _G["EH"], [eid], _G["wanted"]); loc["tries"] += 1
+            rec = next((c for (e, c), _ in r[0] if int(e) == eid), None)
+            if rec: loc.update(part=pi, seg=k, off=off, record=rec); break
         return loc
+    def _row(s, eid):
+        k = int(np.searchsorted(s.ids, eid))
+        return int(s.sorted[k]) if k < len(s.ids) and int(s.ids[k]) == eid else None
