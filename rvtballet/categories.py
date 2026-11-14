@@ -38,3 +38,17 @@ def resolve(cat, cls, cls_names, idarr, full, W=8):
         elif cn == "Family" and fam_of.get(eid) in own: out[i] = builtin(own[fam_of[eid]])
         else: out[i] = NOCAT
     return out
+
+
+_KINDS = (("sketch", ("SketchPlane", "VarSketch", "NonPlanarSketch", "Sketch")),
+          ("style", ("GStyleElem", "FontElem", "LinePattern", "FillPattern", "Appearance", "Attributes", "Style", "PenWidth", "Material")),
+          ("parameter", ("ParamElem", "ParamBinding", "Parameter")),
+          ("view", ("DBView", "DBDrawing", "Viewer", "Viewport", "Browser", "Callout", "Sheet", "Legend")),
+          ("setting", ("Settings", "Setting", "Phase", "Revision", "Units", "Numbering", "Scheme", "Tracker", "Topolog", "Filter", "Table", "Info")))
+
+
+def kind(cls_name):
+    """group of a class without a Revit category: sketch / style / parameter / view / setting / other (explains the (no category) bucket)"""
+    for k, keys in _KINDS:
+        if any(s in cls_name for s in keys): return k
+    return "other"

@@ -400,10 +400,11 @@ def scan(path, log=None, want_elements=False, progress=None, _seg=None, _out=Non
     a_cat = CT.resolve(a_cat, a_cls, np.array(cnames_l or ['']), idarr, full, W)
     u, n = np.unique(a_cat[seen], return_counts=True)
     cc = collections.Counter()
+    from . import categories as CT
     for v, c in zip(u.tolist(), n.tolist()):
         if v != NOCAT: cc[cat.get(str(v), 'cat %s' % v)] += c
     nm_ = seen & (a_cat == NOCAT); un, nn = np.unique(a_cls[nm_], return_counts=True)       # no category in the file (Revit API Category is null too): explained per class
-    for i_, c in zip(un.tolist(), nn.tolist()): cc['(no category) %s' % (cnames_l[i_] if i_ != 65535 else '?')] += c
+    for i_, c in zip(un.tolist(), nn.tolist()): cc['(no category: %s) %s' % (CT.kind(cnames_l[i_]) if i_ != 65535 else 'other', cnames_l[i_] if i_ != 65535 else '?')] += c
     res['counts'] = dict(cc.most_common())
     u, n = np.unique(a_cls[a_cls != 65535], return_counts=True)
     res['class_counts'] = dict(sorted(((cnames_l[int(i)], int(c)) for i, c in zip(u, n)), key=lambda t: -t[1]))
