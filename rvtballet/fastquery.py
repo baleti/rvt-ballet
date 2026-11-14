@@ -571,16 +571,20 @@ ALIASES = {
     'ViewSheet': ('DBViewDrafting',), 'ViewSchedule': ('DBViewSchedule',), 'ViewFamilyType': ('DBViewType',),
     'Level': ('Level',), 'Grid': ('Grid',), 'Wall': ('ArcWall', 'SWall', 'FaceWall'), 'WallType': ('WallType',),
     'Floor': ('Floor',), 'FloorType': ('FloorAttributes',), 'Ceiling': ('Ceiling',), 'CeilingType': ('CeilingAttributes', 'CeilingType'),
-    'RoofBase': ('RoofBase',), 'Roof': ('RoofBase',), 'RoofType': ('RoofAttributesBase',), 'Stairs': ('Stairs',), 'StairsType': ('StairsSym',),
+    'RoofBase': ('RoofBase',), 'Roof': ('RoofBase',), 'RoofType': ('RoofAttributesBase',), 'Stairs': ('StairsElement',), 'StairsType': ('StairsSym',),
+    'Area': ('RoomElem',), 'Space': ('RoomElem',), 'AnnotationSymbol': ('FamilyInstance',),
     'Railing': ('BaseRailing', 'Railing'), 'RailingType': ('BaseRailingSym', 'BaseRailingAttr'), 'FamilyInstance': ('FamilyInstance',),
     'FamilySymbol': ('FamilySymbol',), 'ElementType': ('Symbol',), 'Family': ('Family',), 'Material': ('MaterialElem',), 'Room': ('RoomElem',),
     'TextNote': ('TextNote',), 'Dimension': ('Dimension',), 'IndependentTag': ('IndependentTag', 'TagElem'), 'RevitLinkInstance': ('LinkInstance',),
     'Revision': ('ProjectRevision',), 'Viewport': ('Viewport',), 'Phase': ('ProjectPhase',), 'Group': ('ElementGroup',), 'GroupType': ('ElementGroupType',),
-    'CurtainGridLine': ('CurtainWallGridLine',), 'Mullion': ('Mullion',), 'Panel': ('Panel',),
+    'CurtainGridLine': ('CurtainWallGridLine',), 'Mullion': ('FamilyInstance',), 'Panel': ('FamilyInstance',),
 }
+# Revit API classes that the file stores as one schema class split by category (measured on the gt4 Revit dumps of 9 samples 2020-2026: AnnotationSymbol
+# = FamilyInstance in Generic Annotations, Mullion / Panel = FamilyInstance in Curtain Wall Mullions / Curtain Panels; Room / Area / Space = RoomElem in Rooms / Areas / Spaces)
+ALIAS_CATS = {'FamilyInstance': ('not', {-2000150, -2000170, -2000171}), 'AnnotationSymbol': ('in', {-2000150}), 'Mullion': ('in', {-2000171}), 'Panel': ('in', {-2000170}), 'Room': ('in', {-2000160}), 'Area': ('in', {-2003200}), 'Space': ('in', {-2003600})}
 # categories answered without a class: candidate classes (the ElementHeader category then filters exactly). Loadable-family categories -> FamilyInstance.
 CATEGORY_CLASSES = {
-    'Walls': ('ArcWall', 'SWall', 'FaceWall'), 'Floors': ('Floor',), 'Ceilings': ('Ceiling',), 'Roofs': ('RoofBase',), 'Stairs': ('Stairs', 'MultistoryStairs'),
+    'Walls': ('ArcWall', 'SWall', 'FaceWall'), 'Floors': ('Floor',), 'Ceilings': ('Ceiling',), 'Roofs': ('RoofBase',), 'Stairs': ('StairsElement', 'Stairs', 'MultistoryStairs'),
     'Railings': ('BaseRailing', 'Railing'), 'Rooms': ('RoomElem',), 'Levels': ('Level',), 'Grids': ('Grid',), 'Views': ('DBView',), 'Sheets': ('DBViewDrafting',),
     'Text Notes': ('TextNote',), 'Dimensions': ('Dimension',), 'Materials': ('MaterialElem',), 'Curtain Wall Mullions': ('Mullion', 'FamilyInstance'),
     'Curtain Panels': ('Panel', 'FamilyInstance', 'ArcWall'), 'RVT Links': ('LinkInstance',),
@@ -641,6 +645,7 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
         if roots is None: raise ValueError('category %r needs --class (no class map for it yet)' % category)
         want = _class_set(G['cls'], roots)
     if not want: raise ValueError('no schema class matches %r' % (cls,))
+    acat = ALIAS_CATS.get(cls if isinstance(cls, str) else (cls[0] if cls and len(cls) == 1 else None))
     tag_of = {n: t for t, n in G['cnames'].items()}
     aux = {'Level', 'CategoryElem', 'FamilySurrogate', 'FamSymSurrogate'}
     sym = subclasses(G['cls'], 'Symbol')
@@ -700,6 +705,8 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
         f = r['fields']; h = hdr.get(e)
         craw = _sid(h[0], W) if h else None; cb = builtin(craw)
         if cat is not None and cb != cat and craw != cat: continue
+        cid_ = cb if cb is not None else craw
+        if acat and (acat[0] == 'in' and cid_ not in acat[1] or acat[0] == 'not' and cid_ in acat[1]): continue
         t = tid.get(e); tr = types.get(t)
         lv = f.get('m_assocLevelId'); lv = lv if isinstance(lv, int) and lv > 0 else None
         row = {'id': e, 'class': c, 'name': f.get('name'), 'type_id': t, 'type_name': tr[1]['fields'].get('name') if tr else None,
