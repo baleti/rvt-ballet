@@ -225,3 +225,15 @@ def test_fuzz_timing(d):
             if ans != old: bad += 1                                           # accepted a mixed answer
         except S.FileChanged: changed += 1
     assert bad == 0 and changed > 0
+
+
+def test_future_mtime_clock_skew_does_not_block_forever(d):
+    """a share whose clock runs ahead (mtime an hour in the future) must not be refused for ever: the age is meaningless, the settle check decides"""
+    f = mk(d); t = time.time() + 3600; os.utime(f, (t, t))
+    S.wait_quiet(f, quiet=5, retries=0, settle=0.01)
+    with S.guard(f, quiet=5, check=False): pass
+
+
+def test_small_future_skew_waits_like_recent(d):
+    f = mk(d); t = time.time() + 2; os.utime(f, (t, t))        # 2 s ahead: still looks freshly written
+    with pytest.raises(S.InUse): S.wait_quiet(f, quiet=5, retries=0, settle=0)

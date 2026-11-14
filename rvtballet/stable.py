@@ -118,10 +118,10 @@ def wait_quiet(path, quiet=None, retries=6, backoff=1.0, settle=0.2, sleep=time.
         try: a = path_stamp(path)
         except OSError as ex: raise InUse(path, 'cannot stat it: %s' % ex)
         age = clock() - a[1] / 1e9; why = ''
-        if quiet and age < quiet: why = 'modified %.1f s ago' % age
-        elif age < -300 and quiet: why = ''   # clock skew (share): the age tells nothing, the settle check below still applies
+        skew = age < -300                      # mtime far in the future = clock skew of a share: the age tells nothing, the settle check below still applies
+        if quiet and age < quiet and not skew: why = 'modified %.1f s ago' % age
         if not why:
-            if settle and not (quiet and age >= quiet): sleep(settle)       # an old file needs no settle wait (the guard's closing fingerprint covers a silent writer)
+            if settle and not (quiet and age >= quiet and not skew): sleep(settle)       # an old file needs no settle wait (the guard's closing fingerprint covers a silent writer)
             try: b = path_stamp(path)
             except OSError as ex: raise InUse(path, 'cannot stat it: %s' % ex)
             if a[:2] != b[:2]: why = 'size or modification time still changing'
@@ -227,3 +227,46 @@ def snapshot(path, tmpdir=None, attempts=3, quiet=None, chunk=8 << 20, log=None)
         raise InUse(src, 'changed during every one of %d snapshot attempts' % attempts)
     finally:
         if tmp: shutil.rmtree(tmp, ignore_errors=True)
+
+
+_ACTIVE = []
+_EXT = ('.rvt', '.rte', '.rfa', '.rft')
+
+
+def run(argv, fn, say=print):
+    """entry-point wrapper used by the read-only commands: fn(argv, say) runs with every .rvt/.rte/.rfa path argument guarded (quiet period, closing
+    fingerprint). Options understood and removed here: --snapshot (query a verified private copy), --quiet-secs N (default 5, 0 = off).
+    A change during the read, a file still being saved and a half-written file end in a one-line message and exit 75 / 75 / 1, never in an answer."""
+    argv = list(argv); snap = False; quiet = None; out = []; i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == '--snapshot': snap = True
+        elif a == '--quiet-secs' and i + 1 < len(argv):
+            try: quiet = float(argv[i + 1])
+            except ValueError: print('rvt-ballet: --quiet-secs needs a number', file=sys.stderr); return 2
+            i += 1
+        elif a.startswith('--quiet-secs='):
+            try: quiet = float(a.split('=', 1)[1])
+            except ValueError: print('rvt-ballet: --quiet-secs needs a number', file=sys.stderr); return 2
+        else: out.append(a)
+        i += 1
+    argv = out
+    if _ACTIVE or not enabled(): return fn(argv, say)
+    idx = [k for k, a in enumerate(argv) if a.lower().endswith(_EXT) and os.path.isfile(a)]
+    if not idx: return fn(argv, say)
+    _ACTIVE.append(1)
+    try:
+        with contextlib.ExitStack() as st:
+            for k in idx:
+                p = argv[k]
+                if snap:
+                    argv[k] = st.enter_context(snapshot(p, quiet=quiet, log=lambda m: print('rvt-ballet: ' + m, file=sys.stderr)))
+                else:
+                    st.enter_context(guard(p, quiet=quiet))
+            return fn(argv, say)
+    except (FileChanged, InUse) as ex:
+        print('rvt-ballet: %s' % ex, file=sys.stderr); return 75
+    except Damaged as ex:
+        print('rvt-ballet: %s' % ex, file=sys.stderr); return 1
+    finally:
+        _ACTIVE.pop()
