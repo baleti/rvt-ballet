@@ -13,11 +13,15 @@ def damage(p, how):
         with open(p, 'r+b') as f: f.truncate(n - 1)
     elif how == 'zero_block':
         with open(p, 'r+b') as f: f.seek(2000 * 4096); f.write(b'\0' * 16 * 4096)
+    elif how == 'append_zero':
+        with open(p, 'ab') as f: f.write(b'\0' * 4096)
+    elif how == 'append_junk':
+        with open(p, 'ab') as f: f.write(b'JUNKJUNK' * 512)
     elif how == 'trunc100k':
         with open(p, 'r+b') as f: f.truncate(n - 102400)
 T = tempfile.mkdtemp(); fails = []
 try:
-    for how in ('flip_mid', 'trunc1', 'zero_block', 'trunc100k'):
+    for how in tuple(os.environ.get('HOWS', 'flip_mid,trunc1,zero_block,trunc100k').split(',')):
         D = os.path.join(T, how); os.makedirs(D); P = D + '/ip.rvt'; shutil.copy(S, P); damage(P, how); before = sha(P)
         open(D + '/gate.json', 'w').write('{"rvt": {"2024": "open"}}')
         env = dict(os.environ, SAVEGATE_JOURNAL=D + '/j', SAVEGATE_CACHE=D + '/c', RVTBALLET_ALLOW_OVERWRITE='1', SAVEGATE_GATE=D + '/gate.json')
