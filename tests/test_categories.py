@@ -26,3 +26,12 @@ def test_subcategory_names():
     from rvtballet import categories as C
     full = {(3, "CategoryElem"): {"id": 3, "fields": {"m_name": "SH01_x"}}, (4, "CategoryElem"): {"id": 4, "fields": {}}, (5, "Level"): {"id": 5, "fields": {"m_name": "L"}}}
     assert C.subcategory_names(full) == {3: "SH01_x"}
+
+
+def test_counts_json_lists_subcategories():
+    import os, subprocess, json, pytest
+    f = os.path.expanduser("~/rvt-research/corpus/2024/42_Snowdon_Towers_Sample_HVAC.rvt")
+    if not os.path.exists(f): pytest.skip("Autodesk sample not available")
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    out = json.loads(subprocess.run([os.path.join(here, "rvt-ballet"), "counts", "--json", f], capture_output=True, text=True, check=True).stdout)
+    assert "Overhead Lines" in out["subcategories"] and len(out["subcategories"]) == 7
