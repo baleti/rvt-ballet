@@ -32,3 +32,13 @@ def test_framing_support_move_is_risky():
     buf = open(STRUCT, 'rb').read()
     r = risky_membership(membership(buf, {608203}), [{'op': 'move', 'eid': 608203}])
     assert any(x.startswith('supports ') for x in r.get(608203, [])), r
+
+
+@pytest.mark.parametrize('y,f', [(2025, '48_Snowdon_Towers_Sample_HVAC.rvt'), (2026, '54_Snowdon_Towers_Sample_HVAC.rvt')])
+def test_connected_fitting_move_is_risky_2025_2026(y, f):
+    p = os.path.expanduser('~/rvt-research/corpus/%d/%s' % (y, f))
+    if not os.path.exists(p): pytest.skip('sample not present')
+    from rvtballet.save import membership, risky_membership
+    ids = [1409785, 1407319]
+    r = risky_membership(membership(open(p, 'rb').read(), set(ids)), [{'op': 'move', 'eid': i} for i in ids])
+    for i in ids: assert any(x.startswith('connected to ') for x in r.get(i, [])), r
