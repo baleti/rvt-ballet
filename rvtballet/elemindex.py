@@ -149,7 +149,7 @@ def header_region(pn, segs, stop=30):
         for e, h in r[1]:
             e = int(e)
             if e not in out: cd = h.get("m_classDef"); cd = cd.get("m_ref") if isinstance(cd, dict) else cd
-            out[e] = (_i(h.get("m_categroryId")), _i(h.get("m_ownerViewId")), _i(h.get("m_familyId")), cd if isinstance(cd, int) else -1); n += 1
+            out[e] = (_i(h.get("m_categroryId")), _i(h.get("m_ownerViewId")), _i(h.get("m_familyId")), cd if isinstance(cd, int) else -1, _G["pidx"][pn], k); n += 1
         empty = 0 if n else empty + 1
         if empty >= stop and out: break
     return out
@@ -160,6 +160,19 @@ def _seg_job(job):
     pn, k, segs = job; P = _part(pn); W = _G["W"]
     cur = P.inflate(segs[k]); cand = _cands(cur + (P.inflate(segs[k + 1])[:256] if k + 1 < len(segs) else b""), len(cur), _G["ids"], W, _G["tagmask"])
     return [(e, k, p_, t) for p_, e, t in cand]
+
+
+def _reopen(path):
+    """forked workers must not share the parent's file handle (interleaved seeks)"""
+    _G["o"] = _open(path); _G["parts"] = {}
+
+
+def _seg_job2(job):
+    """admin classes (no standard element-header candidate): the segment holding a decoded record of a missing id (segment granularity, off = -1)"""
+    pn, k, segs = job; P = _part(pn); miss = _G["missing"]
+    ch = P.inflate(segs[k]) + (P.inflate(segs[k + 1])[:TAIL] if k + 1 < len(segs) else b"")
+    r = _G["rd"].extract_chunk(ch, _G["wanted"], _G["EH"], miss, _G["wanted"])
+    return [(int(e), k, -1, -1) for (e, c), _ in r[0] if int(e) in _G["missset"]]
 
 
 def build(path, workers=None, log=None, force=False):
@@ -173,12 +186,16 @@ def build(path, workers=None, log=None, force=False):
     say("segment tables: %d partitions, %d segments, %.1fs" % (len(pns), sum(len(v) for v in segtab.values()), time.time() - t0))
     workers = workers or max(1, (os.cpu_count() or 2) - 1)
     rows = []; _winit(path); hdr = {}
+    _G["pidx"] = {pn: i for i, pn in enumerate(pns)}
     for pn in pns: hdr.update(header_region(pn, segtab[pn]))
     say("header region: %d headers, %.1fs" % (len(hdr), time.time() - t0))
     with mp.get_context("fork").Pool(workers, initializer=_winit, initargs=(path,)) as pool:
         for pi, pn in enumerate(pns):
             for r in pool.imap(_seg_job, [(pn, k, segtab[pn]) for k in range(len(segtab[pn]))], chunksize=4):
                 rows.extend((pi,) + x for x in r)
+    have = {r[1] for r in rows}      # ids with an ElementHeader in the header region but no standard body candidate (GStyleElem, CategoryElem, ...): header-only rows (off = -1, no alt)
+    for e, (c, o_, f, cd, hp, hk) in hdr.items():
+        if e not in have: rows.append((hp, e, hk, -1, -1))
     a = np.array(rows, dtype=np.int64).reshape(-1, 5)
     order = np.lexsort((a[:, 3], a[:, 2], a[:, 0], a[:, 1]))     # first-wins in file order, same rule as fastinfo.scan
     a = a[order]
@@ -190,7 +207,7 @@ def build(path, workers=None, log=None, force=False):
     for c in range(NC):
         m = cnt > c; alt[m, c, 0] = a[first[m] + c, 0]; alt[m, c, 1] = a[first[m] + c, 2]; alt[m, c, 2] = a[first[m] + c, 3]
     a = a[first]
-    hv = np.array([hdr.get(int(e), (-1, -1, -1, -1)) for e in a[:, 1]], dtype=np.int64).reshape(-1, 4)
+    hv = np.array([hdr.get(int(e), (-1, -1, -1, -1))[:4] for e in a[:, 1]], dtype=np.int64).reshape(-1, 4)
     has_hdr = np.array([int(e) in hdr for e in a[:, 1]])
     out = dict(part=a[:, 0].astype(np.int16), id=a[:, 1].astype(np.uint64), seg=a[:, 2].astype(np.int32), off=a[:, 3].astype(np.int32), tag=a[:, 4].astype(np.int32), cat=hv[:, 0], ownerview=hv[:, 1], family=hv[:, 2], has_header=has_hdr, alt=alt,
                pns=np.array(pns))
