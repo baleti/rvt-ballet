@@ -261,3 +261,24 @@ def test_run_snapshot_source_vanishes(d, capsys, monkeypatch):
 
 def test_run_bad_quiet_arg(d):
     assert S.run(['x.rvt', '--quiet-secs', 'abc'], lambda a, s: 0) == 2
+
+
+def test_full_hash_catches_write_between_samples(d, monkeypatch):
+    f = os.path.join(d, 'big.bin'); n = S.HEAD + 2 * S.BLOCK * S.NSAMPLES + (4 << 20)
+    open(f, 'wb').write(b'\0' * n)
+    offs = S._offsets(n); gap = None
+    for o in range(S.HEAD, n - S.HEAD):
+        if all(not (a <= o < a + l) for a, l in offs): gap = o; break
+    assert gap is not None
+    def edit():
+        st = os.stat(f)
+        with open(f, 'r+b') as o: o.seek(gap); o.write(b'X')
+        os.utime(f, ns=(st.st_atime_ns, st.st_mtime_ns))
+    a = S.fingerprint(f); edit(); b = S.fingerprint(f)
+    assert not a.diff(b)  # sampled mode misses it: documented residual risk
+    monkeypatch.setenv(S.ENV_FULL, '1')
+    f2 = os.path.join(d, 'big2.bin'); open(f2, 'wb').write(b'\0' * n)
+    a = S.fingerprint(f2); st = os.stat(f2)
+    with open(f2, 'r+b') as o: o.seek(gap); o.write(b'X')
+    os.utime(f2, ns=(st.st_atime_ns, st.st_mtime_ns))
+    assert 'sampled content' in a.diff(S.fingerprint(f2))

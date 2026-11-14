@@ -23,3 +23,5 @@ check 1 and 3; Windows share modes are invisible from WSL; side files are only s
 
 Observed Revit write pattern: NOT measured yet (no VM lane free). The tests emulate in-place chunked overwrite (also with mtime restored),
 truncate then rewrite, temp file plus atomic rename, append, symlink swap.
+
+Strict mode: RVTBALLET_FULL_HASH=1 makes the fingerprint hash the whole file (catches a rewrite between sampled blocks with the mtime restored; costs one full read of the file, so about the snapshot copy time).

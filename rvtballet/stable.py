@@ -61,8 +61,18 @@ def _offsets(size):
     return offs
 
 
+ENV_FULL = 'RVTBALLET_FULL_HASH'   # '1': fingerprint hashes the whole file (catches a rewrite between sampled blocks with unchanged mtime; costs a full read)
+
+
 def sample_hash(fd, size):
     h = hashlib.blake2b(digest_size=16)
+    if os.environ.get(ENV_FULL) == '1':
+        off = 0
+        while off < size:
+            b = os.pread(fd, 8 << 20, off)
+            if not b: break
+            h.update(b); off += len(b)
+        return h.hexdigest()
     for off, ln in _offsets(size):
         b = os.pread(fd, ln, off); h.update(struct.pack('<QQ', off, len(b))); h.update(b)
     return h.hexdigest()
