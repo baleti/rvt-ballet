@@ -247,3 +247,26 @@ class Reader:
     def _row(s, eid):
         k = int(np.searchsorted(s.ids, eid))
         return int(s.sorted[k]) if k < len(s.ids) and int(s.ids[k]) == eid else None
+
+
+def verify_partition(o, name):
+    """integrity of the segment chain of one partition (read-only; for a writer's post-save gate): every segment inflates to exactly its declared inflated_len with a matching gzip CRC32/ISIZE trailer,
+    segments do not overlap, and the bytes between segments (interludes) are returned so a writer can prove it kept them byte-identical.
+    -> dict(segments, bad, interlude_bytes, interlude_sha1, covered)"""
+    P = Part(o, name); segs = P.segments(); bad = []; deltas = {}; pos = 0; inter = hashlib.sha1(); ib = 0; prev_end = None
+    for i, (off, ln, il) in enumerate(segs):
+        hdr = off - 24
+        if prev_end is not None and hdr < prev_end: bad.append((i, "overlap"))
+        gap_a = prev_end if prev_end is not None else 0
+        if hdr > gap_a: g = P.payload(gap_a, hdr - gap_a); inter.update(g); ib += len(g)
+        raw = P.payload(off, ln)
+        try:
+            d = zlib.decompressobj(-15); out = d.decompress(raw[10:], 1 << 28)
+            t = d.unused_data; deltas[len(out) // 1024] = deltas.get(len(out) // 1024, 0) + 1      # NOTE: header word 3 is NOT the inflated length (an earlier +64 relation was an artefact of capping the inflate at il+64)
+            if not d.eof: bad.append((i, "stream not finished"))
+            elif len(t) < 8 or struct.unpack("<II", t[:8]) != (zlib.crc32(out) & 0xffffffff, len(out) & 0xffffffff): bad.append((i, "gzip trailer"))
+        except zlib.error as e: bad.append((i, "zlib %s" % e))
+        prev_end = off + ln
+    if prev_end is None and P.total: prev_end = 0      # stream without any gzip segment (e.g. 291-byte raw partition): all of it is interlude
+    if prev_end is not None and prev_end < P.total: g = P.payload(prev_end, P.total - prev_end); inter.update(g); ib += len(g)
+    return dict(segments=len(segs), bad=bad, interlude_bytes=ib, interlude_sha1=inter.hexdigest(), deltas=deltas, covered=sum(24 + s[1] for s in segs) + ib == P.total)
