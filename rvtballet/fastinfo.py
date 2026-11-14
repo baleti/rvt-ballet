@@ -298,7 +298,7 @@ def scan(path, log=None, want_elements=False, progress=None, _seg=None, _out=Non
         return int(seen.sum()) + len(found_ids)
     def alldone(): return int((seen & prim).sum()) >= nprim - 2 and admin_ids <= found_ids
     def slot(eid):
-        k = int(np.searchsorted(idarr, eid)); return k if k < N and int(idarr[k]) == eid else -1
+        k = int(np.searchsorted(idarr, idarr.dtype.type(eid))); return k if k < N and int(idarr[k]) == eid else -1      # same dtype: a Python int against a uint64 array made numpy convert the whole array on every call (110 us each, 80 percent of the scan time on a 984 MB file)
     pns = sorted(n for n in names if n.startswith('Partitions/'))      # same (lexicographic) order as rvt_fast._partitions: first-wins across partitions
     nwin = 0; maxwin = 0; nb = 0; stalled = 0; lastseen = 0; early = False
     items = [tuple(x) for x in _seg] if _seg else [(pn, 0, None) for pn in pns]
