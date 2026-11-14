@@ -55,7 +55,7 @@ def run(stop):
     pr.wait(); return w, p, calls
 w, p, calls = run(0); shutil.rmtree(w, True); w, p, calls = run(0); names = [c[1] for c in calls if isinstance(c, list)]; total = len(names); assert total > 0, 'the warm save made no fsync/replace/rename call (child crashed or refused): %r' % calls[:3]; print('calls in a warm full save:', total, names[:40], [c for c in calls if isinstance(c, str) and c.startswith('REFUSED')]); shutil.rmtree(w, True)
 bad = 0; res = {}
-for k in range(int(os.environ.get('KILL_FROM', '1')), total + 1):
+for k in range(int(os.environ.get('KILL_FROM', '1')), min(total, int(os.environ.get('KILL_TO', '999'))) + 1):
     w, p, calls = run(k); now = sha(p)
     bks = [x for pat in (w + '/.savegate/*', w + '/*.bak*', side + '/c/*/*') for x in glob.glob(pat) if os.path.isfile(x) and not x.endswith('.part')]
     if now == h0: st = 'orig'
@@ -66,7 +66,7 @@ for k in range(int(os.environ.get('KILL_FROM', '1')), total + 1):
     ok = st in ('orig', 'new')
     if ok:
         r = subprocess.run([sys.executable, '-c', CH, HERE, p, '0'], env=dict(env, EVAL='KillEveryCall2'), capture_output=True, text=True, timeout=1800); ok = 'SAVED' in r.stdout or ('REFUSED LayoutChanged' in r.stdout and sha(p) == now)      # a 2nd edit of the same element is refused by design when it would change the page layout; the file must stay as it was
-        if not ok: st += ' (clean re-save failed)'
+        if not ok: st += ' (clean re-save failed)'; print('RESAVE-OUT', r.stdout[-400:].replace(chr(10), ' | '), 'ERR', r.stderr[-300:].replace(chr(10), ' | '), flush=True)
     res[st] = res.get(st, 0) + 1
     if not ok: bad += 1; print('FAIL kill at call', k, calls[-1] if calls else '?', st)
     shutil.rmtree(w, True)
