@@ -51,3 +51,20 @@ def test_quiet_period_refuses_fresh_file(ref):
 def test_snapshot_option(ref):
     d, good = ref; rc, out, err = run(os.path.join(d, 'a.rvt'), '--snapshot'); assert rc == 0 and out == good
     assert not [x for x in os.listdir(tempfile.gettempdir()) if x.startswith('rvtsnap-') and os.path.isdir(os.path.join(tempfile.gettempdir(), x)) and os.listdir(os.path.join(tempfile.gettempdir(), x))]
+
+
+@pytest.mark.parametrize('kind', ['touch', 'rewrite_same_bytes', 'rename_same_bytes'])
+def test_continuous_writer_always_refused(ref, kind):
+    """a save that keeps going for the whole query (same content, new mtime / new inode every 50 ms): the answer must be refused every time"""
+    d, good = ref; f = os.path.join(d, 'k.rvt'); shutil.copyfile(SRC, f); stop = threading.Event(); data = open(SRC, 'rb').read(8 << 20)
+    def w():
+        while not stop.is_set():
+            if kind == 'touch': os.utime(f, None)
+            elif kind == 'rewrite_same_bytes':
+                with open(f, 'r+b') as o: o.write(data[:4096])
+            else: shutil.copyfile(SRC, f + '.n'); os.replace(f + '.n', f)
+            time.sleep(0.05)
+    th = threading.Thread(target=w); th.start()
+    try: rc, out, err = run(f)
+    finally: stop.set(); th.join()
+    assert rc == 75 and not out.strip(), 'rc=%s out=%r err=%r' % (rc, out[:100], err[:200])
