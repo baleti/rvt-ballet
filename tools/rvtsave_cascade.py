@@ -9,7 +9,7 @@ var app = UIApp.Application; var op = new OpenOptions(); op.Audit = true;
 var d = app.OpenDocumentFile(ModelPathUtils.ConvertUserVisiblePathToModelPath(@"__FILE__".Replace("/", "\\")), op);
 Func<int> n = () => new FilteredElementCollector(d).WhereElementIsNotElementType().GetElementCount();
 int b = n(); var ids = "__IDS__".Split(',').Select(x => new ElementId(long.Parse(x))).ToList();
-using (var t = new Transaction(d, "x")) { t.Start(); var del = d.Delete(ids); Console.WriteLine("CASC before=" + b + " after=" + n() + " deleted_ids=" + del.Count); t.RollBack(); }
+using (var t = new Transaction(d, "x")) { t.Start(); var del = d.Delete(ids); Console.WriteLine("CASC before=" + b + " after=" + n() + " deleted_ids=" + del.Count + " list=" + string.Join(",", del.Select(x => x.IntegerValue.ToString()))); t.RollBack(); }
 d.Close(false); Console.WriteLine("CASC done");'''
 with guest.vmlock():
     port=guest.fresh(year); guest.put(f,'C:/wl/casc.rvt')
