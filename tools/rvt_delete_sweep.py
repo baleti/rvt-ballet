@@ -20,7 +20,7 @@ async def run(out, f, n, keep):
         for cls, ids in sorted(bycls.items()):
             if os.environ.get('SWEEP_FROM') and cls < os.environ['SWEEP_FROM']: continue      # resume a capped sweep at this class (sorted order)
             if os.environ.get('SWEEP_CLASSES') and cls not in os.environ['SWEEP_CLASSES'].split(','): continue
-            for eid in ids[:n]:
+            for eid in (([int(x) for x in os.environ['SWEEP_EIDS'].split(',') if int(x) in ids]) if os.environ.get('SWEEP_EIDS') else ids[:n]):      # SWEEP_EIDS: explicit element ids instead of the first N per class
                 r = await c.post('/api/m/m/edit', json=dict({'op': 'delete'} if SWEEP_OP == 'delete' else {'op': 'rotate', 'deg': 90.0}, eid=eid))
                 if r.status != 200: rows.append({'class': cls, 'result': 'INPUT_REFUSED'}); continue
                 dest = os.path.join(_T, 'o%d%s' % (k, os.path.splitext(f)[1])); k += 1
