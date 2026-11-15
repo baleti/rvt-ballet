@@ -53,3 +53,10 @@ def test_volatile_ignored():
     c = txt(BASE, rb=RB0) + "VOLATILE 3\n"; o = txt({**BASE, 2: "dddddddd", 3: "eeeeeeee"}, rb=RB1)
     assert v(c, o) == 0
     assert v(txt(BASE, rb=RB0), o) == 1
+
+def test_add_present_passes():      # ADD: allowed id 9 absent from the control must appear in the output
+    assert v(txt(BASE), txt({**BASE, 9: "99999999"}), exp=[], allowed={9}) == 0
+def test_add_silently_dropped_fails():
+    assert v(txt(BASE), txt(BASE), exp=[], allowed={9}) == 1
+def test_add_extra_new_element_fails():
+    assert v(txt(BASE), txt({**BASE, 9: "99999999", 8: "88888888"}), exp=[], allowed={9}) == 1

@@ -64,6 +64,8 @@ def verdict(c, o, exp, allowed, emit=print):
     emit('elements A %d B %d; differing %d; only-in-A %d; only-in-B %d' % (len(a), len(b), len(diff), len(only_a), len(only_b)))
     emit('differing ids outside the allowed list: %d %s' % (len(bad), sorted(bad)[:10]))
     emit('untouched elements identical in Revit view: %.4f %%' % (100.0 * (len(a.keys() & b.keys()) - len(diff)) / max(1, len(a.keys() & b.keys()))))
+    added_exp = allowed - set(a); missing_new = added_exp - set(b); only_b = only_b - allowed      # ADD: an allowed id absent from the control is an expected new element and must be present in the output
+    if missing_new: return 1, 'ADD: expected new element(s) %s missing in the Revit view of the output (silently dropped)' % sorted(missing_new)[:5]
     if bad or bad_a or only_b: return 1, 'untouched elements: %d differ outside allowed, %d undeclared missing, %d new' % (len(bad), len(bad_a), len(only_b))
     return 0, 'control and output open clean, readback exact (%d expectations), only the allowed ids differ in Revit (%d elements)' % (npass, len(a))
 
