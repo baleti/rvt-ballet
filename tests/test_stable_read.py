@@ -353,6 +353,12 @@ def test_preallocated_zero_tail_is_refused(tmp_path):
     with pytest.raises(stable.Damaged): stable.cfb_check(f)
 
 
+def test_zero_last_4kb_is_refused(tmp_path):
+    from rvtballet import stable
+    f = _zero_sample(tmp_path, lambda n: n - 4096, 4096)
+    with pytest.raises(stable.Damaged): stable.cfb_check(f)
+
+
 def test_zero_hole_in_the_middle_is_refused_and_env_accepts(tmp_path, monkeypatch):
     from rvtballet import stable
     f = _zero_sample(tmp_path, lambda n: n // 2, 6 << 20)

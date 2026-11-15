@@ -152,6 +152,7 @@ def _zero_blocks(path, fd, size):
     def z(o, ln):
         b = os.pread(fd, ln, o); return len(b) >= 4096 and b.count(0) == len(b)
     if z(*offs[1]): raise Damaged(path, 'the last %d KB are all zero (a file still being written or copied?); RVTBALLET_ALLOW_ZERO_BLOCKS=1 accepts such a file' % (offs[1][1] >> 10))
+    if size > 65536 and z(size - 4096, 4096): raise Damaged(path, 'the last 4 KB are all zero (a file still being written or copied?); RVTBALLET_ALLOW_ZERO_BLOCKS=1 accepts such a file')
     if sum(1 for o, ln in offs[2:] if z(o, ln)) >= 2: raise Damaged(path, 'several sampled regions are all zero (a file still being written or copied?); RVTBALLET_ALLOW_ZERO_BLOCKS=1 accepts such a file')
 
 
