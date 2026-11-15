@@ -44,6 +44,10 @@ if not os.environ.get('RVT_ADD_YEAR_FORCE'):      # Revit VM 2026-11: 2025 HVAC 
     try: _fy = int(_re2.search(r'(20[12]\d)', bytes(_cfb.CFB(open(a.seed, 'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le', 'ignore')).group(1))
     except Exception: sys.exit('REFUSED: cannot read the Revit version of the file (BasicFileInfo); nothing written')
     if _fy >= 2025: sys.exit('REFUSED: ADD on Revit %d files has no Revit-open PASS (the 2025 HVAC build failed to open); nothing written (RVT_ADD_YEAR_FORCE=1 for experiments only)' % _fy)
+if not os.environ.get('RVT_ADD_MULTIPART_FORCE'):      # Revit VM 2026-11-15: 2023 Arch_Link_Model (Partitions/9 14 MB + Partitions/10 323 KB) column clone = CorruptModelException (CArchiveException 105), tree clone = opens but element silently dropped; the only multi-partition PASSes (rst_basic 2023, chain) have an EMPTY second partition. More than one non-empty partition is refused.
+    _st = _cfb.CFB(open(a.seed, 'rb').read()).streams()
+    _ne = [n for n in _st if n.startswith('Partitions/') and len(_st[n].data) > 1000]
+    if len(_ne) > 1: sys.exit('REFUSED: %d non-empty Partitions streams (%s): ADD on such files failed in Revit (CorruptModelException on 2023 Arch_Link_Model); nothing written (RVT_ADD_MULTIPART_FORCE=1 for experiments only)' % (len(_ne), ', '.join(sorted(_ne))))
 import math
 for _n,_v in (('dx',a.dx),('dy',a.dy),('dz',a.dz)):
     if not math.isfinite(_v) or (abs(_v)>1e6 and not os.environ.get('RVTEDIT_ALLOW_FAR')): sys.exit('REFUSED: --%s=%r is not finite or is beyond 1e6 ft (same rule as rvtedit)'%(_n,_v))
