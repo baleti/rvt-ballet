@@ -51,6 +51,7 @@ def load(src, sha256):
     try: d = json.load(open(_file(src), encoding='utf-8'))
     except FileNotFoundError: return [], None
     except Exception as e: return [], 'unreadable edit store (%s)' % e
+    if not isinstance(d, dict): return [], 'damaged edit store'
     if d.get('sha256') != sha256: return [], 'the file changed since these edits were recorded (they were made against another version)'
     ops = d.get('ops')
     return (ops, None) if isinstance(ops, list) else ([], 'damaged edit store')
