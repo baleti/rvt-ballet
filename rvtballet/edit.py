@@ -499,7 +499,7 @@ def _set_link_path(ed, o):
         import sys as _sys
         for _pth in ('~/rvt-research', '~/rvt-research/write-lab'):
             if os.path.expanduser(_pth) not in _sys.path: _sys.path.insert(0, os.path.expanduser(_pth))
-        import rvt_params; _P = rvt_params.params(ed.src)
+        from . import save as _sv; _P = _sv._read_params(open(ed.src, 'rb').read())
         _others = [e for e, d in _P.items() if e != o['eid'] and isinstance(d, dict) and d.get('class') == 'RvtLinkSymbol']
     except Exception: raise EditError('link path edit refused: cannot list the other link types to check for a duplicate path')
     _nv = o['value'].replace('/', '\\').lower()
@@ -868,7 +868,7 @@ def _check_symbol_name_unique(src, o):
     for pth in ('~/rvt-research', '~/rvt-research/write-lab'):
         if os.path.expanduser(pth) not in sys.path: sys.path.insert(0, os.path.expanduser(pth))
     try:
-        import rvt_params; P = rvt_params.params(src)
+        from . import save as _sv; P = _sv._read_params(open(src, 'rb').read())
     except Exception: return
     me = P.get(o['eid'])
     if not isinstance(me, dict) or me.get('class') != 'FamilySymbol': return
