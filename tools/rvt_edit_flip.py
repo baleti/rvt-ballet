@@ -85,6 +85,21 @@ if os.environ.get('EDIT_FLIP_ELEMTABLE_RAW'):      # crafted: flip a byte of the
         import struct; z += struct.pack('<II', zlib.crc32(bytes(raw)) & 0xffffffff, len(raw)) + tail_[8:]
         c.streams()['Global/ElemTable'].data = st_.build(P_[:i + 10] + z, keep_spare=False)
         tp = os.path.join(_T, 'et.rvt'); cfb.write(c, tp); T['elemtable_raw_%d_at%d_of%d' % (t, o, len(raw))] = open(tp, 'rb').read()
+if os.environ.get('EDIT_FLIP_ELEMTABLE_SWAP'):      # c1x-rvtsave 210: swap two W-byte chunks (id/offset entries; W = EDIT_FLIP_SWAP_W, default 16) of the decoded ElemTable and re-deflate validly: a swapped-element-id output must be refused
+    import cfb, zlib, rvtw, struct
+    W = int(os.environ.get('EDIT_FLIP_SWAP_W', '16'))
+    for t in range(int(os.environ['EDIT_FLIP_ELEMTABLE_SWAP'])):
+        c = cfb.CFB(good); st_ = rvtw.Stream(c.streams()['Global/ElemTable'].data); P_ = bytes(st_.payload); i = P_.find(rvtw.GZ)
+        do_ = zlib.decompressobj(-15); raw = bytearray(do_.decompress(P_[i + 10:])); tail_ = do_.unused_data
+        n_ = len(raw) // W
+        for _try in range(50):
+            a, b = rnd.randrange(n_), rnd.randrange(n_)
+            if raw[a * W:(a + 1) * W] != raw[b * W:(b + 1) * W]: break
+        ca, cb = bytes(raw[a * W:(a + 1) * W]), bytes(raw[b * W:(b + 1) * W]); raw[a * W:(a + 1) * W] = cb; raw[b * W:(b + 1) * W] = ca
+        co = zlib.compressobj(6, zlib.DEFLATED, -15); z = co.compress(bytes(raw)) + co.flush()
+        z += struct.pack('<II', zlib.crc32(bytes(raw)) & 0xffffffff, len(raw)) + tail_[8:]
+        c.streams()['Global/ElemTable'].data = st_.build(P_[:i + 10] + z, keep_spare=False)
+        tp = os.path.join(_T, 'es.rvt'); cfb.write(c, tp); T['elemtable_swap_%d_%d_%d' % (t, a, b)] = open(tp, 'rb').read()
 esc = []
 for k, nb in T.items():
     dest = os.path.join(_T, 'o_%s.rvt' % re.sub(r'[^A-Za-z0-9_.-]', '_', str(k)))
