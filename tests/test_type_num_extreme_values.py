@@ -13,5 +13,5 @@ for v in (-5.0, 0.0, 5e-324, 1e14, -1e14, 0.1 + 0.2):
         save._readback(buf, out, [op]); print('applied+readback ok', v)
     except Exception as x:
         print('refused', v, type(x).__name__, str(x)[:70]); ref.append(v)
-assert sorted(ref) == sorted([5e-324, 1e14, -1e14]), ref      # absurd magnitudes refused, ordinary negatives/zero still accepted
-print('ok: absurd magnitudes refused, others round-trip')
+assert sorted(ref) == sorted([-5.0, 0.0, 5e-324, 1e14, -1e14]), ref      # negatives, zero (Revit 2024 rejected a 0.0 file) and absurd magnitudes refused; only 0.1+0.2 round-trips
+print('ok: negatives, zero, absurd magnitudes refused, 0.30000000000000004 round-trips')
