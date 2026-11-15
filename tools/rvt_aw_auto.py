@@ -53,7 +53,7 @@ org = [l[4] for l in e.trace(lv)[3] if len(l) > 4 and l[1] == 'Plane.m_origin'][
 lz = float(str(org).strip('[]').split(',')[2])
 op = 'aw:%s:%s:%s:%s:%s:%d:%r:%d:%d:%d' % (x0, y0, x1, y1, h, lv, lz, typ, ph, w)
 try:      # thickness: the like-wall has the SAME type, so twice its key-reference offset is that type's width; the fitted template is a 200 mm wall (Revit 2026 harness: badvolume=1 without this)
-    _kro = float(str(f['VWall.m_keyRefOffset']).strip())
+    _kro = abs(float(str(f['VWall.m_keyRefOffset']).strip()))      # sign only says which side the key reference is on (measured: Snowdon Structural 2024 Concrete 10" like wall stores -0.41667, its face planes sit 0.41667 ft from the location line): the old positive-only test skipped the thickness and the added wall kept the 0.328 ft (200 mm) template, Revit regenerated it on first edit
     if math.isfinite(_kro) and 0.01 < _kro < 50 and abs(_kro - 0.32808398950131235) > 1e-6: op += ':%r' % (2 * _kro)
 except Exception: pass
 print('OP', op, flush=True)
