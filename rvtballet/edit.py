@@ -780,6 +780,12 @@ def _set_type_eid(ed, src, o):
     try: t_new, t_old = ed.g.e.trace(o['target'])[2].get('class'), ed.g.e.trace(old)[2].get('class')
     except Exception: raise EditError('target element %d does not exist (or the old one is not in this file); nothing was changed' % o['target'])
     if t_new != t_old: raise EditError('target %d is a %s but the parameter currently points at a %s: refused' % (o['target'], t_new, t_old))
+    try:      # c3x-rvttype: the class alone is too coarse (a Section Marks symbol is a FamilySymbol like the Elevation Marks symbol the parameter points at): the category must match too
+        from . import fastquery as _fq
+        z = _fq.scan(src, want_elements=True)['arrays']; ix = {int(i): k for k, i in enumerate(z['id'])}
+        c_new, c_old = int(z['cat'][ix[o['target']]]), int(z['cat'][ix[old]])
+    except Exception: raise EditError('type parameter edit refused: cannot read the categories of target %d and of the current value %d; nothing was changed' % (o['target'], old))
+    if c_new != c_old: raise EditError('target %d has category id %d but the parameter currently points at category id %d: refused' % (o['target'], c_new, c_old))
     nb = struct.pack('<Q', o['target']); offs = {}
     for l in log:
         if l[1] in ('NamedParam.m_elemId', 'Identifier.m_id64') and l[3] - l[2] == 8:
