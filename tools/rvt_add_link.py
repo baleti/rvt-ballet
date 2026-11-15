@@ -101,9 +101,9 @@ for k,sid in enumerate(trip):
     for o,n in mp.items():
         for buf in (rec,hdr,item,row): genlib.rep(buf,struct.pack(g.IDF,o),struct.pack(g.IDF,n))
     # the header's deletion list (N entries of 22 bytes after the 6-byte prefix) names the SOURCE's dependents (views, tags ...): the clone owns none; a Revit-made new link has N=0 (measured 2020 + 2024 pairs: header 193/183/175 B with N=0, the source link in HVAC 413/337/219 B with N=10/7/2)
-    _n=struct.unpack_from('<I',hdr,14)[0]      # hdr = id(8) + body size(4) + body (tag 0x059f, count, entries ...)
+    _n=struct.unpack_from('<I',hdr,14)[0]      # hdr = id(8) + body size(4) + body (tag = g.EHT, ElementHeader schema index + 12: 0x059f in 2024, 0x05e5 in 2026, count, entries ...)
     if _n:
-        assert struct.unpack_from('<H',hdr,12)[0]==0x59f and struct.unpack_from('<I',hdr,8)[0]==len(hdr)-12 and 18+22*_n<=len(hdr),'header layout'
+        assert bytes(hdr[12:14])==g.EHT and struct.unpack_from('<I',hdr,8)[0]==len(hdr)-12 and 18+22*_n<=len(hdr),'header layout'
         del hdr[18:18+22*_n]; struct.pack_into('<I',hdr,14,0); struct.pack_into('<I',hdr,8,len(hdr)-12)
     rec=g.stamp(bytes(rec))
     assert struct.unpack_from('<I',item,W+4)[0]==len(item)-(W+8),'item layout'
