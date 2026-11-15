@@ -559,6 +559,9 @@ def _set_link_override(ed, o):
     for _k in ('eid', 'link', 'linked_view'):
         if type(o.get(_k)) is not int or not 0 <= o[_k] < 2 ** 62: raise EditError('link override: %s must be a non-negative element id (got %r): refused' % (_k, o.get(_k)))
     if o['link'] not in ed.g.e.m.ids: raise EditError('link element %d does not exist' % o['link'])
+    try: _lk = ed.g.e.trace(o['link'])[3]
+    except (IndexError, KeyError, StopIteration): raise EditError('link element %d cannot be decoded: link override refused' % o['link'])
+    if not any(l[1].startswith('RvtLinkSymbol.') for l in _lk): raise EditError('element %d is not a Revit link type (no RvtLinkSymbol fields): link override refused' % o['link'])
     try: log = ed.g.e.trace(o['eid'])[3]
     except (IndexError, KeyError, StopIteration): raise EditError('element %d does not exist in this file: link override refused' % o['eid'])
     mp = [l for l in log if l[1] == 'RvtLinkOverrides.m_displaySettingsMap']
