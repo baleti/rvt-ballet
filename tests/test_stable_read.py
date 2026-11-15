@@ -315,3 +315,14 @@ def test_cfb_fat_all_free_and_dir_sector_free_are_damaged(d):
     with pytest.raises(S.Damaged): S.cfb_check(f)
     b = bytearray(mini_cfb()); struct.pack_into('<I', b, 48, 3); b[512 + 12:512 + 16] = struct.pack('<I', 0xFFFFFFFF); open(f, 'wb').write(b)
     with pytest.raises(S.Damaged): S.cfb_check(f)
+
+
+def test_run_relative_and_symlinked_dir_paths_are_guarded(d, capsys, monkeypatch):
+    real = os.path.join(d, 'real'); os.mkdir(real); f = os.path.join(real, 'm.rvt'); open(f, 'wb').write(mini_cfb()); t = time.time() - 100; os.utime(f, (t, t))
+    os.symlink(real, os.path.join(d, 'lnk'))
+    def touch(argv, say=print):
+        st = os.stat(f); os.utime(f, ns=(st.st_atime_ns, st.st_mtime_ns + 10 ** 9)); return 0
+    monkeypatch.chdir(d)
+    for p in ('real/m.rvt', 'lnk/m.rvt', os.path.join(d, 'lnk', 'm.rvt')):
+        os.utime(f, (t, t)); S._ACTIVE.clear()
+        assert S.run([p, '--quiet-secs', '0'], touch) == 75, p
