@@ -71,7 +71,7 @@ def validate_op(op):
     if op['op'] == 'move':
         if BACKEND() != 'rvtedit': raise EditError('move needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
         d = [op.get(k, 0.0) for k in ('dx', 'dy', 'dz')]
-        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or abs(v) > 5e4 for v in d): raise EditError('dx, dy, dz must be finite numbers (Revit internal units = feet), |v| <= 50000 (Revit keeps geometry within about 20 miles = 105600 ft of the origin)')
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or abs(v) > 1e4 for v in d): raise EditError('dx, dy, dz must be finite numbers (Revit internal units = feet), |v| <= 10000 (VM probe: a +45000 ft move made Revit 2024 raise a far-from-origin dialog on open)')
         if not any(d): raise EditError('move by zero')
         if max(abs(v) for v in d) < 1e-6: raise EditError('move of %.3g ft is below the 1e-6 ft witness resolution (compose drops moves under 1e-12 ft; the gate tolerance is 1e-6 ft, so a smaller move could not be told from no move): refused rather than reported as moved while the file stays unchanged' % max(abs(v) for v in d))
         return {'op': 'move', 'eid': op['eid'], 'dx': float(d[0]), 'dy': float(d[1]), 'dz': float(d[2])}
@@ -216,7 +216,7 @@ def compose(ops):
         else: slot[k] = len(out); out.append(dict(o))
     keep = []
     for o in out:
-        if o['op'] == 'move' and max(abs(o['dx']), abs(o['dy']), abs(o['dz'])) > 5e4: raise EditError('the moves of element %d add up beyond 50000 ft; nothing was changed' % o['eid'])
+        if o['op'] == 'move' and max(abs(o['dx']), abs(o['dy']), abs(o['dz'])) > 1e4: raise EditError('the moves of element %d add up beyond 10000 ft; nothing was changed' % o['eid'])
         if o['op'] == 'move' and max(abs(o['dx']), abs(o['dy']), abs(o['dz'])) < 1e-12: continue
         if o['op'] == 'rotate' and abs(math.remainder(o['deg'], 360.0)) < 1e-9: continue
         keep.append(o)
