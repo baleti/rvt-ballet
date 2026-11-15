@@ -8,12 +8,18 @@ sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 class T(unittest.TestCase):
     def test_kill_points(self):
         h0 = sha(S); bad = []; seen = []
-        for delay in (3, 8, 15, 30, 60):
+        for delay in (0.0, 0.3, 1.0, 2.5, 'gone'):
             with tempfile.TemporaryDirectory() as d:
                 env = dict(os.environ, TMPDIR=d, DEL_EID=E)
                 p = subprocess.Popen([sys.executable, TOOL, S], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                time.sleep(delay)
-                if p.poll() is not None: continue
+                t0 = time.time(); tmpseen = None
+                while p.poll() is None and time.time() - t0 < 900:
+                    if glob.glob(d + '/**/*.sgtmp', recursive=True) or glob.glob(d + '/*.sgtmp'):
+                        tmpseen = tmpseen or time.time()
+                        if delay != 'gone' and time.time() - tmpseen >= delay: break
+                    elif tmpseen and delay == 'gone': time.sleep(0.02); break
+                    time.sleep(0.02)
+                if p.poll() is not None: seen.append((delay, 'finished-before-kill')); continue
                 p.send_signal(signal.SIGKILL); p.wait()
                 for f in glob.glob(d + '/*/p.rvt'):
                     if sha(f) == h0: seen.append((delay, 'original')); continue
