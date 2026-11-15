@@ -664,6 +664,7 @@ def _rvtedit_pass(a, b, ops):
                     ed.move_annotation(o['eid'], o['dx'], o['dy'])
             elif o['op'] == 'rotate':
                 if _is_pinned(ed, o['eid']): raise EditError('element %d is pinned (Element.m_locked): rotating a pinned element is refused, as Revit does; unpin it first' % o['eid'])
+                if any(str(x[1]).startswith('StructFootingUserData.') for x in ed.g.e.trace(o['eid'])[3]): raise EditError('element %d: rotate refused, it is a structural footing (StructFootingUserData / StructAttachInfo): its box does not follow the placement frame (a 1 ft move measured box shift 0 on rst_basic 2023 512451)' % o['eid'])
                 if any(str(x[1]).startswith('FamInstCurveDriver.') for x in ed.g.e.trace(o['eid'])[3]): raise EditError('element %d: rotate refused, it is a curve-located family instance (beam / brace: FamInstCurveDriver with its own curve, end joins and cached extents); rotating only its placement frame makes the record inconsistent. Columns and point-located instances are supported' % o['eid'])
                 ed.rotate(o['eid'], o['deg'])
                 if ed.g.e.trace(o['eid'])[2].get('class') == 'SWall': WALLROT[0] = True      # isolated-wall rotate (opt-in): its record + item rewrite spans the whole element, the gate's span/budget rules for a single placement edit are widened for it only

@@ -11,3 +11,9 @@ def test_footing_move_refused():
     b = open(F, 'rb').read()
     with pytest.raises(edit.EditError, match='structural footing'):
         edit.apply_full(b, [edit.validate_op({'op': 'move', 'eid': 512451, 'dx': 1.0})])
+
+@pytest.mark.skipif(not os.path.exists(F), reason='sample missing')
+def test_footing_rotate_refused():
+    b = open(F, 'rb').read()
+    with pytest.raises(edit.EditError, match='structural footing'):
+        edit.apply_full(b, [edit.validate_op({'op': 'rotate', 'eid': 512451, 'deg': 30.0})])
