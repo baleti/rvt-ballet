@@ -3,6 +3,9 @@ Needs $RVT_DEL_KILL_SAMPLE (Autodesk sample) and $RVT_DEL_KILL_EID (a deletable 
 import os, sys, glob, time, signal, hashlib, tempfile, subprocess, unittest
 S = os.environ.get('RVT_DEL_KILL_SAMPLE'); E = os.environ.get('RVT_DEL_KILL_EID')
 TOOL = os.path.join(os.path.dirname(__file__), '..', 'tools', 'rvtsave_inplace_delete.py')
+import fnmatch
+def _find(d, pat):
+    return [os.path.join(r, f) for r, _, fs in os.walk(d) for f in fs if fnmatch.fnmatch(f, pat)]  # dot-files included (glob skips them)
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 @unittest.skipUnless(S and E and os.path.exists(S), 'RVT_DEL_KILL_SAMPLE/EID not set')
 class T(unittest.TestCase):
@@ -16,7 +19,7 @@ class T(unittest.TestCase):
                 p = subprocess.Popen([sys.executable, TOOL, S], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 t0 = time.time(); tmpseen = None
                 while p.poll() is None and time.time() - t0 < 900:
-                    if glob.glob(d + '/**/' + pat, recursive=True):
+                    if _find(d, pat):
                         tmpseen = tmpseen or time.time()
                         if delay != 'gone' and time.time() - tmpseen >= delay: break
                     elif tmpseen and delay == 'gone': time.sleep(0.02); break
