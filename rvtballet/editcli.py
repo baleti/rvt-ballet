@@ -134,6 +134,11 @@ def edit_main(argv, say=print):
     if bad: say('rvt-ballet: ' + bad); return 2
     why = check_paths(a.file, a.output, a.in_place, a.overwrite_output)
     if why: say('rvt-ballet: ' + why); return 2
+    from . import stable      # entry check only (no closing fingerprint: an in-place save changes the file itself): not mid-save, not half-written
+    try:
+        with stable.guard(a.file): pass
+    except (stable.FileChanged, stable.InUse) as ex: say('rvt-ballet: %s' % ex); return 75
+    except stable.Damaged as ex: say('rvt-ballet: %s' % ex); return 1
     try:
         for kind, v in a.ops: build_op(kind, v)
     except ValueError as ex: say('rvt-ballet: ' + str(ex)); return 2
