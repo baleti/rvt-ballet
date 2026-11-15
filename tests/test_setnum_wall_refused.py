@@ -11,7 +11,13 @@ class T(unittest.TestCase):
         p=subprocess.run([sys.executable,E,S,o,'dbl:301848:-1001108:15.0'],capture_output=True,text=True,env={**os.environ,**(env or {})})
         return p,os.path.exists(o)
     def test_refused(self):
-        p,saved=self.run_(); self.assertIn('refused: wall dimensions',p.stderr); self.assertFalse(saved)
+        p,saved=self.run_(); self.assertIn('refused: its dimensions',p.stderr); self.assertFalse(saved)
     def test_opt_in(self):
         p,saved=self.run_({'RVTEDIT_SETNUM_GEOM':'1'}); self.assertTrue(saved,p.stderr[-200:])
+    def test_floor_offset_refused(self):
+        F=os.path.expanduser('~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt')
+        if not os.path.exists(F): self.skipTest('sample absent')
+        o=os.path.join(tempfile.mkdtemp(),'f.rvt')
+        p=subprocess.run([sys.executable,E,F,o,'dbl:621720:-1001955:1.5'],capture_output=True,text=True)
+        self.assertIn('wall/floor 621720 refused',p.stderr); self.assertFalse(os.path.exists(o))
 if __name__=='__main__': unittest.main()
