@@ -54,4 +54,10 @@ def pair(a, b, eid, new):
 
 synthetic_refusals(); pair('fe_a.rfa', 'fe_b.rfa', 2916, 2.5); pair('fe2_a.rfa', 'fe2_b.rfa', 2916, 3.3)
 for _n in ('hex', 'circ', 'tri'): pair('fe4_%s_a.rfa' % _n, 'fe4_%s_b.rfa' % _n, 2916, 3.3)
+fa = os.path.join(FL, 'fe2_a.rfa')
+if os.path.exists(fa):
+    with tempfile.TemporaryDirectory() as d:
+        for bad in ('1e9', 'nan', 'inf'):
+            r = subprocess.run([sys.executable, TOOL, fa, os.path.join(d, 'b.rfa'), '2916', bad], capture_output=True, text=True)
+            assert r.returncode == 2 and not os.path.exists(os.path.join(d, 'b.rfa')), 'bad new value %s accepted' % bad
 print('PASS')

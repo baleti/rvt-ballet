@@ -49,6 +49,7 @@ def patch_body_generic(body, new, start):
 
 def main(a):
     src, dst, eid, new = a[0], a[1], int(a[2]), float(a[3])
+    if not (-1e4 < new < 1e4): print('refused: new end offset %r is not a finite value within +-1e4 ft' % new); return 2
     if os.path.exists(dst): print('refused: output exists'); return 2
     try:
         s = SE.Session(src); T = s.template(eid); W = s.ctx.W
