@@ -11,7 +11,7 @@ CAND = [int(x) for x in os.environ['IDS'].split(',')] if os.environ.get('IDS') e
 for e in CAND:
     c['tried'] += 1
     try: nb, _ = edit.apply_full(buf, [mv(e, 1.0)]); nb7, _ = edit.apply_full(buf, [mv(e, 7.0)])
-    except Exception: c['nochange'] += 1; continue
+    except Exception as x: c['nochange'] += 1; print('EDIT_REFUSED', e, str(x)[:160]); continue
     try: save._readback(buf, nb, edit.compose([mv(e, 1.0)])); c['right_ok'] += 1
     except VF as x: c['right_refused'] += 1; print('RIGHT_REFUSED', e, str(x)[:160])
     try: save._readback(buf, nb7, edit.compose([mv(e, 1.0)])); c['ESCAPE'] += 1; print('ESCAPE', e)
