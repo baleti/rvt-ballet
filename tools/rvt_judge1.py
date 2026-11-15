@@ -110,11 +110,15 @@ def judge_batch(cases, wd):
             orig = next(c['orig'] for c in cases if (c['year'], c['osha']) == (year, osha))
             t0 = time.time(); txt = guest_run(guest, year, orig, loc, par, 'j1c%s' % osha[:8], wd)
             print('CONTROL', year, osha[:8], 'sec=%.0f' % (time.time() - t0), 'ok' if txt and 'RESULT ok' in txt else 'NO-OUTPUT', flush=True)
-            if txt and parse(txt)['opened'] and os.environ.get('RVT_JUDGE1_NOISE', '1') == '1':      # noise floor: a second open of the same control
+            vf = os.path.join(CAC, 'volatile_%s_%s_%s.txt' % (year, osha[:24], cshash))      # noise floor is per sample, not per id set: reuse it
+            if txt and parse(txt)['opened'] and os.path.exists(vf):
+                txt += open(vf).read(); print('NOISE', year, osha[:8], 'cached', flush=True)
+            elif txt and parse(txt)['opened'] and os.environ.get('RVT_JUDGE1_NOISE', '1') == '1':      # noise floor: a second open of the same control
                 t2 = guest_run(guest, year, orig, loc, par, 'j1n%s' % osha[:8], wd)
                 if t2 and parse(t2)['opened']:
                     a, b = parse(txt)['eh'], parse(t2)['eh']; vol = sorted(k for k in a.keys() & b.keys() if a[k] != b[k])
                     txt += ''.join('VOLATILE %d\n' % k for k in vol); print('NOISE', year, osha[:8], 'volatile ids', len(vol), flush=True)
+                    open(vf, 'w').write(''.join('VOLATILE %d\n' % k for k in vol))
             ctltxt[(year, osha)] = txt
             if txt and parse(txt)['opened']: open(cf, 'w').write(txt)      # only a clean control is cached
         for c in cases:
@@ -127,6 +131,7 @@ def judge_batch(cases, wd):
             if code == 1 and why.startswith('untouched') and os.environ.get('RVT_JUDGE1_EXPLAIN', '1') == '1':
                 pc, po = parse(ctl_t), parse(txt); ids = sorted((k for k in pc['eh'].keys() & po['eh'].keys() if pc['eh'][k] != po['eh'][k] and k not in c['allowed'] and k not in pc['volatile']))[:20]
                 ec = guest_run(guest, c['year'], c['orig'], [], [], 'j1x%s' % c['osha'][:8], wd, ed=ids); eo = guest_run(guest, c['year'], c['out'], [], [], 'j1y%s' % osha[:8], wd, ed=ids)
+                newvol = []
                 if ec and eo:
                     dc, do = parse(ec)['ed'], parse(eo)['ed']
                     for k in ids:
@@ -134,10 +139,20 @@ def judge_batch(cases, wd):
                         if pc['eh'][k] == parse(ec)['eh'].get(k) and po['eh'][k] == parse(eo)['eh'].get(k):
                             fa = dict(x.split('=', 1) for x in a_.split(';') if '=' in x); fb = dict(x.split('=', 1) for x in b_.split(';') if '=' in x)
                             lines.append('EXPLAIN %d %s: %s' % (k, a_.split('|')[0], '; '.join('%s: %s -> %s' % (n, fa.get(n), fb.get(n)) for n in sorted(set(fa) | set(fb)) if fa.get(n) != fb.get(n))[:600] or 'params equal; tail %r -> %r' % (a_[-160:], b_[-160:])))
-                        else: lines.append('EXPLAIN %d unstable: its hash changed between opens (volatile, not a writer change)' % k)
+                        elif pc['eh'][k] != parse(ec)['eh'].get(k): lines.append('EXPLAIN %d unstable in the UNEDITED control: hash changed between two opens (volatile)' % k); newvol.append(k)
+                        else: lines.append('EXPLAIN %d unstable only in the output: hash changed between two opens of the output (kept as FAIL)' % k)
+                    if newvol and set(newvol) >= set(ids):      # every differing id is proven volatile on the unedited control: the verdict is the rest of the checks (all passed)
+                        vf = os.path.join(CAC, 'volatile_%s_%s_%s.txt' % (c['year'], c['osha'][:24], cshash)); open(vf, 'a').write(''.join('VOLATILE %d\n' % k for k in newvol))
+                        code, why = 0, 'control and output open clean, readback exact, differing ids %s proven volatile on the unedited control (added to the noise floor)' % newvol
             pr = parse(txt); why += ' [open %s ms, total %s ms, sec %.0f, sha %s]' % (pr['t_open'], pr['t_total'], time.time() - t0, osha[:12])
             open(os.path.join(wd, c['name'] + '.verdict.txt'), 'w').write('\n'.join(lines + [str(code) + ' ' + why]) + '\n')
             print('CASE', c['name'], ['PASS', 'FAIL', 'NOORACLE', 'INFRA'][code], why, flush=True); res.append((c, code, why))
+            try:      # verdict ledger: calibration data for offline prechecks and skip-if-already-judged (same output sha + same guest script)
+                import json as _j
+                open(os.path.expanduser(os.environ.get('RVT_JUDGE1_LEDGER', '~/demo-state/rvt-edit/judge1-verdicts.jsonl')), 'a').write(_j.dumps({'ts': time.strftime('%Y-%m-%d %H:%M:%S'), 'year': c['year'], 'name': c['name'],
+                    'orig_sha': c['osha'][:16], 'out_sha': osha[:16], 'verdict': ['PASS', 'FAIL', 'NOORACLE', 'INFRA'][code], 'why': why[:300], 'cs': cshash, 'lane': os.path.basename(guest.RD.rstrip('/')),
+                    'agent': os.environ.get('RVT_AGENT', '')}) + '\n')
+            except Exception as e: print('ledger write failed', e)
         if os.environ.get('RVT_WARM') == '1':
             for y in sorted({c['year'] for c in cases}): guest.down(y)      # leave the lane clean
         print('LOCK held=%.0fs cases=%d' % (time.time() - t_acq, len(cases)), flush=True)
