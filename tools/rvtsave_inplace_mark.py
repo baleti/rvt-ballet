@@ -16,14 +16,14 @@ async def run(orig, keep):
     e, old = c0[0]; md = tempfile.mkdtemp(dir=_T); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models))) as c:
         await c.get('/api/m/m/saveinfo')
-        r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': e, 'param': 'Mark', 'value': 'MKIP', 'match': old}); res['edit'] = r.status
+        r = await c.post('/api/m/m/edit', json={'op': 'set_string', 'eid': e, 'param': 'Mark', 'value': os.environ.get('MARKVAL', 'MKIP'), 'match': old}); res['edit'] = r.status
         r = await c.post('/api/m/m/save', json={}, timeout=__import__('aiohttp').ClientTimeout(total=None)); j = await r.json(); res['save'] = r.status; res['code'] = j.get('code', 'ok')
         if r.status != 200:
             res['untouched'] = sha(src) == h0; res['error'] = str(j.get('error', ''))[:300]; print(res); return
         res['changed'] = sha(src) != h0
         bl = await (await c.get('/api/m/m/backups')).json(); res['backup_is_original'] = bool(bl) and sha(bl[0]['path']) == h0
         pr2 = save._read_params(open(src, 'rb').read()); diff = [k for k in pr if pr[k] != pr2.get(k)]
-        res['params_changed_elems'] = len(diff); res['only_target'] = diff == [e] and pr2[e]['params']['Mark'] == 'MKIP'
+        res['params_changed_elems'] = len(diff); res['only_target'] = diff == [e] and pr2[e]['params']['Mark'] == os.environ.get('MARKVAL', 'MKIP')
         if keep: shutil.copy(src, keep)
         r = await c.post('/api/m/m/restore', json={'n': 0, 'confirm': True}); res['restore_status'] = r.status; res['restored_identical'] = sha(src) == h0
     print(res, 'OK' if res.get('only_target') and res.get('restored_identical') and res.get('backup_is_original') else 'CHECK')
