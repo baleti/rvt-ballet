@@ -611,7 +611,7 @@ def _move_viewport(ed, o):
 
 def _rvtedit_pass(a, b, ops):
     import rvtedit
-    ed = rvtedit.Edit(a); deleted = []
+    ed = rvtedit.Edit(a); deleted = []; ed._deleted_ids = deleted
     _check_batch_names(ops)
     for o in ops:
         try:
@@ -920,7 +920,7 @@ def _delete(ed, eid):
                 break
     if cls not in ('IndependentTag', 'ViewSheet') and not cls.startswith('DBView'):
         # c4x-rvtmatrix item 81: a tag points at its host through RoomBoundingItem.m_linkInstOrHostId and is NOT in the host's deletion list, so owned_set/cascade never saw it. 2025 Structural column delete (606331) was accepted (gate 0 diffs) and left Tag 869338 dangling; Revit dropped the tag on open (readback 2 elements gone, not 1). Refuse while a tag still names the element.
-        tg = tags_hosting(ed, eid)
+        tg = [t for t in tags_hosting(ed, eid) if t not in getattr(ed, '_deleted_ids', ())]      # a tag deleted earlier in the same batch is not dangling
         if tg: raise EditError('element %d is the host of %d tag(s) (%s): deleting it would leave dangling tag references (Revit removes the tags itself on open, so the saved file would differ from what was requested); delete the tags first. Nothing was changed' % (eid, len(tg), ', '.join(map(str, tg[:5]))))
     if cls in IN_USE_GUARD_CLASSES:
         # a type/style that other elements still reference: Structural 2024 DimensionStyle 908160 is used by 12 dimensions, the old delete removed only its own record (1 id) and left 12 dangling type refs (escape). Revit refuses or cascades; we refuse.
