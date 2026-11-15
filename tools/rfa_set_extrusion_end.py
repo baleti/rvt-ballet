@@ -61,11 +61,15 @@ def main(a):
         e0 = struct.unpack_from('<d', body, 72)[0]
         i, r, log, q = s.trace(eid)
         dbl = [l for l in log if l[1] == 'ParamValueDouble.m_value' and l[3] - l[2] == 8]
-        if len(body) == 3060: nb, n = patch_body(body, new)
-        else:
+        nb = None
+        if len(body) == 3060:
+            try: nb, n = patch_body(body, new)
+            except SE.Refused: nb = None      # e.g. a void extrusion (8 slots 32 B later): fall back to guarded value matching with the same slot count
+        if nb is None:
             ends = [k for k, l in enumerate(dbl) if abs(struct.unpack('<d', s.J.get(l[2], 8))[0] - e0) < 1e-12]
             if len(ends) != 1 or ends[0] + 1 >= len(dbl) or len(dbl) != 2: raise SE.Refused('R record does not hold exactly (end, start) ParamValueDouble pair')
             nb, n = patch_body_generic(body, new, struct.unpack('<d', s.J.get(dbl[ends[0] + 1][2], 8))[0])
+            if len(body) == 3060 and n != 31: raise SE.Refused('3060-byte Z item with %d matching slots (measured 31)' % n)
             # collision guard: E or E-start anywhere in the partition OUTSIDE this element's Z item / header / R record (e.g. sketch curve coordinates) means value matching cannot be trusted
             st0 = struct.unpack('<d', s.J.get(dbl[ends[0] + 1][2], 8))[0]; pats = [struct.pack('<d', e0), struct.pack('<d', e0 - st0)]
             spans = [(zk, zk + W + 8 + L), (T['_hk'], T['_hk'] + len(T['hdr'])), (i, q)]

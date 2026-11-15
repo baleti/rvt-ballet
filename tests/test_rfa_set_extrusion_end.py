@@ -52,7 +52,7 @@ def pair(a, b, eid, new):
     print('pair', a, '->', b, 'ok')
 
 
-synthetic_refusals(); pair('fe_a.rfa', 'fe_b.rfa', 2916, 2.5); pair('fe2_a.rfa', 'fe2_b.rfa', 2916, 3.3)
+synthetic_refusals(); pair('fe_a.rfa', 'fe_b.rfa', 2916, 2.5); pair('fe2_a.rfa', 'fe2_b.rfa', 2916, 3.3); pair('fe6_void_a.rfa', 'fe6_void_b.rfa', 2916, 3.3)
 for _n in ('hex', 'circ', 'tri'): pair('fe4_%s_a.rfa' % _n, 'fe4_%s_b.rfa' % _n, 2916, 3.3)
 fa = os.path.join(FL, 'fe2_a.rfa')
 if os.path.exists(fa):
