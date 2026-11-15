@@ -33,4 +33,16 @@ class HostParam(unittest.TestCase):
             names = [x['field'] for c in rep['changed'] if c['id'] == 301609 for x in c['fields']]
             self.assertNotIn('FamilyInstance.m_instOrigin#1', names)
 
+    def test_zone_item_corners_shift_like_revit(self):
+        """Zone item of door 301609 holds outline corner triples whose z is ~-8.9e-16; Revit's move shifts them (x 16.3333 -> 16.8333 at item offsets 48 and 96), a 1e-9 noise filter skipped them."""
+        if not os.path.exists(SCENE) or not os.path.exists(LAB): self.skipTest('no scene/edit-lab')
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, 'o.rte')
+            r = subprocess.run([sys.executable, LAB, SCENE, out, 'mv:301609:0.5:0:0'], capture_output=True, text=True, cwd=os.path.dirname(LAB))
+            self.assertEqual(r.returncode, 0, r.stdout[-300:] + r.stderr[-300:])
+            code = "import sys,struct;sys.path.insert(0,'.');import rvtedit;g=rvtedit.Edit(sys.argv[1]).g;z=g.locate(301609)['zone'];it=bytes(g.bj[z[0][0]+4:z[0][0]+z[0][1]]);print(struct.unpack_from('<d',it,48)[0],struct.unpack_from('<d',it,96)[0])"
+            q = subprocess.run([sys.executable, '-c', code, out], capture_output=True, text=True, cwd=os.path.dirname(LAB))
+            a, b = map(float, q.stdout.strip().splitlines()[-1].split())
+            self.assertAlmostEqual(a, 16.833333333333, places=6, msg=q.stderr[-300:]); self.assertAlmostEqual(b, 16.833333333333, places=6)
+
 if __name__ == '__main__': unittest.main()
