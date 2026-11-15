@@ -37,6 +37,8 @@ async def one_class(c, models, k, src, cls, pr, ix):
             except Exception: _rc[k] = True
         return _rc[k]
     applied = []; refused = {}; used = set()
+    _pf = [int(x) for x in os.environ.get('CP_PREFER_EIDS', '').split(',') if x.strip()]      # known placed, dependent-free elements first (HVAC 2024: 1557 of 1577 instances are risky, 10 of the 20 gate-free ones sit at origin 0,0,0 and are refused, c1x-rvtmatrix item 209)
+    if _pf: ids = [e for e in _pf if e in ids] + [e for e in ids if e not in _pf]
     for kind in ('set_string', 'set_num', 'move', 'set_field'):
         tried = 0; skip = set(); nrisky = 0
         for eid in ids:
