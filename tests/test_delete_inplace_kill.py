@@ -18,7 +18,7 @@ class T(unittest.TestCase):
         for at in ('tmp_written', 'before_replace', 'after_replace'):
             with tempfile.TemporaryDirectory() as d:
                 env = dict(os.environ, TMPDIR=d, DEL_EID=E, KILL_AT=at)
-                p = subprocess.run([sys.executable, WRAP, S], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3000)
+                p = subprocess.run([sys.executable, WRAP, S], env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=3000); print('TOOL_OUT', (p.stdout or b'')[-400:])
                 fs = glob.glob(d + '/*/p.rvt')
                 if p.returncode != -signal.SIGKILL or not fs: seen.append((at, 'NOT-KILLED rc=%s' % p.returncode)); bad.append(at); continue
                 f = fs[0]

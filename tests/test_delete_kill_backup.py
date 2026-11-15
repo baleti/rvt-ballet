@@ -12,7 +12,7 @@ class T(unittest.TestCase):
         h0 = sha(S)
         with tempfile.TemporaryDirectory() as d:
             env = dict(os.environ, TMPDIR=d, DEL_EID=E)
-            p = subprocess.run([sys.executable, WRAP, S], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3000)
+            p = subprocess.run([sys.executable, WRAP, S], env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=3000); print('TOOL_OUT', (p.stdout or b'')[-400:])
             self.assertEqual(p.returncode, -signal.SIGKILL, 'hook never fired (rc=%s)' % p.returncode)
             fs = glob.glob(d + '/*/p.rvt'); self.assertTrue(fs, 'private copy missing')
             self.assertEqual(sha(fs[0]), h0, 'original changed by a kill during backup')
