@@ -11,7 +11,7 @@ function FileId($p) {
   $i = New-Object W.K+BY_HANDLE_FILE_INFORMATION; [void][W.K]::GetFileInformationByHandle($h, [ref]$i); [void][W.K]::CloseHandle($h)
   return ("{0:x}{1:x8}" -f $i.IH, $i.IL)
 }
-$sw = [Diagnostics.Stopwatch]::StartNew(); $last = @{}; $rows = New-Object Collections.Generic.List[string]; $rows.Add("t_ms,name,length,lastwrite_ticks,fileindex")
+$sw = [Diagnostics.Stopwatch]::StartNew(); $last = @{}; $rows = New-Object Collections.Generic.List[string]; $rows.Add("t_ms,name,length,lastwrite_ticks,fileindex"); $flushed = 0; $lastFlush = 0
 while ($sw.Elapsed.TotalSeconds -lt $Seconds) {
   $now = @{}
   Get-ChildItem -Force -Recurse -Depth 1 -LiteralPath $Dir -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
@@ -19,6 +19,10 @@ while ($sw.Elapsed.TotalSeconds -lt $Seconds) {
   }
   foreach ($k in $now.Keys) { if ($last[$k] -ne $now[$k]) { $rows.Add("{0},{1},{2}" -f $sw.ElapsedMilliseconds, $k, $now[$k]) } }
   foreach ($k in @($last.Keys)) { if (-not $now.ContainsKey($k)) { $rows.Add("{0},{1},GONE,," -f $sw.ElapsedMilliseconds, $k) } }
-  $last = $now; Start-Sleep -Milliseconds 20
+  $last = $now
+  if ($sw.ElapsedMilliseconds - $lastFlush -gt 1000) {   # incremental flush: a killed poller still leaves a CSV
+    $lastFlush = $sw.ElapsedMilliseconds; $rows | Set-Content -Encoding ASCII $Out
+  }
+  Start-Sleep -Milliseconds 20
 }
 $rows | Set-Content -Encoding ASCII $Out

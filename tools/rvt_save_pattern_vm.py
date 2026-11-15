@@ -41,8 +41,10 @@ def main(year, f):
         guest.gssh('New-Item -ItemType Directory -Force C:\\wl\\sp | Out-Null; Remove-Item C:\\wl\\sp\\* -Force -Recurse -ErrorAction SilentlyContinue')
         guest.put(f, 'C:/wl/sp/src.rvt'); guest.put(os.path.join(HERE, 'rvt_save_timeline.ps1'), 'C:/wl/rvt_save_timeline.ps1')
         # poller in the background (detached guest process), 150 s
-        guest.gssh("Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','C:\\wl\\rvt_save_timeline.ps1','-Dir','C:\\wl\\sp','-Name','m.rvt','-Seconds','150','-Out','C:\\wl\\sp_timeline.csv' -WindowStyle Hidden")
-        time.sleep(5)
+        # Win32_Process.Create: the poller is not a child of the ssh session (Start-Process children die with the session job object)
+        r0 = guest.gssh("$c = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\wl\\rvt_save_timeline.ps1 -Dir C:\\wl\\sp -Name m.rvt -Seconds 150 -Out C:\\wl\\sp_timeline.csv'; $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine=$c}; 'poller rc=' + $r.ReturnValue + ' pid=' + $r.ProcessId"); print('launch:', (r0.stdout + r0.stderr).strip()[:120], flush=True)
+        time.sleep(8)
+        r = guest.gssh('(Get-Item C:\\wl\\sp_timeline.csv -ErrorAction SilentlyContinue).Length'); print('poller csv bytes after 8 s:', (r.stdout + r.stderr).strip()[:80], flush=True)
         job = guest.run_job(year, port, JOB, tag, 300)
         time.sleep(max(0, 150 - 5 - 60))      # let the poller finish
         local = os.path.join(out, 'savepat_%s_%d.csv' % (sid, year)); got = guest.get('C:/wl/sp_timeline.csv', local)
