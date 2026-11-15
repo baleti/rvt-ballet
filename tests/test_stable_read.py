@@ -307,3 +307,11 @@ def test_revit_backup_folder_touched_is_a_side_file(d):
     assert S.side_files(f) == [stem + '_backup']
     old = time.time() - 3600; os.utime(os.path.join(d, stem + '_backup'), (old, old))
     assert S.side_files(f) == []
+
+
+def test_cfb_fat_all_free_and_dir_sector_free_are_damaged(d):
+    f = os.path.join(d, 'c.rvt'); b = bytearray(mini_cfb())
+    b[512:1024] = struct.pack('<128I', *([0xFFFFFFFF] * 128)); open(f, 'wb').write(b)
+    with pytest.raises(S.Damaged): S.cfb_check(f)
+    b = bytearray(mini_cfb()); struct.pack_into('<I', b, 48, 3); b[512 + 12:512 + 16] = struct.pack('<I', 0xFFFFFFFF); open(f, 'wb').write(b)
+    with pytest.raises(S.Damaged): S.cfb_check(f)

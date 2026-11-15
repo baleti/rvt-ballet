@@ -170,6 +170,13 @@ def cfb_check(path, fd=None):
             for j in range(ss // 4 - 1, -1, -1):          # highest sector id in use (not FREE 0xFFFFFFFF) of this FAT sector
                 if struct.unpack_from('<I', b, 4 * j)[0] != 0xFFFFFFFF: last = max(last, k * (ss // 4) + j); break
         if last >= 0 and (last + 2) * ss > size: raise Damaged(path, 'truncated: sector %d needs %d bytes, file has %d' % (last, (last + 2) * ss, size))
+        if last < 0: raise Damaged(path, 'FAT marks no sector in use (file still being written?)')
+        dstart = struct.unpack_from('<I', h, 48)[0]
+        if dstart < 0xFFFFFFFA:
+            fs = dstart // (ss // 4)
+            if fs >= len(fat_secs): raise Damaged(path, 'directory start sector %d outside the FAT' % dstart)
+            e = os.pread(fd, 4, (fat_secs[fs] + 1) * ss + 4 * (dstart % (ss // 4)))
+            if len(e) < 4 or struct.unpack('<I', e)[0] == 0xFFFFFFFF: raise Damaged(path, 'directory start sector %d is marked free in the FAT' % dstart)
     finally:
         if own: os.close(fd)
 
