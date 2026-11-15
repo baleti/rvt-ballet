@@ -66,6 +66,12 @@ def main(a):
             ends = [k for k, l in enumerate(dbl) if abs(struct.unpack('<d', s.J.get(l[2], 8))[0] - e0) < 1e-12]
             if len(ends) != 1 or ends[0] + 1 >= len(dbl) or len(dbl) != 2: raise SE.Refused('R record does not hold exactly (end, start) ParamValueDouble pair')
             nb, n = patch_body_generic(body, new, struct.unpack('<d', s.J.get(dbl[ends[0] + 1][2], 8))[0])
+            # collision guard: E or E-start anywhere in the partition OUTSIDE this element's Z item / header / R record (e.g. sketch curve coordinates) means value matching cannot be trusted
+            st0 = struct.unpack('<d', s.J.get(dbl[ends[0] + 1][2], 8))[0]; pats = [struct.pack('<d', e0), struct.pack('<d', e0 - st0)]
+            spans = [(zk, zk + W + 8 + L), (T['_hk'], T['_hk'] + len(T['hdr'])), (i, q)]
+            for pt, offs in SE.occurrences(s.sp, pats).items():
+                out = [o for o in offs if not any(a <= o < b for a, b in spans)]
+                if out: raise SE.Refused('the old end offset / end-start value also occurs %d time(s) outside this extrusion (e.g. profile coordinates): value matching is ambiguous' % len(out))
         # (2) element header: exactly one unaligned double equal to the old end offset, no stamp in the header
         hdr = T['hdr']; hh = [o for o in range(len(hdr) - 7) if abs(struct.unpack_from('<d', hdr, o)[0] - e0) < 1e-12 and struct.unpack_from('<d', hdr, o)[0] != 0.0]
         if len(hh) != 1: raise SE.Refused('element header holds %d slots equal to the old end offset %r (expected exactly 1)' % (len(hh), e0))

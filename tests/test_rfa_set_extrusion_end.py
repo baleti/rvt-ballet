@@ -79,4 +79,9 @@ with tempfile.TemporaryDirectory() as d:
         t = os.path.join(d, 't.rfa'); open(t, 'wb').write(open(fa, 'rb').read()[:300000])
         r = subprocess.run([sys.executable, TOOL, t, os.path.join(d, 'o2.rfa'), '2916', '3.3'], capture_output=True, text=True)
         assert r.returncode == 2 and not os.path.exists(os.path.join(d, 'o2.rfa')), 'truncated file accepted'
+fc = os.path.join(FL, 'fe5_col_a.rfa')      # profile coordinates 1.7 x 1.3 equal E and E-start on purpose: refused (ambiguous), nothing written
+if os.path.exists(fc):
+    with tempfile.TemporaryDirectory() as d:
+        r = subprocess.run([sys.executable, TOOL, fc, os.path.join(d, 'o.rfa'), '2916', '3.3'], capture_output=True, text=True)
+        assert r.returncode == 2 and not os.path.exists(os.path.join(d, 'o.rfa')), 'collision file accepted: ' + r.stdout
 print('PASS')
