@@ -26,4 +26,6 @@ for name, op in (('move', lambda e: e.move(EID, 1.0, 0.0)), ('rotate', lambda e:
     nb = hdrbox(out); assert nb != old, name
     assert hits(out, nb) >= 3, '%s: new box found %d times (header + 2 block copies expected)' % (name, hits(out, nb))
     assert hits(out, old) == 0, '%s: old box still present' % name
+out = tempfile.mkdtemp() + '/t0.rvt'; ed = rvtedit.Edit(SRC); ed.rotate(EID, 0.0); ed.save(out)      # c1x-rvtdiff item 96: full-turn rotate is a strict no-op
+assert open(out, 'rb').read() == open(SRC, 'rb').read(), 'rotate by 0 deg must leave the file byte-identical'
 print('OK move and rotate update header box and both zone-item block copies')
