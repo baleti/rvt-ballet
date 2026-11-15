@@ -642,6 +642,7 @@ def _rvtedit_pass(a, b, ops):
                 if _is_pinned(ed, o['eid']): raise EditError('element %d is pinned (Element.m_locked): rotating a pinned element is refused, as Revit does; unpin it first' % o['eid'])
                 if any(str(x[1]).startswith('FamInstCurveDriver.') for x in ed.g.e.trace(o['eid'])[3]): raise EditError('element %d: rotate refused, it is a curve-located family instance (beam / brace: FamInstCurveDriver with its own curve, end joins and cached extents); rotating only its placement frame makes the record inconsistent. Columns and point-located instances are supported' % o['eid'])
                 ed.rotate(o['eid'], o['deg'])
+                if ed.g.e.trace(o['eid'])[2].get('class') == 'SWall': WALLROT[0] = True      # isolated-wall rotate (opt-in): its record + item rewrite spans the whole element, the gate's span/budget rules for a single placement edit are widened for it only
             elif o['op'] == 'change_type': _change_type(ed, o)
             elif o['op'] == 'set_link_path': _set_link_path(ed, o)
             elif o['op'] == 'set_link_load': _set_link_load(ed, o)
@@ -885,6 +886,7 @@ DELETE_VM_VERIFIED = {'CategoryElem', 'BasePoint', 'BrowserOrganization', 'SWall
 
 IN_USE_GUARD_CLASSES = {'DimensionStyle', 'CompoundCeilingType', 'AssemblyCodeTable'}      # type-like classes whose users are not in the header deletion lists
 IN_USE_GUARD_ALLOW = 5      # measured: an id occurs 5 times more in the file before delete than after (own record + lists), Structural 2024 DimensionStyle/CategoryElem/CompoundCeilingType
+WALLROT = [False]      # set by _rvtedit_pass when an isolated SWall was rotated (c1x-rvtmove 2026-11-15)
 
 
 def tags_hosting(ed, eid):
