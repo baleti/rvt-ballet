@@ -29,6 +29,24 @@ def patch_body(body, new):
     return bytes(nb), n
 
 
+def patch_body_generic(body, new, start):
+    """other profiles (hexagon 4254 B, 2-arc circle 4234 B, triangle 2463 B measured, 3 Revit-made pairs): the changed slots are exactly the unaligned doubles equal to E (end) or E-start.
+    START comes from the R record. Value matching is only safe when those values cannot collide with profile coordinates: refuses when E or E-start is 0 or +-1, when slots 72/120 disagree, or when fewer than 8 slots match."""
+    if not (2000 < len(body) < 12000): raise SE.Refused('Z item is %d bytes: outside the measured range 2463..4254' % len(body))
+    e0, e1 = struct.unpack_from('<d', body, 72)[0], struct.unpack_from('<d', body, 120)[0]
+    if e0 != e1 or not (-1e4 < e0 < 1e4): raise SE.Refused('end offset slots 72/120 disagree (%r vs %r)' % (e0, e1))
+    d0 = e0 - start
+    for v in (e0, d0, new, new - start):
+        if abs(v) < 1e-9 or abs(abs(v) - 1.0) < 1e-9: raise SE.Refused('value %r is 0 or +-1: value matching would collide with unit constants' % v)
+    nb = bytearray(body); n = 0
+    for i in range(len(body) - 7):
+        v = struct.unpack_from('<d', body, i)[0]
+        if abs(v - e0) < 1e-12: struct.pack_into('<d', nb, i, new); n += 1
+        elif abs(v - d0) < 1e-12: struct.pack_into('<d', nb, i, new - start); n += 1
+    if n < 8: raise SE.Refused('only %d slots matched' % n)
+    return bytes(nb), n
+
+
 def main(a):
     src, dst, eid, new = a[0], a[1], int(a[2]), float(a[3])
     if os.path.exists(dst): print('refused: output exists'); return 2
@@ -37,13 +55,18 @@ def main(a):
         if T['cls'] != 'ExtrusionElem': raise SE.Refused('element %d is %s, not ExtrusionElem' % (eid, T['cls']))
         zk = T['_zk']; L = struct.unpack('<I', s.J.get(zk + W + 4, 4))[0]; body = s.J.get(zk + W + 8, L)
         if zlib.adler32(body) & 0xffffffff != struct.unpack('<I', s.J.get(zk + W, 4))[0]: raise SE.Refused('Z stamp does not match its body')
-        nb, n = patch_body(body, new)
         e0 = struct.unpack_from('<d', body, 72)[0]
+        i, r, log, q = s.trace(eid)
+        dbl = [l for l in log if l[1] == 'ParamValueDouble.m_value' and l[3] - l[2] == 8]
+        if len(body) == 3060: nb, n = patch_body(body, new)
+        else:
+            ends = [k for k, l in enumerate(dbl) if abs(struct.unpack('<d', s.J.get(l[2], 8))[0] - e0) < 1e-12]
+            if len(ends) != 1 or ends[0] + 1 >= len(dbl) or len(dbl) != 2: raise SE.Refused('R record does not hold exactly (end, start) ParamValueDouble pair')
+            nb, n = patch_body_generic(body, new, struct.unpack('<d', s.J.get(dbl[ends[0] + 1][2], 8))[0])
         # (2) element header: exactly one unaligned double equal to the old end offset, no stamp in the header
         hdr = T['hdr']; hh = [o for o in range(len(hdr) - 7) if abs(struct.unpack_from('<d', hdr, o)[0] - e0) < 1e-12 and struct.unpack_from('<d', hdr, o)[0] != 0.0]
         if len(hh) != 1: raise SE.Refused('element header holds %d slots equal to the old end offset %r (expected exactly 1)' % (len(hh), e0))
         # (3) R record: exactly one ParamValueDouble.m_value equal to the old end offset (what the Revit API reads back)
-        i, r, log, q = s.trace(eid)
         pv = [l for l in log if l[1] == 'ParamValueDouble.m_value' and l[3] - l[2] == 8 and abs(struct.unpack('<d', s.J.get(l[2], 8))[0] - e0) < 1e-12]
         if len(pv) != 1 or pv[0][3] - pv[0][2] != 8: raise SE.Refused('R record holds %d ParamValueDouble slots equal to the old end offset (expected exactly 1)' % len(pv))
         s._spans(zk + W + 8, body, nb, 'extrusion end')

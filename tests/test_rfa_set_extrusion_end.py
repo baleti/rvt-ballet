@@ -22,6 +22,10 @@ def synthetic_refusals():
     struct.pack_into('<d', b, 120, 1.0); struct.pack_into('<d', b, 837, 5.0)
     try: T.patch_body(bytes(b), 3.0); raise SystemExit('FAIL body with wrong slot values accepted')
     except SE.Refused: pass
+    b = bytearray(4000); struct.pack_into('<d', b, 72, 1.7); struct.pack_into('<d', b, 120, 1.7)
+    for st, nw in ((1.0, 3.3), (0.4, 1.0), (0.4, 0.0)):      # unit/zero values collide with constants
+        try: T.patch_body_generic(bytes(b), nw, 0.7 if st == 1.0 else st); raise SystemExit('FAIL colliding value accepted')
+        except SE.Refused: pass
     print('synthetic refusals ok')
 
 
@@ -49,4 +53,5 @@ def pair(a, b, eid, new):
 
 
 synthetic_refusals(); pair('fe_a.rfa', 'fe_b.rfa', 2916, 2.5); pair('fe2_a.rfa', 'fe2_b.rfa', 2916, 3.3)
+for _n in ('hex', 'circ', 'tri'): pair('fe4_%s_a.rfa' % _n, 'fe4_%s_b.rfa' % _n, 2916, 3.3)
 print('PASS')
