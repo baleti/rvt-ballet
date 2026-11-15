@@ -34,7 +34,7 @@ Prefer `--json` or `--tsv`, and summarise with python3 -c, awk, sort or uniq ins
 
 ## Rules
 - READ-ONLY: the file is opened read-only and never written, so reading a file that Revit has open cannot damage it.
-- SAVES IN PROGRESS: a read during a Revit save can see a half-written file. The tool detects this and exits 75 with "changed during read: retry" after two automatic retries; never treat that as an answer. Querying a copy of the model is also fine.
+- SAVES IN PROGRESS: a read during a Revit save can see a half-written file. The tool detects this and exits 75 with "changed during read: retry" after two automatic retries; never treat that as an answer. Querying a copy of the model is also fine. A file modified in the last 5 s (or with a fresh save temp file, a `<name>_backup` folder or `.sgtmp` beside it) is waited for, then refused with exit 75 if the save goes on: wait 10 to 30 s and rerun. `--snapshot` copies the model to a private temp dir, checks the copy against the source before and after, queries the copy and deletes it (needs free disk of the file size). `--quiet-secs N` changes the wait (0 = off); `RVTBALLET_FULL_HASH=1` makes the change check hash the whole file. A file that is only partly written (exit 1, "not a complete .rvt") is also not an answer.
 - PRIVACY: project files are often confidential client data. Keep results in the session, do not paste names into public places, repos or issue trackers, and never upload or copy the file elsewhere.
 - Units: Revit internal units (feet) unless a field says otherwise (1 m = 3.28084 ft). Element ids are Revit ElementIds.
 - Exit codes: 0 ok, 1 unreadable, 2 usage error, 75 changed during read.
