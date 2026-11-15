@@ -16,6 +16,7 @@ answer is silently wrong. This module gives every reader the same three tools, a
 What is NOT guaranteed (see docs/stable-read.md): a writer that changes bytes between the sampled blocks without changing size or mtime_ns
 and that finishes before the second fingerprint is only caught by the full-copy comparison of --snapshot (size/mtime exactness is up to the file system).
 """
+import stat as stat_mod
 import os, sys, time, hashlib, struct, shutil, tempfile, contextlib, errno
 
 BLOCK = 4096
@@ -215,12 +216,26 @@ def _free(path):
     st = os.statvfs(path); return st.f_bavail * st.f_frsize
 
 
+def sweep_stale_snapshots(base=None, max_age=6 * 3600):
+    """rvtsnap-* dirs of OUR user older than max_age (a snapshot process killed by SIGKILL/power loss never ran its cleanup; each holds a full copy of a model)"""
+    base = base or tempfile.gettempdir()
+    try: names = os.listdir(base)
+    except OSError: return
+    for n in names:
+        d = os.path.join(base, n)
+        try:
+            st = os.lstat(d)
+            if n.startswith('rvtsnap-') and stat_mod.S_ISDIR(st.st_mode) and st.st_uid == os.getuid() and time.time() - st.st_mtime > max_age: shutil.rmtree(d, ignore_errors=True)
+        except OSError: pass
+
+
 @contextlib.contextmanager
 def snapshot(path, tmpdir=None, attempts=3, quiet=None, chunk=8 << 20, log=None):
     """copy the file to a private temp dir and yield the copy's path. The copy is accepted only when the source fingerprint is identical before and
     after the copy and the copy has the same size and sampled content; otherwise the copy is repeated (after the quiet period) up to `attempts`.
     The copy is removed on exit, also on error. Needs free disk space of the file size (checked first)."""
     say = log or (lambda m: None); src = os.path.abspath(path); tmp = None
+    sweep_stale_snapshots(tmpdir)
     try:
         for n in range(attempts):
             wait_quiet(src, quiet=quiet)

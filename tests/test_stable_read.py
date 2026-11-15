@@ -326,3 +326,13 @@ def test_run_relative_and_symlinked_dir_paths_are_guarded(d, capsys, monkeypatch
     for p in ('real/m.rvt', 'lnk/m.rvt', os.path.join(d, 'lnk', 'm.rvt')):
         os.utime(f, (t, t)); S._ACTIVE.clear()
         assert S.run([p, '--quiet-secs', '0'], touch) == 75, p
+
+
+def test_snapshot_sweeps_dirs_left_by_killed_snapshots(tmp_path):
+    import os, time
+    from rvtballet import stable
+    old = tmp_path / 'rvtsnap-old'; new = tmp_path / 'rvtsnap-new'; other = tmp_path / 'other-old'
+    for d in (old, new, other): d.mkdir(); (d / 'm.rvt').write_bytes(b'x')
+    t = time.time() - 7 * 3600; os.utime(old, (t, t)); os.utime(other, (t, t))
+    stable.sweep_stale_snapshots(str(tmp_path))
+    assert not old.exists() and new.exists() and other.exists()
