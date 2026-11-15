@@ -90,6 +90,9 @@ L={n:(o,e) for n,o,e,_ in T['log']}
 et=g._et(); RW=g.RW; n_=struct.unpack_from('<I',et,2)[0]
 best=max(range(n_),key=lambda k:(struct.unpack_from('<I',et,6+RW*k+12)[0],struct.unpack_from('<I',et,6+RW*k+8)[0]))
 tr=struct.unpack_from('<3I',et,6+RW*best+8)
+if os.environ.get('RVT_ADD_TRIPLE_FROM_SRC'):      # experiment (c1x-rvtadd 2026-11-15): on a 2-partition file the global max row triple belongs to the OTHER partition (arch23: /9 rows <=876, /10 rows 878, best=878) while the clone is built in the source's partition; use the source's own row triple instead
+    _sk=[k for k in range(n_) if struct.unpack_from('<I',et,6+RW*k)[0]==S]
+    if _sk: tr=struct.unpack_from('<3I',et,6+RW*_sk[0]+8); print('row triple from source:',tr)
 nid=g.nextid; g.nextid+=1; idN=struct.pack(g.IDF,nid)
 rec=bytearray(T['rec']); print('src id occurrences in rec',rec.count(idS)); genlib.rep(rec,idS,idN)
 nmv=0
