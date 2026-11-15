@@ -108,7 +108,7 @@ def _disk_put(key, snap, keys, keep=6):
 def _sweep_stale_snaps(max_age=6 * 3600):
     """verification-worker dirs (rvtballet-snap-*) that a killed process left behind (SIGKILL skips the finally): remove those untouched for max_age seconds, so /tmp does not fill with copies of models."""
     import glob, shutil, tempfile, time
-    for d in glob.glob(os.path.join(tempfile.gettempdir(), 'rvtballet-snap-*')):
+    for d in glob.glob(os.path.join(tempfile.gettempdir(), 'rvtballet-snap-*')) + glob.glob(os.path.join(tempfile.gettempdir(), 'rvtballet-rb-*')):    # rb-* = readback dirs of _rb_params, same SIGKILL leak
         try:
             if os.path.isdir(d) and not os.path.islink(d) and os.stat(d).st_uid == os.getuid() and time.time() - os.stat(d).st_mtime > max_age: shutil.rmtree(d, ignore_errors=True)
         except OSError: pass
