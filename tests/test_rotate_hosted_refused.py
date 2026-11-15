@@ -15,4 +15,11 @@ class T(unittest.TestCase):
         self.assertIn('rotate of wall-hosted instance',p.stderr); self.assertFalse(saved)
     def test_opt_in_saves(self):
         p,saved=self.run_({'RVTEDIT_ROTATE_HOSTED':'1'}); self.assertTrue(saved,p.stderr[-300:])
+    def test_floor_clean_refusal(self):
+        import glob
+        F=os.path.expanduser('~/rvt-research/write-lab/scenes/2024_writer_floors_portrait.rte')
+        if not os.path.exists(F): self.skipTest('scene absent')
+        d=tempfile.mkdtemp(); o=os.path.join(d,'f.rte')
+        p=subprocess.run([sys.executable,E,F,o,'rot:301567:30'],capture_output=True,text=True)
+        self.assertIn('rotate of Floor refused',p.stderr); self.assertNotIn('KeyError',p.stderr); self.assertFalse(os.path.exists(o))
 if __name__=='__main__': unittest.main()
