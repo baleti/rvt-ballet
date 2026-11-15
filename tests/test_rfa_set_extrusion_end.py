@@ -14,6 +14,8 @@ def zbody(path, eid=2916):
 
 
 def synthetic_refusals():
+    try: T.patch_body(bytes(7072), 3.0); raise SystemExit('FAIL non-3060 Z item accepted')
+    except SE.Refused: pass
     b = bytearray(3060); struct.pack_into('<d', b, 72, 1.0); struct.pack_into('<d', b, 120, 2.0)
     try: T.patch_body(bytes(b), 3.0); raise SystemExit('FAIL disagreeing slots accepted')
     except SE.Refused: pass

@@ -15,7 +15,7 @@ NSLOTS = len(SLOTS)
 
 def patch_body(body, new):
     """-> (new body, slot count); raises SE.Refused when the measured layout does not hold"""
-    if len(body) < 130: raise SE.Refused('Z item too short for an extrusion')
+    if len(body) != 3060: raise SE.Refused('Z item is %d bytes: the slot layout was measured only on the 3060-byte Z item of a 4-sided rectangle profile (Autodesk sample families have 6912..9650-byte ones)' % len(body))
     e0, e1 = struct.unpack_from('<d', body, 72)[0], struct.unpack_from('<d', body, 120)[0]
     if e0 != e1 or not (-1e4 < e0 < 1e4): raise SE.Refused('end offset slots 72/120 disagree (%r vs %r)' % (e0, e1))
     s = struct.unpack_from('<d', body, 837)[0]; start = e0 - s
