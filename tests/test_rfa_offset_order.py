@@ -14,6 +14,8 @@ def main():
         for v in ('1.7', '2.5', '1e-320', 'abc'):
             o = T + '/s.rfa'; r = run('rfa_set_extrusion_start.py', FL + 'fe6_start_a.rfa', o, '2916', v)
             assert r.returncode == 2 and not os.path.exists(o), (v, r.returncode, r.stdout); n += 1
+        if os.path.exists(FL + 'fe6_void_a.rfa'):   # void start edit has no Revit-made pair: refused
+            o = T + '/v.rfa'; r = run('rfa_set_extrusion_start.py', FL + 'fe6_void_a.rfa', o, '2916', '0.9'); assert r.returncode == 2 and not os.path.exists(o), r.stdout; n += 1
         r = run('rfa_set_extrusion_start.py', FL + 'fe6_start_a.rfa', T + '/oks.rfa', '2916', '0.9'); assert r.returncode == 0, r.stdout; n += 1
     if os.path.exists(FL + 'fe6_start_a.rfa'):   # start then end == end then start (byte-identical)
         A = FL + 'fe6_start_a.rfa'

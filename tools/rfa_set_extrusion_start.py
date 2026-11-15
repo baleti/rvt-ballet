@@ -32,6 +32,9 @@ def main(a):
         d0 = ez - st
         for v in (st, d0, new, ez - new):
             if abs(v) < 1e-9 or abs(abs(v) - 1.0) < 1e-9: raise SE.Refused('value %r is 0 or +-1: would collide with unit constants' % v)
+        import rfa_set_extrusion_end as EN
+        if not all(abs(struct.unpack_from('<d', body, o)[0] - ez) < 1e-12 or abs(struct.unpack_from('<d', body, o)[0] - d0) < 1e-12 for o in EN.SLOTS):
+            raise SE.Refused('end/end-start slots are not at the solid-extrusion offsets (void extrusion?): start edit measured on solids only')
         nb = bytearray(body); n0 = n1 = n2 = 0
         for k in range(len(body) - 7):
             v = struct.unpack_from('<d', body, k)[0]
