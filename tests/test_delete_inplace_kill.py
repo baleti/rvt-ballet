@@ -6,15 +6,17 @@ TOOL = os.path.join(os.path.dirname(__file__), '..', 'tools', 'rvtsave_inplace_d
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 @unittest.skipUnless(S and E and os.path.exists(S), 'RVT_DEL_KILL_SAMPLE/EID not set')
 class T(unittest.TestCase):
-    def test_kill_points(self):
+    def test_kill_points(self): self._run('*.sgtmp', (0.0, 0.3, 1.0, 2.5, 'gone'))
+    def test_kill_during_backup(self): self._run('*.part', (0.0, 0.2, 0.6, 'gone'))
+    def _run(self, pat, delays):
         h0 = sha(S); bad = []; seen = []
-        for delay in (0.0, 0.3, 1.0, 2.5, 'gone'):
+        for delay in delays:
             with tempfile.TemporaryDirectory() as d:
                 env = dict(os.environ, TMPDIR=d, DEL_EID=E)
                 p = subprocess.Popen([sys.executable, TOOL, S], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 t0 = time.time(); tmpseen = None
                 while p.poll() is None and time.time() - t0 < 900:
-                    if glob.glob(d + '/**/*.sgtmp', recursive=True) or glob.glob(d + '/*.sgtmp'):
+                    if glob.glob(d + '/**/' + pat, recursive=True):
                         tmpseen = tmpseen or time.time()
                         if delay != 'gone' and time.time() - tmpseen >= delay: break
                     elif tmpseen and delay == 'gone': time.sleep(0.02); break
