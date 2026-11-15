@@ -15,5 +15,11 @@ def main():
             o = T + '/s.rfa'; r = run('rfa_set_extrusion_start.py', FL + 'fe6_start_a.rfa', o, '2916', v)
             assert r.returncode == 2 and not os.path.exists(o), (v, r.returncode, r.stdout); n += 1
         r = run('rfa_set_extrusion_start.py', FL + 'fe6_start_a.rfa', T + '/oks.rfa', '2916', '0.9'); assert r.returncode == 0, r.stdout; n += 1
+    if os.path.exists(FL + 'fe6_start_a.rfa'):   # start then end == end then start (byte-identical)
+        A = FL + 'fe6_start_a.rfa'
+        for t, sc, x, y in (('rfa_set_extrusion_start.py', 'rfa_set_extrusion_end.py', '0.9', '3.3'), ('rfa_set_extrusion_end.py', 'rfa_set_extrusion_start.py', '3.3', '0.9')):
+            assert run(t, A, T + '/c1_' + x + '.rfa', '2916', x).returncode == 0
+            assert run(sc, T + '/c1_' + x + '.rfa', T + '/c2_' + x + '.rfa', '2916', y).returncode == 0
+        assert open(T + '/c2_0.9.rfa', 'rb').read() == open(T + '/c2_3.3.rfa', 'rb').read(); n += 1
     print('PASS offset order guards: %d cases' % n if n else 'SKIP no synthetic rfa')
 main()
