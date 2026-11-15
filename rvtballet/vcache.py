@@ -19,8 +19,22 @@ def code_stamp():
     _stamp = h.hexdigest()[:10]; return _stamp
 
 
+def content_stamp(src):
+    """size + hash of the sampled blocks (stable._offsets: head, tail, 16 spread blocks): content derived, so a copy of the file keeps its cache, while an edited or re-saved file of the SAME size (a move, a parameter, a Revit save)
+    no longer serves the old drawing. Not mtime: copies to another host do not keep it."""
+    import struct
+    from . import stable
+    fd = os.open(src, os.O_RDONLY)
+    try:
+        size = os.fstat(fd).st_size; h = hashlib.blake2b(digest_size=8)
+        for off, ln in stable._offsets(size):
+            b = os.pread(fd, ln, off); h.update(struct.pack('<QQ', off, len(b))); h.update(b)
+        return [size, h.hexdigest()]
+    finally: os.close(fd)
+
+
 def _base(src, req):
-    return hashlib.md5(json.dumps([os.path.basename(src), os.stat(src).st_size, req], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.md5(json.dumps([os.path.basename(src), content_stamp(src), req], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def cache_fn(src, req):
