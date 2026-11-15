@@ -105,6 +105,15 @@ def _disk_put(key, snap, keys, keep=6):
     except Exception: pass
 
 
+def _sweep_stale_snaps(max_age=6 * 3600):
+    """verification-worker dirs (rvtballet-snap-*) that a killed process left behind (SIGKILL skips the finally): remove those untouched for max_age seconds, so /tmp does not fill with copies of models."""
+    import glob, shutil, tempfile, time
+    for d in glob.glob(os.path.join(tempfile.gettempdir(), 'rvtballet-snap-*')):
+        try:
+            if os.path.isdir(d) and not os.path.islink(d) and os.stat(d).st_uid == os.getuid() and time.time() - os.stat(d).st_mtime > max_age: shutil.rmtree(d, ignore_errors=True)
+        except OSError: pass
+
+
 def _cached_adapter():
     """RvtAdapter whose snapshot() is memoised by content hash (last 3 buffers): the source dump (~14 s on a 5.6k-element file) is taken once per loaded
     file instead of at every save; the output of a save is cached too, so after SAVE (overwrite) the new loaded bytes cost nothing."""
@@ -117,7 +126,7 @@ def _cached_adapter():
             import subprocess, tempfile, pickle
             from ._vendor.rvtplat import mem
             lim = os.environ.get('RVTBALLET_SNAPSHOT_MEM_GB'); lim = float(lim) * 2 ** 30 if lim else max(mem.limit_gb(0.7) * 2 ** 30 - mem.rss_bytes(), 2 * 2 ** 30)
-            d = tempfile.mkdtemp(prefix='rvtballet-snap-'); a = os.path.join(d, 'in.rvt'); o = os.path.join(d, 'out.pkl')
+            _sweep_stale_snaps(); d = tempfile.mkdtemp(prefix='rvtballet-snap-'); a = os.path.join(d, 'in.rvt'); o = os.path.join(d, 'out.pkl')
             try:
                 with open(a, 'wb') as f: f.write(buf)
                 r = _run_worker([sys.executable, '-c', _WORKER, a, o, str(int(lim)), os.path.expanduser(os.environ.get('SAVEGATE_RVT_LIB') or '~/rvt-research/write-lab'), os.path.dirname(os.path.dirname(os.path.abspath(__file__)))], lim, float(os.environ.get('RVTBALLET_SNAPSHOT_TIMEOUT', '7200')))
