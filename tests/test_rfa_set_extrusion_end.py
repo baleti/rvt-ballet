@@ -71,4 +71,12 @@ if os.path.exists(smp):
     with tempfile.TemporaryDirectory() as d:
         r = subprocess.run([sys.executable, TOOL, smp, os.path.join(d, 'o.rfa'), '82', '7.5'], capture_output=True, text=True)
         assert r.returncode == 2 and not os.path.exists(os.path.join(d, 'o.rfa')) and 'measured on Revit 2024' in r.stdout, 'non-2024 file accepted: ' + r.stdout
+with tempfile.TemporaryDirectory() as d:
+    z = os.path.join(d, 'z.rfa'); open(z, 'wb').write(bytes(100))
+    r = subprocess.run([sys.executable, TOOL, z, os.path.join(d, 'o.rfa'), '2916', '3.3'], capture_output=True, text=True)
+    assert r.returncode == 2 and 'refused' in r.stdout and not os.path.exists(os.path.join(d, 'o.rfa')), r.stdout + r.stderr
+    if os.path.exists(fa):
+        t = os.path.join(d, 't.rfa'); open(t, 'wb').write(open(fa, 'rb').read()[:300000])
+        r = subprocess.run([sys.executable, TOOL, t, os.path.join(d, 'o2.rfa'), '2916', '3.3'], capture_output=True, text=True)
+        assert r.returncode == 2 and not os.path.exists(os.path.join(d, 'o2.rfa')), 'truncated file accepted'
 print('PASS')

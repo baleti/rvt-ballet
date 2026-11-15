@@ -79,6 +79,8 @@ def main(a):
         s.write(dst, mode='fit')
     except SE.Refused as e:
         print('refused:', e); return 2
+    except Exception as e:      # unreadable / not an OLE file etc.: clean refusal, nothing written
+        print('refused: input could not be read (%s: %s)' % (type(e).__name__, str(e)[:80])); return 2
     print('ok: %d Z slots + header + R value patched -> %s' % (n, dst)); return 0
 
 
