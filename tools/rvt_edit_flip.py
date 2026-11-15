@@ -37,6 +37,19 @@ if os.environ.get('EDIT_FLIP_INMEMBER'):      # targeted: flip one byte of the D
             r = pt.mem[mi]['raw']; o = rnd.randrange(len(r)); r[o] ^= 1 << rnd.randrange(8); pt.mem[mi]['dirty'] = True
             c.streams()[pn].data = st_.build(pt.rebuild(), keep_spare=False)
             import io; tp = os.path.join(_T, 'rb.rvt'); cfb.write(c, tp); T['inmember_%s_%d_at%d' % (pn.split('/')[-1], mi, o)] = open(tp, 'rb').read()
+if os.environ.get('EDIT_FLIP_MEMBERSWAP'):      # c1x-rvtsave 217: swap two distinct W-byte chunks (EDIT_FLIP_SWAP_W, default 16) inside the decoded raw of each declared member, valid re-encode: a reordered-data output must be refused
+    import cfb, rvtw, wlpart
+    W = int(os.environ.get('EDIT_FLIP_SWAP_W', '16'))
+    for pn, mem in (dm or {}).items():
+        for mi in mem[:1]:
+            for t in range(int(os.environ['EDIT_FLIP_MEMBERSWAP'])):
+                c = cfb.CFB(good); st_ = rvtw.Stream(c.streams()[pn].data); pt = wlpart.Partition(st_); r = pt.mem[mi]['raw']; n_ = len(r) // W
+                for _try in range(50):
+                    a, b = rnd.randrange(n_), rnd.randrange(n_)
+                    if bytes(r[a*W:(a+1)*W]) != bytes(r[b*W:(b+1)*W]): break
+                ca, cb = bytes(r[a*W:(a+1)*W]), bytes(r[b*W:(b+1)*W]); r[a*W:(a+1)*W] = cb; r[b*W:(b+1)*W] = ca; pt.mem[mi]['dirty'] = True
+                c.streams()[pn].data = st_.build(pt.rebuild(), keep_spare=False)
+                tp = os.path.join(_T, 'ms.rvt'); cfb.write(c, tp); T['memswap_%s_%d_%d_%d' % (pn.split('/')[-1], mi, a, b)] = open(tp, 'rb').read()
 if os.environ.get('EDIT_FLIP_WINDOW'):      # targeted: N byte flips of the DECOMPRESSED raw of each declared member INSIDE (+-32 B around) the edit's own diff window vs the source (valid re-encode), the spot the span rule cannot bound
     import cfb, rvtw, wlpart
     for pn, mem in (dm or {}).items():
