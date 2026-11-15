@@ -82,3 +82,17 @@ def test_snapshot_under_continuous_writer_refuses_and_cleans(ref, tmp_path):
     assert rc == 75 and not out.strip(), 'rc=%s out=%r err=%r' % (rc, out[:100], err[:200])
     left = [n for n in os.listdir(tempfile.gettempdir()) if n.startswith('rvtsnap-') and n not in before]
     assert not left, left
+
+
+def test_corrupt_read_segment_gives_exit_3_not_a_clean_exit(tmp_path):
+    """a gzip segment that fails its CRC (torn or damaged) must not end in exit 0: the answer may be incomplete"""
+    import re
+    b = open(SRC, 'rb').read(); gz = [m.start() for m in re.finditer(b'\x1f\x8b\x08', b)]
+    f = str(tmp_path / 'd.rvt'); hit = None
+    for i in range(0, len(gz), max(1, len(gz) // 12)):
+        x = bytearray(b); x[gz[i] + 40] ^= 0x5A; open(f, 'wb').write(x); os.utime(f, (1e9, 1e9))
+        env = dict(os.environ, RVT_Q_NO_DAMAGE_RETRY='1')
+        p = subprocess.run([sys.executable, '-m', 'rvtballet', 'levels', f, '--quiet-secs', '0'], cwd=ROOT, capture_output=True, text=True, timeout=300, env=env)
+        if 'fail their checksum' in p.stderr: hit = p; break
+    assert hit is not None, 'no flip hit a segment this query reads'
+    assert hit.returncode == 3, (hit.returncode, hit.stderr[-200:])

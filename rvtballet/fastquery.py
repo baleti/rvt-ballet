@@ -1175,7 +1175,7 @@ def main(argv, say=print):
 
 
 def _main(argv, say=print):
-    """rvt-ballet query COMMAND FILE [options]; exit 0 ok, 1 unreadable, 2 usage, 75 file changed during read (after RVT_Q_RETRIES retries)"""
+    """rvt-ballet query COMMAND FILE [options]; exit 0 ok, 1 unreadable, 2 usage, 3 answer printed but compressed blocks fail their checksum (incomplete), 75 file changed during read (after RVT_Q_RETRIES retries)"""
     a = _parser().parse_args(argv)
     if not os.path.isfile(a.file): print('rvt-ballet: no such file: %s' % a.file, file=sys.stderr); return 2
     log = (lambda m: print(m, file=sys.stderr, flush=True)) if a.verbose else None
@@ -1196,8 +1196,11 @@ def _main(argv, say=print):
                 print('rvt-ballet: %s' % ex2, file=sys.stderr); return 75
             if os.environ.get('RVT_Q_TRACE'): raise
             print('rvt-ballet: cannot read %s: %s: %s' % (os.path.basename(a.file), type(ex).__name__, str(ex)[:300]), file=sys.stderr); return 1
+        if _G.get('damaged') and k < tries and os.environ.get('RVT_Q_NO_DAMAGE_RETRY') != '1':
+            print('rvt-ballet: %d compressed blocks fail their checksum (a save in progress can cause this): retry %d of %d in 2 s' % (_G['damaged'], k + 1, tries), file=sys.stderr); time.sleep(2); continue
         for x in lines: say(x)          # printed only after the file was found unchanged: a torn read never reaches stdout
         if log: log('total %.2fs' % (time.time() - t0))
+        if _G.get('damaged') and not rc: return 3      # still failing after the retries: the answer above may be incomplete; a script must not take it for a clean result (stderr says why)
         return rc
 
 
