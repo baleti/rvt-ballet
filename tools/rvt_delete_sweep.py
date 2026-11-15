@@ -22,7 +22,7 @@ async def run(out, f, n, keep):
             if os.environ.get('SWEEP_CLASSES') and cls not in os.environ['SWEEP_CLASSES'].split(','): continue
             for eid in (([int(x) for x in os.environ['SWEEP_EIDS'].split(',') if int(x) in ids]) if os.environ.get('SWEEP_EIDS') else ids[:n]):      # SWEEP_EIDS: explicit element ids instead of the first N per class
                 r = await c.post('/api/m/m/edit', json=dict({'op': 'delete'} if SWEEP_OP == 'delete' else {'op': 'rotate', 'deg': 90.0}, eid=eid))
-                if r.status != 200: rows.append({'class': cls, 'result': 'INPUT_REFUSED'}); continue
+                if r.status != 200: print('INPUT', eid, (await r.text())[:400], flush=True); rows.append({'class': cls, 'result': 'INPUT_REFUSED'}); continue
                 dest = os.path.join(_T, 'o%d%s' % (k, os.path.splitext(f)[1])); k += 1
                 r = await c.post('/api/m/m/saveas', json={'dest': dest}); j = await r.json()
                 if r.status == 200: res = 'ACCEPTED verify_unexpected=%s' % j.get('verify', {}).get('n_unexpected'); assert os.path.exists(dest)
