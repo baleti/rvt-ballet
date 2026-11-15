@@ -20,4 +20,14 @@ class MoveHosted(unittest.TestCase):
             self.assertIn('Trf.m_or#1', names)
             self.assertNotIn('FamilyInstance.m_instOrigin#1', names)
 
+    def test_perpendicular_move_refused_along_wall_allowed(self):
+        f = glob.glob(CORPUS + '/2024/46_Snowdon_Towers_Sample_Facades.rvt')
+        if not f or not os.path.exists(LAB): self.skipTest('no corpus/edit-lab')
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, 'p.rvt')
+            r = subprocess.run([sys.executable, LAB, f[0], out, 'mv:593207:0:0.5:0'], capture_output=True, text=True, cwd=os.path.dirname(LAB))
+            self.assertNotEqual(r.returncode, 0, 'perpendicular move of a hosted window must be refused')
+            self.assertFalse(os.path.exists(out), 'nothing may be written on refusal')
+            self.assertIn('perpendicular', r.stdout + r.stderr)
+
 if __name__ == '__main__': unittest.main()
