@@ -1220,6 +1220,10 @@ def group_warning(ss, mid, buf):
     if jm:      # Revit VM oracle (Snowdon Structural 2024 column 606069, joined to 4): the copy opens clean but the API shows shift 0, the edit is silently ignored/regenerated away
         from .edit import EditError
         raise EditError('element %d: move/rotate refused, it is joined to other elements; Revit opens the copy but ignores the new location (VM readback shift 0, measured). Unjoin it first, or move a non-joined element' % jm[0])
+    jd = sorted(e for e, why in mem.items() if any(x.startswith('joined family instance ') for x in why) and e in {o['eid'] for o in ops if o.get('op') == 'delete'})
+    if jd:      # Revit 2024 VM: Facades column 593361 (joined to 2) deleted alone: gate accepted, Revit CorruptModelException 'needs to be recovered'
+        from .edit import EditError
+        raise EditError('element %d: delete refused, it is a family instance joined to other elements; a copy with only this record removed failed to open in Revit (CorruptModelException, measured). Unjoin it first, or delete a non-joined element' % jd[0])
     cm = sorted((int(x.split()[2]), e) for e, why in mem.items() if e in {o['eid'] for o in ops if o.get('op') in ('move', 'rotate')} for x in why if x.startswith('connected to '))
     if cm and cm[-1][0] >= CONNECTED_MOVE_REFUSE:      # Revit 2025 VM (Snowdon Electrical): a move of eid 1403442 (connected to 23 MEP elements) was accepted by the gate but Revit hung/crashed 3/3 at dx 0.25 and 2.0 (dx 0.01 opened); instances connected to 3 passed. Revit regenerates the connected network, the writer moves one record
         from .edit import EditError
