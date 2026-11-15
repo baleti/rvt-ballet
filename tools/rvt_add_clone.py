@@ -89,6 +89,12 @@ idS=struct.pack(g.IDF,S)
 L={n:(o,e) for n,o,e,_ in T['log']}
 et=g._et(); RW=g.RW; n_=struct.unpack_from('<I',et,2)[0]
 best=max(range(n_),key=lambda k:(struct.unpack_from('<I',et,6+RW*k+12)[0],struct.unpack_from('<I',et,6+RW*k+8)[0]))
+_pn_b=getattr(g,'pn',None)
+if _pn_b:      # c1x-rvtadd 2026-11-15: the global max row can belong to ANOTHER partition (arch23: /10 rows 878 vs /9 rows <=876); take the max row whose element lives in the partition we build in. Identical to the old rule when the other partitions are empty.
+    for k in sorted(range(n_),key=lambda k:(struct.unpack_from('<I',et,6+RW*k+12)[0],struct.unpack_from('<I',et,6+RW*k+8)[0]),reverse=True):
+        try: _p=g.e.trace(struct.unpack_from('<I',et,6+RW*k)[0])[0]
+        except Exception: continue
+        if _p==_pn_b: best=k; break
 tr=struct.unpack_from('<3I',et,6+RW*best+8)
 if os.environ.get('RVT_ADD_TRIPLE_FROM_SRC'):      # experiment (c1x-rvtadd 2026-11-15): on a 2-partition file the global max row triple belongs to the OTHER partition (arch23: /9 rows <=876, /10 rows 878, best=878) while the clone is built in the source's partition; use the source's own row triple instead
     _sk=[k for k in range(n_) if struct.unpack_from('<I',et,6+RW*k)[0]==S]
