@@ -15,8 +15,10 @@ async def run(orig, keep):
     if not c0: print(res, 'NO_CANDIDATE'); return
     e = int(os.environ['DEL_EID']) if os.environ.get('DEL_EID') else c0[int(os.environ.get('DEL_IDX', '0'))]; res['eid'] = e; md = tempfile.mkdtemp(dir=_T); models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models))) as c:
-        await c.get('/api/m/m/saveinfo')
-        r = await c.post('/api/m/m/edit', json={'op': 'delete', 'eid': e}); res['edit'] = r.status
+        await c.get('/api/m/m/saveinfo', timeout=__import__('aiohttp').ClientTimeout(total=None))
+        for _pre in [int(x) for x in os.environ.get('DEL_PRE', '').split(',') if x]:   # ids staged first (e.g. the tags hosted on a column), same save
+            _r = await c.post('/api/m/m/edit', json={'op': 'delete', 'eid': _pre}, timeout=__import__('aiohttp').ClientTimeout(total=None)); res.setdefault('pre', []).append(_r.status)
+        r = await c.post('/api/m/m/edit', json={'op': 'delete', 'eid': e}, timeout=__import__('aiohttp').ClientTimeout(total=None)); res['edit'] = r.status
         if r.status != 200: res['edit_msg'] = (await r.text())[:300]; res['untouched'] = sha(src) == h0; print(res); return
         r = await c.post('/api/m/m/save', json={}, timeout=__import__('aiohttp').ClientTimeout(total=None)); j = await r.json(); res['save'] = r.status; res['code'] = j.get('code', 'ok'); res['detail'] = str({k: v for k, v in j.items() if k != 'code'})[:600] if r.status != 200 else ''
         if r.status != 200:

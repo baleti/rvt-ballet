@@ -1,5 +1,5 @@
 """SIGKILL of an in-place SAVE! of a delete (private copy) at several points: the source file afterwards is either byte-identical to the original or a complete file that parses and lacks the target; never a half-written file.
-Needs $RVT_DEL_KILL_SAMPLE (Autodesk sample) and $RVT_DEL_KILL_EID (a deletable FamilyInstance id)."""
+Optional $DEL_PRE (tag ids deleted first). Needs $RVT_DEL_KILL_SAMPLE (Autodesk sample) and $RVT_DEL_KILL_EID (a deletable FamilyInstance id)."""
 import os, sys, glob, time, signal, hashlib, tempfile, subprocess, unittest
 S = os.environ.get('RVT_DEL_KILL_SAMPLE'); E = os.environ.get('RVT_DEL_KILL_EID')
 WRAP = os.path.join(os.path.dirname(__file__), '..', 'tools', '_kill_at_step.py')
