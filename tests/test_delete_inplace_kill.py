@@ -2,6 +2,7 @@
 Needs $RVT_DEL_KILL_SAMPLE (Autodesk sample) and $RVT_DEL_KILL_EID (a deletable FamilyInstance id)."""
 import os, sys, glob, time, signal, hashlib, tempfile, subprocess, unittest
 S = os.environ.get('RVT_DEL_KILL_SAMPLE'); E = os.environ.get('RVT_DEL_KILL_EID')
+WRAP = os.path.join(os.path.dirname(__file__), '..', 'tools', '_kill_at_step.py')
 TOOL = os.path.join(os.path.dirname(__file__), '..', 'tools', 'rvtsave_inplace_delete.py')
 import fnmatch
 def _find(d, pat):
@@ -9,31 +10,23 @@ def _find(d, pat):
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 @unittest.skipUnless(S and E and os.path.exists(S), 'RVT_DEL_KILL_SAMPLE/EID not set')
 class T(unittest.TestCase):
-    def test_kill_points(self): self._run('*.sgtmp', (0.0, 0.3, 1.0, 2.5, 'gone'))
-    def test_kill_during_backup(self): self._run('*.part', (0.0, 0.2, 0.6, 'gone'))
-    def _run(self, pat, delays):
+    def test_kill_points(self):
+        """deterministic: SIGKILL at the exact savegate steps (hook), not by polling"""
         h0 = sha(S); bad = []; seen = []
-        for delay in delays:
+        sys.path.insert(0, os.path.expanduser('~/src/savegate'))
+        from savegate import rvt_elements as R
+        for at in ('tmp_written', 'before_replace', 'after_replace'):
             with tempfile.TemporaryDirectory() as d:
-                env = dict(os.environ, TMPDIR=d, DEL_EID=E)
-                p = subprocess.Popen([sys.executable, TOOL, S], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                t0 = time.time(); tmpseen = None
-                while p.poll() is None and time.time() - t0 < 900:
-                    if _find(d, pat):
-                        tmpseen = tmpseen or time.time()
-                        if delay != 'gone' and time.time() - tmpseen >= delay: break
-                    elif tmpseen and delay == 'gone': time.sleep(0.02); break
-                    time.sleep(0.02)
-                if p.poll() is not None: seen.append((delay, 'finished-before-kill')); continue
-                p.send_signal(signal.SIGKILL); p.wait()
-                for f in glob.glob(d + '/*/p.rvt'):
-                    if sha(f) == h0: seen.append((delay, 'original')); continue
-                    sys.path.insert(0, os.path.expanduser('~/src/savegate'))
-                    from savegate import rvt_elements as R
-                    try: ok = int(E) not in R.elements(open(f, 'rb').read())
-                    except Exception: ok = False
-                    seen.append((delay, 'complete' if ok else 'BAD'))
-                    if not ok: bad.append(delay)
+                env = dict(os.environ, TMPDIR=d, DEL_EID=E, KILL_AT=at)
+                p = subprocess.run([sys.executable, WRAP, S], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3000)
+                fs = glob.glob(d + '/*/p.rvt')
+                if p.returncode != -signal.SIGKILL or not fs: seen.append((at, 'NOT-KILLED rc=%s' % p.returncode)); bad.append(at); continue
+                f = fs[0]
+                if sha(f) == h0: seen.append((at, 'original')); continue
+                try: ok = int(E) not in R.elements(open(f, 'rb').read())
+                except Exception: ok = False
+                seen.append((at, 'complete' if ok else 'BAD'))
+                if not ok: bad.append(at)
         print('KILL_OUTCOMES', seen)
-        self.assertEqual(bad, [], 'source half-written after kill at these delays')
+        self.assertEqual(bad, [], 'source half-written or hook never fired: %s' % seen)
 if __name__ == '__main__': unittest.main()
