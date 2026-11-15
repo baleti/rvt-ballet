@@ -63,6 +63,7 @@ def main(a):
         e0 = struct.unpack_from('<d', body, 72)[0]
         i, r, log, q = s.trace(eid)
         dbl = [l for l in log if l[1] == 'ParamValueDouble.m_value' and l[3] - l[2] == 8]
+        if abs(new - e0) < 1e-12: raise SE.Refused('new end offset %r equals the current one: nothing to change (a no-op edit would still re-store the end slots 1 ulp away from the source)' % new)
         nb = None
         if len(dbl) == 2 and abs(struct.unpack('<d', s.J.get(dbl[0][2], 8))[0] - e0) < 1e-12:
             st_ = struct.unpack('<d', s.J.get(dbl[1][2], 8))[0]
