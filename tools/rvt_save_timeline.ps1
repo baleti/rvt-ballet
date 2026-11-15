@@ -14,9 +14,11 @@ function FileId($p) {
 $sw = [Diagnostics.Stopwatch]::StartNew(); $last = @{}; $rows = New-Object Collections.Generic.List[string]; $rows.Add("t_ms,name,length,lastwrite_ticks,fileindex"); $flushed = 0; $lastFlush = 0
 while ($sw.Elapsed.TotalSeconds -lt $Seconds) {
   $now = @{}
-  Get-ChildItem -Force -Recurse -Depth 1 -LiteralPath $Dir -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
-    $k = $_.FullName.Substring($Dir.Length).TrimStart('\'); $now[$k] = "{0},{1},{2}" -f $_.Length, $_.LastWriteTimeUtc.Ticks, (FileId $_.FullName)
-  }
+  try {
+    foreach ($fp in [IO.Directory]::EnumerateFiles($Dir, '*', [IO.SearchOption]::AllDirectories)) {
+      try { $fi = New-Object IO.FileInfo $fp; $k = $fp.Substring($Dir.Length).TrimStart('\'); $now[$k] = "{0},{1},{2}" -f $fi.Length, $fi.LastWriteTimeUtc.Ticks, (FileId $fp) } catch { }
+    }
+  } catch { if ($rows.Count -lt 3) { $rows.Add("{0},ENUMERR {1},,," -f $sw.ElapsedMilliseconds, ($_.Exception.Message -replace '[,\r\n]',' ')) } }
   foreach ($k in $now.Keys) { if ($last[$k] -ne $now[$k]) { $rows.Add("{0},{1},{2}" -f $sw.ElapsedMilliseconds, $k, $now[$k]) } }
   foreach ($k in @($last.Keys)) { if (-not $now.ContainsKey($k)) { $rows.Add("{0},{1},GONE,," -f $sw.ElapsedMilliseconds, $k) } }
   $last = $now
