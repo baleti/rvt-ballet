@@ -144,6 +144,17 @@ def wait_quiet(path, quiet=None, retries=6, backoff=1.0, settle=0.2, sleep=time.
     raise InUse(path, why)
 
 
+def _zero_blocks(path, fd, size):
+    """a file extended (preallocated) and not yet filled, or a hole left by an interrupted copy, has all-zero regions the FAT cannot show. Seen on 1080 sampled blocks of 60 real project files: none all-zero.
+    Refused: the tail block all zero, or two or more of the spread blocks all zero (>= 4 KB each). Set RVTBALLET_ALLOW_ZERO_BLOCKS=1 for a genuine file that has such regions."""
+    offs = _offsets(size)
+    if len(offs) < 3: return
+    def z(o, ln):
+        b = os.pread(fd, ln, o); return len(b) >= 4096 and b.count(0) == len(b)
+    if z(*offs[1]): raise Damaged(path, 'the last %d KB are all zero (a file still being written or copied?); RVTBALLET_ALLOW_ZERO_BLOCKS=1 accepts such a file' % (offs[1][1] >> 10))
+    if sum(1 for o, ln in offs[2:] if z(o, ln)) >= 2: raise Damaged(path, 'several sampled regions are all zero (a file still being written or copied?); RVTBALLET_ALLOW_ZERO_BLOCKS=1 accepts such a file')
+
+
 def cfb_check(path, fd=None):
     """cheap structural check of a compound file: signature, sector size, FAT readable and every sector in use inside the file. -> None or raises Damaged"""
     own = fd is None
@@ -178,6 +189,7 @@ def cfb_check(path, fd=None):
             if fs >= len(fat_secs): raise Damaged(path, 'directory start sector %d outside the FAT' % dstart)
             e = os.pread(fd, 4, (fat_secs[fs] + 1) * ss + 4 * (dstart % (ss // 4)))
             if len(e) < 4 or struct.unpack('<I', e)[0] == 0xFFFFFFFF: raise Damaged(path, 'directory start sector %d is marked free in the FAT' % dstart)
+        if os.environ.get('RVTBALLET_ALLOW_ZERO_BLOCKS') != '1': _zero_blocks(path, fd, size)
     finally:
         if own: os.close(fd)
 

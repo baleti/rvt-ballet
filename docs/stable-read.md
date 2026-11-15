@@ -25,3 +25,5 @@ Observed Revit write pattern: NOT measured yet (no VM lane free). The tests emul
 truncate then rewrite, temp file plus atomic rename, append, symlink swap.
 
 Strict mode: RVTBALLET_FULL_HASH=1 makes the fingerprint hash the whole file (catches a rewrite between sampled blocks with the mtime restored; costs one full read of the file, so about the snapshot copy time).
+
+Zero regions: a file that was extended (preallocated) and not yet filled, or has a hole from an interrupted copy, looks structurally valid to the FAT check. `cfb_check` also refuses a file whose last 64 KB are all zero or in which two or more of the 16 spread sampled blocks are all zero (none of 1080 sampled blocks in 60 real files were; RVTBALLET_ALLOW_ZERO_BLOCKS=1 accepts a genuine exception). Not caught: a zero hole smaller than the sampled blocks (for example the last 4 KB only); the gzip CRC of the segments that a query really reads still catches those it touches.

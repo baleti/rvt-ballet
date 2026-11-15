@@ -336,3 +336,25 @@ def test_snapshot_sweeps_dirs_left_by_killed_snapshots(tmp_path):
     t = time.time() - 7 * 3600; os.utime(old, (t, t)); os.utime(other, (t, t))
     stable.sweep_stale_snapshots(str(tmp_path))
     assert not old.exists() and new.exists() and other.exists()
+
+
+def _zero_sample(tmp_path, off_fn, ln):
+    import os, shutil
+    src = os.path.expanduser('~/rvt-research/corpus/2024/42_Snowdon_Towers_Sample_HVAC.rvt')
+    if not os.path.exists(src): pytest.skip('sample missing')
+    f = tmp_path / 'z.rvt'; shutil.copyfile(src, f); n = os.path.getsize(f)
+    with open(f, 'r+b') as o: o.seek(off_fn(n)); o.write(bytes(ln))
+    return str(f)
+
+
+def test_preallocated_zero_tail_is_refused(tmp_path):
+    from rvtballet import stable
+    f = _zero_sample(tmp_path, lambda n: n - (1 << 20), 1 << 20)
+    with pytest.raises(stable.Damaged): stable.cfb_check(f)
+
+
+def test_zero_hole_in_the_middle_is_refused_and_env_accepts(tmp_path, monkeypatch):
+    from rvtballet import stable
+    f = _zero_sample(tmp_path, lambda n: n // 2, 6 << 20)
+    with pytest.raises(stable.Damaged): stable.cfb_check(f)
+    monkeypatch.setenv('RVTBALLET_ALLOW_ZERO_BLOCKS', '1'); stable.cfb_check(f)
