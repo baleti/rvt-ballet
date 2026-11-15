@@ -113,7 +113,7 @@ def side_files(path, within=30.0, now=None):
         hidden = n.startswith('.' + base) and n.lower().endswith('.sgtmp')      # savegate temp: .<name>.<hash>.<rand>.sgtmp
         if n == base or not (hidden or n.startswith(base) or n.startswith(stem)): continue
         low = n.lower(); tail = low[len(stem):]
-        fresh = hidden or low.endswith(_SIDE_SUFFIX) or n.startswith(base + '.') or (tail[:1] == '.' and tail[1:5].isdigit())
+        fresh = hidden or low == (stem + '_backup').lower() or low.endswith(_SIDE_SUFFIX) or n.startswith(base + '.') or (tail[:1] == '.' and tail[1:5].isdigit())
         if not fresh: continue
         try: age = now - os.stat(os.path.join(d, n)).st_mtime
         except OSError: continue

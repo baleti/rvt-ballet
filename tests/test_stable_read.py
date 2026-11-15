@@ -299,3 +299,11 @@ def test_savegate_temp_is_a_side_file(d):
     f = mk(d); name = os.path.basename(f)
     open(os.path.join(d, '.%s.3d8c73.a7273n40.sgtmp' % name), 'wb').write(b'x')
     assert S.side_files(f) == ['.%s.3d8c73.a7273n40.sgtmp' % name]
+
+
+def test_revit_backup_folder_touched_is_a_side_file(d):
+    f = mk(d); stem = os.path.splitext(os.path.basename(f))[0]
+    os.mkdir(os.path.join(d, stem + '_backup'))      # Revit writes <name>_backup\\<name>.000N.rvt next to the model on every save
+    assert S.side_files(f) == [stem + '_backup']
+    old = time.time() - 3600; os.utime(os.path.join(d, stem + '_backup'), (old, old))
+    assert S.side_files(f) == []
