@@ -53,6 +53,7 @@ for _n,_v in (('dx',a.dx),('dy',a.dy),('dz',a.dz)):
     if not math.isfinite(_v) or (abs(_v)>1e6 and not os.environ.get('RVTEDIT_ALLOW_FAR')): sys.exit('REFUSED: --%s=%r is not finite or is beyond 1e6 ft (same rule as rvtedit)'%(_n,_v))
 if not os.access(os.path.dirname(os.path.abspath(a.out)) or '.', os.W_OK | os.X_OK): sys.exit('REFUSED: output directory %s does not exist or is not writable; nothing written' % os.path.dirname(os.path.abspath(a.out)))
 if os.path.realpath(a.seed)==os.path.realpath(a.out): sys.exit('REFUSED: output path equals the input file; ADD writes a copy only (in-place overwrite goes through the savegate path)')
+if os.path.isdir(a.out): sys.exit('REFUSED: output %s is a directory; give a file path; nothing written' % a.out)
 if os.path.exists(a.out) and (os.path.samefile(a.seed, a.out) or os.stat(a.out).st_nlink > 1): sys.exit('REFUSED: output {} is the input file or a hard link of some file (writing it would change the original in place); pick a fresh output path'.format(os.path.basename(a.out)))
 if not os.environ.get('RVT_ADD_WORKSHARED_FORCE'):      # workshared (central/local) models carry worksets + a central link the writer does not maintain: same rule as the in-place save (save.py Workshared)
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
