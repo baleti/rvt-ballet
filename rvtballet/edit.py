@@ -544,6 +544,7 @@ def _set_link_load(ed, o):
     if len(_parts) > 1 and not os.environ.get('PART'): raise EditError('element %d has records in several partitions: Revit may read a copy this edit does not change: link load-state edit refused' % o['eid'])
     b = _body(ed, o['eid'])
     if b[ls[0][2]] not in (0, 1): raise EditError('element %d: unexpected load flag value %d: refused' % (o['eid'], b[ls[0][2]]))
+    if b[ls[0][2]] == (1 if o['value'] else 0): raise EditError('link type %d is already %s: nothing to change (a no-op edit used to rewrite and re-compress the whole partition; refused, file untouched)' % (o['eid'], 'loaded' if o['value'] else 'unloaded'))
     ed._rec_edit(o['eid'], [(ls[0][2], 1, bytes([1 if o['value'] else 0]))])
 
 

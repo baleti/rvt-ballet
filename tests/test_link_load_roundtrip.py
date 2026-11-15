@@ -11,3 +11,8 @@ for eid in (1363937, 1362428):
     r = edit.apply(u, [{'op': 'set_link_load', 'eid': eid, 'value': True}])
     print(eid, 'unload changed' if u != buf else 'unload NO-OP', 'reload identical' if r == buf else 'reload DIFFERS')
 print('done')
+# no-op: loading an already loaded link must be refused (file untouched), not silently rewritten
+try:
+    edit.apply(buf, [{'op': 'set_link_load', 'eid': 1363937, 'value': True}]); raise SystemExit('no-op load accepted')
+except edit.EditError as e: assert 'nothing to change' in str(e), e
+print('OK no-op refused')
