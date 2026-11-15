@@ -60,4 +60,10 @@ if os.path.exists(fa):
         for bad in ('1e9', 'nan', 'inf'):
             r = subprocess.run([sys.executable, TOOL, fa, os.path.join(d, 'b.rfa'), '2916', bad], capture_output=True, text=True)
             assert r.returncode == 2 and not os.path.exists(os.path.join(d, 'b.rfa')), 'bad new value %s accepted' % bad
+if os.path.exists(fa):
+    with tempfile.TemporaryDirectory() as d:
+        c1, c2, c3 = (os.path.join(d, n) for n in ('c1.rfa', 'c2.rfa', 'c3.rfa'))
+        for a_, b_, v in ((fa, c1, '3.3'), (c1, c2, '2.5'), (fa, c3, '2.5')):
+            assert subprocess.run([sys.executable, TOOL, a_, b_, '2916', v], capture_output=True).returncode == 0
+        assert open(c2, 'rb').read() == open(c3, 'rb').read(), 'chained edit differs from the direct edit'
 print('PASS')
