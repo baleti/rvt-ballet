@@ -87,9 +87,9 @@ def load_ledger():
     return rows
 
 
-def put_ledger(run, key, status, note):
+def put_ledger(run, key, status, note, stamp=''):
     os.makedirs(os.path.dirname(LEDGER), exist_ok=True)
-    open(LEDGER, 'a').write(json.dumps({'run': run, 'key': key, 'status': status, 'note': note[:400], 't': time.strftime('%Y-%m-%d %H:%M:%S')}) + '\n')
+    open(LEDGER, 'a').write(json.dumps({'run': run, 'key': key, 'status': status, 'note': note[:400], 'stamp': stamp, 't': time.strftime('%Y-%m-%d %H:%M:%S')}) + '\n')
 
 
 def sample_for(year, hint):
@@ -156,17 +156,52 @@ def bundle(year, cls, hint, workdir):
 
 
 def revit_checks(year, b):
-    """open the bundle's kept output in Revit once, run the expectation check once; cache in the bundle"""
+    """judge the bundle's kept output with tools/rvt_judge1.py (ONE lane lock, ONE open per file, control cached by sha256; replaces rvt_vm_open + rvt_expect_check + elemhash = 4 to 6 locks); cached in the bundle.
+    exit 0 PASS, 1 FAIL, 2 no usable oracle, 3 infrastructure (the last two are never results)"""
     if 'vm' in b: return b['vm']
-    opened, cmp_ok, note = vm_open(year, b['out']); vm = {'opened': opened, 'cmp': cmp_ok, 'note': note, 'exp_ok': None, 'exp_note': ''}
-    if opened and b['applied']:
-        ex = expectations(b['applied']); ep = b['out'] + '.expect.json'; json.dump(ex, open(ep, 'w'))
-        rc, out = run([sys.executable, HERE + '/rvt_expect_check.py', str(year), b['src'], b['out'], ep], timeout=10800)
-        m = re.search(r"EXPECT-CHECK \{'expectations': (\d+), 'pass': (\d+), 'fail': (\d+)\}", out)
-        if m: vm['exp_ok'] = int(m.group(3)) == 0 and int(m.group(2)) == int(m.group(1)); vm['exp_note'] = 'expectations %s/%s' % (m.group(2), m.group(1))
-        else: vm['exp_note'] = 'no expectation verdict'
+    ex = expectations(b['applied']); ep = b['out'] + '.expect.json'; json.dump(ex, open(ep, 'w'))
+    allowed = ','.join(sorted({str(o['eid']) for o in b['applied'] if o.get('eid') is not None}))
+    rc, out = run([sys.executable, HERE + '/rvt_judge1.py', str(year), b['src'], b['out'], ep, allowed, b['out'] + '.j1'], timeout=10800)
+    line = next((l for l in reversed(out.splitlines()) if l.startswith('JUDGE ')), '')
+    why = line[6:][:200]
+    vm = {'opened': None, 'cmp': None, 'note': 'judge1: ' + why, 'exp_ok': None, 'exp_note': ''}
+    if line.startswith('JUDGE PASS'): vm.update(opened=True, cmp=True, exp_ok=True, exp_note='judge1 readback and untouched check exact' if ex else 'judge1 untouched check exact')
+    elif line.startswith('JUDGE FAIL'):
+        if 'output open' in line: vm.update(opened=False, cmp=False)
+        else: vm.update(opened=True, cmp=True, exp_ok=False, exp_note=why)
+    elif not line: vm['note'] = 'no judge1 verdict (rc %s): %s' % (rc, out.strip()[-120:])
     b['vm'] = vm
     return vm
+
+
+_WRITER = []
+
+
+def writer_stamp():
+    """identity of the writer code: last commit touching rvtballet/ + '+dirty' when the tree differs (a dirty tree never matches an older PASS)"""
+    if not _WRITER:
+        g = os.path.expanduser('~/src/rvt-ballet')
+        rc, h = run(['git', '-C', g, 'log', '-1', '--format=%h', '--', 'rvtballet'], timeout=30)
+        rc2, d = run(['git', '-C', g, 'status', '--porcelain', '--', 'rvtballet'], timeout=30)
+        _WRITER.append(h.strip()[:12] + ('+dirty' if d.strip() else ''))
+    return _WRITER[0]
+
+
+def sample_sha(year, hint):
+    f = sample_for(year, hint)
+    if not f: return ''
+    h = hashlib.sha256()
+    with open(f, 'rb') as fh:
+        for blk in iter(lambda: fh.read(1 << 20), b''): h.update(blk)
+    return h.hexdigest()[:16]
+
+
+def already_proven(key, stamp):
+    """latest PASS of this cell (any run) carries the same writer commit + sample sha: do not re-prove it"""
+    last = None
+    for r in load_ledger():
+        if r['key'] == key and r['status'] in ('PASS', 'FAIL'): last = r
+    return last is not None and last['status'] == 'PASS' and bool(last.get('stamp')) and last['stamp'] == stamp and '+dirty' not in stamp
 
 
 def decide_class_case(year, spec, workdir, use_vm):
@@ -285,7 +320,10 @@ def main():
     workdir = tempfile.mkdtemp(prefix='rvtsuite-'); counts = {'PASS': 0, 'FAIL': 0, 'ERROR': 0}
     try:
         for c, it, y in sorted(todo, key=lambda p: (p[2], (p[0], p[1]) in CASES, p[0])):
-            key = '%s|%s|%d' % (c, it, y); spec = CASES.get((c, it))
+            key = '%s|%s|%d' % (c, it, y); spec = CASES.get((c, it)); stamp = ''
+            if spec is not None and 'bundle' in spec:
+                stamp = writer_stamp() + '/' + sample_sha(y, spec['bundle'][1])
+                if already_proven(key, stamp): log('SKIP', key, '| latest PASS has the same writer commit + sample sha', stamp); continue
             try:
                 if spec is None: st, note = 'FAIL', 'not implemented'
                 elif 'static' in spec: st, note = spec['static'] if y in spec.get('static_years', [y]) else ('FAIL', 'not verified for %d (static case covers %s only)' % (y, spec['static_years']))
@@ -294,7 +332,7 @@ def main():
                 elif spec.get('special') == 'add_fi': st, note = decide_add_fi(y, workdir, not a.no_vm)
                 else: st, note = decide_class_case(y, spec, workdir, not a.no_vm)
             except Exception as e: st, note = 'ERROR', '%s: %s' % (type(e).__name__, e)
-            counts[st] += 1; log(st, key, '|', note[:160]); put_ledger(a.run_id, key, st, note)
+            counts[st] += 1; log(st, key, '|', note[:160]); put_ledger(a.run_id, key, st, note, stamp)
             if st in ('PASS', 'FAIL') and not a.no_record: subprocess.run([RECORD, c, it, st, note[:380], str(y)])
     finally: shutil.rmtree(workdir, ignore_errors=True)
     log('done', counts)
