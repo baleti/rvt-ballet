@@ -60,3 +60,10 @@ def test_add_silently_dropped_fails():
     assert v(txt(BASE), txt(BASE), exp=[], allowed={9}) == 1
 def test_add_extra_new_element_fails():
     assert v(txt(BASE), txt({**BASE, 9: "99999999", 8: "88888888"}), exp=[], allowed={9}) == 1
+
+def test_add_generated_block_shift_passes():      # clone takes the id of the first load-time generated element; the generated block (one shared hash) shifts up by one
+    G = "aaaaaaaa"; c = {**BASE, 10: G, 11: G, 12: G}
+    assert v(txt(c), txt({**BASE, 10: "77777777", 11: G, 12: G, 13: G}), exp=[], allowed={10}) == 0
+def test_add_shift_with_real_extra_fails():
+    G = "aaaaaaaa"; c = {**BASE, 10: G, 11: G, 12: G}
+    assert v(txt(c), txt({**BASE, 10: "77777777", 11: G, 12: G, 13: G, 14: "55555555"}), exp=[], allowed={10}) == 1
