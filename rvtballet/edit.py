@@ -324,7 +324,9 @@ def _first_members(buf):
 
 def _check_first_member(src, out):
     """c3x-rvtdiff 2026-11-15 (Revit 2024 VM verdict: iso_t3/iso_rot/iso_t3_mv = CorruptModelException 105): a full first partition member (>100000 B) that shrinks to a tiny one (<1000 B) is the layout Revit refuses"""
-    a, b = _first_members(src), _first_members(out)
+    b = _first_members(out)
+    if not any(v < 1000 for v in b.values()): return      # common case: one scan of the output only
+    a = _first_members(src)
     for n, v in a.items():
         if v > 100000 and b.get(n, v) < 1000:
             raise EditError('edit refused: first partition member of %s would shrink from %d to %d bytes; Revit rejects this layout, nothing written' % (n, v, b[n]))
