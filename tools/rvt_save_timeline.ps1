@@ -4,7 +4,7 @@
 # Reading this CSV shows: in place overwrite (same fileindex, length/lastwrite change in steps), truncate+rewrite (length drops, then grows),
 # temp+rename (new name appears, then the target's fileindex changes), side files (backup folder, <name>.NNNN.rvt, *.tmp).
 param([string]$Dir, [string]$Name, [int]$Seconds = 120, [string]$Out = "timeline.csv")
-Add-Type -MemberDefinition '[DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)] public static extern IntPtr CreateFile(string f,uint a,uint s,IntPtr sa,uint d,uint fl,IntPtr t); [DllImport("kernel32.dll")] public static extern bool GetFileInformationByHandle(IntPtr h, out BY_HANDLE_FILE_INFORMATION i); [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr h); [StructLayout(LayoutKind.Sequential)] public struct BY_HANDLE_FILE_INFORMATION { public uint Attr; public long C; public long A; public long W; public uint Vol; public uint SH; public uint SL; public uint Links; public uint IH; public uint IL; }' -Name K -Namespace W
+Add-Type -MemberDefinition '[DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)] public static extern IntPtr CreateFile(string f,uint a,uint s,IntPtr sa,uint d,uint fl,IntPtr t); [DllImport("kernel32.dll")] public static extern bool GetFileInformationByHandle(IntPtr h, out BY_HANDLE_FILE_INFORMATION i); [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr h); [StructLayout(LayoutKind.Sequential)] public struct BY_HANDLE_FILE_INFORMATION { public uint Attr; public uint CL; public uint CH; public uint AL; public uint AH; public uint WL; public uint WH; public uint Vol; public uint SH; public uint SL; public uint Links; public uint IH; public uint IL; }' -Name K -Namespace W
 function FileId($p) {
   $h = [W.K]::CreateFile($p, 0, 7, [IntPtr]::Zero, 3, 0x02000000, [IntPtr]::Zero)   # no access, share all, backup semantics: never blocks Revit
   if ($h -eq [IntPtr](-1)) { return "noaccess" }
@@ -16,7 +16,7 @@ while ($sw.Elapsed.TotalSeconds -lt $Seconds) {
   $now = @{}
   try {
     foreach ($fp in [IO.Directory]::EnumerateFiles($Dir, '*', [IO.SearchOption]::AllDirectories)) {
-      try { $fi = New-Object IO.FileInfo $fp; $k = $fp.Substring($Dir.Length).TrimStart('\'); $now[$k] = "{0},{1},{2}" -f $fi.Length, $fi.LastWriteTimeUtc.Ticks, (FileId $fp) } catch { }
+      try { $fi = New-Object IO.FileInfo $fp; $k = $fp.Substring($Dir.Length).TrimStart('\'); $now[$k] = "{0},{1},{2}" -f $fi.Length, $fi.LastWriteTimeUtc.Ticks, (FileId $fp) } catch { if ($rows.Count -lt 4) { $rows.Add("{0},FILEERR {1},,," -f $sw.ElapsedMilliseconds, ($_.Exception.Message -replace '[,\r\n]',' ')) } }
     }
   } catch { if ($rows.Count -lt 3) { $rows.Add("{0},ENUMERR {1},,," -f $sw.ElapsedMilliseconds, ($_.Exception.Message -replace '[,\r\n]',' ')) } }
   foreach ($k in $now.Keys) { if ($last[$k] -ne $now[$k]) { $rows.Add("{0},{1},{2}" -f $sw.ElapsedMilliseconds, $k, $now[$k]) } }
