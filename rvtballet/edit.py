@@ -685,6 +685,9 @@ def _rvtedit_pass(a, b, ops):
                 if o['field'] == 'SymbolInfo.m_name': _check_symbol_name_unique(a, o)
                 ed._str_edit(o['eid'], o['field'], o['value'], o['match'])
         except (IndexError, KeyError, StopIteration, AssertionError, struct_error()) as e:
+            try: _gone = o['op'] in ('move', 'rotate') and o['eid'] not in ed.g.e.m.ids
+            except Exception: _gone = False
+            if _gone: raise EditError('element %d does not exist in this file (deleted or never present): %s refused; nothing was changed' % (o['eid'], o['op']))
             hint = ' (the record layout of this kind of element, e.g. a group member, is not handled by the edit backend)' if o['op'] in ('move', 'rotate') else ''
             if o['op'] == 'set_string' and o.get('field') in ('DatumPlane.m_text', 'DBView.m_viewName', 'SymbolInfo.m_name'): hint = ' (this element does not have that name field: %s is only for %s, or the match text is not its current name)' % (o['field'], {'DatumPlane.m_text': 'Levels and Grids', 'DBView.m_viewName': 'views', 'SymbolInfo.m_name': 'family types'}[o['field']])
             if o['op'] == 'set_string' and o.get('field') == 'ParamValueAString.m_value': hint = ' (this element has no stored string parameter value matching that name/match text: CAD links, imports and similar elements keep none, so nothing can be set)'
