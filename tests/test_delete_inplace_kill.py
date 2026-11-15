@@ -7,7 +7,7 @@ sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 @unittest.skipUnless(S and E and os.path.exists(S), 'RVT_DEL_KILL_SAMPLE/EID not set')
 class T(unittest.TestCase):
     def test_kill_points(self):
-        h0 = sha(S); bad = []
+        h0 = sha(S); bad = []; seen = []
         for delay in (3, 8, 15, 30, 60):
             with tempfile.TemporaryDirectory() as d:
                 env = dict(os.environ, TMPDIR=d, DEL_EID=E)
@@ -16,11 +16,13 @@ class T(unittest.TestCase):
                 if p.poll() is not None: continue
                 p.send_signal(signal.SIGKILL); p.wait()
                 for f in glob.glob(d + '/*/p.rvt'):
-                    if sha(f) == h0: continue
+                    if sha(f) == h0: seen.append((delay, 'original')); continue
                     sys.path.insert(0, os.path.expanduser('~/src/savegate'))
                     from savegate import rvt_elements as R
                     try: ok = int(E) not in R.elements(open(f, 'rb').read())
                     except Exception: ok = False
+                    seen.append((delay, 'complete' if ok else 'BAD'))
                     if not ok: bad.append(delay)
+        print('KILL_OUTCOMES', seen)
         self.assertEqual(bad, [], 'source half-written after kill at these delays')
 if __name__ == '__main__': unittest.main()
