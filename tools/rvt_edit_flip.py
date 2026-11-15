@@ -26,9 +26,9 @@ if dm and ops and all(o.get('op') in ('move', 'rotate', 'set_string', 'delete') 
     if len(ops) == 1 and ops[0].get('op') == 'delete': man['member_pure_cut'] = True      # mirrors save._pending
 if dm and len(ops) == 1 and ops[0].get('op') == 'set_string': man['member_span_max'] = 8192 + 2 * len(str(ops[0].get('value', '')))      # mirrors save._pending
 print('manifest modified=%d deleted=%d dirty_members=%s' % (len(man.get('modified', ())), len(man.get('deleted', ())), {k: len(v) for k, v in (dm or {}).items()}), flush=True)
-rnd = random.Random(seed); ss = save.SaveSessions(); T = {} if os.environ.get('EDIT_FLIP_SKIPCTL') else {'control_true_output': good}
+FO = {}; rnd = random.Random(seed); ss = save.SaveSessions(); T = {} if os.environ.get('EDIT_FLIP_SKIPCTL') else {'control_true_output': good}
 for k in range(n):
-    o = rnd.randrange(len(good)); x = bytearray(good); x[o] ^= 1 << rnd.randrange(8); T['flip_%d' % k] = bytes(x)
+    o = rnd.randrange(len(good)); x = bytearray(good); b_ = rnd.randrange(8); x[o] ^= 1 << b_; T['flip_%d' % k] = bytes(x); FO['flip_%d' % k] = (o, b_)
 if os.environ.get('EDIT_FLIP_INMEMBER'):      # targeted: flip one byte of the DECOMPRESSED raw of each declared member, far from the edit (re-encoded through the writer's own partition rebuild), N per member
     import cfb, rvtw, wlpart
     for pn, mem in (dm or {}).items():
@@ -90,7 +90,7 @@ for k, nb in T.items():
     dest = os.path.join(_T, 'o_%s.rvt' % re.sub(r'[^A-Za-z0-9_.-]', '_', str(k)))
     try: save.save_as(ss, 'm', src, dest, new_bytes=nb, manifest=man); acc = True; r = 'ACCEPTED'
     except Exception as e: acc = False; r = type(e).__name__ + ' ' + str(e)[:int(os.environ.get("EDIT_FLIP_MSG", "90"))]
-    if acc and k != 'control_true_output': esc.append(k)
+    if acc and k != 'control_true_output': esc.append(k); print('ESCAPE_AT', k, FO.get(k), flush=True)
     if not acc and k != 'control_true_output': assert not os.path.exists(dest), k
     assert sha(src) == h0
     print(k, r, flush=True)
