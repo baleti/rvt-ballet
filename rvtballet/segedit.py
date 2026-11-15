@@ -218,6 +218,14 @@ class Session:
         self.occ = {}; self.expect = []      # (eid, kind, check fn on the new record bytes)
         self._legacy_check()
 
+    FIT_YEARS = (2024, 2025, 2026)      # years whose fit outputs (padded deflate, frames untouched) the Revit VM opened clean
+    def year(self):
+        if not hasattr(self, '_year'):
+            try: self._year = int(file_version(self.ctx.path))
+            except Exception: self._year = None
+        return self._year
+    def fit_allowed(self): return self.year() in self.FIT_YEARS
+
     def _legacy_check(self):
         """region hs per member as wlpart.Partition: measured hs = round((ISIZE - X2) / X1); the first member with hs == 12 + W starts the record region"""
         hs0 = self.ctx.hs; self.mhs = []
@@ -501,6 +509,11 @@ class Session:
     def build(self, mode='auto'):
         """-> (payload patches [(payload_off, old_len, new_bytes)], delta, info) for the chosen layout. auto = fit, or shift when a dirty member does not fit
         its original compressed size (members an earlier level-9 save already packed tightly)"""
+        if mode == 'auto' and not self.fit_allowed():
+            r = self.build('shift'); r[2]['fallback'] = 'fit layout not allowed for Revit %s files' % self.year(); return r
+        if mode == 'fit' and not self.fit_allowed():
+            raise Refused('fit layout refused for Revit %s files: Revit 2020 fails to OPEN fit outputs (InternalException, c4x-rvteditopus 2026-11-15) while the shift '
+                          'layout of the same edit opens; only 2024-2026 fit outputs are Revit-verified' % self.year())
         if mode == 'auto':
             try: return self.build('fit')
             except Refused as e:

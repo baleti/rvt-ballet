@@ -9,6 +9,7 @@ using System.Collections.Generic;
 // rvt_param_readback.cs (RB param lines). Everything goes to C:\wl\out\__TAG___j1.txt (the console transport truncates at ~10 KB).
 var app = UIApp.Application;
 string file = @"__FILE__".Replace("/", "\\"); string tag = "__TAG__";
+var edIds = new HashSet<string>("__EDIDS__".Split(new[] { ',' }, System.StringSplitOptions.RemoveEmptyEntries));
 string[] locIds = "__LOCIDS__".Split(new[] { ',' }, System.StringSplitOptions.RemoveEmptyEntries);
 string[] parItems = "__PARITEMS__".Split(new[] { (char)30 }, System.StringSplitOptions.RemoveEmptyEntries);
 System.IO.Directory.CreateDirectory(@"C:\wl\out");
@@ -56,6 +57,7 @@ try {
     var tn = e as TextNote; if (tn != null) sb.Append("TN" + tn.Coord.X.ToString("F6") + "," + tn.Coord.Y.ToString("F6"));
     foreach (char c in sb.ToString()) { h ^= c; h *= 16777619; }
     outp.AppendLine("EH " + e.Id.ToString() + " " + h.ToString("x8")); n++;
+    if (edIds.Contains(e.Id.ToString())) outp.AppendLine("ED " + e.Id.ToString() + " " + sb.ToString().Replace("\r", " ").Replace("\n", " "));
   }
   log.AppendLine("COUNT " + n);
   phase = "locreadback";

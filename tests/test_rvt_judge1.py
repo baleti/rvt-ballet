@@ -45,3 +45,11 @@ def test_param_string():
     o = txt({**BASE, 2: "dddddddd"}, rb="RBP 2|Mark storage=String value=(string, see utf16) shown=- len=2 utf16=41,42\n")
     assert v(txt(BASE), o, exp) == 0
     assert v(txt(BASE), o.replace("41,42", "41,43"), exp) == 1
+def test_bboxnull_relative():
+    c = txt(BASE, rb=RB0).replace("BBOXNULL 0", "BBOXNULL 7"); o = txt({**BASE, 2: "dddddddd"}, rb=RB1)
+    assert v(c, o.replace("BBOXNULL 0", "BBOXNULL 7")) == 0
+    assert v(c, o.replace("BBOXNULL 0", "BBOXNULL 8")) == 1
+def test_volatile_ignored():
+    c = txt(BASE, rb=RB0) + "VOLATILE 3\n"; o = txt({**BASE, 2: "dddddddd", 3: "eeeeeeee"}, rb=RB1)
+    assert v(c, o) == 0
+    assert v(txt(BASE, rb=RB0), o) == 1
