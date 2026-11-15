@@ -10,7 +10,9 @@ from rvtballet import segedit as SE
 
 
 def main(a):
-    src, dst, eid, new = a[0], a[1], int(a[2]), float(a[3])
+    try: src, dst, eid, new = a[0], a[1], int(a[2]), float(a[3])
+    except ValueError as e: print('refused: bad EID / NEW_START argument (%s)' % e); return 2
+    if new != 0.0 and abs(new) < 1e-9: print('refused: new start offset %r is a denormal-scale value' % new); return 2
     if not (-1e4 < new < 1e4): print('refused: new start offset %r is not a finite value within +-1e4 ft' % new); return 2
     if os.path.exists(dst): print('refused: output exists'); return 2
     try:
@@ -24,6 +26,7 @@ def main(a):
         dbl = [l for l in log if l[1] == 'ParamValueDouble.m_value' and l[3] - l[2] == 8]
         if len(dbl) != 2: raise SE.Refused('R record does not hold exactly an (end, start) ParamValueDouble pair')
         e0 = struct.unpack('<d', s.J.get(dbl[0][2], 8))[0]; st = struct.unpack('<d', s.J.get(dbl[1][2], 8))[0]
+        if new >= e0 - 1e-9: raise SE.Refused('new start offset %r is not below the end offset %r (zero or negative depth)' % (new, e0))
         ez = struct.unpack_from('<d', body, 72)[0]
         if abs(ez - e0) > 1e-12: raise SE.Refused('Z end slot %r disagrees with the R record end %r' % (ez, e0))
         d0 = ez - st

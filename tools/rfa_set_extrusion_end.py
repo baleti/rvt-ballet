@@ -48,7 +48,9 @@ def patch_body_generic(body, new, start):
 
 
 def main(a):
-    src, dst, eid, new = a[0], a[1], int(a[2]), float(a[3])
+    try: src, dst, eid, new = a[0], a[1], int(a[2]), float(a[3])
+    except ValueError as e: print('refused: bad EID / NEW_END argument (%s)' % e); return 2
+    if new != 0.0 and abs(new) < 1e-9: print('refused: new end offset %r is a denormal-scale value' % new); return 2
     if not (-1e4 < new < 1e4): print('refused: new end offset %r is not a finite value within +-1e4 ft' % new); return 2
     if os.path.exists(dst): print('refused: output exists'); return 2
     try:
@@ -62,6 +64,9 @@ def main(a):
         i, r, log, q = s.trace(eid)
         dbl = [l for l in log if l[1] == 'ParamValueDouble.m_value' and l[3] - l[2] == 8]
         nb = None
+        if len(dbl) == 2 and abs(struct.unpack('<d', s.J.get(dbl[0][2], 8))[0] - e0) < 1e-12:
+            st_ = struct.unpack('<d', s.J.get(dbl[1][2], 8))[0]
+            if new <= st_ + 1e-9: raise SE.Refused('new end offset %r is not above the start offset %r (zero or negative depth)' % (new, st_))
         if len(body) == 3060:
             try: nb, n = patch_body(body, new)
             except SE.Refused: nb = None      # e.g. a void extrusion (8 slots 32 B later): fall back to guarded value matching with the same slot count
