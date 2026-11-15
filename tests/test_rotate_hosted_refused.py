@@ -22,4 +22,10 @@ class T(unittest.TestCase):
         d=tempfile.mkdtemp(); o=os.path.join(d,'f.rte')
         p=subprocess.run([sys.executable,E,F,o,'rot:301567:30'],capture_output=True,text=True)
         self.assertIn('rotate of Floor refused',p.stderr); self.assertNotIn('KeyError',p.stderr); self.assertFalse(os.path.exists(o))
+    def test_beam_curvedriven_refused(self):
+        F=os.path.expanduser('~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt')
+        if not os.path.exists(F): self.skipTest('sample absent')
+        d=tempfile.mkdtemp(); o=os.path.join(d,'b.rvt')
+        p=subprocess.run([sys.executable,E,F,o,'rot:606873:30'],capture_output=True,text=True)
+        self.assertIn('rotate of curve-driven',p.stderr); self.assertFalse(os.path.exists(o))
 if __name__=='__main__': unittest.main()
