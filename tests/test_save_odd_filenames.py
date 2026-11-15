@@ -15,7 +15,7 @@ S = os.path.expanduser('~/rvt-research/write-lab/scenes/classtests/2024_writer_c
 if not os.path.exists(S) or not save.SaveSessions().available: print('skip'); sys.exit(0)
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 import unicodedata
-names = ['my model (copy) 1.rte', unicodedata.normalize('NFC', 'caf\u00e9 \u00fc.rte'), unicodedata.normalize('NFD', 'caf\u00e9 \u00fc.rte'), '\u65e5\u672c\u8a9e.rte', '-dash.rte', 'n' * 196 + '.rte']
+names = ['my model (copy) 1.rte', unicodedata.normalize('NFC', 'caf\u00e9 \u00fc.rte'), unicodedata.normalize('NFD', 'caf\u00e9 \u00fc.rte'), '\u65e5\u672c\u8a9e.rte', '-dash.rte', 'n' * 196 + '.rte', 'UPPER.RTE', 'noext', '.hidden.rte', 'trail .rte', 'a;b&c$d`e.rte']
 for i, nm in enumerate(names):
     dd = _T + '/d%d' % i; os.makedirs(dd); a = os.path.join(dd, nm); shutil.copy(S, a); h0 = sha(a)
     ss = save.SaveSessions(); d = ss.doc('m%d' % i, a)
