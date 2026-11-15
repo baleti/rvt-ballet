@@ -292,6 +292,7 @@ def apply_full(buf, ops):
         deleted = (_apply_rvtedit if BACKEND() == 'rvtedit' else _apply_wledit)(a, b, ops) or []
         with open(b, 'rb') as f: out = f.read()
         _check_member_limit(buf, out)
+        _check_first_member(buf, out)
         return out, deleted
     finally:
         import shutil; shutil.rmtree(d, ignore_errors=True)      # everything in it, including intermediate pass files of a failed multi-partition run
@@ -306,6 +307,26 @@ def _max_member_raw(buf):
         if n.startswith('Partitions/'):
             big = max([big] + [len(m['raw']) for m in wlpart.Partition(rvtw.Stream(e.data)).mem])
     return big
+
+
+def _first_members(buf):
+    """{partition stream name: raw size of its first member}"""
+    if WL not in sys.path: sys.path.insert(0, WL)
+    import cfb, rvtw, wlpart
+    r = {}
+    for n, e in cfb.CFB(buf).streams().items():
+        if n.startswith('Partitions/'):
+            m = wlpart.Partition(rvtw.Stream(e.data)).mem
+            if m: r[n] = len(m[0]['raw'])
+    return r
+
+
+def _check_first_member(src, out):
+    """c3x-rvtdiff 2026-11-15 (Revit 2024 VM verdict: iso_t3/iso_rot/iso_t3_mv = CorruptModelException 105): a full first partition member (>100000 B) that shrinks to a tiny one (<1000 B) is the layout Revit refuses"""
+    a, b = _first_members(src), _first_members(out)
+    for n, v in a.items():
+        if v > 100000 and b.get(n, v) < 1000:
+            raise EditError('edit refused: first partition member of %s would shrink from %d to %d bytes; Revit rejects this layout, nothing written' % (n, v, b[n]))
 
 
 def _check_member_limit(src, out):
