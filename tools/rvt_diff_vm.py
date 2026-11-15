@@ -70,6 +70,8 @@ using System.Collections.Generic;
 var app = UIApp.Application; var log = new StringBuilder();
 EventHandler<Autodesk.Revit.DB.Events.FailuresProcessingEventArgs> fh = (s, e) => { var fa = e.GetFailuresAccessor(); bool hasErr = false; foreach (var m in fa.GetFailureMessages()) { log.AppendLine("FAILURE " + m.GetSeverity() + " " + m.GetDescriptionText()); if (m.GetSeverity() == FailureSeverity.Warning) fa.DeleteWarning(m); else hasErr = true; } if (hasErr) e.SetProcessingResult(FailureProcessingResult.ProceedWithRollBack); };
 app.FailuresProcessing += fh;
+EventHandler<Autodesk.Revit.UI.Events.DialogBoxShowingEventArgs> dh = (s, e) => { string txt = ""; var te = e as Autodesk.Revit.UI.Events.TaskDialogShowingEventArgs; if (te != null) { txt = te.Message; } var me = e as Autodesk.Revit.UI.Events.MessageBoxShowingEventArgs; if (me != null) { txt = me.Message; } log.AppendLine("DIALOG " + e.DialogId + " | " + txt); try { e.OverrideResult(1); } catch (Exception) { } };
+UIApp.DialogBoxShowing += dh;
 try {
   var op = new OpenOptions(); op.Audit = true;
   var d = app.OpenDocumentFile(ModelPathUtils.ConvertUserVisiblePathToModelPath(@"%(f)s"), op);
