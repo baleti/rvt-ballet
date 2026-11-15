@@ -5,7 +5,7 @@ Sets the EndOffset of a family Extrusion by patching the extrusion's Z item the 
 the end offset E sits as an unaligned double at Z body offsets 72 and 120, and every other changed slot holds E-StartOffset (31 slots at fixed offsets, same in a 2x2 and a 3x5 profile pair).
 Each slot moves by the same delta. The Z stamp (Adler32) is rewritten and the partition is saved with the segment writer ('fit' layout).
 Refuses (rc 2, nothing written) when the layout is not the one measured: slots at 72/120 disagree, fewer/more than 31 matching slots, multi-partition file, etc.
-Evidence status: offline only (Z item byte-equal to Revit's own result); Revit VM readback pending."""
+Evidence status: Z item byte-equal to Revit's own result; Revit 2024 VM readback of the rectangle result equals the Revit-made file (start 0.4, end 3.3, bbox z 0.4..3.3; synthetic, open dialogs not captured). Generic (hex/circ/tri) path: readback equal too, still guarded by the collision refusals."""
 import sys, os, struct, zlib
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from rvtballet import segedit as SE
