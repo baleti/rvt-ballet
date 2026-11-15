@@ -1,4 +1,4 @@
-"""c1x-rvtlink: set_link_load unload then reload must restore the original file byte for byte. Snowdon HVAC 2024 local seed (skipped if absent)."""
+"""c1x-rvtlink: set_link_load unload then reload restores the original DECODED content (rvt_diff 2026-11-15: 0 differing byte runs, 0 elements changed; stored bytes differ by re-compression, so not asserted byte-equal). Snowdon HVAC 2024 local seed (skipped if absent)."""
 import os, sys
 SEED = os.path.expanduser('~/c5x-link/al/seed.rvt')
 if not os.path.exists(SEED): print('SKIP: no seed'); sys.exit(0)
