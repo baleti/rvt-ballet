@@ -5,6 +5,7 @@ TOOL = os.path.join(os.path.dirname(__file__), '..', 'tools', 'rvt_add_clone.py'
 C = os.path.expanduser('~/rvt-research/corpus')
 CASES = [  # (sample, src, env, sha256 of the Revit-opened output)
     ('2024/42_Snowdon_Towers_Sample_HVAC.rvt', '1365188', {}, '50abe7a7ac6a7202'),
+    ('2025/48_Snowdon_Towers_Sample_HVAC.rvt', '1365188', {'RVT_ADD_YEAR_FORCE': '1', 'RVT_ADD_PROFILE_B_MULTI': '1'}, 'd4d1c169b68e3c67'),      # 2 non-empty partitions, built in the last one: Revit PASS (pb25); guard must admit it
     ('2023/36_rst_basic_sample_project.rvt', '512451', {'RVT_ADD_PROFILE_B_MULTI': '1'}, '307cfdd12c30051a'),
 ]
 class T(unittest.TestCase):

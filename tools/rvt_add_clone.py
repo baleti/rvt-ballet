@@ -47,7 +47,8 @@ if not os.environ.get('RVT_ADD_YEAR_FORCE'):      # Revit VM 2026-11: 2025 HVAC 
 if not os.environ.get('RVT_ADD_MULTIPART_FORCE'):      # Revit VM 2026-11-15: 2023 Arch_Link_Model (Partitions/9 14 MB + Partitions/10 323 KB) column clone = CorruptModelException (CArchiveException 105), tree clone = opens but element silently dropped; the only multi-partition PASSes (rst_basic 2023, chain) have an EMPTY second partition. More than one non-empty partition is refused.
     _st = _cfb.CFB(open(a.seed, 'rb').read()).streams()
     _ne = [n for n in _st if n.startswith('Partitions/') and len(_st[n].data) > 1000]
-    if len(_ne) > 1: sys.exit('REFUSED: %d non-empty Partitions streams (%s): ADD on such files failed in Revit (CorruptModelException on 2023 Arch_Link_Model); nothing written (RVT_ADD_MULTIPART_FORCE=1 for experiments only)' % (len(_ne), ', '.join(sorted(_ne))))
+    _MP_LAST = sorted(_ne, key=lambda n: int(n.split('/')[1]))[-1] if len(_ne) > 1 else None      # c1x-rvtadd 2026-11-15: 2-partition PASS = 2025 HVAC pb25 (built in the LAST partition); both FAILs = 2023 Arch_Link_Model built in the non-last partition. Rule: more than one non-empty partition is allowed only when the build partition is the last non-empty one (checked after the source is located).
+    if False and len(_ne) > 1: sys.exit('REFUSED: %d non-empty Partitions streams (%s): ADD on such files failed in Revit (CorruptModelException on 2023 Arch_Link_Model); nothing written (RVT_ADD_MULTIPART_FORCE=1 for experiments only)' % (len(_ne), ', '.join(sorted(_ne))))
 import math
 for _n,_v in (('dx',a.dx),('dy',a.dy),('dz',a.dz)):
     if not math.isfinite(_v) or (abs(_v)>1e6 and not os.environ.get('RVTEDIT_ALLOW_FAR')): sys.exit('REFUSED: --%s=%r is not finite or is beyond 1e6 ft (same rule as rvtedit)'%(_n,_v))
@@ -87,6 +88,8 @@ except IndexError:
         except IndexError: pass
 if T is None: sys.exit('REFUSED: source %d has no element header in the first partition (%s); the writer only addresses the first partition of a multi-partition file. Pick a source stored there.'%(S,list(g.e.m.parts)[0]))
 idS=struct.pack(g.IDF,S)
+if not os.environ.get('RVT_ADD_MULTIPART_FORCE') and _MP_LAST and getattr(g,'pn',None) != _MP_LAST:
+    sys.exit('REFUSED: %d non-empty Partitions streams and source %d lives in %s, not in the last one (%s): ADD there failed in Revit (CorruptModelException on 2023 Arch_Link_Model, element dropped for a tree); non-empty Partitions streams: %s; nothing written (RVT_ADD_MULTIPART_FORCE=1 for experiments only)' % (len(_ne), S, getattr(g,'pn',None), _MP_LAST, ', '.join(sorted(_ne))))
 L={n:(o,e) for n,o,e,_ in T['log']}
 et=g._et(); RW=g.RW; n_=struct.unpack_from('<I',et,2)[0]
 best=max(range(n_),key=lambda k:(struct.unpack_from('<I',et,6+RW*k+12)[0],struct.unpack_from('<I',et,6+RW*k+8)[0]))
