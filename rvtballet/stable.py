@@ -99,7 +99,7 @@ def path_stamp(path):
     st = os.stat(path); return (st.st_size, st.st_mtime_ns, st.st_ino, st.st_dev)
 
 
-_SIDE_SUFFIX = ('.tmp', '.temp', '.part', '.partial', '.crdownload', '.lock', '~', '.bak')
+_SIDE_SUFFIX = ('.tmp', '.temp', '.part', '.partial', '.crdownload', '.lock', '~', '.bak', '.sgtmp')      # .sgtmp: savegate's own atomic-write temp
 
 
 def side_files(path, within=30.0, now=None):
@@ -110,9 +110,10 @@ def side_files(path, within=30.0, now=None):
     try: names = os.listdir(d)
     except OSError: return out
     for n in names:
-        if n == base or not (n.startswith(base) or n.startswith(stem)): continue
+        hidden = n.startswith('.' + base) and n.lower().endswith('.sgtmp')      # savegate temp: .<name>.<hash>.<rand>.sgtmp
+        if n == base or not (hidden or n.startswith(base) or n.startswith(stem)): continue
         low = n.lower(); tail = low[len(stem):]
-        fresh = low.endswith(_SIDE_SUFFIX) or n.startswith(base + '.') or (tail[:1] == '.' and tail[1:5].isdigit())
+        fresh = hidden or low.endswith(_SIDE_SUFFIX) or n.startswith(base + '.') or (tail[:1] == '.' and tail[1:5].isdigit())
         if not fresh: continue
         try: age = now - os.stat(os.path.join(d, n)).st_mtime
         except OSError: continue

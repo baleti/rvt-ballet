@@ -293,3 +293,9 @@ def test_info_save_is_guarded(d, monkeypatch, capsys):
     monkeypatch.setattr(editcli, 'info_main', fake)
     with pytest.raises(SystemExit) as e: cli.main(['info', '--save', f, '--quiet-secs', '0'])
     assert seen and e.value.code == 75 and 'changed' in capsys.readouterr().err
+
+
+def test_savegate_temp_is_a_side_file(d):
+    f = mk(d); name = os.path.basename(f)
+    open(os.path.join(d, '.%s.3d8c73.a7273n40.sgtmp' % name), 'wb').write(b'x')
+    assert S.side_files(f) == ['.%s.3d8c73.a7273n40.sgtmp' % name]
