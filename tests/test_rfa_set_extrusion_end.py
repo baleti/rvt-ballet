@@ -66,4 +66,9 @@ if os.path.exists(fa):
         for a_, b_, v in ((fa, c1, '3.3'), (c1, c2, '2.5'), (fa, c3, '2.5')):
             assert subprocess.run([sys.executable, TOOL, a_, b_, '2916', v], capture_output=True).returncode == 0
         assert open(c2, 'rb').read() == open(c3, 'rb').read(), 'chained edit differs from the direct edit'
+smp = '~/rvt-samples/racbasicsamplefamily-2025.rfa'
+if os.path.exists(smp):
+    with tempfile.TemporaryDirectory() as d:
+        r = subprocess.run([sys.executable, TOOL, smp, os.path.join(d, 'o.rfa'), '82', '7.5'], capture_output=True, text=True)
+        assert r.returncode == 2 and not os.path.exists(os.path.join(d, 'o.rfa')) and 'measured on Revit 2024' in r.stdout, 'non-2024 file accepted: ' + r.stdout
 print('PASS')

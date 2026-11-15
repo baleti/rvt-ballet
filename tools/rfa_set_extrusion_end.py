@@ -52,6 +52,8 @@ def main(a):
     if not (-1e4 < new < 1e4): print('refused: new end offset %r is not a finite value within +-1e4 ft' % new); return 2
     if os.path.exists(dst): print('refused: output exists'); return 2
     try:
+        yr = SE.file_version(src)
+        if str(yr) != '2024': raise SE.Refused('Revit year %r: the slot layout was measured on Revit 2024 files only' % (yr,))
         s = SE.Session(src); T = s.template(eid); W = s.ctx.W
         if T['cls'] != 'ExtrusionElem': raise SE.Refused('element %d is %s, not ExtrusionElem' % (eid, T['cls']))
         zk = T['_zk']; L = struct.unpack('<I', s.J.get(zk + W + 4, 4))[0]; body = s.J.get(zk + W + 8, L)
