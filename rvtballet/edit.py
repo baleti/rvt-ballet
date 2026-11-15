@@ -134,6 +134,8 @@ def validate_op(op):
         v = op.get('value')
         if not isinstance(v, str) or not v.strip() or len(v) > 32000 or any(ord(c) < 32 for c in v): raise EditError('link path must be a non-empty string without control characters, at most 32000 chars')
         _check_text(v)
+        import unicodedata      # c1x-rvtlink: characters no Windows path can hold, and invisible/format characters (bidi override, zero-width, BOM, noncharacters): refuse instead of storing a path Revit may not round-trip
+        if any(c in '<>"|?*' or ord(c) in range(127, 160) or unicodedata.category(c) in ('Cf', 'Cn', 'Co') for c in v) or v != v.rstrip(' .'): raise EditError('link path holds a character Windows paths cannot contain (<>"|?*), an invisible/format/control character, or ends in a space or dot')
         return {'op': 'set_link_path', 'eid': op['eid'], 'value': v}
     if op['op'] == 'delete':
         if os.environ.get('RVTBALLET_ENABLE_DELETE') != '1': raise EditError('delete is disabled (opt-in: RVTBALLET_ENABLE_DELETE=1; no Revit evidence for it yet)')
@@ -914,13 +916,13 @@ def _set_string_by_pid(ed, o):
 UNIQUE_CLASS = __import__('re').compile(r'(Tracker|Tracking(Elem|Element)?|Settings?(Elem|Element)?|Table|Manager|Navigator|Library|Cache|Lock)$|^AllProject|^ProjectInfo|^Units')      # singleton-style classes; evidence: AllProjectRevisions delete -> Revit repair dialog (c7x-rvtmatrix, 2024 VM)
 
 
+WALLROT = [False]      # set by _rvtedit_pass when an isolated SWall was rotated (c1x-rvtmove 2026-11-15)
 MOVE_VM_VERIFIED = {'FamilyInstance', 'ImportInstance', 'TextNote', 'Level', 'Grid'}      # classes whose move was opened in the Revit VM with a matching API readback (ledger rung 1); ImportInstance incl. a PINNED link (Pinned is not stored in the record: 3rd Revit 2024 open clean, bbox +1 X, pinned kept); anything else with an origin field (groups, stairs, imports, masses ...) would move without its dependents: refused 
 DELETE_VM_VERIFIED = {'CategoryElem', 'BasePoint', 'BrowserOrganization', 'SWall', 'ColorFillSchema', 'Floor', 'CompoundCeilingType', 'DBViewPlan', 'AutoJoinTracker', 'AssemblyCodeTable', 'Viewport', 'DimensionStyle', 'RoomElem', 'FamilyInstance', 'TextNote', 'IndependentTag', 'RoomTag', 'ScheduleInstance', 'DBViewSchedule'}      # Revit 2024 VM, single-element delete on the cols2 scene: opens with no repair prompt (SWall: only Revit's own 'Room is not in a properly enclosed region' warning, the true consequence of removing a bounding wall) (c7x-rvtmatrix); RoomElem clean in VM too; FamilyInstance/TextNote/IndependentTag/RoomTag/ScheduleInstance/DBViewSchedule opened clean in the Revit 2024 VM on Snowdon HVAC and Structural (c1x-rvtdel, class-count dumps exact, FamilyInstance cascade took its tags); extend only with a VM verdict
 
 
 IN_USE_GUARD_CLASSES = {'DimensionStyle', 'CompoundCeilingType', 'AssemblyCodeTable'}      # type-like classes whose users are not in the header deletion lists
 IN_USE_GUARD_ALLOW = 5      # measured: an id occurs 5 times more in the file before delete than after (own record + lists), Structural 2024 DimensionStyle/CategoryElem/CompoundCeilingType
-WALLROT = [False]      # set by _rvtedit_pass when an isolated SWall was rotated (c1x-rvtmove 2026-11-15)
 
 
 def tags_hosting(ed, eid):

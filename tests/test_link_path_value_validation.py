@@ -9,10 +9,13 @@ def _v(monkeypatch, value):
     from rvtballet import edit
     return edit, edit.validate_op({'op': 'set_link_path', 'eid': 1, 'value': value})
 
-@pytest.mark.parametrize('bad', ['a\0b', 'a\ud800b', 'C:\\x\U0001F600.rvt', '  ', 'a\tb', 'x' * 5000])
+@pytest.mark.parametrize('bad', ['a\0b', 'a\ud800b', 'C:\\x\U0001F600.rvt', '  ', 'a\tb', 'x' * 5000, 'C:\\a\u202eb.rvt', 'C:\\a\ufffeb.rvt', 'C:\\a*.rvt', 'C:\\a|b.rvt', 'C:\\<a>.rvt', 'C:\\"a".rvt', 'C:\\a.rvt ', 'C:\\a.rvt.', 'C:\\a\u200bb.rvt', '\ufeffC:\\a.rvt', 'C:\\a\x85b.rvt'])
 def test_refused(monkeypatch, bad):
     from rvtballet import edit
     with pytest.raises(edit.EditError): _v(monkeypatch, bad)
 
 def test_bmp_unicode_accepted(monkeypatch):
     assert _v(monkeypatch, 'C:\\ok\\\u00e9.rvt')[1]['value'] == 'C:\\ok\\\u00e9.rvt'
+
+def test_relative_and_unc_still_accepted(monkeypatch):
+    for ok in ('C:\\ok\\a.rvt', '..\\x\\a.rvt', '\\\\srv\\sh\\a.rvt', 'a b.rvt'): assert _v(monkeypatch, ok)[1]['value'] == ok
