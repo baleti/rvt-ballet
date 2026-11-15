@@ -38,8 +38,9 @@ async def one_class(c, models, k, src, cls, pr, ix):
         return _rc[k]
     applied = []; refused = {}; used = set()
     for kind in ('set_string', 'set_num', 'move', 'set_field'):
-        tried = 0; skip = set()
+        tried = 0; skip = set(); nrisky = 0
         for eid in ids:
+            if nrisky >= int(os.environ.get('CP_MAX_RISKY', '300')): break
             if (eid in used and not os.environ.get('C3X_SAME_ELEMENT')) or tried >= int(os.environ.get('CP_MAX_TRY', '40')): continue
             p = g(pr[eid])
             if kind == 'set_string':
@@ -59,7 +60,7 @@ async def one_class(c, models, k, src, cls, pr, ix):
                 if not f or not nm: continue
                 op = {'op': 'set_string', 'eid': eid, 'field': f, 'value': nm + os.environ.get('CP_SUFFIX', ' c3x'), 'match': nm, 'param': None}
             else: op = {'op': 'move', 'eid': eid, 'dx': 1.0, 'dy': 0.0, 'dz': 0.0}
-            if _risky(eid, op): refused[kind] = 'skipped: group/design-option member or moved element with dependents (SAVE! would refuse it)'; tried += 1; continue
+            if _risky(eid, op): refused[kind] = 'skipped: group/design-option member or moved element with dependents (SAVE! would refuse it)'; nrisky += 1; continue      # a risk-test skip costs no save attempt: it must not use up CP_MAX_TRY (suite c1x-j1check: first 5 HVAC instances were all risky, false FAIL 'move refused')
             tried += 1; st, j = await post(c, mid, op)
             if st == 200: applied.append(op); used.add(eid); break
             refused[kind] = (j.get('error') or j.get('code') or '')[:70]
