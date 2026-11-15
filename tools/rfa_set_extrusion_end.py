@@ -38,12 +38,22 @@ def main(a):
         zk = T['_zk']; L = struct.unpack('<I', s.J.get(zk + W + 4, 4))[0]; body = s.J.get(zk + W + 8, L)
         if zlib.adler32(body) & 0xffffffff != struct.unpack('<I', s.J.get(zk + W, 4))[0]: raise SE.Refused('Z stamp does not match its body')
         nb, n = patch_body(body, new)
+        e0 = struct.unpack_from('<d', body, 72)[0]
+        # (2) element header: exactly one unaligned double equal to the old end offset, no stamp in the header
+        hdr = T['hdr']; hh = [o for o in range(len(hdr) - 7) if abs(struct.unpack_from('<d', hdr, o)[0] - e0) < 1e-12 and struct.unpack_from('<d', hdr, o)[0] != 0.0]
+        if len(hh) != 1: raise SE.Refused('element header holds %d slots equal to the old end offset %r (expected exactly 1)' % (len(hh), e0))
+        # (3) R record: exactly one ParamValueDouble.m_value equal to the old end offset (what the Revit API reads back)
+        i, r, log, q = s.trace(eid)
+        pv = [l for l in log if l[1] == 'ParamValueDouble.m_value' and l[3] - l[2] == 8 and abs(struct.unpack('<d', s.J.get(l[2], 8))[0] - e0) < 1e-12]
+        if len(pv) != 1 or pv[0][3] - pv[0][2] != 8: raise SE.Refused('R record holds %d ParamValueDouble slots equal to the old end offset (expected exactly 1)' % len(pv))
         s._spans(zk + W + 8, body, nb, 'extrusion end')
         s._replace(zk + W, 4, struct.pack('<I', zlib.adler32(nb) & 0xffffffff), 'z stamp')
+        s._replace(T['_hk'] + hh[0], 8, struct.pack('<d', new), 'header end offset')
+        s._modify(i, q, r, [(pv[0][2], 8, struct.pack('<d', new))], 'R end offset')
         s.write(dst, mode='fit')
     except SE.Refused as e:
         print('refused:', e); return 2
-    print('ok: %d slots patched -> %s' % (n, dst)); return 0
+    print('ok: %d Z slots + header + R value patched -> %s' % (n, dst)); return 0
 
 
 if __name__ == '__main__': sys.exit(main(sys.argv[1:]) if len(sys.argv) == 5 else print(__doc__) or 2)
