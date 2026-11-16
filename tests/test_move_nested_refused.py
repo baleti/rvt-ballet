@@ -31,4 +31,13 @@ class T(unittest.TestCase):
         o=os.path.join(tempfile.mkdtemp(),'c.rvt')
         p=subprocess.run([sys.executable,E,F,o,'mv:606069:1:0:0'],capture_output=True,text=True,cwd=os.path.dirname(E))
         self.assertTrue(os.path.exists(o),p.stderr[-200:])
+    def test_rotate_parent_refused_and_column_rotates(self):
+        F=os.path.expanduser('~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt')
+        if not os.path.exists(F): self.skipTest('sample absent')
+        d=tempfile.mkdtemp(); o=os.path.join(d,'p.rvt')
+        p=subprocess.run([sys.executable,E,F,o,'rot:642543:30'],capture_output=True,text=True,cwd=os.path.dirname(E))
+        self.assertIn('nested sub-component',p.stderr); self.assertFalse(os.path.exists(o))
+        o2=os.path.join(d,'c.rvt')
+        p=subprocess.run([sys.executable,E,F,o2,'rot:606069:30'],capture_output=True,text=True,cwd=os.path.dirname(E))
+        self.assertTrue(os.path.exists(o2),p.stderr[-200:])
 if __name__=='__main__': unittest.main()
