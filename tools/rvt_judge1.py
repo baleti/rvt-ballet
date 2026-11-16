@@ -86,6 +86,12 @@ def guest_run(guest, year, f, loc, par, tag, wd, tries=3, ed=()):
         port = guest.fresh(year)
         if not port: time.sleep(60); continue
         guest.put(f, 'C:/wl/' + base, 900)
+        # integrity of the transfer: a truncated/damaged guest copy opens as CorruptModelException (batch17 2026-11-16, same bytes had opened clean in batch15); compare the guest SHA-256 with the host's and re-send on mismatch, so a transfer fault is never reported as a corrupt output
+        try:
+            hs = hashlib.sha256(open(f, 'rb').read()).hexdigest().upper(); r = guest.gssh("(Get-FileHash -Algorithm SHA256 'C:/wl/%s').Hash" % base, 600)
+            gs = ((getattr(r, 'stdout', r) or '').strip().split() or [''])[-1].upper()
+            if len(gs) == 64 and gs != hs: print('guest copy of %s differs (host %s guest %s): re-sending' % (base, hs[:8], gs[:8])); continue
+        except Exception: pass
         con = guest.run_job(year, port, cs, tag, int(os.environ.get('RVT_JUDGE1_TIMEOUT', '1500')))
         lf = os.path.join(wd, tag + '_j1.txt')
         if os.path.exists(lf): os.remove(lf)
