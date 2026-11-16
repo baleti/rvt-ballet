@@ -50,6 +50,7 @@ if not os.environ.get('RVT_ADD_MULTIPART_FORCE'):      # Revit VM 2026-11-15: 20
     _MP_LAST = sorted(_ne, key=lambda n: int(n.split('/')[1]))[-1] if len(_ne) > 1 else None      # c1x-rvtadd 2026-11-15: 2-partition PASS = 2025 HVAC pb25 (built in the LAST partition); both FAILs = 2023 Arch_Link_Model built in the non-last partition. Rule: more than one non-empty partition is allowed only when the build partition is the last non-empty one (checked after the source is located).
     if False and len(_ne) > 1: sys.exit('REFUSED: %d non-empty Partitions streams (%s): ADD on such files failed in Revit (CorruptModelException on 2023 Arch_Link_Model); nothing written (RVT_ADD_MULTIPART_FORCE=1 for experiments only)' % (len(_ne), ', '.join(sorted(_ne))))
 import math
+if not 1 <= a.count <= 50: sys.exit('REFUSED: --count %d out of range 1..50 (more clones per build are untested in Revit); nothing written' % a.count)
 for _n,_v in (('dx',a.dx),('dy',a.dy),('dz',a.dz)):
     if not math.isfinite(_v) or (abs(_v)>1e6 and not os.environ.get('RVTEDIT_ALLOW_FAR')): sys.exit('REFUSED: --%s=%r is not finite or is beyond 1e6 ft (same rule as rvtedit)'%(_n,_v))
 if not os.access(os.path.dirname(os.path.abspath(a.out)) or '.', os.W_OK | os.X_OK): sys.exit('REFUSED: output directory %s does not exist or is not writable; nothing written' % os.path.dirname(os.path.abspath(a.out)))
