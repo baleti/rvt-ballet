@@ -13,4 +13,6 @@ def test_long_link_path_noop(monkeypatch):
     n = struct.unpack_from('<I', ed.g.bj, l[2])[0]; cur = bytes(ed.g.bj[l[2] + 4:l[2] + 4 + 2 * n]).decode('utf-16le')
     assert len(cur) > 60
     buf = open(F, 'rb').read()
-    assert edit.apply(buf, [{'op': 'set_link_path', 'eid': int(E), 'value': cur}]) == buf
+    try: out = edit.apply(buf, [{'op': 'set_link_path', 'eid': int(E), 'value': cur}])
+    except edit.EditError as e: assert 'nothing to change' in str(e); return      # same value: refused, file untouched
+    assert out == buf

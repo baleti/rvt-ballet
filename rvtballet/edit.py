@@ -512,6 +512,7 @@ def _set_link_path(ed, o):
                 _n = struct.unpack_from('<I', _body(ed, _e), _l[2])[0]; _op = bytes(_body(ed, _e)[_l[2] + 4:_l[2] + 4 + 2 * _n]).decode('utf-16le', 'replace')
                 if _op.replace('/', '\\').lower() == _nv: raise EditError('link type %d already points at %r: Revit keeps one link type per file (two on one path both fail to load); nothing was changed' % (_e, _op))
                 break
+    if o['value'] == old: raise EditError('link type %d already has this path: nothing to change (a same-value edit rewrote and re-compressed the whole partition; refused, file untouched)' % o['eid'])
     edits = []
     for l in log:
         if l[1] in ('ModelPath.m_path', 'std::pair< AString, AString >.second') and full(l) == old: edits.append((l[2], l[3] - l[2], _u16(o['value'])))
