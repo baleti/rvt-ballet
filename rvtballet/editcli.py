@@ -107,7 +107,7 @@ async def _run(src, ops, out, in_place, say):
             si = await (await c.get('/api/m/m/saveinfo')).json()
             if not si.get('available'): say('saving is not available here (savegate not installed)'); return 3
             if si.get('workshared'): say('refused: workshared (central/local) models cannot be saved; the file was not touched'); return 3
-            if not si.get('open'): say('refused: Revit %s files cannot be saved by this build (supported: 2024, 2025, 2026); the file was not touched' % si.get('version')); return 3
+            if not si.get('open'): say('refused: this Revit file cannot be saved by this build (supported: 2024, 2025, 2026)%s; the file was not touched' % ((' [' + str(si.get('error'))[:200] + ']') if si.get('error') else (' [Revit %s]' % si.get('version')))); return 3
             for kind, v in ops:
                 op = build_op(kind, v); st = _status_of(kind)
                 r = await c.post('/api/m/m/edit', json=op); j = await r.json()
