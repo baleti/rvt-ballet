@@ -4,7 +4,7 @@ _made = []; _mk = _tf.mkdtemp
 def _mkd(*a, **k):
     d = _mk(*a, **k); _made.append(d); return d
 _tf.mkdtemp = _mkd; atexit.register(lambda: [_sh.rmtree(d, ignore_errors=True) for d in _made])
-import os, sys, asyncio, tempfile, shutil, json, hashlib, errno
+import os, sys, threading, asyncio, tempfile, shutil, json, hashlib, errno
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'; json.dump({'rvt': {'2024': 'open'}}, open(_T + '/gate.json', 'w')); os.environ['SAVEGATE_GATE'] = _T + '/gate.json'
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'); sys.path.insert(0, HERE)
@@ -26,7 +26,15 @@ async def run():
         for name, content in plants.items():
             open(lp, 'wb').write(content.encode('latin-1')); before = open(lp, 'rb').read()
             for ep, body in (('save', {'confirm': True}), ('restore', {'confirm': True, 'n': 0})):
-                r = await c.post('/api/m/m/' + ep, json=body); j = await r.json(); print(name, ep, r.status, j.get('code'), str(j.get('error'))[:200])
+                stop = threading.Event()
+                def _fresh():      # a loaded host can spend >10 s before the lock is reached; keep the planted lock's mtime fresh (empty/garbage locks are only stale when old)
+                    while not stop.wait(1.0):
+                        try: os.utime(lp)
+                        except OSError: pass
+                th = threading.Thread(target=_fresh, daemon=True); th.start()
+                try: r = await c.post('/api/m/m/' + ep, json=body); j = await r.json()
+                finally: stop.set(); th.join()
+                print(name, ep, r.status, j.get('code'), str(j.get('error'))[:200])
                 assert r.status >= 400 and sha(src) == h1, (name, ep, r.status, j)
             assert open(lp, 'rb').read() == before, 'lock file of another holder was removed/changed: ' + name
             os.remove(lp)
