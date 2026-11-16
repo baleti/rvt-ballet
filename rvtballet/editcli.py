@@ -91,6 +91,8 @@ def check_paths(src, out, in_place, overwrite_output):
     try: same = os.path.exists(out) and os.path.samefile(src, out)
     except OSError: same = False
     if same or os.path.realpath(out) == os.path.realpath(src): return 'OUT is the input file: refusing to overwrite the original (use --in-place, with the SAVE! policy on)'
+    se, oe = os.path.splitext(src)[1].lower(), os.path.splitext(out)[1].lower()
+    if se in ('.rvt', '.rte', '.rfa', '.rft') and oe != se: return 'OUT extension %s differs from the input %s: Revit decides project / template / family by the extension and rejects the copy ("not a valid .rvt file", measured 2026-11-16 on a template saved as .rvt); name the output *%s' % (oe or '(none)', se, se)
     if os.path.exists(out) and not overwrite_output: return 'OUT already exists: %s (use --overwrite-output to replace it)' % out
     return None
 
