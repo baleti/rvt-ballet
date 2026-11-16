@@ -993,6 +993,9 @@ def _delete(ed, eid):
                     if 0 < hid < 2 ** 62:
                         try: hc = ed.g.e.trace(hid)[2]['class']
                         except Exception: hc = '?'
+                        try: _cat = ed._category(ed.g.template(eid))
+                        except Exception: _cat = None
+                        if hc == 'SWall' and _cat in (-2000014, -2000023): continue      # c4x-rvtdiff 153: Windows/Doors in a straight wall: Revit regenerates the wall on open and its API Area/Volume of both host walls of Facades 2024 593207 equal the Revit-made delete (VM probes wp2_*), 2025/2026 ledger PASS rows
                         if hc != 'Level': raise EditError('element %d is hosted in a %s (%d): Revit regenerates the host geometry when a hosted instance is deleted (wall cutout and face history records are rewritten) and this editor cannot reproduce that; nothing was changed' % (eid, hc, hid))
     if cls not in ('IndependentTag', 'ViewSheet') and not cls.startswith('DBView'):
         # c4x-rvtmatrix item 81: a tag points at its host through RoomBoundingItem.m_linkInstOrHostId and is NOT in the host's deletion list, so owned_set/cascade never saw it. 2025 Structural column delete (606331) was accepted (gate 0 diffs) and left Tag 869338 dangling; Revit dropped the tag on open (readback 2 elements gone, not 1). Refuse while a tag still names the element.

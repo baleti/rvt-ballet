@@ -1,6 +1,6 @@
 """c1x-rvtdel: Snowdon Facades 2024 hosted FamilyInstance 593274: deleting the hosted instance alone removes exactly that id, leaves every survivor (incl. its host wall 593193) unchanged and mentioned nowhere. Pins the PARAMETER-level behaviour only. CAVEAT: another agent reports 593274 is the nested child of parent 593273 (c5x-link rbnest1); the parent's raw sub-component reference is NOT covered by this check, so this is not evidence the delete is semantically safe. No dashboard PASS until the Revit VM verdict and a nested-child analysis."""
 import os, sys, tempfile, shutil
-_T = tempfile.mkdtemp(); os.environ.update(SAVEGATE_JOURNAL=_T+'/j', SAVEGATE_CACHE=_T+'/c', RVTBALLET_SNAPSHOT_CACHE=_T+'/snap', RVTBALLET_EDIT_BACKEND='rvtedit', RVTBALLET_ENABLE_DELETE='1')
+_T = tempfile.mkdtemp(); os.environ.update(SAVEGATE_JOURNAL=_T+'/j', SAVEGATE_CACHE=_T+'/c', RVTBALLET_SNAPSHOT_CACHE=_T+'/snap', RVTBALLET_EDIT_BACKEND='rvtedit', RVTBALLET_ENABLE_DELETE='1', RVTBALLET_DELETE_HOSTED='1')      # c4x-rvtdiff 151: hosted deletes are refused by default now (host wall regeneration); this test pins the parameter-level behaviour only
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 for p in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab')): sys.path.insert(0, p)
 SRC = os.path.expanduser('~/rvt-research/corpus/2024/46_Snowdon_Towers_Sample_Facades.rvt')
