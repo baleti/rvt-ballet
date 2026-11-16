@@ -930,10 +930,32 @@ def _full_astr(ed, vn):
     return vn[4]
 
 
+def _create_astring(ed, o):
+    """c4x-rvtmatrix items 141-154: create the never-set string parameter Comments the way Revit does (3 byte-exact Revit witnesses, Revit 2024 + 2026 VM open and readback). The element's null Element.m_pParamValueSetAString pointer becomes ffffffff + u16 tag (tag = the single value shared by all AString sets of the file), and a set object (u32 1, i64 id, u32 nchars, UTF-16) is inserted after the Double/Int set objects. Refused: an element that already has a string set, one without a Double/Int set (no witnessed anchor), one with an ElementId set (order not witnessed), a file without exactly one tag."""
+    import struct, collections, rvt_xcache
+    log = ed.g.e.trace(o['eid'])[3]
+    ptr = [l for l in log if l[1] == 'Element.m_pParamValueSetAString']
+    if len(ptr) != 1 or bytes(ed.g.bj[ptr[0][2]:ptr[0][3]]) != b'\0\0\0\0': raise EditError('element %d: cannot create parameter Comments (it already has string parameters or the layout is not the witnessed one); nothing was changed' % o['eid'])
+    sets = {l[1][len('ParamValueSet'):-len('.m_paramSet')]: l for l in log if l[1].startswith('ParamValueSet') and l[1].endswith('.m_paramSet')}
+    before = [sets[n] for n in ('Double', 'Int') if n in sets]
+    if not before or 'ElementId' in sets: raise EditError('element %d: creating Comments is only supported on elements with a Double or Int parameter set and no ElementId set (the only layouts Revit witnessed); nothing was changed' % o['eid'])
+    c = collections.Counter()
+    for k, r in rvt_xcache.get_x(ed.src)['recs'].items():
+        v = (r.get('fields') or {}).get('m_pParamValueSetAString')
+        if isinstance(v, dict) and v.get('handle') == 4294967295 and 'ptr' in v: c[v['ptr']] += 1
+    if len(c) != 1: raise EditError('cannot create parameter Comments: the file has %d distinct string-set tags (need exactly 1); nothing was changed' % len(c))
+    body = struct.pack('<I', 1) + struct.pack('<q', -1010106) + struct.pack('<I', len(o['value'])) + o['value'].encode('utf-16le')
+    ed._rec_edit(o['eid'], [(ptr[0][2], 4, b'\xff\xff\xff\xff' + struct.pack('<H', next(iter(c)))), (max(l[3] for l in before), 0, body)])
+
+
 def _set_string_by_pid(ed, o):
     """overwrite the string value that belongs to ONE parameter id (exact log entry), not 'the first value with this text'"""
     import struct
-    pid = _resolve_pid(ed, o); log = ed.g.e.trace(o['eid'])[3]
+    try: pid = _resolve_pid(ed, o)
+    except EditError:
+        if os.environ.get('RVTBALLET_CREATE_ASTRING') == '1' and o.get('pid') is None and o.get('param') == 'Comments' and not o.get('expect'): _create_astring(ed, o); return      # opt-in, default stays a refusal
+        raise
+    log = ed.g.e.trace(o['eid'])[3]
     for k, l in enumerate(log):
         if l[1] == 'ParamValueAString.m_paramId' and _eid_val(l[4]) == pid:
             # the value entry is the one whose bytes are CONTIGUOUS with this id entry (directly after, else directly before): never 'the nearest value' (that picked the neighbouring parameter)
