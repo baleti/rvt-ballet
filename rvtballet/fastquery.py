@@ -687,7 +687,18 @@ def _sid(v, W=8):
     return v if -(1 << 31) <= v < (1 << 31) else None
 
 
-BUILTIN_PARAM_FIELDS = {'Mark': -1001203}      # BuiltInParameter.ALL_MODEL_MARK (confirmed on house3: ParamValueAString.m_paramId EID(-1001203))
+def _builtin_param(params, name):
+    """value of the built-in parameter called `name` (reader PNAMES table, same names the editor accepts) stored on this element, else None; ids of one name are tried in table order (c4x-rvtdiff 167/168: --fields Mark printed blank for a ParamValueAString mark)"""
+    if not params or not isinstance(name, str): return None
+    try:
+        import sys, os
+        rr = os.path.expanduser('~/rvt-research')
+        if rr not in sys.path: sys.path.insert(0, rr)
+        import rvt_params
+    except ImportError: return None
+    for k, v in rvt_params.PNAMES.items():
+        if v == name and int(k) in params: return params[int(k)]
+    return None
 
 
 def collect(path, cls=None, category=None, fields=None, where=None, workers=None, log=None, rule='last', names=True):
@@ -779,7 +790,7 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
         for k in (fields or ()):
             if k not in row:
                 row[k] = f.get(k)
-                if row[k] is None and k in BUILTIN_PARAM_FIELDS: row[k] = (f.get('params') or {}).get(BUILTIN_PARAM_FIELDS[k])      # c4x-rvtdiff 167: --fields Mark printed blank for a Mark stored as ParamValueAString (house3 window 301610 'W1.0.1')
+                if row[k] is None: row[k] = _builtin_param(f.get('params'), k)      # c4x-rvtdiff 167: --fields Mark printed blank for a Mark stored as ParamValueAString (house3 window 301610 'W1.0.1')
         if where and any(str(row.get(k)) != str(v) for k, v in where.items()): continue
         out.append(row)
     log('collect: %d rows, %.2fs' % (len(out), time.time() - t0))
