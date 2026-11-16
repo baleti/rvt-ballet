@@ -8,7 +8,7 @@ base = os.path.expanduser('~/c3x-tmp-c4x'); os.makedirs(base, exist_ok=True); T 
 def run(tag, sig=None, delay=0.0):
     D = os.path.join(T, tag); os.makedirs(D); P = D + '/ip.rte'; shutil.copy(S, P); open(D + '/g.json', 'w').write('{"rvt": {"2024": "open"}}')
     env = dict(os.environ, SAVEGATE_GATE=D + '/g.json', SAVEGATE_JOURNAL=D + '/j', SAVEGATE_CACHE=D + '/c', RVTBALLET_ALLOW_OVERWRITE='1')
-    p = subprocess.Popen([RB, 'edit', P, '--in-place', '--move', '301592', '1', '0', '0'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, start_new_session=True)
+    p = subprocess.Popen([RB, 'edit', P, '--in-place', '--move', '301592', '1', '0', '0'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, start_new_session=True, preexec_fn=lambda: [signal.signal(x, signal.SIG_DFL) for x in (signal.SIGHUP, signal.SIGINT)])      # nohup / '&' make a child ignore HUP / INT: restore the defaults so the signal really lands
     if sig:
         time.sleep(delay)
         try: os.killpg(p.pid, sig)
@@ -16,7 +16,7 @@ def run(tag, sig=None, delay=0.0):
     p.wait(timeout=600); return D, P, env
 try:
     D0, P0, _ = run('ref'); good = sha(P0); orig = sha(S); fails = []
-    for name, sig in (('INT', signal.SIGINT), ('HUP', signal.SIGHUP), ('QUIT', signal.SIGQUIT), ('TERM', signal.SIGTERM)):
+    for name, sig in tuple((n, g) for n, g in (('INT', signal.SIGINT), ('HUP', signal.SIGHUP), ('QUIT', signal.SIGQUIT), ('TERM', signal.SIGTERM)) if n in os.environ.get('SIGS', 'INT,HUP,QUIT,TERM').split(',')):
         for delay in (1.0, 8.0, 20.0, 32.0):
             tag = '%s_%g' % (name, delay); D, P, env = run(tag, sig, delay); h = sha(P)
             state = 'original' if h == orig else 'complete' if h == good else 'OTHER'
