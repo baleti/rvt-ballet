@@ -4,6 +4,7 @@ _T = tempfile.mkdtemp(); os.environ.update(SAVEGATE_JOURNAL=_T+'/j', SAVEGATE_CA
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 for p in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab')): sys.path.insert(0, p)
 SRC = os.path.expanduser('~/rvt-research/corpus/2024/46_Snowdon_Towers_Sample_Facades.rvt')
+import os as _o; _o.environ['RVTBALLET_DELETE_WALL_JOINED'] = '1'      # c1x-rvtdel item 119: mechanics test on a joined wall; the default gate now refuses joined walls
 from rvtballet import save, edit
 if not os.path.exists(SRC) or not save.SaveSessions().available: print('skip'); sys.exit(0)
 try:
