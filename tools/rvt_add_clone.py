@@ -79,6 +79,11 @@ if not a.force:
 g=rvtgen.Gen(a.seed)
 if a.src not in g.e.m.ids or a.src<=0: sys.exit('REFUSED: no element with id %d in %s'%(a.src,a.seed))
 if g.nextid<=g.maxid and not a.force: raise SystemExit('refuse: ElemTable counter %d <= max element id %d (new id would collide); --force to override'%(g.counter,g.maxid))
+if not os.environ.get('RVT_ADD_CHAIN_FORCE'):      # Revit VM 2026-11-16 (batch12/13): a 2nd ADD on top of an ADD output opens clean but Revit silently drops the EARLIER added element (3 chained adds on rst_basic 2023: only the last survives). Our ADD output has a tiny first Partitions member (155/217 B per add) where Revit-written and delete outputs have ~130 kB members; refuse such an input
+    for _pn in sorted(n for n in g.e.m.parts if n.startswith('Partitions/')):
+        _o = g.e.part(_pn).offs(); _d = [_o[i + 1] - _o[i] for i in range(len(_o) - 1)]
+        if len(_d) > 3 and _d[0] < 5000 and sorted(_d)[len(_d) // 2] > 50000:
+            sys.exit('REFUSED: %s of the input starts with a tiny member (%d B, others ~%d B): the file already carries an element added by this tool, and a second ADD on top makes Revit silently drop the earlier added element (VM 2026-11-16). Open and save it in Revit first, or add all elements in one build; nothing written (RVT_ADD_CHAIN_FORCE=1 for experiments)' % (_pn, _d[0], sorted(_d)[len(_d) // 2]))
 W=g.W; S=a.src
 try: T=g.template(S)
 except IndexError:
