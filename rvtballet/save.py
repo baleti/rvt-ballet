@@ -345,7 +345,7 @@ cls_of = {e: c for (e, c) in x['recs']}
 annot = {}      # target id -> annotation/rebar/alignment elements naming it via m_elemId (Snowdon Structural 2024: 630 SpotElevations name FamilyInstances; Revit recomputes their values on a move, the writer moves the instance only)
 for (e, c), r in x['recs'].items():
     if not re.search(r'Spot|Rebar|Alignment|Tag|Callout|Annotation', c): continue
-    t = []; find(r.get('fields'), 'm_elemId', t)
+    t = []; find(r.get('fields'), 'm_elemId', t); find(r.get('fields'), 'm_linkInstOrHostId', t)      # IndependentTag names its host here (Electrical 2024: 6 tagged instances were unflagged)
     for v in t:
         for i in ids(v):
             if i < 2 ** 32 - 1 and i != e and cls_of.get(i) not in (None, 'Level'): annot.setdefault(i, set()).add(e)
