@@ -13,7 +13,7 @@ from rvtballet import server
 import rvt_params, rvt_geometry as G
 import rvt_untouched_report as U
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
-g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
+g = lambda x: {k: ('NaN' if isinstance(v, float) and v != v else v) for k, v in (x.get('params', x) if isinstance(x, dict) else {}).items()}      # NaN != NaN would flag untouched elements as changed
 DEFAULT = ['SWall', 'Floor', 'Ceiling', 'RoofBase', 'FootPrintRoof', 'ExtrusionRoof', 'FamilyInstance', 'RoomElem', 'RbsDuctCurve', 'RbsPipeCurve', 'RbsWireCurve', 'TextNote', 'LinearDimString', 'IndependentTag', 'Family', 'FamilySymbol',
            'DBViewPlan', 'DBViewSection', 'DBView3d', 'Viewport', 'DBDrawing', 'Level', 'Grid', 'RefPlane', 'MaterialElem', 'BaseRailing']
 KNOWN = set(rvt_params.PNAMES.values())
