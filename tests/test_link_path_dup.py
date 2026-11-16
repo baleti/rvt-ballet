@@ -12,7 +12,7 @@ ed = rvtedit.Edit(SEED)
 for v in ('Snowdon Towers Sample Architectural.rvt', 'SNOWDON TOWERS SAMPLE ARCHITECTURAL.RVT'):
     try: edit._set_link_path(ed, {'eid': 1363937, 'value': v}); raise SystemExit('duplicate path accepted: ' + v)
     except edit.EditError as e: assert 'one link type per file' in str(e), e
-for v in ('Brand_New.rvt', 'Snowdon Towers Sample Structural.rvt'): edit._set_link_path(ed, {'eid': 1363937, 'value': v})
+for v in ('Brand_New.rvt', 'Brand_Newer.rvt'): edit._set_link_path(ed, {'eid': 1363937, 'value': v})
 for v in ('a<b>.rvt', 'a|b?c*.rvt', '..\\x\\..\\y.rvt', 'COM1.rvt', 'trail.rvt .', '', 'a\ud800b.rvt', 'd\\' * 130 + 'x.rvt'):
     try: edit._set_link_path(ed, {'eid': 1363937, 'value': v}); raise SystemExit('odd path accepted: %r' % v)
     except edit.EditError: pass
