@@ -312,6 +312,14 @@ for (e, c), r in x['recs'].items():      # geometry joins (m_geomJoined, Structu
         for w in f:
             for i in ids(w):
                 if i < 2 ** 32 - 1 and i != e: joined.setdefault(e, set()).add(i); joined.setdefault(i, set()).add(e)
+for (e, c), r in x['recs'].items():      # FamilyInstance join/miter records (m_JoinInfo, m_otherInfoAtMiter name the other instance; Structural 2024: 4 targets such as 686385 were referenced only this way, so their move was not flagged)
+    for key in ('m_JoinInfo', 'm_otherInfoAtMiter'):
+        t = []; find(r.get('fields'), key, t)
+        for v in t:
+            f = []; find(v, 'm_elemId', f)
+            for w in f:
+                for i in ids(w):
+                    if i < 2 ** 32 - 1 and i != e: joined.setdefault(e, set()).add(i); joined.setdefault(i, set()).add(e)
 framed = {}      # support id -> instances whose m_refs.m_endStructId names it (beams framing into a column/wall end; Structural 2024: 59 accepted point-located columns carry 10-16 beams); Revit re-ends framing members on a support move, the writer moves one record (paired run mvcol24c pending: relax if Revit leaves the beams alone)
 for (e, c), r in x['recs'].items():
     t = []; find(r.get('fields'), 'm_endStructId', t)
