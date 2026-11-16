@@ -72,6 +72,9 @@ if not a.force:
     if _bad: sys.exit('REFUSED: source %d owns dependent element(s) %s (header deletion lists name it); copying it corrupts the model. Pick a childless source or --force.'%(a.src,_bad[:6]))
     _c=_ed.g.e.trace(a.src)[2]['class']
     if _c != 'FamilyInstance': sys.exit('REFUSED: source %d is a %s; this tool moves FamilyInstance origins only (a %s copy would sit on the original and skip owner-view/host lists). Text notes: rvtedit.py tn:X:Y:TEXT; other classes need their own op.' % (a.src, _c, _c))
+    _tr=_ed.g.e.trace(a.src)
+    if any(l[1].startswith('CurtainCellFamRef.') for l in _tr[3]):      # curtain-wall panel/door: its cell reference names a grid cell that already holds the original; the clone's file fails to open (Revit 2023 rme_basic door 573615, InternalException, 2026-11-16)
+        sys.exit('REFUSED: source %d is a curtain-grid cell element (CurtainCellFamRef); a copy points at an already occupied cell and Revit rejects the file; pick a free-standing instance; nothing written' % a.src)
     print('dependents screen: none')
 g=rvtgen.Gen(a.seed)
 if a.src not in g.e.m.ids or a.src<=0: sys.exit('REFUSED: no element with id %d in %s'%(a.src,a.seed))
