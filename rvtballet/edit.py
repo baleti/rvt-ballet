@@ -816,7 +816,12 @@ def _check_wall_height_pid(o, pid, log):
         raise EditError('Unconnected Height on element %d is stored under two ids (-1001105 and -1001101) and Revit reads the other one: an edit of the first is ignored by Revit; refused (give pid -1001101 explicitly); nothing was changed' % o['eid'])
 
 
-_SETNUM_GEOM_CLASSES = ('Floor', 'SWall', 'ArcWall', 'Wall')      # classes whose Double parameters drive stored geometry that Revit regenerates
+_SETNUM_GEOM_CLASSES = ('Floor', 'SWall', 'ArcWall', 'Wall')
+
+
+def _setnum_geom_class(cls):
+    """Floors, walls, ceilings and roofs (any class name containing Ceiling or Roof): their offset/thickness/fascia numbers drive stored geometry (c4x-rvtdiff 2026-11-16: floor and wall verified stale in the Revit VM; ceiling and roof by analogy, ledger PASS rows compared only the parameter readback)"""
+    return cls in _SETNUM_GEOM_CLASSES or 'Ceiling' in cls or 'Roof' in cls      # classes whose Double parameters drive stored geometry that Revit regenerates
 
 
 def _set_num_by_pid(ed, o):
@@ -824,8 +829,8 @@ def _set_num_by_pid(ed, o):
     import struct
     pid = _resolve_pid(ed, o); log = ed.g.e.trace(o['eid'])[3]
     _check_wall_height_pid(o, pid, log)
-    if o.get('kind') == 'Double' and os.environ.get('RVTBALLET_SETNUM_GEOM') != '1' and (ed.g.e.trace(o['eid'])[2].get('class') or '') in _SETNUM_GEOM_CLASSES:      # c4x-rvtdiff 2026-11-16 (walls: Revit VM elemhash, Structural 2024 wall 585072 Top Offset 0 -> 2: Unconnected Height reads 78.75 but Area 780.29 and Volume 645.19 are unchanged) (Revit VM, Snowdon Structural 2024 floor 621720 Height Offset From Level 0 -> 1.5): the saved file reads Height Offset 1.5 but Elevation at Bottom/Top stay 5.0/5.5 (a Revit-made change gives 6.5/7.0: Floor.m_bottom/m_top and 5 Plane.m_origin shift with the parameter); a bare parameter write leaves stale geometry
-        raise EditError('element %d is a floor or wall: its offset/dimension parameters drive stored geometry (Floor.m_bottom/m_top and the sketch planes) that Revit regenerates; a bare parameter write leaves the geometry at the old position, so it is refused (RVTBALLET_SETNUM_GEOM=1 to force); nothing was changed' % o['eid'])
+    if o.get('kind') == 'Double' and os.environ.get('RVTBALLET_SETNUM_GEOM') != '1' and _setnum_geom_class(ed.g.e.trace(o['eid'])[2].get('class') or ''):      # c4x-rvtdiff 2026-11-16 (walls: Revit VM elemhash, Structural 2024 wall 585072 Top Offset 0 -> 2: Unconnected Height reads 78.75 but Area 780.29 and Volume 645.19 are unchanged) (Revit VM, Snowdon Structural 2024 floor 621720 Height Offset From Level 0 -> 1.5): the saved file reads Height Offset 1.5 but Elevation at Bottom/Top stay 5.0/5.5 (a Revit-made change gives 6.5/7.0: Floor.m_bottom/m_top and 5 Plane.m_origin shift with the parameter); a bare parameter write leaves stale geometry
+        raise EditError('element %d is a floor, wall, ceiling or roof: its offset/dimension parameters drive stored geometry (Floor.m_bottom/m_top and the sketch planes) that Revit regenerates; a bare parameter write leaves the geometry at the old position, so it is refused (RVTBALLET_SETNUM_GEOM=1 to force); nothing was changed' % o['eid'])
     for l in log:
         if l[1] == 'ParamValue%s.m_paramId' % o['kind'] and _eid_val(l[4]) == pid:
             vn = _value_entry(log, o['kind'], l)
