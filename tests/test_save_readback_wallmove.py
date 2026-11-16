@@ -1,7 +1,7 @@
 """regression: a wall MOVE whose output carries a different displacement (or none) must be refused by save._readback; the honest move passes. The wall's placement origin (Trf.m_or) is the witness (the geometry reader has no mesh for a moved wall)."""
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_MOVE_ANY'] = '1'      # wall move has no Revit-verified implementation (policy refuses it at edit time); this test exercises the readback witness, offline
+os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'; os.environ['RVTBALLET_MOVE_ANY'] = '1'; os.environ['RVTEDIT_MOVE_WALL_DEPS'] = '1'      # wall move has no Revit-verified implementation (policy refuses it at edit time); this test exercises the readback witness, offline
 F = os.path.expanduser('~/rvt-research/write-lab/scenes/classtests/2024_writer_cols2.rte')
 from rvtballet import edit, save
 if not os.path.exists(F) or not save._import(): print('skip'); sys.exit(0)
