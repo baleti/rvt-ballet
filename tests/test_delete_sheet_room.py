@@ -14,7 +14,9 @@ pr = rvt_params.params(src)
 src = os.path.join(_T, 'src.rvt'); shutil.copy(SRC, src)
 pr = rvt_params.params(src)
 d0 = save.SaveSessions().doc('msheet', src)
-for eid, cls in ((251, 'DBDrawing'), (583143, 'RoomElem')):      # room: VM-verified class; gate needs the part_header delete rule
+try: edit.apply_full(d0.buf, [edit.validate_op({'op': 'delete', 'eid': 251})]); raise SystemExit('sheet delete must be refused: its viewport would dangle')
+except edit.EditError as e: print('sheet refused OK', str(e)[:60], flush=True)
+for eid, cls in ((583143, 'RoomElem'),):      # room: VM-verified class; gate needs the part_header delete rule
     assert pr[eid].get('class') == cls, (eid, pr[eid].get('class'))
     d = save.SaveSessions().doc('m' + str(eid), src)
     ops = [edit.validate_op({'op': 'delete', 'eid': eid})]
