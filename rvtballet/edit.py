@@ -830,6 +830,8 @@ def _set_num_by_pid(ed, o):
     import struct
     pid = _resolve_pid(ed, o); log = ed.g.e.trace(o['eid'])[3]
     _check_wall_height_pid(o, pid, log)
+    if o.get('kind') == 'Int' and (ed.g.e.trace(o['eid'])[2].get('class') or '') == 'Level':      # c1x-rvttype 2026-11-16 (Revit 2024 pair c1xlvl3, Structural Level 329 Building Story Yes -> No: the Level record is unchanged, element 13 grows by 20 bytes and 2 id tables change): not an in-place int patch
+        raise EditError('element %d is a Level: its integer parameters (e.g. Building Story) are stored outside the level record (Revit grows element 13 and updates id tables), a bare write would not match; refused, nothing was changed' % o['eid'])
     if o.get('kind') == 'Double' and os.environ.get('RVTBALLET_SETNUM_GEOM') != '1' and _setnum_geom_class(ed.g.e.trace(o['eid'])[2].get('class') or ''):      # c4x-rvtdiff 2026-11-16 (walls: Revit VM elemhash, Structural 2024 wall 585072 Top Offset 0 -> 2: Unconnected Height reads 78.75 but Area 780.29 and Volume 645.19 are unchanged) (Revit VM, Snowdon Structural 2024 floor 621720 Height Offset From Level 0 -> 1.5): the saved file reads Height Offset 1.5 but Elevation at Bottom/Top stay 5.0/5.5 (a Revit-made change gives 6.5/7.0: Floor.m_bottom/m_top and 5 Plane.m_origin shift with the parameter); a bare parameter write leaves stale geometry
         raise EditError('element %d is a floor, wall, ceiling or roof: its offset/dimension parameters drive stored geometry (Floor.m_bottom/m_top and the sketch planes) that Revit regenerates; a bare parameter write leaves the geometry at the old position, so it is refused (RVTBALLET_SETNUM_GEOM=1 to force); nothing was changed' % o['eid'])
     for l in log:
