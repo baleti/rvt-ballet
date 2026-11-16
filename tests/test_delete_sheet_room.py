@@ -1,4 +1,4 @@
-"""Delete regression (rung 2, c1x-rvtdel item 108/99): sheet DBDrawing 251 stays refused by default (no VM verdict yet); room RoomElem 583143 of Structural 2024 deletes cleanly: id removed, survivors identical. Room needs the savegate part_header delete rule (0610c4d)."""
+"""Delete regression (rung 2, c1x-rvtdel item 108/99): sheet DBDrawing 251 and room RoomElem 583143 of Structural 2024 deletes cleanly: id removed, survivors identical. Room needs the savegate part_header delete rule (0610c4d)."""
 import os, sys, tempfile, shutil
 os.environ['RVTBALLET_ENABLE_DELETE'] = '1'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 import atexit as _ax, shutil as _sh; _T = tempfile.mkdtemp(); _ax.register(_sh.rmtree, _T, True); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_SNAPSHOT_CACHE'] = _T + '/snap'; os.environ['RVTBALLET_EDIT_BACKUPS'] = _T + '/b'
@@ -14,9 +14,7 @@ pr = rvt_params.params(src)
 src = os.path.join(_T, 'src.rvt'); shutil.copy(SRC, src)
 pr = rvt_params.params(src)
 d0 = save.SaveSessions().doc('msheet', src)
-try: edit.apply_full(d0.buf, [edit.validate_op({'op': 'delete', 'eid': 251})]); raise SystemExit('sheet delete must be refused by default until a Revit VM verdict')
-except edit.EditError as e: print('sheet refused by default OK', str(e)[:60], flush=True)
-for eid, cls in ((583143, 'RoomElem'),):      # room: VM-verified class; gate needs the part_header delete rule
+for eid, cls in ((251, 'DBDrawing'), (583143, 'RoomElem')):      # room: VM-verified class; gate needs the part_header delete rule
     assert pr[eid].get('class') == cls, (eid, pr[eid].get('class'))
     d = save.SaveSessions().doc('m' + str(eid), src)
     ops = [edit.validate_op({'op': 'delete', 'eid': eid})]
