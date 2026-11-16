@@ -1108,6 +1108,18 @@ def _delete(ed, eid):
             raise EditError('element %d is a view template: views may still use it (DBView.m_viewTemplateId) and deleting it would leave dangling references; nothing was changed' % eid)
         return list(ed.delete_view(eid))
     if cls == 'ViewSheet': return list(ed.delete_sheet(eid) or [eid])
+    if cls == 'ProfileRoof':      # c1x-rvtdel item 127: the generic path kept the roof's VarSketch as an orphan; the floor cascade (sketch + curves + plane named in the deletion list) removes it
+        import re as _re
+        g = ed.g; cl = lambda x: g.e.trace(x)[2]['class']; out = {int(eid)}
+        for n, o, en, v in g.template(eid)['hlog']:
+            if n == 'ElementParents.m_appearanceParents':
+                out |= {int(x) for x in _re.findall(r'EID\((\d+)\)', str(v)) if int(eid) - 3 <= int(x) < int(eid) and cl(int(x)) == 'VarSketch'}
+        todo = [x for x in out if x != int(eid)]
+        while todo:
+            n = todo.pop()
+            for y in ed.dependents(n):
+                if y not in out and cl(y) in ('VarSketch', 'CurveElem', 'SketchPlane'): out.add(y); todo.append(y)
+        ids = sorted(out); ed.delete(*ids); return ids
     if cls == 'DBDrawing':      # c1x-rvtdel item 122: Revit-made Delete of Structural 2024 sheet 251 removes {248 DBViewProject, 249 Viewer, 250 Viewport, 251} and nothing else; the generic path removed only 251 and left the Viewport dangling
         ids = sorted(ed.cascade(eid)); ed.delete(*ids); return ids
     ids = ed.owned_set(eid); ed.delete(*ids); return list(ids)
