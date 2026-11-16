@@ -974,7 +974,7 @@ def _delete(ed, eid):
         import re as _re, cfb as _cfb
         try: fy = int(_re.search(r'(20[12]\d)', bytes(_cfb.CFB(open(ed.src, 'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le', 'ignore')).group(1))
         except Exception: raise EditError('delete refused: cannot read the Revit version of the file')
-        if fy != 2024 and not (fy == 2026 and cls in ('SWall', 'FamilyInstance', 'Floor', 'IndependentTag')): raise EditError('delete of a %s is not VM-verified on Revit %d files (verified: 2024; 2026 only SWall/FamilyInstance/Floor/IndependentTag): refused, nothing changed' % (cls, fy))
+        if fy != 2024 and not (fy == 2026 and cls in ('SWall', 'FamilyInstance', 'Floor', 'IndependentTag')) and not (fy == 2025 and cls in ('SWall', 'FamilyInstance')): raise EditError('delete of a %s is not VM-verified on Revit %d files (verified: 2024; 2025 only SWall/FamilyInstance, ledger PASS rows Snowdon Structural column/beam/wall and Facades window, Revit 2025 VM open clean + readback; 2026 only SWall/FamilyInstance/Floor/IndependentTag): refused, nothing changed' % (cls, fy))
     if cls not in DELETE_VM_VERIFIED and UNIQUE_CLASS.search(cls): raise EditError('element %d is a %s: a project-wide settings / tracker / table element that Revit expects to exist exactly once (deleting AllProjectRevisions made Revit show "Repair Missing Unique Elements"); not deleted' % (eid, cls))
     if cls == 'RoomElem' and os.environ.get('RVTBALLET_DELETE_ROOM_TAGGED') != '1':
         # c1x-rvtdel item 114: after a room delete the room's RoomTag(s) and the LevelRoomPlan still hold its id (dangling, measured Structural 2024 room 583143: RoomTag 583144, LevelRoomPlan 582607); Revit's own cascade for tags is not verified, so tagged rooms are refused

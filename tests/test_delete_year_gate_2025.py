@@ -1,4 +1,4 @@
-"""c3x-rvtdel: the delete whitelist is VM-verified on 2024 (2026 only SWall/FamilyInstance/Floor). A 2025 file must refuse a FamilyInstance delete (production gate accepted it before the year gate). Autodesk 2025 Structural sample."""
+"""c3x-rvtdel: the delete whitelist is VM-verified on 2024 (2026 only SWall/FamilyInstance/Floor). 2025 verified only for SWall/FamilyInstance (ledger PASS rows, Revit 2025 VM): the year gate must NOT refuse a FamilyInstance, but must still refuse other classes (c4x-rvtdiff 177). Autodesk 2025 Structural sample."""
 import os, sys, tempfile, shutil
 _T = tempfile.mkdtemp(); os.environ.update(SAVEGATE_JOURNAL=_T+'/j', SAVEGATE_CACHE=_T+'/c', RVTBALLET_SNAPSHOT_CACHE=_T+'/snap', RVTBALLET_EDIT_BACKEND='rvtedit', RVTBALLET_ENABLE_DELETE='1')
 os.environ.pop('RVTBALLET_DELETE_ANY', None)
@@ -13,7 +13,11 @@ try:
     ids = [e for e, v in rvt_params.params(src).items() if isinstance(v, dict) and v.get('class') == 'FamilyInstance'][:3]
     assert ids, 'no FamilyInstance'
     for i in ids:
-        try: edit.apply_full(d.buf, [edit.validate_op({'op': 'delete', 'eid': i})]); raise SystemExit('FAIL: 2025 FamilyInstance %s deleted' % i)
+        try: edit.apply_full(d.buf, [edit.validate_op({'op': 'delete', 'eid': i})])
+        except edit.EditError as e: assert 'not VM-verified on Revit 2025' not in str(e), str(e)   # other guards (tag, hosted, view owner) may still refuse
+    other = [e for e, v in rvt_params.params(src).items() if isinstance(v, dict) and v.get('class') not in ('FamilyInstance', 'SWall') and v.get('class') in edit.DELETE_VM_VERIFIED][:1]
+    for i in other:
+        try: edit.apply_full(d.buf, [edit.validate_op({'op': 'delete', 'eid': i})]); raise SystemExit('FAIL: 2025 non-whitelisted class deleted')
         except edit.EditError as e: assert 'not VM-verified on Revit 2025' in str(e), str(e)
-    print('OK 2025 refused', len(ids))
+    print('OK 2025 year gate: FamilyInstance passes the gate, others refused', len(ids), len(other))
 finally: shutil.rmtree(_T, ignore_errors=True)
