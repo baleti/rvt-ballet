@@ -839,7 +839,7 @@ def _set_type_yesno(ed, src, o):
     except Exception: raise EditError('yes/no create refused: cannot read the Revit version of the file')
     if fy != 2024: raise EditError('yes/no create is only verified on Revit 2024 files (this file is %d): refused' % fy)
     tr = ed.g.e.trace(o['eid']); log = tr[3]
-    if tr[2].get('class') != 'FamilySymbol': raise EditError('element %d is not a FamilySymbol (type); nothing was changed' % o['eid'])
+    if tr[2].get('class') not in ('FamilySymbol', 'SysMullionFamSym'): raise EditError('element %d is not a type symbol (class %s); nothing was changed' % (o['eid'], tr[2].get('class')))
     L = {l[1]: l for l in log}
     ptr = L.get('Element.m_pParamValueSetInt'); dbl = L.get('ParamValueSetDouble.m_paramSet'); cl = L.get('CellList.m_cells')
     if 'ParamValueSetInt.m_paramSet' in L: raise EditError('element %d already has an Int value set: editing it is not Revit-witnessed; nothing was changed' % o['eid'])
@@ -1084,6 +1084,11 @@ def _delete(ed, eid):
         import re as _re
         w = ed.g.W; pat = _re.escape(int(eid).to_bytes(w, 'little')); n = sum(len(_re.findall(pat, p['joined'])) for p in ed.g.e.m.parts.values())
         if n > IN_USE_GUARD_ALLOW: raise EditError('element %d is a %s still referenced by other elements (%d occurrences of its id in the element streams, own record and id lists account for at most %d): deleting it would leave dangling references; nothing was changed' % (eid, cls, n, IN_USE_GUARD_ALLOW))
+    if cls == 'Floor' and os.environ.get('RVTBALLET_DELETE_FLOOR_WALLREF') != '1':
+        # c1x-rvtdel item 120: Site 2024 floor 1139521 is still named by walls 1139388/1139389 (field scan); a Revit-made wall delete rewrote exactly such a neighbour (join data, regenerated geometry), so a floor named by a wall is refused until a paired Revit floor delete shows the neighbour patch
+        import rvt_xcache
+        needle = 'EID(%d)' % int(eid); nb = [int(k2[0]) for k2, r2 in rvt_xcache.get_x(ed.src)['recs'].items() if k2[1] == 'SWall' and needle in str(r2.get('fields')) and int(k2[0]) not in getattr(ed, '_deleted_ids', ())]
+        if nb: raise EditError('floor %d is still named by wall(s) %s: Revit rewrites such walls when the floor goes and this editor cannot reproduce that; nothing was changed' % (eid, nb[:5]))
     if cls == 'Floor':
         # delete_floor looks up the class of every candidate id with a full record decode (about 60 s each on a big file, the same ids many times: 1590 s of a 1676 s two-delete save, profiled); cache those read-only lookups until the first real deletion
         tr0 = ed.g.e.trace; memo = {}
