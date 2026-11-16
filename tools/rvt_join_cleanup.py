@@ -32,6 +32,9 @@ def main(src, out, eid):
             if eid in named:
                 if named - {eid, e}: raise SystemExit('partner %d has joins with other elements %s: not derived, refused' % (e, sorted(named - {eid, e})))
                 partners[e] = len(pairs)
+    for e in [eid] + sorted(partners):      # column/wall style joins (m_affectedEdgesTags, e.g. Facades 2024 column 593361) are a different structure: not derived, refused
+        r = x['recs'].get((e, 'FamilyInstance')); t = []; find(r.get('fields') if r else None, 'm_affectedEdgesTags', t)
+        if any(t): raise SystemExit('element %d also has m_affectedEdgesTags joins (column/wall style): not derived, refused' % e)
     buf = open(src, 'rb').read()
     nb, _ = edit.apply_full(buf, [edit.validate_op({'op': 'delete', 'eid': eid})])
     d = tempfile.mkdtemp(prefix='rvtjoin-')
