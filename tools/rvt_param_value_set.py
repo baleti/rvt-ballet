@@ -19,13 +19,20 @@ os.environ.setdefault('RVT_GEOM','1')
 import rvtedit, rvt_xcache
 if kind=='string' and any(ord(c)>0xFFFF or ord(c)<32 for c in val): sys.exit('REFUSED: unsupported characters in value; nothing written')
 recs=rvt_xcache.get_x_ro(src)['recs']
-pids=[k[0] for k,v in recs.items() if v['class']=='ParamElemExternal' and (v['fields'].get('m_pParamDef') or {}).get('obj',{}).get('m_caption')==pname]
+BUILTIN=pname.startswith('pid:')      # c1x-rvttype 2026-11-16: built-in parameter by signed pid (no ParamElemExternal exists); int/yesno only
+if BUILTIN and kind not in ('int','yesno'): sys.exit('REFUSED: a built-in pid is only supported for int/yesno; nothing written')
+pids=[int(pname[4:])%(1<<64)] if BUILTIN else [k[0] for k,v in recs.items() if v['class']=='ParamElemExternal' and (v['fields'].get('m_pParamDef') or {}).get('obj',{}).get('m_caption')==pname]
 if len(pids)!=1: sys.exit('REFUSED: parameter %r found %d times; nothing written'%(pname,len(pids)))
 pid=pids[0]
 ed=rvtedit.Edit(src); log=ed.g.e.trace(eid)[3]
 L={l[1]:l for l in log}
 SETS={'string':'ParamValueSetAString.m_paramSet','double':'ParamValueSetDouble.m_paramSet','int':'ParamValueSetInt.m_paramSet','eid':'ParamValueSetElementId.m_paramSet'}
-if kind!='string':
+if kind!='string' and BUILTIN:
+    if kind=='yesno' and val not in ('0','1'): sys.exit('REFUSED: value not 0/1; nothing written')
+    kind='int'
+    try: pk=struct.pack('<i',int(val))
+    except ValueError: sys.exit('REFUSED: value does not parse; nothing written')
+elif kind!='string':
     d=(recs[(pid,'ParamElemExternal')] if (pid,'ParamElemExternal') in recs else [v for k,v in recs.items() if (k[0] if isinstance(k,tuple) else k)==pid][0])['fields']['m_pParamDef']['obj']
     _pt=(recs[(pid,'ParamElemExternal')] if (pid,'ParamElemExternal') in recs else [v for k,v in recs.items() if (k[0] if isinstance(k,tuple) else k)==pid][0])['fields']['m_pParamDef']['ptr']   # definition class pointer encodes the data type (Revit-made files: 672 text, 514 int, 680 double, 3002 yes/no, 2916 material)
     if kind=='yesno' and (_pt!=PTR[_fy]['yesno'] or val not in ('0','1')): sys.exit('REFUSED: not a Yes/No parameter or value not 0/1; nothing written')
@@ -39,7 +46,7 @@ if kind!='string':
 if kind=='int' and SETS[kind] not in L:
     # element has a null Int set pointer: Revit (paired experiment c5xpi) turns the 4-byte null into the 6-byte class pointer ffffffff+tag and appends a new ParamValueSetInt object right after the Double set object
     ptr=L.get('Element.m_pParamValueSetInt'); dbl=L.get('ParamValueSetDouble.m_paramSet')
-    if not ptr or ptr[3]-ptr[2]!=4 or bytes(ed.g.bj[ptr[2]:ptr[3]])!=b'\0\0\0\0' or not dbl: sys.exit('REFUSED: element %d has no int set and no known place to create one; nothing written'%eid)
+    if not ptr or ptr[3]-ptr[2]!=4 or bytes(ed.g.bj[ptr[2]:ptr[3]])!=b'\0\0\0\0' or not (dbl or L.get('CellList.m_cells')): sys.exit('REFUSED: element %d has no int set and no known place to create one; nothing written'%eid)
     tag=None
     for k2,v2 in recs.items():
         e2=k2[0] if isinstance(k2,tuple) else k2
@@ -47,7 +54,8 @@ if kind=='int' and SETS[kind] not in L:
         except Exception: continue
         if l2 and l2[3]-l2[2]==6: tag=bytes(ed.g.bj[l2[2]:l2[3]]); break
     if not tag: sys.exit('REFUSED: no element in the file carries an Int set pointer to copy the class tag from; nothing written')
-    ed._rec_edit(eid,[(ptr[2],4,tag),(dbl[3],0,struct.pack('<IQi',1,pid,int(val)))]); ed.save(out); print('wrote',out,'pid',pid,'on',eid,'int (new set object)'); sys.exit(0)
+    cl=L.get('CellList.m_cells'); at=cl[2] if cl and (not dbl or dbl[3]<=cl[2]) else dbl[3]      # Revit pair c1xyn8: the new set object sits right before CellList.m_cells (also when the Double set is null)
+    ed._rec_edit(eid,[(ptr[2],4,tag),(at,0,struct.pack('<IQi',1,pid,int(val)))]); ed.save(out); print('wrote',out,'pid',pid,'on',eid,'int (new set object)'); sys.exit(0)
 if SETS[kind] not in L: sys.exit('REFUSED: element %d has no %s value set object to extend; nothing written'%(eid,kind))
 a,b=L[SETS[kind]][2],L[SETS[kind]][3]
 raw=bytes(ed.g.bj[a:b]); n=struct.unpack_from('<I',raw,0)[0]; o=4; ents=[]
