@@ -62,6 +62,7 @@ def cs_for(ops, tag, file):
         elif k == 'addgrid': body.append('{ var ng = Grid.Create(d, Line.CreateBound(new XYZ(%s, %s, 0), new XYZ(%s, %s, 0))); log.AppendLine("OP addgrid new id " + ng.Id); }' % (p[1], p[2], p[3], p[4]))
         elif k == 'addcol': body.append('{ var sym = new FilteredElementCollector(d).OfClass(typeof(FamilySymbol)).OfCategory(BuiltInCategory.OST_StructuralColumns).Cast<FamilySymbol>().First(); if (!sym.IsActive) sym.Activate(); var lv = new FilteredElementCollector(d).OfClass(typeof(Level)).Cast<Level>().OrderBy(l => l.Elevation).First(); var nc = d.Create.NewFamilyInstance(new XYZ(%s, %s, lv.Elevation), sym, lv, Autodesk.Revit.DB.Structure.StructuralType.Column); log.AppendLine("OP addcol new id " + nc.Id + " symbol " + sym.Id); }' % (p[1], p[2]))
         elif k == 'parambind': body.append('{ var app = d.Application; var fn = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "c1xsp.txt"); System.IO.File.WriteAllText(fn, ""); app.SharedParametersFilename = fn; var df = app.OpenSharedParameterFile(); var grp = df.Groups.Create("C1XGRP"); var def = grp.Definitions.Create(new ExternalDefinitionCreationOptions("%s", %s)); var cs = app.Create.NewCategorySet(); cs.Insert(d.Settings.Categories.get_Item(BuiltInCategory.OST_Walls)); bool ok = d.ParameterBindings.Insert(def, app.Create.NewInstanceBinding(cs), GroupTypeId.Data); log.AppendLine("OP parambind " + ok); }' % (p[1], {'yesno': 'SpecTypeId.Boolean.YesNo', 'int': 'SpecTypeId.Int.Integer'}.get(p[2] if len(p) > 2 else '', 'SpecTypeId.String.Text')))
+        elif k == 'workshare': pass      # handled at SaveAs time: BASE is saved as a workshared central model
         else: raise SystemExit('unknown op ' + o)
     return '''using Autodesk.Revit.DB;
 using System.Linq;
@@ -78,6 +79,7 @@ try {
   var d = app.OpenDocumentFile(ModelPathUtils.ConvertUserVisiblePathToModelPath(@"%(f)s"), op);
   Directory.CreateDirectory(@"C:\\wl\\out");
   var so = new SaveAsOptions(); so.OverwriteExistingFile = true;
+  %(ws)s
   d.SaveAs(@"C:\\wl\\out\\%(t)s_base%(ext)s", so); log.AppendLine("SAVED base");
   using (var t = new Transaction(d, "rvtdiff")) { t.Start();
     %(b)s
@@ -86,7 +88,7 @@ try {
   d.Close(false);
 } catch (Exception ex) { log.AppendLine("RESULT fail " + ex.Message.Replace("\\n", " ")); log.AppendLine("EXTRACE " + ex.GetType().Name + " " + (ex.StackTrace ?? "").Replace("\\n", " | ")); }
 Console.WriteLine(log.ToString());
-''' % {'f': file.replace('\\', '\\\\'), 't': tag, 'ext': os.path.splitext(file)[1] or '.rvt', 'b': '\n    '.join(body)}
+''' % {'f': file.replace('\\', '\\\\'), 't': tag, 'ext': os.path.splitext(file)[1] or '.rvt', 'b': '\n    '.join(body), 'ws': ('if (!d.IsWorkshared) d.EnableWorksharing("Shared Levels and Grids", "Workset1"); var wso = new WorksharingSaveAsOptions(); wso.SaveAsCentral = true; so.SetWorksharingOptions(wso); log.AppendLine("WORKSHARING central requested");' if 'workshare' in ops.split(';') else '')}
 
 def one(year, port, src, tag, ops):
     rem = 'C:/wl/diff_%s_src%s' % (tag, os.path.splitext(src)[1] or '.rvt')
