@@ -54,7 +54,7 @@ if kind=='int' and SETS[kind] not in L:
         except Exception: continue
         if l2 and l2[3]-l2[2]==6: tag=bytes(ed.g.bj[l2[2]:l2[3]]); break
     if not tag: sys.exit('REFUSED: no element in the file carries an Int set pointer to copy the class tag from; nothing written')
-    cl=L.get('CellList.m_cells'); at=cl[2] if cl and (not dbl or dbl[3]<=cl[2]) else dbl[3]      # Revit pair c1xyn8: the new set object sits right before CellList.m_cells (also when the Double set is null)
+    cl=L.get('CellList.m_cells'); at=dbl[3] if dbl else cl[2]      # Revit pairs c1xyn8 (Double set null: right before CellList.m_cells) and c1xyn9 (Double set present, CellList later in the record: right AFTER the Double set)
     ed._rec_edit(eid,[(ptr[2],4,tag),(at,0,struct.pack('<IQi',1,pid,int(val)))]); ed.save(out); print('wrote',out,'pid',pid,'on',eid,'int (new set object)'); sys.exit(0)
 if SETS[kind] not in L: sys.exit('REFUSED: element %d has no %s value set object to extend; nothing written'%(eid,kind))
 a,b=L[SETS[kind]][2],L[SETS[kind]][3]
