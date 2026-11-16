@@ -14,7 +14,7 @@ async def run():
     models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models)), timeout=aiohttp.ClientTimeout(total=None)) as c:
         await c.get('/api/m/m/saveinfo')
-        r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': 1365188, 'dx': 2.0}); assert r.status == 200
+        r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': 1490644, 'dx': 2.0}); assert r.status == 200
         for exc in (sg.VerifyFailed('injected verify failure'), sg.Locked('injected lock'), sg.DiskError('injected disk error'), RuntimeError('injected crash')):
             def boom(*a, **k): raise exc
             sg.save = boom
