@@ -16,14 +16,5 @@ pr = rvt_params.params(src)
 d0 = save.SaveSessions().doc('msheet', src)
 try: edit.apply_full(d0.buf, [edit.validate_op({'op': 'delete', 'eid': 251})]); raise SystemExit('sheet delete must be refused: its viewport would dangle')
 except edit.EditError as e: print('sheet refused OK', str(e)[:60], flush=True)
-for eid, cls in ((583143, 'RoomElem'),):      # room: VM-verified class; gate needs the part_header delete rule
-    assert pr[eid].get('class') == cls, (eid, pr[eid].get('class'))
-    d = save.SaveSessions().doc('m' + str(eid), src)
-    ops = [edit.validate_op({'op': 'delete', 'eid': eid})]
-    nb, deleted = edit.apply_full(d.buf, ops); assert eid in deleted
-    save._readback(d.buf, nb, ops)
-    out = os.path.join(_T, 'out%d.rvt' % eid); open(out, 'wb').write(nb)
-    p2 = rvt_params.params(out)
-    assert eid not in p2 and set(p2) == set(pr) - set(deleted), (eid, len(p2), len(pr), len(deleted))
-    assert all(p2[e] == pr[e] for e in p2 if e not in deleted), 'survivor drift'
-    print(cls, eid, 'delete OK', len(deleted), flush=True)
+try: edit.apply_full(save.SaveSessions().doc('mroom', src).buf, [edit.validate_op({'op': 'delete', 'eid': 583143})]); raise SystemExit('tagged room delete must be refused')
+except edit.EditError as e: print('tagged room refused OK', str(e)[:70], flush=True)

@@ -976,6 +976,11 @@ def _delete(ed, eid):
         except Exception: raise EditError('delete refused: cannot read the Revit version of the file')
         if fy != 2024 and not (fy == 2026 and cls in ('SWall', 'FamilyInstance', 'Floor', 'IndependentTag')): raise EditError('delete of a %s is not VM-verified on Revit %d files (verified: 2024; 2026 only SWall/FamilyInstance/Floor/IndependentTag): refused, nothing changed' % (cls, fy))
     if cls not in DELETE_VM_VERIFIED and UNIQUE_CLASS.search(cls): raise EditError('element %d is a %s: a project-wide settings / tracker / table element that Revit expects to exist exactly once (deleting AllProjectRevisions made Revit show "Repair Missing Unique Elements"); not deleted' % (eid, cls))
+    if cls == 'RoomElem' and os.environ.get('RVTBALLET_DELETE_ROOM_TAGGED') != '1':
+        # c1x-rvtdel item 114: after a room delete the room's RoomTag(s) and the LevelRoomPlan still hold its id (dangling, measured Structural 2024 room 583143: RoomTag 583144, LevelRoomPlan 582607); Revit's own cascade for tags is not verified, so tagged rooms are refused
+        import rvt_xcache, re as _re
+        needle = 'EID(%d)' % int(eid); tg = [int(k2[0]) for k2, r2 in rvt_xcache.get_x(ed.src)['recs'].items() if k2[1] == 'RoomTag' and needle in str(r2.get('fields'))]
+        if tg: raise EditError('room %d is tagged by RoomTag %s: a room delete would leave those tags pointing at a missing room (Revit cascade not reproduced); nothing was changed' % (eid, tg[:5]))
     if cls == 'FamilyInstance':
         # c4x-rvtmatrix item 53 (ESCAPE): deleting a Title Blocks instance owned by a drafting view (Element.m_ownerDBViewId = DBViewDrafting) on the 2026 HVAC sample was accepted (gate 0 diffs, our reader saw 1 element gone) but Revit's API readback of the output showed 9 fewer elements (title block, ViewSchedule, ScheduleSheetInstance, GraphicsStyle, 5 uncategorised). View-owned instances (title blocks, detail components, annotation symbols) are refused until their delete is reproduced exactly; model instances (no owner view; Structural 2024 588559 measured exactly -1 in Revit) stay allowed.
         import re as _re
