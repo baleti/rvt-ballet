@@ -984,6 +984,16 @@ def _delete(ed, eid):
                     except Exception: oc = '?'
                     raise EditError('element %d belongs to a view (owner %s %d: a title block, detail component or annotation symbol): deleting it makes Revit also drop dependent elements (a schedule and related records were lost in the Revit readback of a measured 2026 delete) that this editor cannot reproduce; nothing was changed' % (eid, oc, ov))
                 break
+    if cls == 'FamilyInstance' and os.environ.get('RVTBALLET_DELETE_HOSTED') != '1':
+        # c4x-rvtdiff 151 (ESCAPE): deleting a window hosted in a wall was accepted (gate 0 diffs, Facades 2024 593207) but Revit-made delete (witness c4x_wdel1) also regenerates the host walls (cutout list, face/edge history, record lengths -1.2/-2.4 KB) and a dimension; the writer leaves the walls stale
+        import re as _re
+        for l in ed.g.e.trace(eid)[3]:
+            if l[1] in ('InsertableInst.m_hostId', 'InsertableInst.m_extraHostIds'):
+                for hid in (int(x) for x in _re.findall(r'\d+', str(l[4]))):
+                    if 0 < hid < 2 ** 62:
+                        try: hc = ed.g.e.trace(hid)[2]['class']
+                        except Exception: hc = '?'
+                        if hc != 'Level': raise EditError('element %d is hosted in a %s (%d): Revit regenerates the host geometry when a hosted instance is deleted (wall cutout and face history records are rewritten) and this editor cannot reproduce that; nothing was changed' % (eid, hc, hid))
     if cls not in ('IndependentTag', 'ViewSheet') and not cls.startswith('DBView'):
         # c4x-rvtmatrix item 81: a tag points at its host through RoomBoundingItem.m_linkInstOrHostId and is NOT in the host's deletion list, so owned_set/cascade never saw it. 2025 Structural column delete (606331) was accepted (gate 0 diffs) and left Tag 869338 dangling; Revit dropped the tag on open (readback 2 elements gone, not 1). Refuse while a tag still names the element.
         tg = [t for t in tags_hosting(ed, eid) if t not in getattr(ed, '_deleted_ids', ())]      # a tag deleted earlier in the same batch is not dangling
