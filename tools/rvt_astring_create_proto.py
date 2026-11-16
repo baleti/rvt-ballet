@@ -4,7 +4,7 @@ Layout: Element.m_pParamValueSetAString null(4 B 00000000) -> ffffffff + u16 tag
 import sys, os, struct, collections
 for p in ('~/rvt-research/write-lab', '~/rvt-research/edit-lab', '~/rvt-research'): sys.path.insert(0, os.path.expanduser(p))
 import rvtedit, rvt_xcache
-BIP = {'Comments': -1010106}
+BIP = {'Comments': -1010106, 'Mark': -1001203}
 
 def file_tag(src):
     c = collections.Counter()

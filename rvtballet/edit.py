@@ -930,6 +930,9 @@ def _full_astr(ed, vn):
     return vn[4]
 
 
+_CREATE_BIP = {'Comments': -1010106, 'Mark': -1001203}      # built-in ids as Revit 2024 reported them in the creation witnesses (c4xcm1/cm2 Comments, c4xcm10 Mark)
+
+
 def _create_astring(ed, o):
     """c4x-rvtmatrix items 141-154: create the never-set string parameter Comments the way Revit does (3 byte-exact Revit witnesses, Revit 2024 + 2026 VM open and readback). The element's null Element.m_pParamValueSetAString pointer becomes ffffffff + u16 tag (tag = the single value shared by all AString sets of the file), and a set object (u32 1, i64 id, u32 nchars, UTF-16) is inserted after the Double/Int set objects. Refused: an element that already has a string set, one without a Double/Int set (no witnessed anchor), one with an ElementId set (order not witnessed), a file without exactly one tag."""
     import struct, collections, rvt_xcache
@@ -944,7 +947,7 @@ def _create_astring(ed, o):
         v = (r.get('fields') or {}).get('m_pParamValueSetAString')
         if isinstance(v, dict) and v.get('handle') == 4294967295 and 'ptr' in v: c[v['ptr']] += 1
     if len(c) != 1: raise EditError('cannot create parameter Comments: the file has %d distinct string-set tags (need exactly 1); nothing was changed' % len(c))
-    body = struct.pack('<I', 1) + struct.pack('<q', -1010106) + struct.pack('<I', len(o['value'])) + o['value'].encode('utf-16le')
+    body = struct.pack('<I', 1) + struct.pack('<q', _CREATE_BIP[o['param']]) + struct.pack('<I', len(o['value'])) + o['value'].encode('utf-16le')
     ed._rec_edit(o['eid'], [(ptr[0][2], 4, b'\xff\xff\xff\xff' + struct.pack('<H', next(iter(c)))), (max(l[3] for l in before), 0, body)])
 
 
@@ -953,7 +956,7 @@ def _set_string_by_pid(ed, o):
     import struct
     try: pid = _resolve_pid(ed, o)
     except EditError:
-        if os.environ.get('RVTBALLET_CREATE_ASTRING') == '1' and o.get('pid') is None and o.get('param') == 'Comments' and not o.get('expect'): _create_astring(ed, o); return      # opt-in, default stays a refusal
+        if os.environ.get('RVTBALLET_CREATE_ASTRING') == '1' and o.get('pid') is None and o.get('param') in _CREATE_BIP and not o.get('expect'): _create_astring(ed, o); return      # opt-in, default stays a refusal
         raise
     log = ed.g.e.trace(o['eid'])[3]
     for k, l in enumerate(log):
