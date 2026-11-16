@@ -1003,6 +1003,12 @@ def _delete(ed, eid):
                         except Exception: hc = '?'
                         try: _cat = ed._category(ed.g.template(eid))
                         except Exception: _cat = None
+                        if _cat is None:      # 2026 files: g.template has no header for the id (IndexError); the reader's header table carries the category (ElementHeader.m_categroryId)
+                            try:
+                                import rvt_xcache, re as _re2
+                                _m = _re2.search(r'(\d+)', str(rvt_xcache.get_x_ro(ed.src)['eh'][eid]['m_categroryId']))
+                                if _m: _cat = int(_m.group(1)) - (1 << 64) if int(_m.group(1)) >= (1 << 63) else int(_m.group(1))
+                            except Exception: _cat = None
                         if hc == 'SWall' and _cat in (-2000014, -2000023): continue      # c4x-rvtdiff 153: Windows/Doors in a straight wall: Revit regenerates the wall on open and its API Area/Volume of both host walls of Facades 2024 593207 equal the Revit-made delete (VM probes wp2_*), 2025/2026 ledger PASS rows
                         if hc != 'Level': raise EditError('element %d is hosted in a %s (%d): Revit regenerates the host geometry when a hosted instance is deleted (wall cutout and face history records are rewritten) and this editor cannot reproduce that; nothing was changed' % (eid, hc, hid))
     if cls not in ('IndependentTag', 'ViewSheet') and not cls.startswith('DBView'):
