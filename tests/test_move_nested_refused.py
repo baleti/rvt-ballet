@@ -17,4 +17,11 @@ class T(unittest.TestCase):
     def test_plain_still_moves(self):
         for i in (301609,301610):
             p,saved=self.run_('mv:%d:0.5:0:0'%i); self.assertTrue(saved,p.stderr[-200:])
+    def test_column_in_chain_still_moves(self):
+        """the id before a column's own id in its header can be the previous column in a list (301563), not an owner: false positive of the first guard version"""
+        C=os.path.expanduser('~/c3x-tmp-c4x/kp/2024_writer_cols2_Bool.rte')
+        if not os.path.exists(C): self.skipTest('cols2 scene absent')
+        o=os.path.join(tempfile.mkdtemp(),'c.rte')
+        p=subprocess.run([sys.executable,E,C,o,'mv:301592:0.5:0:0'],capture_output=True,text=True,cwd=os.path.dirname(E))
+        self.assertTrue(os.path.exists(o),p.stderr[-200:])
 if __name__=='__main__': unittest.main()
