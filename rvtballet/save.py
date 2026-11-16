@@ -652,7 +652,11 @@ def _pending(ss, mid, d, new_bytes, manifest, light=False):
     from .edit import apply_full, Edits
     from .edit import compose
     e = ss.edits(mid); ops = list(e.ops); ss.applied[mid] = len(ops)
-    nb, deleted = apply_full(d.buf, ops); m = Edits(); m.ops = ops; cops = compose(ops)
+    nb, deleted = apply_full(d.buf, ops)
+    from . import edit as _ed
+    if _ed.ASM_MOVED:      # c4x-rvtdiff 144: the writer moved a whole nested assembly (parent + sub-components) for one move op: declare every other member as its own move so the gate checks each one
+        ops = ops + [{'op': 'move', 'eid': _m, 'dx': _dx, 'dy': _dy, 'dz': _dz, 'via_assembly': True} for _m, _dx, _dy, _dz in _ed.ASM_MOVED if _m not in {o.get('eid') for o in ops}]
+    m = Edits(); m.ops = ops; cops = compose(ops)
     if light: _light_readback(d.buf, nb, cops)
     else: _readback(d.buf, nb, cops)
     mf = m.manifest(deleted); echoes = [] if light else derived_echoes(d.buf, nb, cops)

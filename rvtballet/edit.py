@@ -283,9 +283,12 @@ def _sweep_stale_edit_dirs(max_age=6 * 3600):
     return n
 
 
+ASM_MOVED = []      # (member eid, dx, dy, dz) of every nested-assembly member the lab writer moved besides the op's own element (c4x-rvtdiff 144): the save path declares them as moves so the gate checks each one
+
+
 def apply_full(buf, ops):
     """replay ops on bytes -> new bytes (the source bytes are never modified). Backend: env RVTBALLET_EDIT_BACKEND = wledit (default) | rvtedit"""
-    ops = compose(ops); _DIRTY.d = {}
+    ops = compose(ops); _DIRTY.d = {}; ASM_MOVED[:] = []
     if not ops: return buf, []
     _sweep_stale_edit_dirs()
     d = tempfile.mkdtemp(prefix='rvtballet-edit-'); a = os.path.join(d, 'in.rvt'); b = os.path.join(d, 'out.rvt')
@@ -712,6 +715,9 @@ def _rvtedit_pass(a, b, ops):
     try:      # the members this writer actually rewrote, declared to the gate (savegate dirty_members rule): a flip in any OTHER member of the partition is then refused
         for pn, pt in ed.g.e.parts.items(): _DIRTY.d.setdefault(pn, set()).update(k for k, m in enumerate(pt.mem) if m.get('dirty'))
     except Exception: _DIRTY.d = None      # unknown: declare nothing (the gate's other checks still apply)
+    for _e, _par, _kids, _dx, _dy, _dz in ed.__dict__.get('_asm_moved', []):
+        for _m in [_par] + list(_kids):
+            if _m != _e: ASM_MOVED.append((_m, _dx, _dy, _dz))
     return deleted
 
 
