@@ -1,0 +1,16 @@
+"""Moving a railing (house3 301949 / its symbol 301950) used to save with ONLY Trf.m_or changed while its path sketch (VarSketch 301952),
+top rail (301959) and balusters stayed in place (c4x-rvtdiff 2026-11-16). Must be refused; fails without the guard in edit-lab rvtedit.py."""
+import os,subprocess,sys,tempfile,unittest
+S=os.path.expanduser('~/rvt-research/write-lab/scenes/2024_house3.rte'); E=os.path.expanduser('~/rvt-research/edit-lab/rvtedit.py')
+@unittest.skipUnless(os.path.exists(S) and os.path.exists(E),'lab files absent')
+class T(unittest.TestCase):
+    def run_(self,eid,env=None):
+        o=os.path.join(tempfile.mkdtemp(),'o.rte')
+        p=subprocess.run([sys.executable,E,S,o,'mv:%d:1:0:0'%eid],capture_output=True,text=True,cwd=os.path.dirname(E),env={**os.environ,**(env or {})})
+        return p,os.path.exists(o)
+    def test_refused(self):
+        for eid in (301949,301950):
+            p,saved=self.run_(eid); self.assertIn('refused',p.stderr); self.assertFalse(saved)
+    def test_opt_in_saves(self):
+        p,saved=self.run_(301949,{'RVTEDIT_MOVE_RAILING':'1'}); self.assertTrue(saved,p.stderr[-200:])
+if __name__=='__main__': unittest.main()
