@@ -14,7 +14,7 @@ async def run():
     src = os.path.join(_T, 'src.rvt'); shutil.copy(SRC, src); T = aiohttp.ClientTimeout(total=None)
     async with TestClient(TestServer(mkapp(src)), timeout=T) as c:
         await c.get('/api/m/m/saveinfo')
-        r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': 1365188, 'dx': 2.0}); assert r.status == 200
+        r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': 1490644, 'dx': 2.0}); assert r.status == 200
         assert len(stored()) == 1, stored()
     # "restart": a brand-new app and SaveSessions, same file
     async with TestClient(TestServer(mkapp(src)), timeout=T) as c:
@@ -23,7 +23,7 @@ async def run():
         r = await c.post('/api/m/m/edits/recover', json={}); j = await r.json(); assert r.status == 200 and j['recovered'] == 1 and j['n'] == 1, (r.status, j)
         assert (await (await c.get('/api/m/m/saveinfo')).json())['pending_edits'] == 1
         r = await c.post('/api/m/m/edit/undo', json={}); assert r.status == 200 and stored() == [], stored()      # undo to empty removes the store
-        await c.post('/api/m/m/edit', json={'op': 'move', 'eid': 1365188, 'dx': 1.0}); assert len(stored()) == 1
+        await c.post('/api/m/m/edit', json={'op': 'move', 'eid': 1490644, 'dx': 1.0}); assert len(stored()) == 1
     # the file changes behind our back: stored edits are refused, kept on disk
     with open(src, 'ab') as f: f.write(b'\0')
     async with TestClient(TestServer(mkapp(src)), timeout=T) as c:
