@@ -1121,7 +1121,7 @@ def _readback(src_buf, nb, ops):
                 elif not isinstance(e0, (int, float)) or not isinstance(e1, (int, float)) or abs((e1 - e0) - dz) > 1e-6 * max(1.0, abs(dz)) + 1e-6: bad.append('moved level %d: Elevation %r -> %r, not the requested shift of %.6g ft' % (o['eid'], e0, e1, dz))
             vech = vertical_echo(x, y, o) if not lvl else set()      # pure vertical move of a placed instance: elevation-type parameters (and the reader's aliases of the same stored number) change by exactly dz
             ch = [k for k in set(x) | set(y) if k not in own and k not in vech and not (lvl and k == 'Elevation') and x.get(k) != y.get(k) and not (k.startswith('Column Location Mark') and isinstance(x.get(k), str) and _same_mark_base(x[k], y.get(k)))]
-            if ch: bad.append('moved element %d: parameters changed' % o['eid'])
+            if ch: bad.append('moved element %d: parameters changed (%s)' % (o['eid'], ', '.join('%s: %s -> %s' % (k, str(x.get(k))[:24], str(y.get(k))[:24]) for k in sorted(ch)[:6])))
             if o['op'] == 'move' and not any(r.get('op') == 'rotate' and r['eid'] == o['eid'] for r in mv):      # the displacement itself: the element's bounding box must shift by exactly (dx, dy, dz) (feet); skipped only when the geometry reader has no box for the SOURCE element
                 b0, b1 = _pair(_bbox_of, src_buf, nb, o['eid'])
                 if b0 is not None:
