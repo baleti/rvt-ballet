@@ -22,8 +22,8 @@ def main(src, dst, eid, name, value):
     # measured on 44 elements with 3+ sets (Structural 2024): serialisation order is Double, Int, AString, ElementId
     before = [sets[n] for n in ('Double', 'Int') if n in sets]
     if before: at = max(l[3] for l in before)
-    elif 'ElementId' in sets: at = sets['ElementId'][2]
-    else: raise SystemExit('refused: no Double/Int/ElementId ParamValueSet object to anchor the insertion')
+    else: raise SystemExit('refused: no Double/Int ParamValueSet object to anchor the insertion')
+    if 'ElementId' in sets: raise SystemExit('refused: element has an ElementId set; the insertion order against it is not witnessed by Revit (c4xcm5/6/7 found no creatable Comments on such elements)')
     body = struct.pack('<I', 1) + struct.pack('<q', BIP[name]) + struct.pack('<I', len(value)) + value.encode('utf-16le')
     ed._rec_edit(eid, [(ptr[0][2], 4, b'\xff\xff\xff\xff' + struct.pack('<H', tag)), (at, 0, body)])
     ed.save(dst); print('saved', dst, 'tag', tag, 'insert at', at, 'bytes', len(body) + 2)
