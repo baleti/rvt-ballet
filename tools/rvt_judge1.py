@@ -77,10 +77,10 @@ def verdict(c, o, exp, allowed, emit=print):
     if bad or bad_a or only_b: return 1, 'untouched elements: %d differ outside allowed, %d undeclared missing, %d new' % (len(bad), len(bad_a), len(only_b))
     return 0, 'control and output open clean, readback exact (%d expectations), only the allowed ids differ in Revit (%d elements)' % (npass, len(a))
 
-def guest_run(guest, year, f, loc, par, tag, wd, tries=3, ed=()):
+def guest_run(guest, year, f, loc, par, tag, wd, tries=3, ed=(), twin=''):
     """one open of f in the guest; returns j1 text or None (infrastructure)"""
     base = tag + os.path.splitext(f)[1]
-    cs = open(CS).read().replace('__FILE__', 'C:/wl/' + base).replace('__TAG__', tag).replace('__LOCIDS__', ','.join(loc)).replace('__EDIDS__', ','.join(str(x) for x in ed)).replace('__PARITEMS__', RS.join(par)).replace('__IDT__', 'long' if year >= 2024 else 'int')
+    cs = open(CS).read().replace('__FILE__', 'C:/wl/' + base).replace('__TAG__', tag).replace('__LOCIDS__', ','.join(loc)).replace('__TWIN__', twin).replace('__EDIDS__', ','.join(str(x) for x in ed)).replace('__PARITEMS__', RS.join(par)).replace('__IDT__', 'long' if year >= 2024 else 'int')
     # Revit 2020-2023 API has no ElementId(long) constructor (CS1503 compile error): the id type is per year
     for k in range(tries):
         port = guest.fresh(year)
@@ -104,6 +104,16 @@ def guest_run(guest, year, f, loc, par, tag, wd, tries=3, ed=()):
         if 'RESULT fail' in (con or ''): return con      # the job ran and failed to open: that IS the observation (the file write may not have happened)
         guest.down(year)      # hang / crash / no output: fresh Revit for the retry
     return None
+
+def twin_string(exp):
+    """expectations -> twin edit list for tools/rvt_judge1.cs, or '' if any kind is unsupported (then no twin is attempted)"""
+    out = []
+    for e in exp:
+        if e['kind'] == 'move': out.append('move|%d|%r|%r|%r' % (e['eid'], *[float(x) for x in e['d']]))
+        elif e['kind'] == 'rotate': out.append('rotate|%d|%r' % (e['eid'], float(e['deg'])))
+        elif e['kind'] == 'param' and e.get('type') in ('Integer', 'Double', 'String') and '|' not in str(e['value']) and RS not in str(e['value']): out.append('param|%d|%s|%s' % (e['eid'], e['name'], e['value']))
+        else: return ''
+    return RS.join(out)
 
 def judge_batch(cases, wd):
     """cases: [dict(year, orig, out, exp, allowed, name)] -> list of (case, code, why). One lane lock for everything."""
@@ -160,6 +170,17 @@ def judge_batch(cases, wd):
                     if newvol and set(newvol) >= set(ids):      # every differing id is proven volatile on the unedited control: the verdict is the rest of the checks (all passed)
                         vf = os.path.join(CAC, 'volatile_%s_%s_%s.txt' % (c['year'], c['osha'][:24], cshash)); open(vf, 'a').write(''.join('VOLATILE %d\n' % k for k in newvol))
                         code, why = 0, 'control and output open clean, readback exact, differing ids %s proven volatile on the unedited control (added to the noise floor)' % newvol
+            if code == 1 and why.startswith('untouched') and os.environ.get('RVT_JUDGE1_TWIN', '1') == '1':      # Revit-made twin (c8x-rvtjudge): the same API edit applied inside Revit to the unedited file; PASS only if the WHOLE output equals the twin (every element hash, minus control-volatile ids)
+                tw = twin_string(c['exp'])
+                if tw:
+                    tt = guest_run(guest, c['year'], c['orig'], [], [], 'j1t%s' % osha[:8], wd, twin=tw)
+                    pc, po = parse(ctl_t), parse(txt)
+                    if tt and 'TWIN applied' in tt and parse(tt)['opened']:
+                        pt = parse(tt)['eh']; vol = pc['volatile']
+                        dif = sorted(k for k in (pt.keys() | po['eh'].keys()) if pt.get(k) != po['eh'].get(k) and k not in vol)
+                        lines.append('TWIN: output vs Revit-made twin: %d differing ids %s' % (len(dif), dif[:10]))
+                        if not dif: code, why = 0, 'control and output open clean, readback exact; whole output equals the Revit-made twin (same API edit applied in Revit), so the extra differing ids are Revit-derived dependents'
+                    else: lines.append('TWIN: no usable twin (%s)' % ((tt or '')[:150].replace(chr(10), ' ') if tt else 'no output'))
             pr = parse(txt); why += ' [open %s ms, total %s ms, sec %.0f, sha %s]' % (pr['t_open'], pr['t_total'], time.time() - t0, osha[:12])
             open(os.path.join(wd, c['name'] + '.verdict.txt'), 'w').write('\n'.join(lines + [str(code) + ' ' + why]) + '\n')
             print('CASE', c['name'], ['PASS', 'FAIL', 'NOORACLE', 'INFRA'][code], why, flush=True); res.append((c, code, why))

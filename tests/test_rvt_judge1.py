@@ -67,3 +67,11 @@ def test_add_generated_block_shift_passes():      # clone takes the id of the fi
 def test_add_shift_with_real_extra_fails():
     G = "aaaaaaaa"; c = {**BASE, 10: G, 11: G, 12: G}
     assert v(txt(c), txt({**BASE, 10: "77777777", 11: G, 12: G, 13: G, 14: "55555555"}), exp=[], allowed={10}) == 1
+
+
+def test_twin_string_supported_and_refused():
+    import rvt_judge1 as j
+    assert j.twin_string([{"kind": "move", "eid": 7, "d": [2, 0, 0]}]) == "move|7|2.0|0.0|0.0"
+    assert j.twin_string([{"kind": "rotate", "eid": 7, "deg": 90}]) == "rotate|7|90.0"
+    assert j.twin_string([{"kind": "param", "eid": 7, "name": "Mark", "type": "String", "value": "A|B"}]) == ""
+    assert j.twin_string([{"kind": "absent", "eid": 7}]) == ""
