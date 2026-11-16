@@ -73,6 +73,7 @@ def verdict(c, o, exp, allowed, emit=print):
         if ok: emit('load-time generated block shifted by %d (ids %s), tolerated' % (len(ok), ok)); only_b = only_b - set(ok)
     added_exp = allowed - set(a); missing_new = added_exp - set(b); only_b = only_b - allowed      # ADD: an allowed id absent from the control is an expected new element and must be present in the output
     if missing_new: return 1, 'ADD: expected new element(s) %s missing in the Revit view of the output (silently dropped)' % sorted(missing_new)[:5]
+    if bad or bad_a or only_b: emit('ids: differ-outside %s undeclared-missing %s new %s' % (sorted(bad)[:5], sorted(bad_a)[:5], sorted(only_b)[:5]))
     if bad or bad_a or only_b: return 1, 'untouched elements: %d differ outside allowed, %d undeclared missing, %d new' % (len(bad), len(bad_a), len(only_b))
     return 0, 'control and output open clean, readback exact (%d expectations), only the allowed ids differ in Revit (%d elements)' % (npass, len(a))
 
