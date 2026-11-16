@@ -452,6 +452,9 @@ class Session:
         class G: pass
         class F: pass
         f = F(); f.g = G(); f.g.W = self.ctx.W
+        import types
+        for _n, _v in vars(rvtedit.Edit).items():      # Edit._shifted/_rotated call self._wall_host_dir (and other private helpers) since c4x-rvtdiff 2026-11-15; the stand-in object must carry them or every segedit move/rotate raises AttributeError
+            if _n.startswith('_') and not _n.startswith('__') and callable(_v) and not hasattr(f, _n): setattr(f, _n, types.MethodType(_v, f))
         return rvtedit, f
 
     def move(self, eid, dx, dy, dz=0.0):
