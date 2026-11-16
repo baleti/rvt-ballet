@@ -3,7 +3,7 @@ import os, sys, tempfile, shutil
 os.environ['RVTBALLET_ENABLE_DELETE'] = '1'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
 import atexit as _ax; _T = tempfile.mkdtemp(); _ax.register(shutil.rmtree, _T, True)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-SRC = os.path.expanduser('~/c2x-tmp/ip25/2024_47_Snowdon_Towers_Sample_Site.rvt'); W = int(os.environ.get('W', 1139388)); WORD = 'joined' if W == 1139388 else 'still named'
+SRC = os.path.expanduser('~/c2x-tmp/ip25/2024_47_Snowdon_Towers_Sample_Site.rvt'); W = int(os.environ.get('W', 1139388)); WORD = 'still named' if W == 1139388 else 'still named'
 from rvtballet import save, edit
 if not os.path.exists(SRC) or not save.SaveSessions().available: print('skip'); sys.exit(0)
 src = os.path.join(_T, 'src.rvt'); shutil.copy(SRC, src)
