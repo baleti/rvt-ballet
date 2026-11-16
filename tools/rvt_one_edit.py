@@ -3,7 +3,7 @@ Unlike rvt_class_pass.py it does NOT parse every element's parameters (that scan
 usage: tools/rvt_one_edit.py FILE 'OPJSON' KEEP_OUT.rvt     e.g. '{"op":"set_string","eid":329,"field":"DatumPlane.m_text","value":"X c3x","match":"X","param":null}'"""
 import os, sys, asyncio, tempfile, time, json, hashlib, shutil
 _T = tempfile.mkdtemp(); os.environ['SAVEGATE_JOURNAL'] = _T + '/j'; os.environ['SAVEGATE_CACHE'] = _T + '/c'; os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
-import atexit, signal; atexit.register(shutil.rmtree, _T, True); signal.signal(signal.SIGTERM, lambda *a: sys.exit(143)); os.environ.setdefault('RVT_BALLET_CACHE', _T + '/bc'); os.environ.setdefault('RVT_CORE_CACHE', _T + '/cc'); os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'
+import atexit, signal; atexit.register(shutil.rmtree, _T, True); signal.signal(signal.SIGTERM, lambda *a: (shutil.rmtree(_T, True), os._exit(143))); os.environ.setdefault('RVT_BALLET_CACHE', _T + '/bc'); os.environ.setdefault('RVT_CORE_CACHE', _T + '/cc'); os.environ['RVTBALLET_ALLOW_OVERWRITE'] = '1'
 _H = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, os.path.join(_H, '..')); sys.path.insert(0, _H)
 for p in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab'), os.path.expanduser('~/src/savegate')): sys.path.insert(0, p)
 sys.path.append(os.path.expanduser('~/src/rvt-extract'))  # savegate adapters import rvtx.partition (header-id gate, 7e969d6); fail-closed without it
