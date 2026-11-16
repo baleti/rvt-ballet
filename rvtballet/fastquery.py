@@ -687,6 +687,9 @@ def _sid(v, W=8):
     return v if -(1 << 31) <= v < (1 << 31) else None
 
 
+BUILTIN_PARAM_FIELDS = {'Mark': -1001203}      # BuiltInParameter.ALL_MODEL_MARK (confirmed on house3: ParamValueAString.m_paramId EID(-1001203))
+
+
 def collect(path, cls=None, category=None, fields=None, where=None, workers=None, log=None, rule='last', names=True):
     """rows of every element of class `cls` (Revit API or schema class name / list; subclasses included) and/or `category` (built-in name or id), like
     FilteredElementCollector(doc).OfClass(..).OfCategory(..). Each row: id, class, name, type_id, type_name, level_id, level, category_id, category,
@@ -774,7 +777,9 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
         if row['owner_view_id'] in (-1, 0): row['owner_view_id'] = None
         if row['name'] is None and row['type_name']: row['name'] = row['type_name']           # Revit: Element.Name of an instance is its type name
         for k in (fields or ()):
-            if k not in row: row[k] = f.get(k)
+            if k not in row:
+                row[k] = f.get(k)
+                if row[k] is None and k in BUILTIN_PARAM_FIELDS: row[k] = (f.get('params') or {}).get(BUILTIN_PARAM_FIELDS[k])      # c4x-rvtdiff 167: --fields Mark printed blank for a Mark stored as ParamValueAString (house3 window 301610 'W1.0.1')
         if where and any(str(row.get(k)) != str(v) for k, v in where.items()): continue
         out.append(row)
     log('collect: %d rows, %.2fs' % (len(out), time.time() - t0))
