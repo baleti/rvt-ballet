@@ -9,11 +9,17 @@ class T(unittest.TestCase):
         o=os.path.join(tempfile.mkdtemp(),'o.rte')
         p=subprocess.run([sys.executable,E,S,o,op],capture_output=True,text=True,cwd=os.path.dirname(E),env={**os.environ,**(env or {})})
         return p,os.path.exists(o)
-    def test_child_refused(self):
-        for i in (301619,301622):
-            p,saved=self.run_('mv:%d:0.5:0:0'%i); self.assertIn('nested assembly (parent 301612',p.stderr); self.assertFalse(saved)
-    def test_parent_refused(self):
-        p,saved=self.run_('mv:301612:0.5:0:0'); self.assertIn('nested assembly',p.stderr); self.assertFalse(saved)
+    def test_window_assembly_moves_by_default(self):
+        """window 301612 with 4 nested generic models: moving the parent or any child moves the whole assembly (Revit-made witness gm_mv; VM-verified); opt-out RVTEDIT_MOVE_NESTED=0 refuses"""
+        for i in (301619,301622,301612):
+            p,saved=self.run_('mv:%d:0.5:0:0'%i); self.assertTrue(saved,p.stderr[-200:])
+        p,saved=self.run_('mv:301619:0.5:0:0',{'RVTEDIT_MOVE_NESTED':'0'}); self.assertFalse(saved); self.assertIn('nested assembly',p.stderr)
+    def test_unverified_parent_class_refused(self):
+        F=os.path.expanduser('~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt')
+        if not os.path.exists(F): self.skipTest('sample absent')
+        o=os.path.join(tempfile.mkdtemp(),'c.rvt')
+        p=subprocess.run([sys.executable,E,F,o,'mv:642543:1:0:0'],capture_output=True,text=True,cwd=os.path.dirname(E))
+        self.assertFalse(os.path.exists(o)); self.assertIn('nested assembly',p.stderr)
     def test_plain_still_moves(self):
         for i in (301609,301610):
             p,saved=self.run_('mv:%d:0.5:0:0'%i); self.assertTrue(saved,p.stderr[-200:])
@@ -41,7 +47,7 @@ class T(unittest.TestCase):
         p=subprocess.run([sys.executable,E,F,o2,'rot:606069:30'],capture_output=True,text=True,cwd=os.path.dirname(E))
         self.assertTrue(os.path.exists(o2),p.stderr[-200:])
     def test_opt_in_assembly_equals_revit(self):
-        """RVTEDIT_MOVE_NESTED=1: parent (hostParam+Trf) and all 4 children (Trf only) move together; offline record diff equals the Revit-made move (gm_mv witness, ~/c2x-diff/gm_mv/BASE_AFTER.json). Not VM-verified, so default stays refusal."""
+        """RVTEDIT_MOVE_NESTED=1: parent (hostParam+Trf) and all 4 children (Trf only) move together; offline record diff equals the Revit-made move (gm_mv witness, ~/c2x-diff/gm_mv/BASE_AFTER.json). VM-verified (probe_nest, 2024), so it is the default for window/door parents."""
         R=os.path.expanduser('~/c2x-diff/gm_mv/BASE_AFTER.json')
         if not os.path.exists(R): self.skipTest('Revit-made witness json absent')
         d=tempfile.mkdtemp(); o=os.path.join(d,'n.rte'); j=os.path.join(d,'n.json')
