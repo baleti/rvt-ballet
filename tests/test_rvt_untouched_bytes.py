@@ -22,3 +22,12 @@ def test_segedit_fit_edit_has_no_violations(tmp_path):
 def test_frame_fault_is_a_violation(tmp_path, fld):
     d = ff.flip(S[0], 'Partitions/21', 10, fld, str(tmp_path / 'f.rvt'))
     r = ub.check_partition(_payload(S[0]), _payload(d)); assert r['n_violations'] >= 1
+
+
+def test_stream_rule_edit_clean_and_other_file_flagged(tmp_path, capsys):
+    from rvtballet import segedit
+    out = str(tmp_path / 'o.rvt'); segedit.apply_ops(S[0], out, [{'op': 'set_string', 'eid': 1365188, 'param': 'Mark', 'value': 'UB2'}], mode='fit')
+    assert ub.main(S[0], out) == 0 and '_other_streams_changed' not in capsys.readouterr().out
+    other = sorted(glob.glob(os.path.expanduser('~/rvt-research/corpus/2024/*Snowdon*Structural.rvt')))
+    if other:
+        assert ub.main(S[0], other[0]) == 1 and '_other_streams_changed' in capsys.readouterr().out

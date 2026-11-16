@@ -3,6 +3,7 @@
 For every Partitions/* stream whose bytes differ, align the gzip members by index and require: same member count; head, tail (up to zero slack) and every frame/interlude byte equal to the
 source, except (a) the bytes of members whose compressed bytes differ (the dirty ones) and (b) their declared frame fields: before-frame X1/stored/X2 (frame offsets 12..23, member 0: head 24..35)
 and the previous member's after-frame length (offsets 2..5 of the 32 bytes before the next member). Everything else must be identical.
+--allow-streams=A,B: streams (e.g. ElemTable) an add/delete may rewrite; any other non-partition stream that differs is a violation ('_other_streams_changed').
 --count-change: an add/delete op may change the head element count (u32 at payload offset 14).
 Prints one JSON line: {partition: {members, dirty, violations: [payload offsets...], structure_changed}}; exit 1 on any violation or structure change. Public samples only."""
 import os, sys, json
@@ -32,8 +33,10 @@ def check_partition(pa, pb, count_change=False):
     return dict(members=len(ma), dirty=len(dirty), violations=viol[:20], n_violations=len(viol))
 
 
-def main(src, out, count_change=False):
+def main(src, out, count_change=False, allow=()):
     A = cfb.CFB(open(src, 'rb').read()).streams(); B = cfb.CFB(open(out, 'rb').read()).streams(); res = {}
+    other = sorted(n for n in set(A) | set(B) if not n.startswith('Partitions/') and (n not in A or n not in B or A[n].data != B[n].data) and n not in allow)
+    if other: res['_other_streams_changed'] = dict(streams=other, n_violations=len(other))      # stream rule (item 201): outside the edited partitions nothing may differ unless the op legitimately rewrites it (--allow-streams)
     for n in A:
         if not n.startswith('Partitions/') or n not in B or A[n].data == B[n].data: continue
         pa = bytes(rvtw.Stream(A[n].data).payload); pb = bytes(rvtw.Stream(B[n].data).payload); res[n] = check_partition(pa, pb, count_change)
@@ -42,4 +45,4 @@ def main(src, out, count_change=False):
 
 
 if __name__ == '__main__':
-    a = [x for x in sys.argv[1:] if not x.startswith('--')]; sys.exit(main(a[0], a[1], '--count-change' in sys.argv))
+    a = [x for x in sys.argv[1:] if not x.startswith('--')]; al = [x.split('=', 1)[1].split(',') for x in sys.argv if x.startswith('--allow-streams=')]; sys.exit(main(a[0], a[1], '--count-change' in sys.argv, tuple(al[0]) if al else ()))
