@@ -38,7 +38,7 @@ print('cli parsing, shim and refusal paths OK')
 F = os.path.expanduser('~/rvt-research/corpus/2024/42_Snowdon_Towers_Sample_HVAC.rvt')
 if not os.path.exists(F): print('skip real edit'); sys.exit(0)
 src = os.path.join(d, 'h.rvt'); shutil.copy(F, src); h0 = sha(src); o = os.path.join(d, 'h_out.rvt'); out = []
-rc = editcli.edit_main([src, '--move', '1365188', '2', '0', '0', '--set-string', '1365188', 'Mark', 'CLI1', '-o', o], out.append)
+rc = editcli.edit_main([src, '--move', '1490644', '2', '0', '0', '--set-string', '1365188', 'Mark', 'CLI1', '-o', o], out.append)
 assert rc == 0 and os.path.exists(o) and sha(src) == h0 and sha(o) != h0 and 'accepted [supported]: move' in '\n'.join(out), out
 assert editcli.edit_main([src, '--move', '1365188', '2', '0', '0', '-o', o], out.append) == 2
 out = []; rc = editcli.edit_main([src, '--rotate', '999999999', '30', '-o', os.path.join(d, 'bad.rvt')], out.append)
