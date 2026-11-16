@@ -19,7 +19,7 @@ try:
         r2 = subprocess.run(cmd[:-4] + ['--info'] if False else [os.path.join(HERE, 'bin', 'rvt-ballet'), 'info', P], capture_output=True, text=True, env=env, timeout=300)
         readable = r2.returncode == 0
         print(mode, 'rc', r.returncode, 'edited' if h1 != h0 else 'original', 'litter', litter, 'info rc', r2.returncode)
-        if litter or not readable: fails.append(mode)
+        if litter or not readable or r.returncode != 0: fails.append(mode)
 finally: shutil.rmtree(T, ignore_errors=True)
 assert not fails, 'closed-pipe save left litter or an unreadable file: %s' % fails
 print('closed stdout/stderr in-place ok')

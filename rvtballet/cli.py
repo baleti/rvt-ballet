@@ -183,7 +183,15 @@ def main(argv=None):
         sys.exit(doctor.main(argv[1:]))
     if argv and argv[0] == 'edit':
         from . import editcli
-        sys.exit(editcli.edit_main(argv[1:]))
+        def _say(*a):      # a dead stdout (closed pipe, /dev/full) must not turn a completed save into a failure or abort the run half way
+            try: print(*a)
+            except OSError: pass
+        rc = editcli.edit_main(argv[1:], say=_say)
+        try: sys.stdout.flush(); sys.stderr.flush()
+        except OSError:
+            try: dn = os.open(os.devnull, os.O_WRONLY); os.dup2(dn, 1); os.dup2(dn, 2)
+            except OSError: pass
+        sys.exit(rc)
     ap = argparse.ArgumentParser(prog='rvt-ballet'); sub = ap.add_subparsers(dest='cmd', required=True)
     o = sub.add_parser('open'); o.add_argument('files', nargs='+'); o.add_argument('--port', type=int, default=0); o.add_argument('--no-browser', action='store_true'); o.add_argument('--workspace'); o.add_argument('--rebuild', action='store_true'); o.add_argument('--force', action='store_true', help='open/convert files above %d MB anyway (RVT_BIG_MB)' % BIG_MB); o.add_argument('--sheets', action='store_true', help='open directly on the sheets page'); o.add_argument('--hide', default='', help='comma list of categories hidden at start, e.g. Planting,Entourage (URL ?hide=...)'); o.add_argument('--prepare', action='store_true', help='demo prep: convert + cache the model(s), warm the sheets cache, print the exact demo command, do not serve')
     c = sub.add_parser('convert'); c.add_argument('file'); c.add_argument('out', nargs='?'); c.add_argument('--force', action='store_true', help='convert files above %d MB anyway (RVT_BIG_MB)' % BIG_MB)
