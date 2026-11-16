@@ -11,9 +11,9 @@ class T(unittest.TestCase):
         return p,os.path.exists(o)
     def test_child_refused(self):
         for i in (301619,301622):
-            p,saved=self.run_('mv:%d:0.5:0:0'%i); self.assertIn('nested in FamilyInstance 301612',p.stderr); self.assertFalse(saved)
+            p,saved=self.run_('mv:%d:0.5:0:0'%i); self.assertIn('nested assembly (parent 301612',p.stderr); self.assertFalse(saved)
     def test_parent_refused(self):
-        p,saved=self.run_('mv:301612:0.5:0:0'); self.assertIn('nested sub-component',p.stderr); self.assertFalse(saved)
+        p,saved=self.run_('mv:301612:0.5:0:0'); self.assertIn('nested assembly',p.stderr); self.assertFalse(saved)
     def test_plain_still_moves(self):
         for i in (301609,301610):
             p,saved=self.run_('mv:%d:0.5:0:0'%i); self.assertTrue(saved,p.stderr[-200:])
@@ -40,4 +40,17 @@ class T(unittest.TestCase):
         o2=os.path.join(d,'c.rvt')
         p=subprocess.run([sys.executable,E,F,o2,'rot:606069:30'],capture_output=True,text=True,cwd=os.path.dirname(E))
         self.assertTrue(os.path.exists(o2),p.stderr[-200:])
+    def test_opt_in_assembly_equals_revit(self):
+        """RVTEDIT_MOVE_NESTED=1: parent (hostParam+Trf) and all 4 children (Trf only) move together; offline record diff equals the Revit-made move (gm_mv witness, ~/c2x-diff/gm_mv/BASE_AFTER.json). Not VM-verified, so default stays refusal."""
+        R=os.path.expanduser('~/c2x-diff/gm_mv/BASE_AFTER.json')
+        if not os.path.exists(R): self.skipTest('Revit-made witness json absent')
+        d=tempfile.mkdtemp(); o=os.path.join(d,'n.rte'); j=os.path.join(d,'n.json')
+        p,saved=self.run_('mv:301619:0.5:0:0',{'RVTEDIT_MOVE_NESTED':'1'}) if False else (None,None)
+        pr=subprocess.run([sys.executable,E,S,o,'mv:301619:0.5:0:0'],capture_output=True,text=True,cwd=os.path.dirname(E),env={**os.environ,'RVTEDIT_MOVE_NESTED':'1'})
+        self.assertTrue(os.path.exists(o),pr.stderr[-200:])
+        T=os.path.join(os.path.dirname(__file__),'..','tools')
+        subprocess.run([sys.executable,os.path.join(T,'rvt_diff.py'),S,o,'--json',j],capture_output=True)
+        c=subprocess.run([sys.executable,os.path.join(T,'rvt_diff_cmp.py'),R,j],capture_output=True,text=True)
+        bad=[l for l in c.stdout.splitlines() if l.startswith('id ')]
+        self.assertEqual(bad,[],bad[:5])
 if __name__=='__main__': unittest.main()
