@@ -6,13 +6,17 @@ F = os.path.expanduser('~/rvt-research/corpus/2024/46_Snowdon_Towers_Sample_Faca
 if not (os.path.exists(LAB) and os.path.exists(F)): print('skip'); sys.exit(0)
 import rvt_diff
 d = tempfile.mkdtemp(); o = os.path.join(d, 'o.rvt')
-env = dict(os.environ, RVTBALLET_MOVE_ANY='1', RVTEDIT_MOVE_WALL_DEPS='1')
+env = dict(os.environ, RVTBALLET_MOVE_ANY='1', RVTEDIT_MOVE_WALL_DEPS='1', RVTEDIT_MOVE_WALL_TOUCH='1')
 r = subprocess.run([sys.executable, LAB, F, o, 'mv:802680:1:0:0', 'mv:802682:1:0:0'], capture_output=True, text=True, cwd=os.path.dirname(LAB), env=env, timeout=1500)
 assert os.path.exists(o), r.stderr[-400:]
 rep = rvt_diff.pretty(rvt_diff.diff(F, o, True))
 ids = sorted(int(m) for m in re.findall(r'^  id (\d+) ', rep, re.M))
 assert ids == [802680, 802682, 802683, 802684, 802685, 802686], ids
 assert 'added 0' in rep and 'removed 0' in rep, rep[:300]
+# touch guard (default): Revit auto-joins neighbour 802687 on this move (wmp802680 witness), so the lab writer refuses without the force env
+env2 = dict(env); env2.pop('RVTEDIT_MOVE_WALL_TOUCH'); o2 = os.path.join(d, 'o2.rvt')
+r2 = subprocess.run([sys.executable, LAB, F, o2, 'mv:802680:1:0:0'], capture_output=True, text=True, cwd=os.path.dirname(LAB), env=env2, timeout=1500)
+assert not os.path.exists(o2) and '802687' in (r2.stdout + r2.stderr), (r2.stdout + r2.stderr)[-400:]
 # product path: the wall move is refused outright (no Revit-verified wall move); the lab backend's own dependents() guard is blind on this sample (returns [] even for wall 593220), so the product refusal is the protection
 _T = tempfile.mkdtemp(); os.environ.update(SAVEGATE_JOURNAL=_T + '/j', SAVEGATE_CACHE=_T + '/c', RVTBALLET_EDIT_BACKEND='rvtedit')
 os.environ.pop('RVTBALLET_MOVE_ANY', None); os.environ.pop('RVTEDIT_MOVE_WALL_DEPS', None)
