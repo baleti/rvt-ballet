@@ -822,7 +822,7 @@ _SETNUM_GEOM_CLASSES = ('Floor', 'SWall', 'ArcWall', 'Wall')
 def _setnum_geom_class(cls):
     """Floors, walls, ceilings and roofs (any class name containing Ceiling or Roof): their offset/thickness/fascia numbers drive stored geometry (c4x-rvtdiff 2026-11-16: floor and wall verified stale in the Revit VM; ceiling and roof by analogy, ledger PASS rows compared only the parameter readback)"""
     if cls.endswith(('Type', 'Attributes', 'Attr', 'Sym')): return False      # type/attribute elements are edited through the type ops (set_type_num, VM-verified), not here
-    return cls in _SETNUM_GEOM_CLASSES or any(k in cls for k in ('Ceiling', 'Roof', 'Wall', 'Sweep', 'Floor'))      # SweepHost (wall sweeps/reveals: offsets), CurtainWall, ProfileRoof, ...: instance classes found by the Double-storing class scan of Structural/Facades 2024      # classes whose Double parameters drive stored geometry that Revit regenerates
+    return cls in _SETNUM_GEOM_CLASSES or any(k in cls for k in ('Ceiling', 'Roof', 'Wall', 'Sweep', 'Floor', 'Railing'))      # SweepHost (wall sweeps/reveals: offsets), CurtainWall, ProfileRoof, ...: instance classes found by the Double-storing class scan of Structural/Facades 2024      # classes whose Double parameters drive stored geometry that Revit regenerates
 
 
 def _set_num_by_pid(ed, o):
