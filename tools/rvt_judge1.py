@@ -38,6 +38,7 @@ def parse(txt):
     r['cmp'] = r['cmp'].groups() if r['cmp'] else None; r['bboxnull'] = int(r['bboxnull'].group(1)) if r['bboxnull'] else None
     r['eh'] = {int(a): b for a, b in re.findall(r'^EH (\d+) ([0-9a-f]{8})', txt, re.M)}
     r['ed'] = {int(a): b for a, b in re.findall(r'^ED (\d+) (.*)$', txt, re.M)}
+    r['ec'] = {int(a): b for a, b in re.findall(r'^EC (\d+) (\S+)$', txt, re.M)}
     r['volatile'] = {int(x) for x in re.findall(r'^VOLATILE (\d+)$', txt, re.M)}
     r['loc'] = X.parse_loc('\n'.join(l for l in txt.splitlines() if l.startswith(('RB ', 'TF '))))
     r['par'] = X.parse_par('\n'.join('RB ' + l[4:] for l in txt.splitlines() if l.startswith('RBP ')))
@@ -154,6 +155,7 @@ def judge_batch(cases, wd):
             txt = guest_run(guest, c['year'], c['out'], loc, par, 'j1o%s' % osha[:8], wd)
             if not txt: res.append((c, 3, 'INFRA no Revit output for the output file')); continue
             lines = []; code, why = verdict(parse(ctl_t), parse(txt), c['exp'], c['allowed'], lines.append)
+            eo = None
             if code == 1 and why.startswith('untouched') and os.environ.get('RVT_JUDGE1_EXPLAIN', '1') == '1':
                 pc, po = parse(ctl_t), parse(txt); ids = sorted((k for k in pc['eh'].keys() & po['eh'].keys() if pc['eh'][k] != po['eh'][k] and k not in c['allowed'] and k not in pc['volatile']))[:20]
                 ec = guest_run(guest, c['year'], c['orig'], [], [], 'j1x%s' % c['osha'][:8], wd, ed=ids); eo = guest_run(guest, c['year'], c['out'], [], [], 'j1y%s' % osha[:8], wd, ed=ids)
@@ -170,17 +172,26 @@ def judge_batch(cases, wd):
                     if newvol and set(newvol) >= set(ids):      # every differing id is proven volatile on the unedited control: the verdict is the rest of the checks (all passed)
                         vf = os.path.join(CAC, 'volatile_%s_%s_%s.txt' % (c['year'], c['osha'][:24], cshash)); open(vf, 'a').write(''.join('VOLATILE %d\n' % k for k in newvol))
                         code, why = 0, 'control and output open clean, readback exact, differing ids %s proven volatile on the unedited control (added to the noise floor)' % newvol
-            if code == 1 and why.startswith('untouched') and os.environ.get('RVT_JUDGE1_TWIN', '1') == '1':      # Revit-made twin (c8x-rvtjudge): the same API edit applied inside Revit to the unedited file; PASS only if the WHOLE output equals the twin (every element hash, minus control-volatile ids)
+            if code == 1 and why.startswith('untouched') and ', 0 undeclared missing, 0 new' in why and os.environ.get('RVT_JUDGE1_TWIN', '1') == '1':
+                # c8x-rvtjudge: every id still differing outside the allowed list must be PROVEN, never declared away:
+                #  (a) DEPENDENT: its hash in our output equals its hash in the Revit-made twin (same API edit applied inside Revit to the unedited file), or
+                #  (b) TRANSIENT first-open: our output's two opens disagree on it, its settled (second-open) hash equals the control's (and the twin's), and its element class is one that
+                #      also flaps in the unedited control of this sample (the control noise floor). Anything else keeps the FAIL.
+                pc, po = parse(ctl_t), parse(txt); pe = parse(eo) if eo else None; pt = None
                 tw = twin_string(c['exp'])
                 if tw:
                     tt = guest_run(guest, c['year'], c['orig'], [], [], 'j1t%s' % osha[:8], wd, twin=tw)
-                    pc, po = parse(ctl_t), parse(txt)
-                    if tt and 'TWIN applied' in tt and parse(tt)['opened']:
-                        pt = parse(tt)['eh']; vol = pc['volatile']
-                        dif = sorted(k for k in (pt.keys() | po['eh'].keys()) if pt.get(k) != po['eh'].get(k) and k not in vol)
-                        lines.append('TWIN: output vs Revit-made twin: %d differing ids %s' % (len(dif), dif[:10]))
-                        if not dif: code, why = 0, 'control and output open clean, readback exact; whole output equals the Revit-made twin (same API edit applied in Revit), so the extra differing ids are Revit-derived dependents'
+                    if tt and 'TWIN applied' in tt and parse(tt)['opened']: pt = parse(tt)['eh']
                     else: lines.append('TWIN: no usable twin (%s)' % ((tt or '')[:150].replace(chr(10), ' ') if tt else 'no output'))
+                vol = pc['volatile']; volcls = {pc['ec'].get(k) for k in vol} - {None}
+                rest = sorted(k for k in pc['eh'].keys() & po['eh'].keys() if pc['eh'][k] != po['eh'][k] and k not in c['allowed'] and k not in vol)
+                dep, tra, bad = [], [], []
+                for k in rest:
+                    if pt is not None and pt.get(k) == po['eh'][k]: dep.append(k)
+                    elif pe and pe['eh'].get(k) != po['eh'][k] and pe['eh'].get(k) == pc['eh'][k] and (pt is None or pt.get(k) == pe['eh'][k]) and po['ec'].get(k) in volcls: tra.append(k)
+                    else: bad.append(k)
+                lines.append('TWIN: %d differing ids: %d Revit-derived dependents %s, %d transient first-open %s, %d unexplained %s; control noise classes %s' % (len(rest), len(dep), dep[:8], len(tra), tra[:8], len(bad), bad[:8], sorted(volcls)))
+                if rest and not bad: code, why = 0, 'control and output open clean, readback exact; extra differing ids all proven: %d Revit-derived dependents (equal the Revit-made twin), %d transient first-open (settled hash equals control and twin, class flaps in the unedited control)' % (len(dep), len(tra))
             pr = parse(txt); why += ' [open %s ms, total %s ms, sec %.0f, sha %s]' % (pr['t_open'], pr['t_total'], time.time() - t0, osha[:12])
             open(os.path.join(wd, c['name'] + '.verdict.txt'), 'w').write('\n'.join(lines + [str(code) + ' ' + why]) + '\n')
             print('CASE', c['name'], ['PASS', 'FAIL', 'NOORACLE', 'INFRA'][code], why, flush=True); res.append((c, code, why))

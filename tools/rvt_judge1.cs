@@ -74,6 +74,7 @@ try {
     var tn = e as TextNote; if (tn != null) sb.Append("TN" + tn.Coord.X.ToString("F6") + "," + tn.Coord.Y.ToString("F6"));
     foreach (char c in sb.ToString()) { h ^= c; h *= 16777619; }
     outp.AppendLine("EH " + e.Id.ToString() + " " + h.ToString("x8")); n++;
+    outp.AppendLine("EC " + e.Id.ToString() + " " + e.GetType().Name);
     if (edIds.Contains(e.Id.ToString())) outp.AppendLine("ED " + e.Id.ToString() + " " + sb.ToString().Replace("\r", " ").Replace("\n", " "));
   }
   log.AppendLine("COUNT " + n);
