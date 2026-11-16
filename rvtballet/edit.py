@@ -984,7 +984,7 @@ def _delete(ed, eid):
                     except Exception: oc = '?'
                     raise EditError('element %d belongs to a view (owner %s %d: a title block, detail component or annotation symbol): deleting it makes Revit also drop dependent elements (a schedule and related records were lost in the Revit readback of a measured 2026 delete) that this editor cannot reproduce; nothing was changed' % (eid, oc, ov))
                 break
-    if cls == 'FamilyInstance' and os.environ.get('RVTBALLET_DELETE_HOSTED') != '1':
+    if cls == 'FamilyInstance' and os.environ.get('RVTBALLET_DELETE_HOSTED') != '1' and not any(l[1] == 'FamilyInstance.m_superInstanceId' and 0 < (int(__import__('re').findall(r'\d+', str(l[4]))[0]) if __import__('re').findall(r'\d+', str(l[4])) else 0) < 2 ** 62 for l in ed.g.e.trace(eid)[3]):      # nested children are refused by the membership check below with its own message
         # c4x-rvtdiff 151 (ESCAPE): deleting a window hosted in a wall was accepted (gate 0 diffs, Facades 2024 593207) but Revit-made delete (witness c4x_wdel1) also regenerates the host walls (cutout list, face/edge history, record lengths -1.2/-2.4 KB) and a dimension; the writer leaves the walls stale
         import re as _re
         for l in ed.g.e.trace(eid)[3]:
