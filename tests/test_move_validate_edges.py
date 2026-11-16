@@ -17,3 +17,14 @@ def test_far_cumulative_refused():
     m = lambda d: edit.validate_op({'op': 'move', 'eid': 5, 'dx': d, 'dy': 0, 'dz': 0})
     with pytest.raises(edit.EditError):
         edit.compose([m(9000.0), m(9000.0)])
+
+
+@pytest.mark.parametrize('v', [1e-300, 5e-324, 1e-12, 1e-9])
+def test_subresolution_move_refused(v):
+    with pytest.raises(edit.EditError):
+        edit.validate_op({'op': 'move', 'eid': 5, 'dx': v, 'dy': 0, 'dz': 0})
+
+
+def test_float_noise_chain_cancels():
+    m = lambda d: edit.validate_op({'op': 'move', 'eid': 5, 'dx': d, 'dy': 0, 'dz': 0})
+    assert edit.compose([m(0.1), m(0.2), m(-0.3)]) == []
