@@ -512,12 +512,14 @@ def _set_link_path(ed, o):
         from . import save as _sv; _P = _sv._read_params(open(ed.src, 'rb').read())
         _others = [e for e, d in _P.items() if e != o['eid'] and isinstance(d, dict) and d.get('class') == 'RvtLinkSymbol']
     except Exception: raise EditError('link path edit refused: cannot list the other link types to check for a duplicate path')
-    _nv = o['value'].replace('/', '\\').lower()
+    import unicodedata as _ud
+    _nrm = lambda t: _ud.normalize('NFC', t.replace('/', '\\')).casefold()      # NFC/NFD and case variants of one name are one file on Windows
+    _nv = _nrm(o['value'])
     for _e in _others:
         for _l in ed.g.e.trace(_e)[3]:
             if _l[1] == 'ModelPath.m_path':
                 _n = struct.unpack_from('<I', _body(ed, _e), _l[2])[0]; _op = bytes(_body(ed, _e)[_l[2] + 4:_l[2] + 4 + 2 * _n]).decode('utf-16le', 'replace')
-                if _op.replace('/', '\\').lower() == _nv: raise EditError('link type %d already points at %r: Revit keeps one link type per file (two on one path both fail to load); nothing was changed' % (_e, _op))
+                if _nrm(_op) == _nv: raise EditError('link type %d already points at %r: Revit keeps one link type per file (two on one path both fail to load); nothing was changed' % (_e, _op))
                 break
     if o['value'] == old: raise EditError('link type %d already has this path: nothing to change (a same-value edit rewrote and re-compressed the whole partition; refused, file untouched)' % o['eid'])
     edits = []
