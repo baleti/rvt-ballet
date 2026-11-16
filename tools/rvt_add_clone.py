@@ -28,7 +28,7 @@ else:
 import genlib
 import rvt_idlist as idlist
 ap=argparse.ArgumentParser(); ap.add_argument('seed'); ap.add_argument('out'); ap.add_argument('--src',type=int,required=True)
-ap.add_argument('--dx',type=float,default=3.0); ap.add_argument('--dy',type=float,default=4.0); ap.add_argument('--dz',type=float,default=0.0); ap.add_argument('--nolatest',action='store_true'); ap.add_argument('--force',action='store_true',help='skip the dependents screen (instances that own children corrupt the model when copied)')
+ap.add_argument('--dx',type=float,default=3.0); ap.add_argument('--dy',type=float,default=4.0); ap.add_argument('--dz',type=float,default=0.0); ap.add_argument('--count',type=int,default=1); ap.add_argument('--nolatest',action='store_true'); ap.add_argument('--force',action='store_true',help='skip the dependents screen (instances that own children corrupt the model when copied)')
 a=ap.parse_args()
 if not os.environ.get('RVT_ADD_DAMAGED_FORCE'):      # a damaged input (bad gzip member / ECC page) was silently cloned into an 'ok' output (64 flipped bytes, 3 of 3 positions); refuse before building
     import rvt_scan as _S, rvt2text as _T, rvt_entities as _E
@@ -111,27 +111,28 @@ tr=struct.unpack_from('<3I',et,6+RW*best+8)
 if os.environ.get('RVT_ADD_TRIPLE_FROM_SRC'):      # experiment (c1x-rvtadd 2026-11-15): on a 2-partition file the global max row triple belongs to the OTHER partition (arch23: /9 rows <=876, /10 rows 878, best=878) while the clone is built in the source's partition; use the source's own row triple instead
     _sk=[k for k in range(n_) if struct.unpack_from('<I',et,6+RW*k)[0]==S]
     if _sk: tr=struct.unpack_from('<3I',et,6+RW*_sk[0]+8); print('row triple from source:',tr)
-nid=g.nextid; g.nextid+=1; idN=struct.pack(g.IDF,nid)
-rec=bytearray(T['rec']); print('src id occurrences in rec',rec.count(idS)); genlib.rep(rec,idS,idN)
-nmv=0
-for n,o,e,v in T['log']:
-    if n in ('FamilyInstance.m_instOrigin','Trf.m_or'):
-        x,y,z=struct.unpack_from('<3d',rec,o); struct.pack_into('<3d',rec,o,x+a.dx,y+a.dy,z+a.dz); nmv+=1
-print('moved fields',nmv)
-rec=g.stamp(bytes(rec))
-hdr=bytearray(T['hdr']); genlib.rep(hdr,idS,idN)
-item=bytearray(T['item']); genlib.rep(item,idS,idN)
-import zlib
-assert struct.unpack_from('<I',item,W+4)[0]==len(item)-(W+8),'item layout'
-struct.pack_into('<I',item,W,zlib.adler32(bytes(item[W+8:]))&0xffffffff)
-row=bytearray(T['row']); genlib.rep(row,idS,idN); struct.pack_into('<3I',row,8,*tr)
-g.new.append((bytes(hdr),rec,bytes(item),nid)); g.rows.append(bytes(row))
-if not a.nolatest:
-    def reg(raw):
-        out,Ls=idlist.add_to_lists(raw,S,nid,W); print('latest lists',[(l[2]) for l in Ls]);
-        if not Ls: sys.exit('REFUSED: source %d appears in no Global/Latest id-list of this project (nothing to register the clone in); pick another source; nothing written' % S)
-        return out
-    g.latest_edits=[('Latest',reg)]
+for _k in range(a.count):      # --count N: N clones in ONE build (ids ascending, offsets dx*(k+1))
+    nid=g.nextid; g.nextid+=1; idN=struct.pack(g.IDF,nid)
+    rec=bytearray(T['rec']); print('src id occurrences in rec',rec.count(idS)); genlib.rep(rec,idS,idN)
+    nmv=0
+    for n,o,e,v in T['log']:
+        if n in ('FamilyInstance.m_instOrigin','Trf.m_or'):
+            x,y,z=struct.unpack_from('<3d',rec,o); struct.pack_into('<3d',rec,o,x+a.dx*(_k+1),y+a.dy*(_k+1),z+a.dz*(_k+1)); nmv+=1
+    print('moved fields',nmv)
+    rec=g.stamp(bytes(rec))
+    hdr=bytearray(T['hdr']); genlib.rep(hdr,idS,idN)
+    item=bytearray(T['item']); genlib.rep(item,idS,idN)
+    import zlib
+    assert struct.unpack_from('<I',item,W+4)[0]==len(item)-(W+8),'item layout'
+    struct.pack_into('<I',item,W,zlib.adler32(bytes(item[W+8:]))&0xffffffff)
+    row=bytearray(T['row']); genlib.rep(row,idS,idN); struct.pack_into('<3I',row,8,*tr)
+    g.new.append((bytes(hdr),rec,bytes(item),nid)); g.rows.append(bytes(row))
+    if not a.nolatest:
+        def reg(raw, nid=nid):
+            out,Ls=idlist.add_to_lists(raw,S,nid,W); print('latest lists',[(l[2]) for l in Ls]);
+            if not Ls: sys.exit('REFUSED: source %d appears in no Global/Latest id-list of this project (nothing to register the clone in); pick another source; nothing written' % S)
+            return out
+        g.latest_edits=list(getattr(g,'latest_edits',[]))+[('Latest',reg)]
 g.itag=T['item'][W+8:W+10]
 _final = os.path.realpath(a.out); _b, _x = os.path.splitext(os.path.basename(_final)); a.out = os.path.join(os.path.dirname(os.path.abspath(_final)), '.' + _b + '.%d.part' % os.getpid() + _x)      # build beside the target, move into place only after every check passes: a refused/failed build must not destroy a previous output
 if os.path.exists(_final) and not os.access(_final, os.W_OK): sys.exit('REFUSED: the output file %s exists and is read-only; it was not overwritten (clear the read-only flag or pick another name)' % os.path.basename(_final))      # c1x-rvtsave 194: a read-only previous output was silently replaced (and made writable)
