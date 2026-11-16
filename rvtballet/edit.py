@@ -43,7 +43,7 @@ def _check_text(v):
     if any(ord(ch) > 0xFFFF for ch in v): raise EditError('characters outside the Basic Multilingual Plane (emoji, rare CJK) are not supported in values yet; nothing was changed')
 
 
-_OP_KEYS = {'set_string': {'op', 'eid', 'param', 'value', 'match', 'field', 'pid', 'pids', 'kind', 'expect'}, 'move': {'op', 'eid', 'dx', 'dy', 'dz'}, 'set_num': {'op', 'eid', 'param', 'pid', 'pids', 'value', 'kind'}, 'delete': {'op', 'eid'}, 'rotate': {'op', 'eid', 'deg'}, 'change_type': {'op', 'eid', 'type_eid'}, 'set_type_num': {'op', 'eid', 'param', 'pid', 'value'}, 'set_type_eid': {'op', 'eid', 'pid', 'target'}, 'set_type_material': {'op', 'eid', 'target'}, 'set_link_path': {'op', 'eid', 'value'}, 'set_link_load': {'op', 'eid', 'value'}, 'set_link_override': {'op', 'eid', 'link', 'linked_view'}, 'set_room_bounding': {'op', 'eid', 'value'}}      # strict key sets only for ops whose optional keys are safety guards
+_OP_KEYS = {'set_string': {'op', 'eid', 'param', 'value', 'match', 'field', 'pid', 'pids', 'kind', 'expect'}, 'move': {'op', 'eid', 'dx', 'dy', 'dz'}, 'set_num': {'op', 'eid', 'param', 'pid', 'pids', 'value', 'kind'}, 'delete': {'op', 'eid'}, 'rotate': {'op', 'eid', 'deg'}, 'change_type': {'op', 'eid', 'type_eid'}, 'set_type_num': {'op', 'eid', 'param', 'pid', 'value'}, 'set_type_eid': {'op', 'eid', 'pid', 'target'}, 'set_type_yesno': {'op', 'eid', 'pid', 'value'}, 'set_type_material': {'op', 'eid', 'target'}, 'set_link_path': {'op', 'eid', 'value'}, 'set_link_load': {'op', 'eid', 'value'}, 'set_link_override': {'op', 'eid', 'link', 'linked_view'}, 'set_room_bounding': {'op', 'eid', 'value'}}      # strict key sets only for ops whose optional keys are safety guards
 
 
 # VM-measured (c6x-rvtwrite, 2024 and 2025 Snowdon HVAC): writing the stored ParamValueInt of these does not change what the Revit API reports
@@ -63,7 +63,7 @@ REVIT_IGNORES_STORED_INT = {'Return Airflow', 'Power Load Units', 'Lighting Load
 
 
 def validate_op(op):
-    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate', 'change_type', 'set_link_override', 'set_type_num', 'set_type_eid', 'set_type_material', 'set_link_path', 'set_link_load', 'set_room_bounding'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
+    if not isinstance(op, dict) or op.get('op') not in ('set_string', 'set_num', 'delete', 'move', 'rotate', 'change_type', 'set_link_override', 'set_type_num', 'set_type_eid', 'set_type_yesno', 'set_type_material', 'set_link_path', 'set_link_load', 'set_room_bounding'): raise EditError('unsupported edit op (supported: set_string, set_num, delete, move, rotate)')
     if not isinstance(op.get('eid'), int) or isinstance(op.get('eid'), bool): raise EditError('eid (element id) must be an integer')
     _ok = _OP_KEYS.get(op['op'])
     if _ok is not None and set(op) - _ok: raise EditError('unknown key(s) %s for %s (a misspelt guard such as match would be silently dropped): nothing was changed' % (sorted(set(op) - _ok), op['op']))
@@ -104,6 +104,14 @@ def validate_op(op):
         if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0: raise EditError('pid must be a positive integer (family parameter element id)')
         if not isinstance(tgt, int) or isinstance(tgt, bool) or tgt <= 0: raise EditError('target must be a positive element id')
         return {'op': 'set_type_eid', 'eid': op['eid'], 'pid': pid, 'target': tgt}
+    if op['op'] == 'set_type_yesno':
+        if os.environ.get('RVTBALLET_ENABLE_TYPEYESNO') != '1': raise EditError('set_type_yesno is disabled (opt-in: RVTBALLET_ENABLE_TYPEYESNO=1; Revit-verified only for one parameter on one 2024 file)')
+        if BACKEND() != 'rvtedit': raise EditError('set_type_yesno needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
+        if op.get('pid') != -1019013 or isinstance(op.get('pid'), bool): raise EditError('only the built-in parameter Export Type to IFC (pid -1019013) is Revit-witnessed for Yes/No create')
+        v = op.get('value')
+        if isinstance(v, bool): v = int(v)
+        if isinstance(v, float) or v not in (0, 1): raise EditError('value must be true/false or 0/1')
+        return {'op': 'set_type_yesno', 'eid': op['eid'], 'pid': -1019013, 'value': v}
     if op['op'] == 'set_type_material':
         if os.environ.get('RVTBALLET_ENABLE_TYPEEID') != '1': raise EditError('set_type_material is disabled (opt-in: RVTBALLET_ENABLE_TYPEEID=1; no Revit open verdict yet)')
         if BACKEND() != 'rvtedit': raise EditError('set_type_material needs the rvtedit backend (RVTBALLET_EDIT_BACKEND=rvtedit)')
@@ -203,6 +211,7 @@ def compose(ops):
         elif o['op'] == 'rotate': k = ('rotate', e)
         elif o['op'] == 'set_type_num': k = ('set_type_num', e, o.get('pid'), o.get('param'))
         elif o['op'] == 'set_type_eid': k = ('set_type_eid', e, o.get('pid'))
+        elif o['op'] == 'set_type_yesno': k = ('set_type_yesno', e, o.get('pid'))
         elif o['op'] == 'set_room_bounding': k = ('set_room_bounding', e)      # the last value wins
         elif o['op'] == 'set_type_material': k = ('set_type_material', e)
         elif o['op'] == 'change_type': k = ('change_type', e)      # the last type wins
@@ -692,6 +701,7 @@ def _rvtedit_pass(a, b, ops):
             elif o['op'] == 'set_num': _set_num_by_pid(ed, o)
             elif o['op'] == 'set_type_num': _set_type_num(ed, a, o)
             elif o['op'] == 'set_type_eid': _set_type_eid(ed, a, o)
+            elif o['op'] == 'set_type_yesno': _set_type_yesno(ed, a, o)
             elif o['op'] == 'set_type_material': _set_type_material(ed, a, o)
             elif o['op'] == 'set_room_bounding': _set_room_bounding(ed, o)
             elif o['op'] == 'set_string' and o.get('kind') == 'AString': _set_string_by_pid(ed, o)
@@ -820,6 +830,29 @@ def _set_type_eid(ed, src, o):
             if v == old: offs[l[2]] = nb
     if ev[0][2] not in offs: raise EditError('internal: the parameter value field was not located; nothing was changed')
     ed._rec_edit(o['eid'], [(off, 8, b) for off, b in sorted(offs.items())])
+
+
+def _set_type_yesno(ed, src, o):
+    """CREATE the never-set built-in Yes/No (Int) value 'Export Type to IFC' on a FamilySymbol. Spec from Revit pairs c1xyn8 (link type) and c1xyn9 (plain type): the null Int set pointer becomes the 6-byte class pointer and a new ParamValueSetInt [count 1][pid i64][i32] is inserted right after the Double set (or before CellList.m_cells when there is none). An existing Int set is refused (not witnessed)."""
+    import re as _re, cfb as _cfb, struct, rvt_xcache
+    try: fy = int(_re.search(r'(20[12]\d)', bytes(_cfb.CFB(open(src, 'rb').read()).streams()['BasicFileInfo'].data).decode('utf-16le', 'ignore')).group(1))
+    except Exception: raise EditError('yes/no create refused: cannot read the Revit version of the file')
+    if fy != 2024: raise EditError('yes/no create is only verified on Revit 2024 files (this file is %d): refused' % fy)
+    tr = ed.g.e.trace(o['eid']); log = tr[3]
+    if tr[2].get('class') != 'FamilySymbol': raise EditError('element %d is not a FamilySymbol (type); nothing was changed' % o['eid'])
+    L = {l[1]: l for l in log}
+    ptr = L.get('Element.m_pParamValueSetInt'); dbl = L.get('ParamValueSetDouble.m_paramSet'); cl = L.get('CellList.m_cells')
+    if 'ParamValueSetInt.m_paramSet' in L: raise EditError('element %d already has an Int value set: editing it is not Revit-witnessed; nothing was changed' % o['eid'])
+    if not ptr or ptr[3] - ptr[2] != 4 or bytes(ed.g.bj[ptr[2]:ptr[3]]) != b'\0\0\0\0' or not (dbl or cl): raise EditError('element %d has no known place to create an Int set; nothing was changed' % o['eid'])
+    tag = None
+    for k2 in rvt_xcache.get_x(src)['recs']:
+        e2 = k2[0] if isinstance(k2, tuple) else k2
+        try: l2 = {l[1]: l for l in ed.g.e.trace(e2)[3]}.get('Element.m_pParamValueSetInt')
+        except Exception: continue
+        if l2 and l2[3] - l2[2] == 6: tag = bytes(ed.g.bj[l2[2]:l2[3]]); break
+    if not tag: raise EditError('no element carries an Int set pointer to copy the class tag from; nothing was changed')
+    at = dbl[3] if dbl else cl[2]
+    ed._rec_edit(o['eid'], [(ptr[2], 4, tag), (at, 0, struct.pack('<IQi', 1, o['pid'] % (1 << 64), o['value']))])
 
 
 def _check_wall_height_pid(o, pid, log):
@@ -1007,6 +1040,11 @@ def _delete(ed, eid):
         import rvt_xcache, re as _re
         needle = 'EID(%d)' % int(eid); tg = [int(k2[0]) for k2, r2 in rvt_xcache.get_x(ed.src)['recs'].items() if k2[1] == 'RoomTag' and needle in str(r2.get('fields'))]
         if tg: raise EditError('room %d is tagged by RoomTag %s: a room delete would leave those tags pointing at a missing room (Revit cascade not reproduced); nothing was changed' % (eid, tg[:5]))
+    if cls == 'SWall' and os.environ.get('RVTBALLET_DELETE_WALL_JOINED') != '1':
+        # c1x-rvtdel item 119: paired Revit Delete(1139388) on Structural/Site 2024 rewrote the joined neighbour wall (EndInfo/CDJoinInfo join entry cleared, face history regenerated); our delete left that join entry naming the removed wall. Walls still named by another SWall (joins) are refused until the neighbour patch is reproduced.
+        import rvt_xcache
+        needle = 'EID(%d)' % int(eid); nb = [int(k2[0]) for k2, r2 in rvt_xcache.get_x(ed.src)['recs'].items() if k2[1] == 'SWall' and int(k2[0]) != int(eid) and needle in str(r2.get('fields')) and int(k2[0]) not in getattr(ed, '_deleted_ids', ())]
+        if nb: raise EditError('wall %d is joined to wall(s) %s whose join data still names it: Revit rewrites those walls on delete (join entry cleared, geometry regenerated) and this editor cannot reproduce that; nothing was changed' % (eid, nb[:5]))
     if cls == 'FamilyInstance':
         # c4x-rvtmatrix item 53 (ESCAPE): deleting a Title Blocks instance owned by a drafting view (Element.m_ownerDBViewId = DBViewDrafting) on the 2026 HVAC sample was accepted (gate 0 diffs, our reader saw 1 element gone) but Revit's API readback of the output showed 9 fewer elements (title block, ViewSchedule, ScheduleSheetInstance, GraphicsStyle, 5 uncategorised). View-owned instances (title blocks, detail components, annotation symbols) are refused until their delete is reproduced exactly; model instances (no owner view; Structural 2024 588559 measured exactly -1 in Revit) stay allowed.
         import re as _re
