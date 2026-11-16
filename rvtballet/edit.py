@@ -494,6 +494,7 @@ def _set_link_path(ed, o):
     except UnicodeEncodeError: raise EditError('link path has an unpaired surrogate (not valid UTF-16): refused')
     if len(_v) > 259: raise EditError('link path is %d chars (> 259, Windows MAX_PATH): refused, Revit behaviour beyond it is untested' % len(_v))
     if ':' in _v and not _re2.fullmatch(r'[A-Za-z]:[\\/][^:]*', _v): raise EditError("link path has a ':' that is not the drive designator (Windows forbids it in names; NTFS stream syntax): refused")
+    if _re2.search(r'[\\/]$', _v) or _re2.search(r'(?<!^)[\\/]{2,}', _v): raise EditError('link path ends with a separator or has an empty segment (a directory / a path Windows normalises, the stored path would not match): refused')
     _segs = [x for x in _re2.split(r'[\\/]', _v) if x]
     if any(x in ('.', '..') for x in _segs): raise EditError("link path contains '.' or '..' segments (Revit normalises them, the stored path would not match): refused")
     if any(x != x.rstrip(' .') or _re2.fullmatch(r'(?i)(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?', x) for x in _segs): raise EditError('link path has a reserved device name or a segment ending in dot or space: refused')
