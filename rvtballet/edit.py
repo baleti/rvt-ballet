@@ -1108,6 +1108,8 @@ def _delete(ed, eid):
             raise EditError('element %d is a view template: views may still use it (DBView.m_viewTemplateId) and deleting it would leave dangling references; nothing was changed' % eid)
         return list(ed.delete_view(eid))
     if cls == 'ViewSheet': return list(ed.delete_sheet(eid) or [eid])
+    if cls == 'DBDrawing':      # c1x-rvtdel item 122: Revit-made Delete of Structural 2024 sheet 251 removes {248 DBViewProject, 249 Viewer, 250 Viewport, 251} and nothing else; the generic path removed only 251 and left the Viewport dangling
+        ids = sorted(ed.cascade(eid)); ed.delete(*ids); return ids
     ids = ed.owned_set(eid); ed.delete(*ids); return list(ids)
 
 
