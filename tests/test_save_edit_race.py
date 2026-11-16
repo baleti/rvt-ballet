@@ -19,12 +19,12 @@ async def run():
     models = server.Models(); models.m['m'] = {'dir': md, 'name': 'a', 'src': src}
     async with TestClient(TestServer(server.make_app(models)), timeout=aiohttp.ClientTimeout(total=None)) as c:
         await c.get('/api/m/m/saveinfo')
-        r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': 1365188, 'dx': 2.0}); assert r.status == 200, await r.text()
+        r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': 1421396, 'dx': 2.0}); assert r.status == 200, await r.text()
         saving = asyncio.ensure_future(c.post('/api/m/m/save', json={}))
         await asyncio.sleep(0.05); codes = []
         for _ in range(20):
             if saving.done(): break
-            r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': 1365188, 'dx': 5.0}); codes.append(r.status)
+            r = await c.post('/api/m/m/edit', json={'op': 'move', 'eid': 1421396, 'dx': 5.0}); codes.append(r.status)
             r = await c.post('/api/m/m/edit/undo', json={}); codes.append(r.status)
             await asyncio.sleep(0.05)
         rs = await saving; j = await rs.json(); assert rs.status == 200, (rs.status, j)
