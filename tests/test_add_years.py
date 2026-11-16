@@ -17,7 +17,7 @@ class AddYears(unittest.TestCase):
             if not f: continue
             with self.subTest(year=y), tempfile.TemporaryDirectory() as d:
                 out = os.path.join(d, 'o.rvt')
-                r = subprocess.run([sys.executable, TOOL, f[0], out, '--src', str(src)], capture_output=True, text=True, env=dict(os.environ, RVT_ADD_EDITENGINE='1', RVT_ADD_EDITENGINE_FORCE='1', RVT_ADD_LAYOUT_FORCE='1'))
+                r = subprocess.run([sys.executable, TOOL, f[0], out, '--src', str(src)], capture_output=True, text=True, env=dict(os.environ, RVT_ADD_EDITENGINE='1', RVT_ADD_EDITENGINE_FORCE='1', RVT_ADD_LAYOUT_FORCE='1', RVT_ADD_MULTIPART_FORCE='1'))
                 self.assertEqual(r.returncode, 0, r.stdout[-300:] + r.stderr[-300:])
                 a = reader.load(f[0])['recs']; b = reader.load(out)['recs']
                 new = [k for k in b if k not in a]; gone = [k for k in a if k[0] != 0 and 'error' not in a[k] and k not in b]
