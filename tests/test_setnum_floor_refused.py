@@ -10,5 +10,10 @@ class T(unittest.TestCase):
         p=subprocess.run(['rvt-ballet','edit',F,'--set-num','621720','Height Offset From Level','1.5','-o',o],capture_output=True,text=True,env={**os.environ,'RVTBALLET_EDIT_BACKEND':'rvtedit',**(env or {})})
         return p,os.path.exists(o)
     def test_refused(self):
-        p,saved=self.run_(); self.assertFalse(saved,p.stdout[-300:]); self.assertIn('is a floor',p.stdout+p.stderr)
+        p,saved=self.run_(); self.assertFalse(saved,p.stdout[-300:]); self.assertIn('floor or wall',p.stdout+p.stderr)
+    def test_wall_refused(self):
+        """Structural 2024 wall 585072 Top Offset 0 -> 2: Revit readback Unconnected Height 78.75 but Area 780.29 / Volume 645.19 unchanged (stale geometry)"""
+        o=os.path.join(tempfile.mkdtemp(),'w.rvt')
+        p=subprocess.run(['rvt-ballet','edit',F,'--set-num','585072','Top Offset','2.0','-o',o],capture_output=True,text=True,env={**os.environ,'RVTBALLET_EDIT_BACKEND':'rvtedit'})
+        self.assertFalse(os.path.exists(o),p.stdout[-300:]); self.assertIn('floor or wall',p.stdout+p.stderr)
 if __name__=='__main__': unittest.main()
