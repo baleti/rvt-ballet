@@ -969,6 +969,7 @@ _CREATE_BIP = {'Comments': -1010106, 'Mark': -1001203}      # built-in ids as Re
 def _create_astring(ed, o):
     """c4x-rvtmatrix items 141-154: create the never-set string parameter Comments the way Revit does (3 byte-exact Revit witnesses, Revit 2024 + 2026 VM open and readback). The element's null Element.m_pParamValueSetAString pointer becomes ffffffff + u16 tag (tag = the single value shared by all AString sets of the file), and a set object (u32 1, i64 id, u32 nchars, UTF-16) is inserted after the Double/Int set objects. Refused: an element that already has a string set, one without a Double/Int set (no witnessed anchor), one with an ElementId set (order not witnessed), a file without exactly one tag."""
     import struct, collections, rvt_xcache
+    if not o['value']: raise EditError('element %d: creating %s with an empty value is not supported (Revit never stores an empty new string parameter; witnesses used non-empty text); nothing was changed' % (o['eid'], o['param']))
     log = ed.g.e.trace(o['eid'])[3]
     ptr = [l for l in log if l[1] == 'Element.m_pParamValueSetAString']
     if len(ptr) != 1 or bytes(ed.g.bj[ptr[0][2]:ptr[0][3]]) != b'\0\0\0\0': raise EditError('element %d: cannot create parameter Comments (it already has string parameters or the layout is not the witnessed one); nothing was changed' % o['eid'])
