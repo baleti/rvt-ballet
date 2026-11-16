@@ -913,7 +913,7 @@ def _tris_of(buf, eid):
     for lib in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab')):
         if lib not in sys.path: sys.path.insert(0, lib)
     import rvt_geometry as G
-    fd, tmp = tempfile.mkstemp(suffix='.rte')
+    fd, tmp = _mk_tmp_rte()
     try:
         os.write(fd, buf); os.close(fd)
         r = G.element_geometry(tmp, eid)
@@ -976,7 +976,7 @@ def _bbox_class(buf, eid):
     for lib in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab')):
         if lib not in sys.path: sys.path.insert(0, lib)
     import rvt_geometry as G
-    fd, tmp = tempfile.mkstemp(suffix='.rte')
+    fd, tmp = _mk_tmp_rte()
     try:
         os.write(fd, buf); os.close(fd)
         r = G.file_geometry_index(tmp); return str(r.get(eid, ''))
@@ -985,6 +985,24 @@ def _bbox_class(buf, eid):
         except OSError: pass
         try: G._ctx.pop(tmp, None)
         except Exception: pass
+
+
+def _mk_tmp_rte():
+    """temp .rte for the geometry checks: in a private per-user dir, named with the owner pid; files whose owner process is gone (kill -9 / abort leaked them, input-sized each) are swept on the next call. Falls back to a plain temp file when the dir is unusable."""
+    import tempfile, re
+    try:
+        d = os.path.join(tempfile.gettempdir(), 'rvtballet-tmp-%d' % os.getuid()); os.makedirs(d, mode=0o700, exist_ok=True)
+        for f in os.listdir(d):
+            m = re.match(r'p(\d+)-.*\.rte$', f)
+            if not m: continue
+            try: os.kill(int(m.group(1)), 0)
+            except ProcessLookupError:
+                try: os.remove(os.path.join(d, f))
+                except OSError: pass
+            except OSError: pass
+        return tempfile.mkstemp(prefix='p%d-' % os.getpid(), suffix='.rte', dir=d)
+    except OSError:
+        return tempfile.mkstemp(suffix='.rte')
 
 
 def _own_body(ed, eid):
@@ -1061,7 +1079,7 @@ def _bbox_of(buf, eid):
     for lib in (os.path.expanduser('~/rvt-research'), os.path.expanduser('~/rvt-research/write-lab')):
         if lib not in sys.path: sys.path.insert(0, lib)
     import rvt_geometry as G
-    fd, tmp = tempfile.mkstemp(suffix='.rte')
+    fd, tmp = _mk_tmp_rte()
     try:
         os.write(fd, buf); os.close(fd)
         r = G.element_geometry(tmp, eid)
