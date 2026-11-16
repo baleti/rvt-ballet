@@ -8,20 +8,20 @@ import rvt_untouched_bytes as ub, rvt_frame_flip as ff
 import cfb, rvtw
 
 
-def _payload(path, part='Partitions/21'):
-    return bytes(rvtw.Stream(cfb.CFB(open(path, 'rb').read()).streams()[part].data).payload)
+def _sd(path, part='Partitions/21'):
+    return cfb.CFB(open(path, 'rb').read()).streams()[part].data
 
 
 def test_segedit_fit_edit_has_no_violations(tmp_path):
     from rvtballet import segedit
     out = str(tmp_path / 'o.rvt'); segedit.apply_ops(S[0], out, [{'op': 'set_string', 'eid': 1365188, 'param': 'Mark', 'value': 'UB1'}], mode='fit')
-    r = ub.check_partition(_payload(S[0]), _payload(out)); assert r['dirty'] == 1 and r['n_violations'] == 0
+    r = ub.check_partition(None, None, sa=_sd(S[0]), sb=_sd(out)); assert r['dirty'] == 1 and r['n_violations'] == 0
 
 
 @pytest.mark.parametrize('fld', ['stored', 'X1', 'X2', 'after'])
 def test_frame_fault_is_a_violation(tmp_path, fld):
     d = ff.flip(S[0], 'Partitions/21', 10, fld, str(tmp_path / 'f.rvt'))
-    r = ub.check_partition(_payload(S[0]), _payload(d)); assert r['n_violations'] >= 1
+    r = ub.check_partition(None, None, sa=_sd(S[0]), sb=_sd(d)); assert r['n_violations'] >= 1
 
 
 def test_stream_rule_edit_clean_and_other_file_flagged(tmp_path, capsys):

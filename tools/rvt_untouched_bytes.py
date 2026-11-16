@@ -8,11 +8,12 @@ and the previous member's after-frame length (offsets 2..5 of the 32 bytes befor
 Prints one JSON line: {partition: {members, dirty, violations: [payload offsets...], structure_changed}}; exit 1 on any violation or structure change. Public samples only."""
 import os, sys, json
 sys.path.insert(0, os.path.expanduser('~/rvt-research/write-lab'))
-import cfb, rvtw
+import cfb, rvtw, wlpart
 
 
-def check_partition(pa, pb, count_change=False):
-    ma = rvtw.members(pa, pa.find(rvtw.GZ)); mb = rvtw.members(pb, pb.find(rvtw.GZ))
+def check_partition(pa, pb, count_change=False, sa=None, sb=None):
+    pa = bytes(rvtw.Stream(sa).payload) if pa is None else pa; pb = bytes(rvtw.Stream(sb).payload) if pb is None else pb
+    ma = [(m['pos'], m['end'], 0) for m in wlpart.Partition(rvtw.Stream(sa)).mem]; mb = [(m['pos'], m['end'], 0) for m in wlpart.Partition(rvtw.Stream(sb)).mem]      # wlpart tiling = what the gate walks (rvtw.members stops at the first gap: 339 of 1011 members on public 2024 HVAC Partitions/21)
     if len(ma) != len(mb): return dict(structure_changed='member count %d -> %d' % (len(ma), len(mb)))
     dirty = [k for k, ((sa, ea, _), (sb, eb, _)) in enumerate(zip(ma, mb)) if pa[sa:ea] != pb[sb:eb]]
     allowed = []      # (start, end) in SOURCE-frame segment coordinates handled per segment below
@@ -39,7 +40,7 @@ def main(src, out, count_change=False, allow=()):
     if other: res['_other_streams_changed'] = dict(streams=other, n_violations=len(other))      # stream rule (item 201): outside the edited partitions nothing may differ unless the op legitimately rewrites it (--allow-streams)
     for n in A:
         if not n.startswith('Partitions/') or n not in B or A[n].data == B[n].data: continue
-        pa = bytes(rvtw.Stream(A[n].data).payload); pb = bytes(rvtw.Stream(B[n].data).payload); res[n] = check_partition(pa, pb, count_change)
+        pa = bytes(rvtw.Stream(A[n].data).payload); pb = bytes(rvtw.Stream(B[n].data).payload); res[n] = check_partition(pa, pb, count_change, A[n].data, B[n].data)
     bad = any(v.get('structure_changed') or v.get('n_violations') for v in res.values())
     print(json.dumps(res)); return 1 if bad else 0
 
