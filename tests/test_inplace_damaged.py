@@ -28,7 +28,9 @@ try:
         r = subprocess.run([os.path.join(HERE, 'bin', 'rvt-ballet'), 'edit', P, '--in-place', '--set-string', '1365188', 'Mark', 'x'], capture_output=True, text=True, env=env, timeout=900)
         bk = [f for dp, _, fs in os.walk(D) for f in fs if '.savegate' in dp]
         msg = (r.stdout + r.stderr).lower()
-        ok = r.returncode == 3 and sha(P) == before and not bk and ('damaged' in msg or 'cut short' in msg or 'corrupt' in msg)
+        if how.startswith('trunc'):      # since the torn-read guard (ce5ac5e) a truncated container is refused before the gate: rc 1 'not a complete .rvt (truncated ...)'
+            ok = r.returncode in (1, 3) and sha(P) == before and not bk and ('truncated' in msg or 'damaged' in msg or 'cut short' in msg or 'corrupt' in msg)
+        else: ok = r.returncode == 3 and sha(P) == before and not bk and ('damaged' in msg or 'cut short' in msg or 'corrupt' in msg)
         print(how, 'rc', r.returncode, 'unchanged', sha(P) == before, 'backups', len(bk), 'OK' if ok else 'FAIL')
         if not ok: fails.append(how)
 finally: shutil.rmtree(T, ignore_errors=True)
