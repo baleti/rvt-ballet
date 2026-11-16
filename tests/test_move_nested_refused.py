@@ -24,4 +24,11 @@ class T(unittest.TestCase):
         o=os.path.join(tempfile.mkdtemp(),'c.rte')
         p=subprocess.run([sys.executable,E,C,o,'mv:301592:0.5:0:0'],capture_output=True,text=True,cwd=os.path.dirname(E))
         self.assertTrue(os.path.exists(o),p.stderr[-200:])
+    def test_joined_real_column_still_moves(self):
+        """Snowdon Structural 2024 column 606069 (joined to 4 elements; its header id list names beam 606875) has many Revit-verified moves: joins are not nesting"""
+        F=os.path.expanduser('~/rvt-research/corpus/2024/43_Snowdon_Towers_Sample_Structural.rvt')
+        if not os.path.exists(F): self.skipTest('sample absent')
+        o=os.path.join(tempfile.mkdtemp(),'c.rvt')
+        p=subprocess.run([sys.executable,E,F,o,'mv:606069:1:0:0'],capture_output=True,text=True,cwd=os.path.dirname(E))
+        self.assertTrue(os.path.exists(o),p.stderr[-200:])
 if __name__=='__main__': unittest.main()
