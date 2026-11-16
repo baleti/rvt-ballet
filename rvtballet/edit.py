@@ -381,6 +381,8 @@ def _apply_rvtedit(a, b, ops):
     os.environ.setdefault('RVT_GEOM', '1')
     try: import rvtedit, cfb
     except ImportError as e: raise EditError('the rvtedit backend is not available (%s); install/point RVTBALLET_EDITLAB and RVTBALLET_WRITELAB' % e)
+    _lk = [(o['op'], o.get('eid')) for o in ops if o.get('op') in ('set_link_path', 'set_link_load')]
+    if len(_lk) != len(set(_lk)): raise EditError('two link path (or load) ops on one link type reached the editor un-coalesced: the second works from record offsets the first shifted and flipped the load flag (c1x-rvtlink item 95c, 2024 VM-less readback); refused')
     saved_part = os.environ.get('PART'); tmps = []
     try:
         os.environ.pop('PART', None); groups = {}
