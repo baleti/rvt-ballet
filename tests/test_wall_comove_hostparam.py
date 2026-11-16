@@ -17,3 +17,8 @@ assert not any('hostParam' in l for l in both), both
 assert any('hostParam' in l for l in alone), alone
 assert any('Trf.m_or' in l for l in both), both
 print('wall+window co-move keeps hostParam, lone window move shifts it: OK')
+# item 62: without the opt-in env the host wall move is refused and nothing is written
+o = os.path.join(tempfile.mkdtemp(), 'o.rte'); env = dict(os.environ, RVTBALLET_MOVE_ANY='1'); env.pop('RVTEDIT_MOVE_WALL_DEPS', None)
+r = subprocess.run([sys.executable, LAB, F, o, 'mv:301557:0:1:0'], capture_output=True, text=True, cwd=os.path.dirname(LAB), env=env)
+assert not os.path.exists(o) and 'refused' in (r.stderr + r.stdout).lower(), (r.stdout[-200:], r.stderr[-200:])
+print('hosting wall move refused without opt-in: OK')
