@@ -12,7 +12,7 @@ for t in test_save test_save_dest test_save_api test_save_overwrite test_save_ve
   case "$out" in *OK*|skip*) ;; *) F=1;; esac
 done
 # move/rotate regression set (c1x-rvtdiff 2026-11-16): hosted door round trip, hosted window origin copies, hostparam, refusals; each prints skip when the synthetic scene is missing
-for t in test_move_roundtrip_hosted_door test_move_hosted_window_origin_copies test_move_hosted_hostparam test_rotate_hosted_refused test_move_unverified_classes_refused; do
+for t in test_move_roundtrip_hosted_door test_move_hosted_window_origin_copies test_move_stray_writes_door test_move_hosted_hostparam test_rotate_hosted_refused test_move_unverified_classes_refused; do
   [ -f "$D/tests/$t.py" ] || continue
   s=$(date +%s); out=$(PATH="$D:$PATH" nice "$PY" "$D/tests/$t.py" 2>&1 | tail -1 | cut -c1-110); echo "$t: $out ($(( $(date +%s)-s ))s)"
   case "$out" in *OK*|skip*) ;; *) F=1;; esac
