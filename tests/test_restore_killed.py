@@ -30,9 +30,10 @@ try:
     r = subprocess.run([sys.executable, '-c', code, S0], capture_output=True, text=True, timeout=1200); out = r.stdout + r.stderr
     assert r.returncode == 0 and 'H0' in out, out[-300:]
     h0, hs = out.split('H0')[1].split()[:1][0], out.split('HS')[1].split()[0]
-    for sig in (signal.SIGKILL, signal.SIGTERM):
-        for delay in (0.0, 0.05, 0.1, 0.12, 0.14, 0.15, 0.16, 0.18, 0.2, 0.3):
-            tag = '%s_%g' % (sig.name, delay); D = T + '/' + tag; shutil.copytree(S0, D)
+    DEL = [float(x) for x in os.environ.get('DELAYS', '0.0,0.05,0.1,0.12,0.14,0.15,0.16,0.18,0.2,0.3').split(',')] * int(os.environ.get('REPEAT', '1'))
+    for sig in [getattr(signal, n) for n in os.environ.get('SIGS', 'SIGKILL,SIGTERM').split(',')]:
+        for delay in DEL:
+            tag = '%s_%g_%d' % (sig.name, delay, len(os.listdir(T))); D = T + '/' + tag; shutil.copytree(S0, D)
             code = (PRE % (os.path.abspath(HERE), D + '/j', D + '/c')) + REST[len(PRE):]
             p = subprocess.Popen([sys.executable, '-c', code, D], stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
             time.sleep(delay)
