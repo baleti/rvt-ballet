@@ -15,3 +15,10 @@ if os.path.exists(A2) and os.path.exists(B2):
     assert q('--tolerate-header-only').returncode == 1
     assert q('--tolerate-header-only', '--tolerate-wall-runtime').returncode == 0
     print('ok: wall runtime flag rule')
+# third case: rotate-90 pair: 1-ulp float noise on 301592 disappears with --float-tol, the empty GridsForColumn entry of 76368 remains a difference
+A3 = os.path.expanduser('~/c2x-diff/c4x_rs_rotours/base.rte'); B3 = os.path.expanduser('~/c2x-diff/c4x_rs_rotrevit/base.rte')
+if os.path.exists(A3) and os.path.exists(B3):
+    q3 = lambda *x: subprocess.run([sys.executable, R + '/tools/rvt_resave_equiv.py', A3, B3, '--tolerate-header-only', *x], capture_output=True, text=True, timeout=1500)
+    o1 = q3(); assert o1.returncode == 1 and '301592' in o1.stdout and '76368' in o1.stdout
+    o2 = q3('--float-tol=1e-9'); assert o2.returncode == 1 and '76368' in o2.stdout and 'body changes [76368]' in o2.stdout, o2.stdout[-200:]
+    print('ok: float tolerance')

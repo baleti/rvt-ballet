@@ -11,25 +11,35 @@ def classify(d, tolerate_headers=False):
         else: body.append(c['id'])
     ok = not d.get('added') and not d.get('removed') and not body and (tolerate_headers or not ho)
     return ok, ho, body
-def field_diff_ids(a, b, ignore=()):
+def _close(x, y, eps):
+    if isinstance(x, float) or isinstance(y, float):
+        try: return abs(float(x) - float(y)) <= eps
+        except (TypeError, ValueError): return False
+    if isinstance(x, dict) and isinstance(y, dict): return x.keys() == y.keys() and all(_close(x[k], y[k], eps) for k in x)
+    if isinstance(x, (list, tuple)) and isinstance(y, (list, tuple)): return len(x) == len(y) and all(_close(p, q, eps) for p, q in zip(x, y))
+    return x == y
+def field_diff_ids(a, b, ignore=(), eps=0.0):
     """ids whose DECODED record fields differ between the two files, independent of rvt_diff's header/record walker (which cannot see instance-body changes such as a Mark string: c4x-rvtdiff 223 retraction)."""
     sys.path[:0] = [os.path.expanduser('~/rvt-research/write-lab'), os.path.expanduser('~/rvt-research')]
     import rvt_xcache
     ra, rb = rvt_xcache.get_x_ro(a)['recs'], rvt_xcache.get_x_ro(b)['recs']
     dump = lambda r: json.dumps({k: v for k, v in (r.get('fields') or {}).items() if k not in ignore}, sort_keys=True, default=str)
-    return sorted(k[0] for k in set(ra) & set(rb) if dump(ra[k]) != dump(rb[k]))
-def main(a, b, tolerate=False, runtime=False):
+    return sorted(k[0] for k in set(ra) & set(rb) if (dump(ra[k]) != dump(rb[k]) if not eps else not _close(json.loads(dump(ra[k])), json.loads(dump(rb[k])), eps)))
+def main(a, b, tolerate=False, runtime=False, eps=0.0):
     j = os.path.join(tempfile.mkdtemp(), 'd.json')
     r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rvt_diff.py'), a, b, '--json', j] + ([] if tolerate else ['--nofields']), capture_output=True, text=True)
     if not os.path.exists(j): print('diff tool failed:', r.stderr[-300:]); return 2
     d = json.load(open(j)); ch = [c['id'] for c in d.get('changed', [])]
     print('added %s removed %s changed %d %s' % (d.get('added'), d.get('removed'), len(ch), ch[:20]))
     ok, ho, body = classify(d, tolerate)
-    fd = field_diff_ids(a, b, ('m_wallRunTimeData',) if runtime else ()); print('decoded-field differences (walker independent%s): %d %s' % (', VWall.m_wallRunTimeData ignored' if runtime else '', len(fd), fd[:20]))
-    if fd: ok = False; body = sorted(set(body) | set(fd))
+    fd = field_diff_ids(a, b, ('m_wallRunTimeData',) if runtime else (), eps); print('decoded-field differences (walker independent%s): %d %s' % (', VWall.m_wallRunTimeData ignored' if runtime else '', len(fd), fd[:20]))
+    if eps: body = [i for i in body if i in fd]      # walker body ids whose decoded fields agree within the float tolerance do not count
+    if fd: ok = False
+    body = sorted(set(body) | set(fd)); ok = ok and not body
     if tolerate: print('header-only changes %s, body changes %s' % (ho[:20], body[:20]))
     print('EQUIVALENT' if ok else 'DIFFERENT'); return 0 if ok else 1
 if __name__ == '__main__':
-    args = [x for x in sys.argv[1:] if x not in ('--tolerate-header-only', '--tolerate-wall-runtime')]
+    eps = next((float(x.split('=', 1)[1]) for x in sys.argv[1:] if x.startswith('--float-tol=')), 0.0)
+    args = [x for x in sys.argv[1:] if x not in ('--tolerate-header-only', '--tolerate-wall-runtime') and not x.startswith('--float-tol=')]
     if len(args) != 2: print(__doc__ + '\nOption --tolerate-header-only: ElementHeader-only differences (session stamps, id list order) do not count; any body, added or removed element still does. Option --tolerate-wall-runtime: ignore VWall.m_wallRunTimeData only (Revit pending-autojoin runtime flag, present in the unedited original and in Revit-made files, consumed when Revit opens our file: c4x-rvtdiff 295).'); sys.exit(2)
-    sys.exit(main(args[0], args[1], '--tolerate-header-only' in sys.argv, '--tolerate-wall-runtime' in sys.argv))
+    sys.exit(main(args[0], args[1], '--tolerate-header-only' in sys.argv, '--tolerate-wall-runtime' in sys.argv, eps))
