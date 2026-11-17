@@ -15,4 +15,6 @@ m = headercheck.header_diff(src, bad, [EID]); assert m and 'changed' in m[0], m
 os.environ['RVTBALLET_HEADER_CHECK'] = '1'
 try: save._readback(src, bad, [{'op': 'set_link_path', 'eid': EID, 'value': 'x'}]); raise SystemExit('ESCAPE: category flip accepted')
 except Exception as e: assert 'header' in str(e), e
+dd = headercheck.deep_diff(F, out); assert len(dd) == 1 and str(EID) in dd[0], dd      # whole-model layer: finds the rewrite without being told the element
+assert headercheck.deep_diff(F, out, {EID}) == [] and headercheck.deep_diff(F, F) == []
 print('ok')

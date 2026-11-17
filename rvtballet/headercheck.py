@@ -24,3 +24,20 @@ def header_diff(src_buf, out_buf, eids):
         if e not in b: bad.append("element %d: header missing in the output" % e)
         elif tuple(map(str, a[e])) != tuple(map(str, b[e])): bad.append("element %d: header (category, owner view, family, class) changed %s -> %s" % (e, tuple(map(str, a[e])), tuple(map(str, b[e]))))
     return bad
+
+
+def deep_diff(src_path, out_path, allowed=(), limit=20):
+    """whole-model layer (opt-in, one cold scan per file, ~8 s on a 22 MB sample): the RESOLVED category (header, sub/user category parent, Family/GStyle/surrogate body), owner view,
+    family and class of EVERY element must be identical in source and output, except `allowed` ids (edited, deleted, added). Catches a category rewrite in an element the ops did not name
+    and in a body-level category (Family, GStyleElem) the header check cannot see. -> list of messages"""
+    from . import fastinfo
+    A = fastinfo.scan(src_path, want_elements=True)["arrays"]; B = fastinfo.scan(out_path, want_elements=True)["arrays"]
+    def tab(x):
+        nm = x["cls_names"]
+        return {int(i): (int(c), int(o), int(f), str(nm[k])) for i, c, o, f, k in zip(x["id"], x["cat"], x["owner_view"], x["family"], x["cls"])}
+    a, b = tab(A), tab(B); al = {int(e) for e in allowed}; bad = []
+    for e, v in a.items():
+        if e in al or e not in b: continue
+        if v != b[e]: bad.append("element %d: resolved (category, owner view, family, class) %s -> %s" % (e, v, b[e]))
+        if len(bad) >= limit: break
+    return bad
