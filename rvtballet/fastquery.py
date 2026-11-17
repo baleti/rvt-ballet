@@ -858,7 +858,7 @@ class Engine:
         s.log('%s: %d tasks, %d workers, %.2fs%s' % (what, n, s.workers, time.time() - t0, (', ' + extra) if extra else ''))
 
 
-HDR_MAXWIN = int(os.environ.get("RVT_Q_HDR_MAXWIN", "0"))      # experiment: do not merge header windows longer than this many segments (0 = always merge, the old behaviour; default 4: doors on 6 samples 20-70 MB 0.1-0.17 s faster, 200 runs identical)
+HDR_MAXWIN = int(os.environ.get("RVT_Q_HDR_MAXWIN", "0"))      # experiment, KEEP 0: >0 splits long merged header windows but made wall-types non-deterministic (cold runs: 3 of 6 gave a type with category null instead of Walls on 2 corpus files; found by coldq-bench REGRESSION)
 
 
 def header_jobs(segtab, tasks, res, want_ids, per_task=False):

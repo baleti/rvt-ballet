@@ -207,3 +207,8 @@ def test_header_window_split_same_answer(cmd):
         p = subprocess.run([sys.executable, "-m", "rvtballet.fastquery", cmd, src, "--json"], cwd=HERE, capture_output=True, timeout=300, env=dict(os.environ, RVT_Q_HDR_MAXWIN=w))
         assert p.returncode == 0; h[w] = hashlib.sha1(p.stdout).hexdigest()
     assert h["0"] == h["4"]
+
+
+def test_header_window_split_default_is_off():
+    """RVT_Q_HDR_MAXWIN>0 gave non-deterministic wall-types (category lost in about half of the cold runs, 19_Commercial and 27_Technical_school samples); the default must stay 0 until that is understood. test_header_window_split_same_answer does not cover wall-types"""
+    assert Q.HDR_MAXWIN == 0
