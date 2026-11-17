@@ -11,6 +11,13 @@ def classify(d, tolerate_headers=False):
         else: body.append(c['id'])
     ok = not d.get('added') and not d.get('removed') and not body and (tolerate_headers or not ho)
     return ok, ho, body
+def field_diff_ids(a, b):
+    """ids whose DECODED record fields differ between the two files, independent of rvt_diff's header/record walker (which cannot see instance-body changes such as a Mark string: c4x-rvtdiff 223 retraction)."""
+    sys.path[:0] = [os.path.expanduser('~/rvt-research/write-lab'), os.path.expanduser('~/rvt-research')]
+    import rvt_xcache
+    ra, rb = rvt_xcache.get_x_ro(a)['recs'], rvt_xcache.get_x_ro(b)['recs']
+    dump = lambda r: json.dumps(r.get('fields'), sort_keys=True, default=str)
+    return sorted(k[0] for k in set(ra) & set(rb) if dump(ra[k]) != dump(rb[k]))
 def main(a, b, tolerate=False):
     j = os.path.join(tempfile.mkdtemp(), 'd.json')
     r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rvt_diff.py'), a, b, '--json', j] + ([] if tolerate else ['--nofields']), capture_output=True, text=True)
@@ -18,6 +25,8 @@ def main(a, b, tolerate=False):
     d = json.load(open(j)); ch = [c['id'] for c in d.get('changed', [])]
     print('added %s removed %s changed %d %s' % (d.get('added'), d.get('removed'), len(ch), ch[:20]))
     ok, ho, body = classify(d, tolerate)
+    fd = field_diff_ids(a, b); print('decoded-field differences (walker independent): %d %s' % (len(fd), fd[:20]))
+    if fd: ok = False; body = sorted(set(body) | set(fd))
     if tolerate: print('header-only changes %s, body changes %s' % (ho[:20], body[:20]))
     print('EQUIVALENT' if ok else 'DIFFERENT'); return 0 if ok else 1
 if __name__ == '__main__':
