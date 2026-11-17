@@ -194,3 +194,16 @@ def test_damaged_real_sample_native_equals_python(sample, seed, tmp_path):
         assert p.returncode >= 0, "died on signal %d (native=%s)" % (-p.returncode, n)
         r[n] = (p.returncode, p.stdout)
     assert r["1"] == r["0"]
+
+
+@pytest.mark.parametrize("cmd", ["doors", "counts"])
+def test_header_window_split_same_answer(cmd):
+    """RVT_Q_HDR_MAXWIN=4 (split long merged header windows into parallel jobs) must answer exactly like 0 (old merge-everything)"""
+    import subprocess, hashlib
+    src = os.path.join(os.path.expanduser("~/rvt-research/corpus"), "2024/42_Snowdon_Towers_Sample_HVAC.rvt")
+    if not os.path.exists(src): pytest.skip("sample absent")
+    h = {}
+    for w in ("0", "4"):
+        p = subprocess.run([sys.executable, "-m", "rvtballet.fastquery", cmd, src, "--json"], cwd=HERE, capture_output=True, timeout=300, env=dict(os.environ, RVT_Q_HDR_MAXWIN=w))
+        assert p.returncode == 0; h[w] = hashlib.sha1(p.stdout).hexdigest()
+    assert h["0"] == h["4"]

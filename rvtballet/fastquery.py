@@ -858,6 +858,9 @@ class Engine:
         s.log('%s: %d tasks, %d workers, %.2fs%s' % (what, n, s.workers, time.time() - t0, (', ' + extra) if extra else ''))
 
 
+HDR_MAXWIN = int(os.environ.get("RVT_Q_HDR_MAXWIN", "4"))      # experiment: do not merge header windows longer than this many segments (0 = always merge, the old behaviour; default 4: doors on 6 samples 20-70 MB 0.1-0.17 s faster, 200 runs identical)
+
+
 def header_jobs(segtab, tasks, res, want_ids, per_task=False):
     """header jobs for `want_ids`: only segments that hold an ElementHeader candidate of a wanted id (noted in the record pass), each window from that
     segment through OVL decoded bytes of the same channel (the same tail a task has), windows of one task merged; asked for just those ids"""
@@ -884,7 +887,7 @@ def header_jobs(segtab, tasks, res, want_ids, per_task=False):
             st = max(0, st0 - 1)               # from the previous segment: a record's bytes before its id may sit there
             m = st; ov = 0
             while m < len(idx) and (m <= st + 1 or ov < OVL): ov += segs[idx[m]][2]; m += 1
-            if win and st <= win[-1][1]: win[-1][1] = max(win[-1][1], m); win[-1][2] |= by_start[st0]
+            if win and st <= win[-1][1] and (HDR_MAXWIN <= 0 or m - win[-1][0] <= HDR_MAXWIN): win[-1][1] = max(win[-1][1], m); win[-1][2] |= by_start[st0]
             else: win.append([st, m, set(by_start[st0])])
         if per_task:                           # round 2 (old rule): every window of the task asks for all of the task's hit ids
             allh = sorted(set(ehc[0][sel].tolist())); win = [[a, b, allh] for a, b, _ in win]
