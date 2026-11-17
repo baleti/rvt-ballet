@@ -1133,6 +1133,13 @@ def _readback(src_buf, nb, ops):
     dl = [o for o in ops if o.get('op') == 'delete']
     ct = [o for o in ops if o.get('op') == 'change_type']      # type changes: the instance must report the requested type id afterwards
     tn = [o for o in ops if o.get('op') == 'set_type_num']      # type parameter edits: the type must report the new value, every other type parameter unchanged
+    sg = _import()
+    _hb = []
+    if os.environ.get("RVTBALLET_HEADER_CHECK", "1") == "1":      # c9x-rvtcat 2026-11-17: category/owner view/family/class of every edited element must be unchanged (a category rewrite inside a declared edit passed every other gate)
+        from .headercheck import header_diff
+        try: _hb = header_diff(src_buf, nb, {o["eid"] for o in ops if o.get("eid") is not None and o.get("op") != "delete"})
+        except Exception as e: raise OutputUnreadable("the element headers could not be compared (%s: %s); nothing was written" % (type(e).__name__, e)) from e
+    if _hb: raise sg.VerifyFailed("read-back of the edited element(s) failed: %s" % "; ".join(_hb[:3]), {"n_unexpected": len(_hb), "unexpected": _hb[:20]})
     if not tg and not mv and not fl and not dl and not ct and not tn: return
     g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
     sg = _import()
