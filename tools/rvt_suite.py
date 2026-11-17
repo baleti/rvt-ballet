@@ -244,9 +244,12 @@ def decide_change_type(year, workdir, use_vm):
     if not ok: return 'FAIL', 'gate/save: ' + ' | '.join(l for l in out.splitlines() if l.startswith(('edit', 'saveas', 'verify', 'report', 'save!')))[:300]
     if not use_vm: return 'ERROR', 'VM checks disabled (--no-vm)'
     if not vm_up(): return 'ERROR', 'Revit VM is down'
-    opened, cmp_ok, note = vm_open(year, keep)
-    if opened is None: return 'ERROR', note
-    if not opened or not cmp_ok: return 'FAIL', 'Revit open/compare: ' + note
+    ep = keep + '.expect.json'; json.dump({}, open(ep, 'w'))
+    rc, jo = run([sys.executable, HERE + '/rvt_judge1.py', str(year), src, keep, ep, str(inst), keep + '.j1'], timeout=10800)
+    jl = next((l for l in reversed(jo.splitlines()) if l.startswith('JUDGE ')), '')
+    note = 'judge1: ' + jl[6:][:200]
+    if not jl: return 'ERROR', 'no judge1 verdict (rc %s): %s' % (rc, jo.strip()[-120:])
+    if not jl.startswith('JUDGE PASS'): return 'FAIL', 'Revit judge1 (control = original): ' + note
     rc, o1 = run([sys.executable, HERE + '/rvt_param_readback.py', str(year), '%d|@symbol' % inst, keep], timeout=10800)
     s1 = re.search(r'symbol=(\d+)', o1)
     if not s1: return 'ERROR', 'no Revit symbol readback of the saved file: ' + o1.strip()[-200:].replace('\n', ' / ')
