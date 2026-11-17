@@ -10,11 +10,20 @@ Why it is fast (measured on a 984 MB project file, see docs/rvt-fast-query.md):
 Read-only: the file is opened once with O_RDONLY and never written; a file that changes while it is read raises FileChanged instead of returning an answer.
 """
 import os, sys, struct, zlib, time, collections
+_T0 = time.time()
 
 PAGE_STORED = 65249; PAGE_PAYLOAD = 64896
 TASK_MB = float(os.environ.get('RVT_Q_TASK_MB', '8'))          # decoded MB per task (plus the overlap)
 OVL = int(os.environ.get('RVT_Q_OVERLAP_KB', '1024')) << 10     # decoded bytes of the following segments appended to a task (a record straddling the task end is decoded whole)
 _G = {}
+# segment header word 4 is a channel: 101 = ElementHeaders, 102 = element records, 103 = geometry/bulk blobs (each channel carries the same sequence of
+# sub-records, measured on a 984 MB 2024 file: 2.61M per channel, 101 is the first contiguous block of every partition). No query class record and no
+# ElementHeader sits in 103 (all query outputs identical without it, 984 MB file + samples), so the walk keeps 101+102 only: 4.03 -> 2.35 GB to inflate.
+# RVT_Q_CHANNELS=all keeps every segment (old behaviour); a comma list picks channels.
+_ch = os.environ.get('RVT_Q_CHANNELS', '101,102')
+CHANNELS = None if _ch == 'all' else frozenset(int(x) for x in _ch.split(','))
+KNOWN_CH = frozenset((101, 102, 103))
+SPLIT = os.environ.get('RVT_Q_SPLIT', '1') == '1'      # channel-pure tasks (101: header candidates only, 102: class scan only)
 
 
 def _paths():
@@ -68,17 +77,64 @@ class Stream:
         """== elemindex.Part.segments (same walk and resync rule) through pread; cb(segs so far) every `every` segments (the master plans tasks while it walks)"""
         T = s.total; GZ = b'\x1f\x8b\x08\x00'; segs = []; head = s.payload(fd, 0, 64); i = head.find(GZ)
         if i < 24: return []
-        hdr = i - 24
+        hdr = i - 24; rd = s._small_reader(fd); allsegs = []; unknown = False
+        N = _native() if NATIVE and s.small is None else None
+        if N is not None:
+            rows = _native_walk_all(N, s, hdr, T)
+            if rows is not None:
+                for off_, st_, dl_, ch_, _w0 in rows:
+                    if ch_ not in KNOWN_CH: unknown = True
+                    allsegs.append((off_, st_, dl_, ch_))
+                    if CHANNELS is None or ch_ in CHANNELS:
+                        segs.append((off_, st_, dl_, ch_))
+                        if cb and len(segs) % every == 0 and not unknown: cb(segs)
+                hdr = None
         while hdr is not None and hdr + 24 <= T:
-            b = s.payload(fd, hdr, hdr + 28)
+            if N is not None:                   # C walk over the mmap (same tests); stops where a header does not verify, the Python step below resyncs
+                k, hdr2, arr = _native_walk(N, s, hdr, T)
+                if k:
+                    for off_, st_, dl_, ch_, _w0 in arr:
+                        if ch_ not in KNOWN_CH: unknown = True
+                        allsegs.append((off_, st_, dl_, ch_))
+                        if CHANNELS is None or ch_ in CHANNELS:
+                            segs.append((off_, st_, dl_, ch_))
+                            if cb and len(segs) % every == 0 and not unknown: cb(segs)
+                    hdr = hdr2; continue
+            b = rd(hdr, 28)
             if len(b) == 28:
                 w = struct.unpack('<6I', b[:24])
                 if b[24:28] == GZ and 18 <= w[2] and hdr + 24 + w[2] <= T and w[0] < 16 and w[3] > 0:
-                    segs.append((hdr + 24, w[2], w[3])); hdr += 24 + w[2]
-                    if cb and len(segs) % every == 0: cb(segs)
+                    if w[4] not in KNOWN_CH: unknown = True
+                    allsegs.append((hdr + 24, w[2], w[3], w[4]))
+                    if CHANNELS is None or w[4] in CHANNELS: segs.append((hdr + 24, w[2], w[3], w[4]))
+                    hdr += 24 + w[2]
+                    if cb and len(segs) % every == 0 and not unknown: cb(segs)
                     continue
+            if N is not None:
+                r_ = _native_resync(N, s, hdr, T)
+                if r_ != -2: hdr = None if r_ < 0 else r_; continue
             hdr = s._resync(fd, hdr, T)
+        if unknown or (allsegs and CHANNELS is not None and not segs):
+            # a channel value outside 101/102/103 (other Revit versions / layouts): no channel logic at all, the old walk result (3-tuples, all segments).
+            # Early tasks already sent from a prefix would then differ from plan(): walk_and_decode asserts on that (loud, never silent)
+            return [x[:3] for x in allsegs]
         return segs
+    def _small_reader(s, fd):
+        """payload bytes [a, a+n) for small n: one slice of an mmap of the file when the bytes sit inside one page payload and one sector (the common case),
+        else payload() (same bytes). The walk reads 28 bytes per segment: a 64 KB pread each was 0.4-0.7 s of serial master time on a 984 MB file."""
+        if s.small is not None: return lambda a, n: s.payload(fd, a, a + n)
+        import mmap
+        try: m = mmap.mmap(fd, 0, prot=mmap.PROT_READ)
+        except (ValueError, OSError, AttributeError): return lambda a, n: s.payload(fd, a, a + n)
+        ss = s.ss; ch = s.chain; P = PAGE_PAYLOAD; PS = PAGE_STORED
+        def rd(a, n):
+            pg, po = divmod(a, P)
+            if po + n <= P:
+                st = pg * PS + po; k, so = divmod(st, ss)
+                if so + n <= ss and k < len(ch):
+                    o = (ch[k] + 1) * ss + so; return m[o:o + n]
+            return s.payload(fd, a, a + n)
+        return rd
     def _resync(s, fd, a, T):
         GZ = b'\x1f\x8b\x08\x00'; step = 1 << 14
         while a < T:
@@ -128,14 +184,14 @@ def _libdeflate():
     _LD.append(lib); return lib
 
 
-def inflate_run(buf, a, segs, sizes_out=None, bad_out=None):
+def _inflate_run_raw(buf, a, segs, sizes_out=None, bad_out=None):
     """inflated bytes of consecutive segments [(payload offset, stored_len, x)], `buf` = payload bytes from offset `a`. A segment's stored bytes are
     [10-byte gzip header][deflate][CRC32][ISIZE][8-byte footer]: libdeflate inflates straight into one buffer sized from the ISIZE fields (an ISIZE that does
     not match the inflated size falls back to zlib for that segment)"""
     lib = _libdeflate()
     if lib is None:
         parts = []
-        for off, ln, _ in segs:
+        for off, ln, *_ in segs:
             try: x = _inflate(buf[off - a: off - a + ln])
             except zlib.error: x = b''
             if bad_out is not None and (ln < 34 or zlib.crc32(x) & 0xffffffff != struct.unpack_from('<I', buf, off - a + ln - 16)[0]): bad_out.append(off)
@@ -144,23 +200,23 @@ def inflate_run(buf, a, segs, sizes_out=None, bad_out=None):
         return b''.join(parts)
     L, C = lib; d = _G.get('ldd')
     if d is None or _G.get('ldd_pid') != os.getpid(): d = _G['ldd'] = L.libdeflate_alloc_decompressor(); _G['ldd_pid'] = os.getpid()
-    sizes = [struct.unpack_from('<I', buf, off - a + ln - 12)[0] if ln >= 34 else 0 for off, ln, _ in segs]
+    sizes = [struct.unpack_from('<I', buf, off - a + ln - 12)[0] if ln >= 34 else 0 for off, ln, *_ in segs]
     out = bytearray(sum(sizes)); ob = C.addressof((C.c_char * max(1, len(out))).from_buffer(out)) if out else 0
     ib = C.cast(C.c_char_p(buf), C.c_void_p).value; ai = C.c_size_t(); ao = C.c_size_t(); o = 0; fix = []
-    for i, ((off, ln, _), sz) in enumerate(zip(segs, sizes)):
+    for i, ((off, ln, *_), sz) in enumerate(zip(segs, sizes)):
         r = L.libdeflate_deflate_decompress_ex(d, ib + off - a + 10, ln - 10, ob + o, sz, C.byref(ai), C.byref(ao)) if sz else 1
         if r != 0 or ao.value != sz: fix.append(i)
         o += sz
     if bad_out is not None:              # gzip CRC32 of every segment (libdeflate_crc32): a torn or damaged segment never decodes silently
         o = 0
-        for i, ((off, ln, _), sz) in enumerate(zip(segs, sizes)):
+        for i, ((off, ln, *_), sz) in enumerate(zip(segs, sizes)):
             if i not in fix and L.libdeflate_crc32(0, ob + o, sz) != struct.unpack_from('<I', buf, off - a + ln - 16)[0]: bad_out.append(off)
             o += sz
     if not fix:
         if sizes_out is not None: sizes_out.extend(sizes)
         return bytes(out)
     parts = []; o = 0                         # rare: rebuild with zlib for the odd segments
-    for i, ((off, ln, _), sz) in enumerate(zip(segs, sizes)):
+    for i, ((off, ln, *_), sz) in enumerate(zip(segs, sizes)):
         if i in fix:
             try: x = _inflate(buf[off - a: off - a + ln])
             except zlib.error: x = b''
@@ -171,15 +227,54 @@ def inflate_run(buf, a, segs, sizes_out=None, bad_out=None):
     return b''.join(parts)
 
 
-def plan(pi, pn, segs, task_mb=None, ovl=None):
-    """decode tasks of one partition in stream order: (key, pn, segment list, number of main segments); the tail of the list is the overlap"""
-    tasks = []; per = (task_mb or TASK_MB) * 1e6; k = 0; n_ = 0; OVL = ovl or globals()['OVL']
-    while k < len(segs):
-        j = k; n = 0
-        while j < len(segs) and (n < per or j == k): n += segs[j][2]; j += 1
-        m = j; ov = 0
-        while m < len(segs) and ov < OVL: ov += segs[m][2]; m += 1
-        tasks.append(((pi, k), pn, segs[k:m], j - k)); k = j
+RUN_PAD = 8
+
+
+def inflate_run(buf, a, segs, sizes_out=None, bad_out=None, reader=None):
+    """_inflate_run_raw, plus RUN_PAD zero bytes in front of every run of physically adjacent segments when the segments carry a channel (per-channel
+    tasks gather one channel's runs from many (101, 102, 103) triples). The record at the start of a run has no A prefix; the Rust candidate scan finds it
+    only with more than its own 4 pad bytes in front. Each pad counts in the size of the segment after it, so a position still maps to the right segment.
+    bad_out gets the offset of every segment whose gzip CRC32 fails (checked per run by _inflate_run_raw)."""
+    if not segs or len(segs[0]) < 4:
+        if buf is None: a = segs[0][0]; buf = reader(a, segs[-1][0] + segs[-1][1])
+        return _inflate_run_raw(buf, a, segs, sizes_out, bad_out)
+    runs = []; st = 0
+    for i in range(1, len(segs) + 1):
+        if i == len(segs) or segs[i][0] != segs[i - 1][0] + segs[i - 1][1] + 24: runs.append((st, i)); st = i
+    parts = []; pad = bytes(RUN_PAD)
+    for x, y in runs:
+        sz = [] if sizes_out is not None else None
+        if reader is not None:
+            ra = segs[x][0]; parts.append(pad); parts.append(_inflate_run_raw(reader(ra, segs[y - 1][0] + segs[y - 1][1]), ra, segs[x:y], sz, bad_out))
+        else: parts.append(pad); parts.append(_inflate_run_raw(buf, a, segs[x:y], sz, bad_out))
+        if sz is not None: sz[0] += RUN_PAD; sizes_out.extend(sz)
+    return b''.join(parts)
+
+
+def _chan_groups(segs):
+    """global segment indices grouped by channel, each group in stream order. A partition is a sequence of (101, 102, 103) triples (one big base triple,
+    then one small triple per incremental save: 4324 triples in the biggest partition of a 984 MB file); each channel is ONE logical stream across the
+    triples; tasks are planned over one channel's segments, never across channels (inflate_run pads the start of every run)."""
+    if not segs or len(segs[0]) < 4: return [list(range(len(segs)))]
+    g = {}
+    for i, sg in enumerate(segs): g.setdefault(sg[3], []).append(i)
+    return [g[c] for c in sorted(g)]
+
+
+def plan(pi, pn, segs, task_mb=None, ovl=None, final_only=False):
+    """decode tasks of one partition in stream order: (key, pn, segment list, number of main segments); the tail of the list is the overlap.
+    key = (pi, global index of the first segment); tasks are planned over one channel's segments (_chan_groups). final_only: only tasks that later
+    segments cannot change (main and overlap both full)."""
+    tasks = []; per = (task_mb or TASK_MB) * 1e6; OVL = ovl or globals()['OVL']
+    for idx in _chan_groups(segs):
+        N = len(idx); k = 0
+        while k < N:
+            j = k; n = 0
+            while j < N and (n < per or j == k): n += segs[idx[j]][2]; j += 1
+            m = j; ov = 0
+            while m < N and ov < OVL: ov += segs[idx[m]][2]; m += 1
+            if final_only and (n < per or ov < OVL): break
+            tasks.append(((pi, idx[k]), pn, [segs[x] for x in idx[k:m]], j - k)); k = j
     return tasks
 
 
@@ -197,18 +292,54 @@ def _job(job):
     c0 = time.process_time(); w0 = time.time()
     _, key, pn, segs, nmain, wanted, note_eh, hdr_ids = job; S = _G['streams'][pn]; fd = _G['fd']
     a = segs[0][0]; b = segs[-1][0] + segs[-1][1]
-    buf = S.payload(fd, a, b); sizes = []; bad = []; chunk = inflate_run(buf, a, segs, sizes, bad); del buf
-    bad = [x for x in bad if x <= segs[nmain - 1][0]] if 0 < nmain <= len(segs) else bad      # a segment counts in the task that owns it (overlap segments belong to the next task)
+    ch = segs[0][3] if len(segs[0]) > 3 else None
+    if SPLIT and ch == 101 and not note_eh and not hdr_ids:        # header channel, nothing asked of it: do not even inflate
+        return job[:2], ([], [], None, (time.process_time() - c0, time.time() - w0, os.getpid(), 0))
     from . import rvtfile as FI
     rd = _G['rd']; recs = []; ehs = []; ehc = None
     specs = wanted if isinstance(wanted, list) and wanted and isinstance(wanted[0], dict) else ([{'tags': wanted}] if wanted else [])
+    if SPLIT and ch == 101 and not hdr_ids: specs = []            # ElementHeader channel: no class record to find
+    if SPLIT and ch == 102: note_eh = False                        # record channel: no ElementHeader
+    nat = None; chunk = None; fr = None; bad = []
+    if NATIVE and SPLIT and not hdr_ids and ch in (101, 102) and S.small is None and (specs if ch == 102 else note_eh):
+        nat = _native_task(S, segs, nmain, ch, bad)
+        if nat is None and DEBUG: sys.stderr.write('NATIVE fallback %r %s\n' % (key, _G.pop('why', '?')))
+        if nat is None: bad = []
+    if nat is None:
+        sizes = []; chunk = inflate_run(None, None, segs, sizes, bad, reader=lambda x, y: S.payload(fd, x, y))
+        if FRAME and SPLIT and ch == 102 and specs:
+            fr = frame_records(chunk, sizes, segs, nmain, _G['W'])
+            if fr is None and DEBUG: sys.stderr.write('FRAME fallback %r %s\n' % (key, _G.pop('why', '?')))
+    bad = [x for x in bad if x <= segs[nmain - 1][0]] if 0 < nmain <= len(segs) else bad      # a segment counts in the task that owns it (overlap segments belong to the next task)
+    loc = None
     for sp in specs:              # {'tags', 'mode': 'fi' (fastinfo._reduce) | 'lite' (_lite), 'full': no-STOP decoder (type names), 'only': ids}
+        if sp.get('locate'):      # locator only: ids of the records with these tags whose id lies in this task's main part (no decode)
+            import numpy as np
+            if nat is not None:
+                rv = nat['recs'][:4 * nat['k']].reshape(-1, 4); loc = np.unique(rv[np.isin(rv[:, 3], np.asarray(sp['tags'], np.int64)), 2].astype(np.uint64))
+            elif fr is not None:
+                tg = set(sp['tags']); loc = np.unique(np.asarray([e for (a_, b_, e, t) in fr if t in tg], np.uint64))
+            continue
         d_ = _G['rd_full'] if sp.get('full') else rd
-        r = d_.extract_chunk(chunk, sp['tags'], -1, sp.get('only'), [])
+        okid = None               # framed paths: a decode is kept only for an id the framing put in the mini buffer (zero pads and record bodies can
+                                  # hold false candidates: id-0 rows on the 984 MB file)
+        if nat is not None:
+            mini = _native_gather(nat, sp['tags'], sp.get('only'))
+            r = d_.extract_chunk(mini, sp['tags'], -1, sp.get('only'), []) if mini else ([], [])
+            import numpy as np
+            rv = nat['recs'][:4 * nat['k']].reshape(-1, 4); okid = set(rv[np.isin(rv[:, 3], np.asarray(list(sp['tags']), np.int64)), 2].tolist())
+        elif fr is not None:
+            tg = set(sp['tags']); on = set(int(x) for x in sp['only']) if sp.get('only') is not None else None
+            mini = b''.join(PAD8 + chunk[a_:b_] for (a_, b_, e, t) in fr if t in tg and (on is None or e in on))
+            r = d_.extract_chunk(mini, sp['tags'], -1, sp.get('only'), []) if mini else ([], [])
+            okid = {e for (a_, b_, e, t) in fr if t in tg}
+        else:
+            r = d_.extract_chunk(chunk, sp['tags'], -1, sp.get('only'), [])
         lite = sp.get('mode') == 'lite'
         for (eid, c), rec in r[0]:
+            if okid is not None and int(eid) not in okid or int(eid) == 0: continue       # id 0 is never an element: a decode at a zero pad
             if rec.get('fields'): recs.append(((int(eid), c), _lite(c, rec) if lite and c not in FI_REDUCED else FI._reduce(c, rec)))
-    if note_eh: ehc = _eh_candidate_ids(chunk, sizes)
+    if note_eh: ehc = nat['ehc'] if nat is not None else _eh_candidate_ids(chunk, sizes)
     if hdr_ids:
         allh = hdr_ids == 'all'
         r = rd.extract_chunk(chunk, [], _G['EH'], None if allh else hdr_ids, [])
@@ -220,7 +351,223 @@ def _job(job):
                 t += ((tuple(map(float, mm[0])) + tuple(map(float, mm[1]))) if mm and len(mm) == 2 else None,)
             ehs.append((int(eid), t))
         del r
-    return job[:2], (recs, ehs, ehc, (time.process_time() - c0, time.time() - w0, os.getpid(), len(bad)))
+    return job[:2], (recs, ehs, ehc, (time.process_time() - c0, time.time() - w0, os.getpid(), len(bad)), loc)
+
+
+NATIVE = os.environ.get('RVT_Q_NATIVE', '1') == '1'           # C helper _rvtframe.so (inflate from mmap, 102 framing, walk); missing -> Python
+DEBUG = bool(os.environ.get('RVT_Q_DEBUG'))
+LOCATE = os.environ.get('RVT_Q_LOCATE', '1') == '1'
+_NAT = {}
+
+
+def _native():
+    """ctypes handle on _rvtframe.so (next to this file) + libdeflate; None when either is missing (the Python path is used)"""
+    key = (os.getpid(), _G.get('gen'))           # one mmap/chain/id cache per _setup: a second query in the same process (another file, or the same one after a save) must not see the first one's
+    if 'lib' in _NAT and _NAT.get('key') == key: return _NAT['lib']
+    old = _NAT.get('lib')
+    if old is not None and _NAT.get('key', (0,))[0] == os.getpid():
+        try: old['mv'] = None; old['mm'].close()
+        except Exception: pass
+    lib = None; ld = _libdeflate()
+    so = os.path.join(os.path.dirname(os.path.abspath(__file__)), '_rvtframe.so')
+    if ld is not None and os.path.exists(so):
+        import ctypes as C, mmap
+        try:
+            L = C.CDLL(so)
+            for f in ('inflate_task', 'frame102', 'gather', 'eh_candidates'): getattr(L, f).restype = C.c_int64
+            P = C.c_void_p; I = C.c_int64
+            L.inflate_task.argtypes = [P, I, P, I, I, P, I, P, I, P, P, I, P, P, P, P]
+            L.frame102.argtypes = [P, I, P, I, I, P, C.c_int, C.c_uint64, C.c_int, P, I]
+            L.gather.argtypes = [P, P, I, P, P, I, P, I]
+            L.eh_candidates.argtypes = [P, I, C.c_int, C.c_int, P, I, P, I, P, I]
+            LD, _ = ld
+            fnp = C.cast(LD.libdeflate_deflate_decompress_ex, C.c_void_p).value
+            crcp = C.cast(LD.libdeflate_crc32, C.c_void_p).value
+            dec = LD.libdeflate_alloc_decompressor()
+            fd = os.open(_G['path'], os.O_RDONLY); fsize = os.fstat(fd).st_size
+            mm = mmap.mmap(fd, 0, prot=mmap.PROT_READ); os.close(fd)
+            import numpy as np
+            mv = np.frombuffer(mm, np.uint8); base = mv.ctypes.data
+            lib = dict(L=L, C=C, np=np, fnp=fnp, crcp=crcp, dec=dec, mm=mm, mv=mv, base=base, fsize=fsize, chains={},
+                       tmp=np.empty(4 << 20, np.uint8), buf=np.empty(0, np.uint8), ids=np.ascontiguousarray(_G['ids'], np.uint64))
+        except Exception as ex:
+            sys.stderr.write('native helper unavailable: %r\n' % (ex,)); lib = None
+    _NAT.clear(); _NAT.update(lib=lib, key=key); return lib
+
+
+def _native_resync(N, S, a, T):
+    L = N['L']; C = N['C']; np = N['np']
+    if not hasattr(L.resync_segments, '_set'):
+        L.resync_segments.restype = C.c_int64; P = C.c_void_p; I = C.c_int64
+        L.resync_segments.argtypes = [P, I, P, I, I, I, I, P]; L.resync_segments._set = 1
+    if 'rbuf' not in N: N['rbuf'] = np.empty((4 << 20) + 64 + (1 << 14), np.uint8)
+    chain = N['chains'].get(id(S))
+    if chain is None: chain = N['chains'][id(S)] = np.ascontiguousarray(np.array(S.chain, np.int32))
+    return L.resync_segments(N['base'], N['fsize'], chain.ctypes.data, len(chain), S.ss, a, T, N['rbuf'].ctypes.data)
+
+
+def _native_walk_all(N, S, hdr, T):
+    L = N['L']; C = N['C']; np = N['np']
+    if not hasattr(L.walk_all, '_set'):
+        L.walk_all.restype = C.c_int64; P = C.c_void_p; I = C.c_int64
+        L.walk_all.argtypes = [P, I, P, I, I, I, I, P, I, P]; L.walk_all._set = 1
+    if 'rbuf' not in N: N['rbuf'] = np.empty((4 << 20) + 64 + (1 << 14), np.uint8)
+    chain = N['chains'].get(id(S))
+    if chain is None: chain = N['chains'][id(S)] = np.ascontiguousarray(np.array(S.chain, np.int32))
+    cap = S.total // 42 + 64; out = np.empty(5 * cap, np.int64)
+    k = L.walk_all(N['base'], N['fsize'], chain.ctypes.data, len(chain), S.ss, hdr, T, out.ctypes.data, cap, N['rbuf'].ctypes.data)
+    return None if k < 0 else out[:5 * k].reshape(-1, 5).tolist()
+
+
+def _native_walk(N, S, hdr, T):
+    np = N['np']; L = N['L']; C = N['C']
+    if not hasattr(L.walk_segments, '_set'):
+        L.walk_segments.restype = C.c_int64; P = C.c_void_p; I = C.c_int64
+        L.walk_segments.argtypes = [P, I, P, I, I, I, I, P, I, P]; L.walk_segments._set = 1
+    ck = id(S); chain = N['chains'].get(ck)
+    if chain is None: chain = N['chains'][ck] = np.ascontiguousarray(np.array(S.chain, np.int32))
+    cap = 1 << 16; out = np.empty(5 * cap, np.int64); nx = np.zeros(1, np.int64)
+    k = L.walk_segments(N['base'], N['fsize'], chain.ctypes.data, len(chain), S.ss, hdr, T, out.ctypes.data, cap, nx.ctypes.data)
+    return k, int(nx[0]), out[:5 * k].reshape(-1, 5).tolist()
+
+
+def _native_task(S, segs, nmain, ch, bad):
+    """inflate + (102) frame or (101) ElementHeader candidates in C, straight from an mmap of the file; None on any failure (Python path)"""
+    N = _native()
+    if N is None: return None
+    np = N['np']; L = N['L']
+    ck = id(S); chain = N['chains'].get(ck)
+    if chain is None: chain = N['chains'][ck] = np.ascontiguousarray(np.array(S.chain, np.int32))
+    sa = np.array([(x[0], x[1]) for x in segs], np.int64)
+    need = int(sum(x[2] for x in segs) + 8 * len(segs) + 4096)
+    if len(N['buf']) < need: N['buf'] = np.empty(int(need * 1.3), np.uint8)
+    buf = N['buf']; sizes = np.zeros(len(segs), np.int64); badf = np.zeros(len(segs), np.uint8)
+    if int(sa[:, 1].max()) > len(N['tmp']): N['tmp'] = np.empty(int(sa[:, 1].max()) + 4096, np.uint8)
+    n = L.inflate_task(N['base'], N['fsize'], chain.ctypes.data, len(chain), S.ss, sa.ctypes.data, len(segs), buf.ctypes.data, len(buf),
+                       sizes.ctypes.data, N['tmp'].ctypes.data, len(N['tmp']), N['dec'], N['fnp'], N['crcp'], badf.ctypes.data)
+    if n < 0: _G['why'] = 'inflate %d' % n; return None
+    bad.extend(int(segs[i][0]) for i in np.flatnonzero(badf).tolist())      # gzip CRC32 of every segment (libdeflate_crc32 in C): same rule as inflate_run
+    bounds = np.zeros(len(segs) + 1, np.int64); np.cumsum(sizes, out=bounds[1:])
+    if ch == 101:
+        cap = max(1024, n // 64); out = np.empty(2 * cap, np.int64)
+        k = L.eh_candidates(buf.ctypes.data, n, _G['EH'], _G['W'], N['ids'].ctypes.data, len(N['ids']), bounds.ctypes.data, len(segs), out.ctypes.data, cap)
+        if k < 0: _G['why'] = 'eh cap'; return None
+        v = out[0:2 * k:2].astype(np.uint64); sg = out[1:2 * k:2].astype(np.int32); o = np.lexsort((sg, v))
+        return {'ehc': (v[o], sg[o])}
+    cap = n // 20 + 64; recs = np.empty(4 * cap, np.int64)
+    k = L.frame102(buf.ctypes.data, n, bounds.ctypes.data, len(segs), nmain, sa.ctypes.data, 12 + len(_G['cls']), _id_top(), _G['W'], recs.ctypes.data, cap)
+    if k < 0: _G['why'] = 'frame %d' % k; return None
+    return {'buf': buf, 'n': n, 'recs': recs, 'k': k}
+
+
+def _native_gather(nat, tags, only):
+    N = _NAT['lib']; np = N['np']
+    mask = np.zeros(65536, np.uint8); mask[np.asarray(list(tags), np.int64)] = 1
+    on = np.unique(np.asarray([int(x) for x in only], np.uint64)) if only is not None else np.zeros(1, np.uint64)
+    rv = nat['recs'][:4 * nat['k']].reshape(-1, 4)
+    tot = int((rv[:, 1] - rv[:, 0]).sum() + 8 * len(rv)) + 16
+    out = np.empty(tot, np.uint8)
+    if only is not None and not len(on): return b''
+    m = N['L'].gather(nat['buf'].ctypes.data, nat['recs'].ctypes.data, nat['k'], mask.ctypes.data, on.ctypes.data, len(on) if only is not None else 0, out.ctypes.data, tot)
+    return out[:m].tobytes() if m > 0 else b''
+
+
+FRAME = os.environ.get('RVT_Q_FRAME', '1') == '1'             # Python 102 framing when the C helper is unavailable
+PAD8 = bytes(8)
+
+
+def _resync102(chunk, lo, hi, n, nt, W=8):
+    """first record prefix position p in [lo, hi) of a 102 chunk region whose length chain verifies STRONGLY (at least one checked hop: the next
+    prefix equals this record's length; ids in the id table, tags in the schema; up to 6 hops). A candidate whose first record runs past the chunk end
+    cannot be checked: a real one would be the last record start of the chunk, so it is never preferred over a strong one and alone it gives None
+    (the caller falls back to the old scan). Layout from the record start p: [u32 prev length][id: W bytes][u32][u32 L][u16 tag]. -> (p or None, weak seen)"""
+    import numpy as np
+    ro = 4 + W + 4; m = min(hi, n - 24)
+    if m <= lo: return None, False
+    bb = np.frombuffer(chunk, np.uint8)
+    P = np.arange(lo, m)
+    def u32(Q): return bb[Q].astype(np.uint64) | bb[Q + 1].astype(np.uint64) << 8 | bb[Q + 2].astype(np.uint64) << 16 | bb[Q + 3].astype(np.uint64) << 24
+    L = u32(P + ro); T = bb[P + ro + 4].astype(np.int64) | bb[P + ro + 5].astype(np.int64) << 8
+    ok = (T >= 12) & (T < nt)
+    E = P.astype(np.uint64) + ro + 4 + L
+    inside = E + 4 <= n
+    weak = bool((ok & ~inside).any())
+    ii = np.flatnonzero(ok & inside)
+    if not len(ii): return None, weak
+    sel = u32(E[ii].astype(np.int64)) == L[ii]
+    for p in P[ii[sel]].tolist():
+        if _chain_ok(chunk, p, n, nt, 6, W): return p, weak
+    return None, weak
+
+
+def _id_known(e):
+    import numpy as np
+    ids = _G['ids']; k = int(np.searchsorted(ids, np.uint64(e))); return k < len(ids) and int(ids[k]) == e
+
+
+def _id_top():
+    t = _G.get('id_top')
+    if t is None: t = _G['id_top'] = 2 * int(_G['ids'][-1]) + (1 << 20) if len(_G['ids']) else 1 << 40
+    return t
+
+
+def _rid(chunk, p, W):
+    return struct.unpack_from('<Q' if W == 8 else '<I', chunk, p)[0]
+
+
+def _chain_ok(chunk, p, n, nt, hops, W=8):
+    """True when the length chain from p verifies at least 2 hops (next prefix == length; plausible id: below twice the largest table id; tag in the
+    schema), or ends exactly at a run trailer"""
+    uf = struct.unpack_from; top = _id_top(); good = 0; ro = 4 + W + 4
+    for h in range(hops):
+        if p + ro + 6 > n: return good >= 2
+        e = _rid(chunk, p + 4, W); L, = uf('<I', chunk, p + ro); t, = uf('<H', chunk, p + ro + 4)
+        if not (12 <= t < nt) or e >= top: return False
+        E = p + ro + 4 + L
+        if E + 4 > n: return good >= 2
+        if uf('<I', chunk, E)[0] != L: return False
+        good += 1; p = E
+    return True
+
+
+def frame_records(chunk, sizes, segs, nmain, W=8):
+    """[(id pos, record end, id, tag)] of every 102 record whose id lies in the task's main segments, by the length framing of channel 102:
+    [u32 length of the previous record][id: W bytes][u32][u32 L][u16 tag ... L bytes]; a run starts without the previous-length word (inflate_run's 8-byte pad
+    stands in for it). The task's first segment may start mid-run: resync. Every hop is checked (next prefix == L); any mismatch -> None (old scan)."""
+    n = len(chunk); nt = 12 + len(_G['cls']); uf = struct.unpack_from; top = _id_top(); ro = 4 + W + 4; none = (1 << (8 * W)) - 1; tsz = 4 + W + 12
+    bounds = [0]
+    for z in sizes: bounds.append(bounds[-1] + z)
+    if len(bounds) != len(segs) + 1 or bounds[-1] != n: return None
+    main_end = bounds[nmain]
+    rs = [0] + [i for i in range(1, len(segs)) if segs[i][0] != segs[i - 1][0] + segs[i - 1][1] + 24]
+    out = []
+    for k, i in enumerate(rs):
+        if bounds[i] + 8 >= main_end: break
+        run_end = bounds[rs[k + 1]] if k + 1 < len(rs) else n
+        if i == 0:
+            # the task may start mid-run: first verified record start, segment by segment through the main part (blob continuations hold none)
+            p = None; j = 0
+            while p is None and j < nmain and (j == 0 or j not in rs):
+                p, weak = _resync102(chunk, max(4, bounds[j]), bounds[j + 1], n, nt, W)
+                if p is None and weak: _G['why'] = 'weak'; return None
+                j += 1
+            if p is None: continue                  # no record starts before the next run (one big record from an earlier task)
+        else: p = bounds[i] + 4
+        while p + 4 < main_end:
+            if p + ro + 6 > run_end:
+                if run_end < n and p + 4 == run_end: break          # clean end of a complete run (4-byte trailer)
+                if run_end == n: break
+                _G['why'] = 'runend %d %d' % (p, run_end); return None
+            e = _rid(chunk, p + 4, W); L, = uf('<I', chunk, p + ro); t, = uf('<H', chunk, p + ro + 4)
+            if e == none and p + tsz == run_end and L == 0: break          # run terminator: [prefix][id -1][1][0][0], ends exactly at the run end
+            if not (12 <= t < nt) or (e >= top and e != none): _G['why'] = 'tag/id p=%d run_end=%d n=%d main_end=%d e=%x t=%d L=%d %s' % (p, run_end, n, main_end, e, t, L, chunk[p:p+32].hex()); return None
+            E = p + ro + 4 + L
+            out.append((p + 4, min(E, n), e, t))
+            if E + 4 <= run_end:
+                if uf('<I', chunk, E)[0] != L: _G['why'] = 'chain'; return None
+            elif run_end < n: _G['why'] = 'past-run-end'; return None
+            p = E
+    return out
 
 
 FI_REDUCED = ('CategoryElem', 'FamilySurrogate', 'FamSymSurrogate', 'GStyleElem')
@@ -405,6 +752,7 @@ def _setup(path, log):
     rd_full.set_ids(ids.tolist())
     cnames = {i + 12: c['name'] for i, c in enumerate(cls)}
     log('schema + decoder: %.2fs' % (time.time() - t0))
+    _G['gen'] = _G.get('gen', 0) + 1
     _G.update(path=path, fd=fd, st0=st0, damaged=0, o=o, pns=pns, streams=streams, cls=cls, W=W, sch=sch, rd=rd, rd_full=rd_full, ids=ids, owned=owned,
               cnames=cnames, EH=sch.by.get('ElementHeader', -999) + 12)
     consistent()
@@ -427,7 +775,7 @@ class Engine:
     """one fork pool for the whole query: segment walks (biggest partition first), each partition's decode tasks submitted as soon as its walk is back,
     later passes reuse the same workers. Results are keyed (partition index, first segment) so first-wins follows stream order."""
     def __init__(s, workers, log):
-        s.log = log; s.workers = workers; s.pool = None; s.stat = []; s.hdr = None; s.plan_kw = {}      # hdr = 'all': every task also decodes every ElementHeader (scan)
+        s.log = log; s.workers = workers; s.pool = None; s.stat = []; s.loc = {}; s.hdr = None; s.plan_kw = {}      # hdr = 'all': every task also decodes every ElementHeader (scan)
         if workers > 1:
             import multiprocessing as mp
             s.pool = mp.get_context('fork').Pool(workers, initializer=_winit)
@@ -446,7 +794,7 @@ class Engine:
             for pi in order:
                 pn = pns[pi]; segtab[pn] = _job(('walk', pi, pn))[1]
                 for t in plan(pi, pn, segtab[pn], **s.plan_kw):
-                    tasks[t[0]] = t; b = _job(('dec',) + t + (wanted, note_eh, s.hdr))[1]; res[t[0]] = b[:3]; _G['damaged'] = _G.get('damaged', 0) + b[3][3]
+                    tasks[t[0]] = t; b = _job(('dec',) + t + (wanted, note_eh, s.hdr))[1]; res[t[0]] = b[:3]; _G['damaged'] = _G.get('damaged', 0) + b[3][3]; s.loc[t[0]] = b[4] if len(b) > 4 else None
             return segtab, tasks, res
         import queue
         q = queue.Queue(); pending = 0
@@ -458,9 +806,8 @@ class Engine:
         pi0 = order[0]; pn0 = pns[pi0]; sent = set()
         def early(segs):
             nonlocal pending
-            for t in plan(pi0, pn0, segs, **s.plan_kw):
+            for t in plan(pi0, pn0, segs, final_only=True, **s.plan_kw):        # a task whose main part and overlap are full cannot change any more
                 if t[0] in sent: continue
-                if t[0][1] + len(t[2]) >= len(segs): break            # its overlap may still grow: wait
                 sent.add(t[0]); tasks[t[0]] = t; s.pool.apply_async(_job, (('dec',) + t + (wanted, note_eh, s.hdr),), callback=put, error_callback=err); pending += 1
         fd = os.open(_G['path'], os.O_RDONLY)
         try: segtab[pn0] = _G['streams'][pn0].segments(fd, every=512, cb=early)
@@ -482,7 +829,7 @@ class Engine:
                     tasks[t[0]] = t; s.pool.apply_async(_job, (('dec',) + t + (wanted, note_eh, s.hdr),), callback=put, error_callback=err); pending += 1
                 if len(segtab) == len(pns): tw = time.time() - t0
             else:
-                res[head[1]] = body[:3]; s.stat.append(body[3]); _G['damaged'] = _G.get('damaged', 0) + body[3][3]
+                res[head[1]] = body[:3]; s.stat.append(body[3]); _G['damaged'] = _G.get('damaged', 0) + body[3][3]; s.loc[head[1]] = body[4] if len(body) > 4 else None
         s._report('records', len(tasks), t0, 'walks done at %.2fs, %d segments' % (tw or 0, sum(map(len, segtab.values()))))
         return segtab, tasks, res
     def run(s, jobs, what):
@@ -502,27 +849,53 @@ class Engine:
         s.log('%s: %d tasks, %d workers, %.2fs%s' % (what, n, s.workers, time.time() - t0, (', ' + extra) if extra else ''))
 
 
-def header_jobs(segtab, tasks, res, want_ids):
+def header_jobs(segtab, tasks, res, want_ids, per_task=False):
     """header jobs for `want_ids`: only segments that hold an ElementHeader candidate of a wanted id (noted in the record pass), each window from that
-    segment through OVL decoded bytes (the same tail a task has), windows of one task merged; asked for just those ids"""
+    segment through OVL decoded bytes of the same channel (the same tail a task has), windows of one task merged; asked for just those ids"""
     import numpy as np
-    nd = np.array(sorted(int(i) for i in want_ids), np.uint64); jobs = []
+    nd = np.array(sorted(int(i) for i in want_ids), np.uint64); jobs = []; gcache = {}
     for key in sorted(res):
         ehc = res[key][2]
         if ehc is None or not len(ehc[0]): continue
         sel = np.isin(ehc[0], nd)
         if not sel.any(): continue
         _, pn, tsegs, nmain = tasks[key]; pi, k0 = key; segs = segtab[pn]
-        hit_ids = sorted(set(ehc[0][sel].tolist())); starts = sorted(set((k0 + ehc[1][sel]).tolist()))
+        if pn not in gcache:
+            gl = {}
+            for idx in _chan_groups(segs):
+                for p_, g_ in enumerate(idx): gl[g_] = (idx, p_)
+            gcache[pn] = gl
+        idx, p0 = gcache[pn][k0]               # the task's channel group and the position of its first segment in it
+        # each window asks only for the ids whose candidate opened it: asking every window of a task for all of the task's hit ids let a window
+        # opened for another id decode a false header of this id first (first-wins): 1 type lost its category on a 984 MB save
+        by_start = collections.defaultdict(set)
+        for e_, st_ in zip(ehc[0][sel].tolist(), (p0 + ehc[1][sel]).tolist()): by_start[st_].add(e_)
         win = []
-        for st in starts:
-            st = max(0, st - 1)                # from the previous segment: a record's bytes before its id may sit there
+        for st0 in sorted(by_start):
+            st = max(0, st0 - 1)               # from the previous segment: a record's bytes before its id may sit there
             m = st; ov = 0
-            while m < len(segs) and (m <= st + 1 or ov < OVL): ov += segs[m][2]; m += 1
-            if win and st <= win[-1][1]: win[-1][1] = max(win[-1][1], m)
-            else: win.append([st, m])
-        for a, b in win: jobs.append(((pi, a), pn, segs[a:b], b - a, [], False, hit_ids))
+            while m < len(idx) and (m <= st + 1 or ov < OVL): ov += segs[idx[m]][2]; m += 1
+            if win and st <= win[-1][1]: win[-1][1] = max(win[-1][1], m); win[-1][2] |= by_start[st0]
+            else: win.append([st, m, set(by_start[st0])])
+        if per_task:                           # round 2 (old rule): every window of the task asks for all of the task's hit ids
+            allh = sorted(set(ehc[0][sel].tolist())); win = [[a, b, allh] for a, b, _ in win]
+        for a, b, ids_ in win: jobs.append(((pi, idx[a]), pn, [segs[x] for x in idx[a:b]], b - a, [], False, sorted(ids_)))
     return jobs
+
+
+def headers(E, segtab, tasks, res, want_ids):
+    """{eid: header tuple}, first-wins in stream order. Round 1: each window asks only for the ids whose candidate opened it (precise). Round 2, only for
+    ids round 1 did not find: every window of their tasks asks for them (the old rule; one railing header on two 984 MB saves is found only this way)."""
+    hdr = {}
+    for key, (_, ehs, _) in sorted(E.run(header_jobs(segtab, tasks, res, want_ids), 'headers').items()):
+        for e, h in ehs:
+            if e not in hdr: hdr[e] = h
+    miss = [e for e in want_ids if e not in hdr]
+    if miss:
+        for key, (_, ehs, _) in sorted(E.run(header_jobs(segtab, tasks, res, miss, per_task=True), 'headers (round 2)').items()):
+            for e, h in ehs:
+                if e not in hdr: hdr[e] = h
+    return hdr
 
 
 def classes(path, want, header_ids=None, workers=None, log=None, last_wins=False):
@@ -531,9 +904,12 @@ def classes(path, want, header_ids=None, workers=None, log=None, last_wins=False
     log = log or (lambda *a: None); workers = workers or _workers()
     G = _setup(path, log); pred = want if callable(want) else (lambda c, w=set(want): c in w)
     wanted = sorted(t for t, n in G['cnames'].items() if pred(n))
+    log('  @%.3f setup done' % (time.time() - _T0))
     E = Engine(workers, log)
+    log('  @%.3f pool up' % (time.time() - _T0))
     try:
         segtab, tasks, res = E.walk_and_decode(wanted, header_ids is not None)
+        log('  @%.3f records done' % (time.time() - _T0))
         recs = {}
         for key in sorted(res):
             for k, v in res[key][0]:
@@ -541,10 +917,7 @@ def classes(path, want, header_ids=None, workers=None, log=None, last_wins=False
         hdr = {}
         hid = header_ids(recs) if callable(header_ids) else header_ids
         if hid:
-            hres = E.run(header_jobs(segtab, tasks, res, hid), 'headers')
-            for key in sorted(hres):
-                for e, h in hres[key][1]:
-                    if e not in hdr: hdr[e] = h
+            hdr = headers(E, segtab, tasks, res, list(hid))
     finally: E.close()
     return recs, hdr, G
 
@@ -725,6 +1098,8 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
     spec = [x for x in spec if x['tags']]
     fl = (want | aux) & sym
     if fl: spec.append({'tags': sorted(tag_of[n] for n in fl if n in tag_of), 'mode': 'lite', 'full': True})
+    stags = sorted(tag_of[n] for n in sym - {'Level'} if n in tag_of)
+    if names and stags and LOCATE: spec.append({'tags': stags, 'locate': True})
     E = Engine(workers, log)
     try:
         segtab, tasks, res = E.walk_and_decode(spec, True)
@@ -738,9 +1113,7 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
         # ElementHeaders of the result ids: category, owner view, family
         hdr = {}
         if rows:
-            for key, (_, ehs, _) in sorted(E.run(header_jobs(segtab, tasks, res, list(rows)), 'headers').items()):
-                for e, h in ehs:
-                    if e not in hdr: hdr[e] = h
+            hdr = headers(E, segtab, tasks, res, list(rows))
         # type records (names) by id: only type classes, no-STOP decoder, only the referenced ids
         tid = {}
         for e, (c, r) in rows.items():
@@ -751,10 +1124,42 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
         types = {}
         need = sorted({v for v in tid.values()} - {e for (e, c) in full})
         if names and need:
-            stags = sorted(tag_of[n] for n in sym - {'Level'} if n in tag_of)
-            jobs = [t + ([{'tags': stags, 'mode': 'lite', 'full': True, 'only': need}], False, None) for t in (tasks[k] for k in sorted(tasks))]
-            for key, (rr, _, _) in sorted(E.run(jobs, 'types by id').items()):
-                for (e, c), r in rr:
+            import numpy as np
+            nd = np.asarray(need, np.uint64)
+            def has(k):     # the record locator of pass 1 (102 tasks framed natively): only tasks that hold a needed type record; unknown -> asked
+                lc = E.loc.get(k)
+                if lc is None:
+                    t_ = tasks[k]; return not (SPLIT and len(t_[2][0]) > 3 and t_[2][0][3] == 101)       # 101 tasks decode no records under SPLIT
+                return bool(np.isin(lc, nd).any())
+            # only the occurrence that wins can matter (rule last: the last task holding the id, first: the first); tasks without a locator get every id.
+            # ids that come back without a decoded record are asked again of every task holding them (round 2 = the old rule for those ids)
+            ks = sorted(tasks); assign = collections.defaultdict(set); unknown = []
+            for k in ks:
+                lc = E.loc.get(k)
+                if lc is None:
+                    if has(k): unknown.append(k)
+                    continue
+                for e in lc[np.isin(lc, nd)].tolist(): assign[e].add(k)
+            per = collections.defaultdict(set)
+            for e in need:
+                if e in assign: per[max(assign[e]) if rule == 'last' else min(assign[e])].add(e)
+            for k in unknown: per[k] |= set(need)
+            def tjobs(per_):
+                return [tasks[k] + ([{'tags': stags, 'mode': 'lite', 'full': True, 'only': sorted(per_[k])}], False, None) for k in sorted(per_)]
+            got = collections.defaultdict(list)
+            for key, (rr, _, _) in E.run(tjobs(per), 'types by id').items():
+                for (e, c), r in rr: got[key].append((e, c, r))
+            miss = set(need) - {e for v in got.values() for e, _, _ in v}
+            if miss:
+                per2 = collections.defaultdict(set)
+                for e in miss:
+                    for k in assign.get(e, ()): per2[k].add(e)
+                for k in unknown: per2[k] |= miss
+                for key, (rr, _, _) in E.run(tjobs(per2), 'types by id (round 2)').items():
+                    for (e, c), r in rr:
+                        if e in miss: got[key].append((e, c, r))
+            for key in sorted(got):
+                for e, c, r in got[key]:
                     if rule == 'last' or e not in types: types[e] = (c, r)
         tv = set(tid.values())
         for (e, c), r in full.items():
