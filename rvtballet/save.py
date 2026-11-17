@@ -621,6 +621,7 @@ _UNTOUCHED = ("untouched", "not touched", "unchanged", "nothing was written", "n
 def user_message(exc, status=None):
     """refusal text for the user: the error plus a plain statement that no file was changed (unless it already says so). Not for 5xx after the write started."""
     m = str(exc).rstrip(". ")
+    if "the previous version was restored from its backup" in m and "RESTORE FAILED" not in m: return m + ". The previous version is back on disk (restored from the backup made before the save); nothing more to restore"
     if "after rename" in m: return m + ". The file on disk WAS replaced and may be damaged; use RESTORE to bring back the previous version (the backup was made before the save)"      # found wrong after the replace: never claim it is untouched
     if "'member_span'" in m and type(exc).__name__ == 'VerifyFailed':      # growing/shrinking a text value re-lays out the rest of its data block: the safety check treats that wide change as unexpected (a safe refusal, not damage)
         return m + ". This edit changes the length of a stored value, which shifts other data in the same block, so it could not be proven safe and was refused; the model file was not touched. Try a replacement value of the same length"
