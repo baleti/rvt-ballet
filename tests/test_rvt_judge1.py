@@ -74,7 +74,7 @@ def test_twin_string_supported_and_refused():
     assert j.twin_string([{"kind": "move", "eid": 7, "d": [2, 0, 0]}]) == "move|7|2.0|0.0|0.0"
     assert j.twin_string([{"kind": "rotate", "eid": 7, "deg": 90}]) == "rotate|7|90.0"
     assert j.twin_string([{"kind": "param", "eid": 7, "name": "Mark", "type": "String", "value": "A|B"}]) == ""
-    assert j.twin_string([{"kind": "absent", "eid": 7}]) == ""
+    assert j.twin_string([{"kind": "absent", "eid": 7}]) == "delete|7"   # absent = delete twin since ba5a95e
 
 
 def test_watchdog_limit_bounded_and_overridable(monkeypatch):
