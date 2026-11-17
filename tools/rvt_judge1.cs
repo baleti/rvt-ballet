@@ -21,7 +21,7 @@ app.FailuresProcessing += fh;
 string phaseNow = "";
 EventHandler<Autodesk.Revit.UI.Events.DialogBoxShowingEventArgs> dh = (s, e) => { log.AppendLine("DIALOG " + e.DialogId); if (phaseNow == "twin") { try { e.OverrideResult(1); } catch {} } };
 try { UIApp.DialogBoxShowing += dh; } catch {}
-Func<byte[], IEnumerable<byte>> Sha = b => { var t = Type.GetType("System.Security.Cryptography.SHA256, System.Security.Cryptography"); var h = t.GetMethod("Create", Type.EmptyTypes).Invoke(null, null); return (byte[])h.GetType().GetMethod("ComputeHash", new[] { typeof(byte[]) }).Invoke(h, new object[] { b }); };
+Func<byte[], IEnumerable<byte>> Sha = b => { var t = Type.GetType("System.Security.Cryptography.SHA256, System.Security.Cryptography") ?? Type.GetType("System.Security.Cryptography.SHA256"); var h = t.GetMethod("Create", Type.EmptyTypes).Invoke(null, null); return (byte[])h.GetType().GetMethod("ComputeHash", new[] { typeof(byte[]) }).Invoke(h, new object[] { b }); };
 Func<Document, string[]> dump = (d) => {
   var res = new List<string>();
   var all = new FilteredElementCollector(d).WhereElementIsNotElementType().ToList();
