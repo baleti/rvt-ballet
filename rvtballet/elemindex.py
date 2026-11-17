@@ -282,6 +282,16 @@ def _footer_ok(f, ln, foot):
     return True
 
 
+def _last_page_ecc_ok(o, name):
+    """True/False = the page ECC of the LAST (short) page of the raw partition stream verifies / fails (the high-entropy tail block IS that page's parity: VM 2024, a zeroed run is refused, a 1-bit flip is corrected and opens); None = ECC module unavailable"""
+    try:
+        _paths(); sys.path.append(os.path.expanduser("~/rvt-research/write-lab")); import rvtw, ecc
+        d = o.openstream(name).read(); full = len(d) // rvtw.PAGE_STORED; last = d[full * rvtw.PAGE_STORED:]
+        if not last: return True
+        return ecc.params(len(last)) is not None and bool(ecc.check(last))
+    except Exception: return None
+
+
 def verify_partition(o, name):
     """integrity of the segment chain of one partition (read-only; for a writer's post-save gate): every segment inflates to exactly its declared inflated_len with a matching gzip CRC32/ISIZE trailer,
     segments do not overlap, and the bytes between segments (interludes) are returned so a writer can prove it kept them byte-identical.
@@ -387,7 +397,8 @@ def compare_partitions(orig, out, name, allow_added=True):
     if tb.startswith(core): slack = tb[len(core):]
     else:
         nz_a = len(ta) - ta.count(0); nz_b = len(tb) - tb.count(0)
-        if nz_a and nz_b < 0.9 * nz_a: reasons.append("trailer damaged: %d non-zero bytes -> %d (a zeroed trailer run made Revit 2024 refuse the file; legit saves keep the count)" % (nz_a, nz_b))
+        ecc_ok = _last_page_ecc_ok(out, name)
+        if nz_a and nz_b < 0.9 * nz_a and ecc_ok is not True: reasons.append("trailer damaged: %d non-zero bytes -> %d (a zeroed trailer run made Revit 2024 refuse the file; legit saves keep the count)" % (nz_a, nz_b))
         warnings.append("tail block (%d B, %d non-zero) differs from the original (%d non-zero): a high-entropy trailer after the last segment changed; meaning unknown, VM-check it" % (len(tb), len(tb) - tb.count(0), len(ta) - ta.count(0)))
     if slack.count(0) != len(slack): reasons.append("tail slack is not all zero")
     return dict(ok=not reasons, reasons=reasons, warnings=warnings, changed_segments=changed, added_segments=added, tail_slack=len(slack), tail_slack_all_zero=(slack.count(0) == len(slack)))
