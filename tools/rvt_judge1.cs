@@ -113,7 +113,7 @@ try {
   d = app.OpenDocumentFile(ModelPathUtils.ConvertUserVisiblePathToModelPath(sp), new OpenOptions());
   phase = "dump2"; d2 = dump(d);
   d.Close(false); d = null;
-  try { System.IO.File.Delete(sp); } catch {}
+  if ("__KEEP__" != "1") { try { System.IO.File.Delete(sp); } catch {} }
   var s1 = new HashSet<string>(d1); var s2 = new HashSet<string>(d2);
   log.AppendLine("COMPARE only_original=" + d1.Count(x => !s2.Contains(x)) + " only_resaved=" + d2.Count(x => !s1.Contains(x)));
   foreach (var x in d1.Where(x => !s2.Contains(x)).Take(5)) log.AppendLine("  ORIG " + x); foreach (var x in d2.Where(x => !s1.Contains(x)).Take(5)) log.AppendLine("  SAVED " + x);

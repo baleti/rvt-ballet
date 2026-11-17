@@ -81,7 +81,7 @@ def verdict(c, o, exp, allowed, emit=print):
 def guest_run(guest, year, f, loc, par, tag, wd, tries=3, ed=(), twin='', timeout=0):
     """one open of f in the guest; returns j1 text or None (infrastructure)"""
     base = tag + os.path.splitext(f)[1]
-    cs = open(CS).read().replace('__FILE__', 'C:/wl/' + base).replace('__TAG__', tag).replace('__LOCIDS__', ','.join(loc)).replace('__TWIN__', twin).replace('__EDIDS__', ','.join(str(x) for x in ed)).replace('__PARITEMS__', RS.join(par)).replace('__IDT__', 'long' if year >= 2024 else 'int')
+    cs = open(CS).read().replace('__FILE__', 'C:/wl/' + base).replace('__TAG__', tag).replace('__LOCIDS__', ','.join(loc)).replace('__TWIN__', twin).replace('__KEEP__', '1' if os.environ.get('RVT_JUDGE1_KEEP_SAVED') else '0').replace('__EDIDS__', ','.join(str(x) for x in ed)).replace('__PARITEMS__', RS.join(par)).replace('__IDT__', 'long' if year >= 2024 else 'int')
     # Revit 2020-2023 API has no ElementId(long) constructor (CS1503 compile error): the id type is per year
     for k in range(tries):
         port = guest.fresh(year)
@@ -97,6 +97,11 @@ def guest_run(guest, year, f, loc, par, tag, wd, tries=3, ed=(), twin='', timeou
         lf = os.path.join(wd, tag + '_j1.txt')
         if os.path.exists(lf): os.remove(lf)
         guest.get('C:/wl/out/%s_j1.txt' % tag, lf, 600)
+        if os.environ.get('RVT_JUDGE1_KEEP_SAVED'):      # evidence helper: pull the Revit-made SaveAs copy of this file (to a dir of your choice) and remove it in the guest
+            ext = os.path.splitext(f)[1]; kd = os.environ['RVT_JUDGE1_KEEP_SAVED']; os.makedirs(kd, exist_ok=True)
+            if guest.get('C:/wl/out/%s_j1saved%s' % (tag, ext), os.path.join(kd, '%s_revit_saved%s' % (tag, ext)), 900): print('KEPT Revit-saved copy of %s -> %s' % (tag, kd), flush=True)
+            try: guest.gssh("Remove-Item -Force -EA 0 'C:/wl/out/%s_j1saved%s'" % (tag, ext), 60)
+            except Exception: pass
         try: guest.gssh("Remove-Item -Force -EA 0 'C:/wl/%s','C:/wl/out/%s_j1.txt'" % (base, tag), 60)
         except Exception: pass
         txt = open(lf, errors='replace').read() if os.path.exists(lf) else ''
