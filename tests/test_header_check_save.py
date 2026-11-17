@@ -23,4 +23,6 @@ off = [l[2] for l in log if l[1] == 'FamilyBase.m_categoryId'][0]; s2._replace(o
 out2 = d + '/famflip.rvt'; s2.write(out2)
 fd = headercheck.deep_diff(F, out2); assert len(fd) == 1 and 'Family %d' % FAM in fd[0], fd
 assert headercheck.deep_diff(F, out2, {FAM}) == []
+hf = headercheck.header_diff(open(F, 'rb').read(), open(out2, 'rb').read(), [FAM]); assert hf and 'body category' in hf[0], hf      # per-edit layer
+assert headercheck.header_diff(open(F, 'rb').read(), open(F, 'rb').read(), [FAM]) == []
 print('ok')

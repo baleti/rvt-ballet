@@ -14,6 +14,17 @@ def _headers(buf, eids):
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _family_body_cats(buf, eids):
+    from . import fastquery, categories
+    d = tempfile.mkdtemp(prefix="rvtballet-hf-")
+    try:
+        f = os.path.join(d, "x.rvt"); open(f, "wb").write(buf); want = set(eids)
+        r = fastquery.classes(f, {"Family"})[0]
+        return {int(e): categories._sc(v["fields"]["m_categoryId"]) for (e, c), v in r.items() if int(e) in want and v["fields"].get("m_categoryId") is not None}
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def header_diff(src_buf, out_buf, eids):
     """-> list of messages for edited ids whose header tuple differs (or whose header vanished from the output)"""
     eids = sorted(set(eids))
@@ -23,6 +34,9 @@ def header_diff(src_buf, out_buf, eids):
         if e not in a: continue      # no header in the source (reader limit): nothing to compare
         if e not in b: bad.append("element %d: header missing in the output" % e)
         elif tuple(map(str, a[e])) != tuple(map(str, b[e])): bad.append("element %d: header (category, owner view, family, class) changed %s -> %s" % (e, tuple(map(str, a[e])), tuple(map(str, b[e]))))
+    fa, fb = _family_body_cats(src_buf, eids), _family_body_cats(out_buf, eids)      # Family body category: live in Revit (types take it), not in any header
+    for e, v in fa.items():
+        if fb.get(e) != v: bad.append("Family %d: body category (m_categoryId) changed %s -> %s" % (e, v, fb.get(e)))
     return bad
 
 
