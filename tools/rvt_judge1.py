@@ -116,6 +116,22 @@ def twin_string(exp):
         else: return ''
     return RS.join(out)
 
+def watchdog_limit(n_cases, n_years):
+    """seconds a batch may hold the lane: generous (b10: 2 cases, 2 years held 773 s, limit 2700 s) but bounded. RVT_JUDGE1_MAX_SEC overrides."""
+    return int(os.environ.get('RVT_JUDGE1_MAX_SEC') or 900 + 500 * n_cases + 400 * n_years)
+
+def _arm_watchdog(n_cases, n_years, rd):
+    """infrastructure hang (Revit never ready on a wedged lane: b9/b11 polled the guest for 35 min) -> INFRA exit 3, lane out of rotation, lock freed by process exit. Checks are not touched."""
+    import threading
+    lim = watchdog_limit(n_cases, n_years)
+    def fire():
+        print('INFRA watchdog: lane held more than %d s without finishing, exiting 3 (lane marked degraded)' % lim, flush=True)
+        try: open(os.path.join(rd, 'degraded'), 'w').write(str(time.time()))
+        except Exception: pass
+        os._exit(3)
+    t = threading.Timer(lim, fire); t.daemon = True; t.start()
+    return t
+
 def judge_batch(cases, wd):
     """cases: [dict(year, orig, out, exp, allowed, name)] -> list of (case, code, why). One lane lock for everything."""
     import guest
@@ -128,6 +144,7 @@ def judge_batch(cases, wd):
     res = []; t_enq = time.time()
     with guest.vmlock() as lk:
         t_acq = time.time(); print('LOCK lane=%s wait=%.0fs' % (os.path.basename(guest.RD.rstrip('/')), t_acq - t_enq), flush=True)
+        _arm_watchdog(len(cases), len({c['year'] for c in cases}), guest.RD)
         ctltxt = {}
         for (year, osha), (loc, par) in sorted(ctl.items()):
             loc = sorted(loc, key=int); par = sorted(par)

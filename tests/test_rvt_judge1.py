@@ -75,3 +75,13 @@ def test_twin_string_supported_and_refused():
     assert j.twin_string([{"kind": "rotate", "eid": 7, "deg": 90}]) == "rotate|7|90.0"
     assert j.twin_string([{"kind": "param", "eid": 7, "name": "Mark", "type": "String", "value": "A|B"}]) == ""
     assert j.twin_string([{"kind": "absent", "eid": 7}]) == ""
+
+
+def test_watchdog_limit_bounded_and_overridable(monkeypatch):
+    import importlib.util, os
+    spec = importlib.util.spec_from_file_location("j1", os.path.join(os.path.dirname(__file__), "..", "tools", "rvt_judge1.py"))
+    j = importlib.util.module_from_spec(spec); spec.loader.exec_module(j)
+    monkeypatch.delenv("RVT_JUDGE1_MAX_SEC", raising=False)
+    assert j.watchdog_limit(2, 2) == 2700 and j.watchdog_limit(2, 2) > 773
+    monkeypatch.setenv("RVT_JUDGE1_MAX_SEC", "5")
+    assert j.watchdog_limit(9, 9) == 5
