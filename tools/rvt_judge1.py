@@ -172,7 +172,8 @@ def judge_batch(cases, wd):
                     if newvol and set(newvol) >= set(ids):      # every differing id is proven volatile on the unedited control: the verdict is the rest of the checks (all passed)
                         vf = os.path.join(CAC, 'volatile_%s_%s_%s.txt' % (c['year'], c['osha'][:24], cshash)); open(vf, 'a').write(''.join('VOLATILE %d\n' % k for k in newvol))
                         code, why = 0, 'control and output open clean, readback exact, differing ids %s proven volatile on the unedited control (added to the noise floor)' % newvol
-            if code == 1 and why.startswith('untouched') and ', 0 undeclared missing, 0 new' in why and os.environ.get('RVT_JUDGE1_TWIN', '1') == '1':
+            force_twin = os.environ.get('RVT_JUDGE1_TWIN_FORCE') == '1' and code == 0      # evidence only: run the twin on a PASS too, never changes the verdict
+            if (force_twin or (code == 1 and why.startswith('untouched') and ', 0 undeclared missing, 0 new' in why)) and os.environ.get('RVT_JUDGE1_TWIN', '1') == '1':
                 # c8x-rvtjudge: every id still differing outside the allowed list must be PROVEN, never declared away:
                 #  (a) DEPENDENT: its hash in our output equals its hash in the Revit-made twin (same API edit applied inside Revit to the unedited file), or
                 #  (b) TRANSIENT first-open: our output's two opens disagree on it, its settled (second-open) hash equals the control's (and the twin's), and its element class is one that
@@ -183,6 +184,7 @@ def judge_batch(cases, wd):
                     tt = guest_run(guest, c['year'], c['orig'], [], [], 'j1t%s' % osha[:8], wd, tries=2, twin=tw, timeout=420)
                     if tt and 'TWIN applied' in tt and parse(tt)['opened']: pt = parse(tt)['eh']
                     else: lines.append('TWIN: no usable twin (%s)' % ((tt or '')[:150].replace(chr(10), ' ') if tt else 'no output'))
+                if force_twin: lines.append('TWINFORCE: twin %s; ids differing output vs twin (outside allowed, not volatile): %s' % ('usable' if pt is not None else 'NOT usable', sorted(k for k in (pt or {}).keys() & po['eh'].keys() if pt[k] != po['eh'][k] and k not in c['allowed'] and k not in pc['volatile'])[:10] if pt is not None else 'n/a'))
                 vol = pc['volatile']; volcls = {pc['ec'].get(k) for k in vol} - {None}
                 rest = sorted(k for k in pc['eh'].keys() & po['eh'].keys() if pc['eh'][k] != po['eh'][k] and k not in c['allowed'] and k not in vol)
                 dep, tra, bad = classify_extra(rest, pc, po, pe, pt, volcls)
