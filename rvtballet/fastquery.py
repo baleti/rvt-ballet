@@ -10,6 +10,7 @@ Why it is fast (measured on a 984 MB project file, see docs/rvt-fast-query.md):
 Read-only: the file is opened once with O_RDONLY and never written; a file that changes while it is read raises FileChanged instead of returning an answer.
 """
 import os, sys, struct, zlib, time, collections
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')        # numpy is used without BLAS here; saves starting one idle thread per core per process
 _T0 = time.time()
 
 PAGE_STORED = 65249; PAGE_PAYLOAD = 64896
@@ -320,7 +321,7 @@ def _job(job):
             elif fr is not None:
                 tg = set(sp['tags']); loc = np.unique(np.asarray([e for (a_, b_, e, t) in fr if t in tg], np.uint64))
             continue
-        d_ = _G['rd_full'] if sp.get('full') else rd
+        d_ = (_G.get('rd_sym') or _G['rd_full']) if sp.get('dec') == 'sym' else (_G.get('rd_inl') or rd) if sp.get('dec') == 'inl' else _G['rd_full'] if sp.get('full') else rd
         okid = None               # framed paths: a decode is kept only for an id the framing put in the mini buffer (zero pads and record bodies can
                                   # hold false candidates: id-0 rows on the 984 MB file)
         if nat is not None:
@@ -335,10 +336,14 @@ def _job(job):
             okid = {e for (a_, b_, e, t) in fr if t in tg}
         else:
             r = d_.extract_chunk(chunk, sp['tags'], -1, sp.get('only'), [])
-        lite = sp.get('mode') == 'lite'
+        lite = sp.get('mode') == 'lite'; keep = sp.get('keep')
         for (eid, c), rec in r[0]:
             if okid is not None and int(eid) not in okid or int(eid) == 0: continue       # id 0 is never an element: a decode at a zero pad
-            if rec.get('fields'): recs.append(((int(eid), c), _lite(c, rec) if lite and c not in FI_REDUCED else FI._reduce(c, rec)))
+            if rec.get('fields'):
+                rr = _lite(c, rec) if lite and c not in FI_REDUCED else FI._reduce(c, rec)
+                if keep is not None and isinstance(rr, dict) and isinstance(rr.get('fields'), dict):
+                    rr = dict(rr, fields={k: v for k, v in rr['fields'].items() if k in keep})
+                recs.append(((int(eid), c), rr))
     if note_eh: ehc = nat['ehc'] if nat is not None else _eh_candidate_ids(chunk, sizes)
     if hdr_ids:
         allh = hdr_ids == 'all'
@@ -357,6 +362,16 @@ def _job(job):
 NATIVE = os.environ.get('RVT_Q_NATIVE', '1') == '1'           # C helper _rvtframe.so (inflate from mmap, 102 framing, walk); missing -> Python
 DEBUG = bool(os.environ.get('RVT_Q_DEBUG'))
 LOCATE = os.environ.get('RVT_Q_LOCATE', '1') == '1'
+# speedups 2026-11-17 (each switch =0 restores the previous behaviour; outputs identical on a 984 MB 2024 file, 30 commands x 3 saves, and on the samples)
+SLIM = os.environ.get('RVT_Q_SLIM', '1') == '1'           # collect pass 1: workers send back only the record keys collect reads
+SYMSTOP = os.environ.get('RVT_Q_SYMSTOP', '1') == '1'     # type records read for their name only: decoder stopping after SymbolInfo (rd_sym)
+INLINE = os.environ.get('RVT_Q_INLINE', '1') == '1'       # collect pass 1, no extra fields: inline-fields-only decoder (rd_inl) for classes _inline_safe
+EARLYCAT = os.environ.get('RVT_Q_EARLYCAT', '1') == '1'   # collect: category filter before the types-by-id pass
+R2SKIP = os.environ.get('RVT_Q_R2SKIP', '1') == '1'       # collect types-by-id round 2: skip (task, id) pairs round 1 already asked
+FASTFAT = os.environ.get('RVT_Q_FASTFAT', '1') == '1'     # _setup: linear olefile FAT load
+ESCACHE = os.environ.get('RVT_Q_ESCACHE', '0') == '1'     # _setup: 1 = rvt_fast.es_load (second open of the file + pickle cache of earlier runs)
+ESFORK = os.environ.get('RVT_Q_ESFORK', '1') == '1'       # _setup: ES schemas computed in a forked child while the decoders are built
+ES_TIMEOUT = float(os.environ.get('RVT_Q_ES_TIMEOUT', '5'))
 _NAT = {}
 
 
@@ -727,6 +742,108 @@ def _ids_owned(et, W):
     return uniq(np.concatenate([a, b[(b > 0) & (b < top)]])), uniq(a[ow != 0xffffffffffffffff])
 
 
+def _es_start(o, sch, W, rvtfmt, F):
+    """fork a child that computes rvt_fast.find_schemas of Global/Latest (0.1 s of Rust on a 984 MB file) and pickles it into a pipe; None on any failure
+    (the caller then computes it in process)"""
+    try:
+        gl = rvtfmt.inflate_stream(o.openstream('Global/Latest').read())[1]
+        import warnings
+        r_, w_ = os.pipe()
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)      # idle BLAS threads may exist; the worker pool forks the same way
+            pid = os.fork()
+    except Exception: return None
+    if pid == 0:
+        ok = 1
+        try:
+            os.close(r_); import pickle; data = pickle.dumps(F.find_schemas(gl, sch, W), 5); v = memoryview(data)
+            while v: v = v[os.write(w_, v):]
+            ok = 0
+        except BaseException: pass
+        finally: os._exit(ok)
+    os.close(w_); return (pid, r_)
+
+
+def _es_join(esj):
+    """the child's schemas, or None (no child, child failed or stuck past ES_TIMEOUT, short or unreadable data)"""
+    if esj is None: return None
+    import select
+    pid, r_ = esj; parts = []; dl = time.time() + ES_TIMEOUT
+    try:
+        while True:
+            if not select.select([r_], [], [], max(0.0, dl - time.time()))[0]: parts = None; break
+            b = os.read(r_, 1 << 20)
+            if not b: break
+            parts.append(b)
+    except Exception: parts = None
+    finally: os.close(r_)
+    if parts is None:
+        try: os.kill(pid, 9)
+        except Exception: pass
+    try: st = os.waitpid(pid, 0)[1]
+    except Exception: st = -1
+    if parts is None or st != 0: return None
+    try:
+        import pickle; return pickle.loads(b''.join(parts))
+    except Exception: return None
+
+
+_OLE = {}
+
+
+def _ole_class(olefile):
+    """olefile.OleFileIO with a linear FAT load: OleFileIO.loadfat_sect grows the FAT with `self.fat = self.fat + nextfat` per FAT sector (quadratic:
+    20-50 ms on a 984 MB file, 1-2 ms here); each sector is appended in place. Same FAT, same end-of-chain rule."""
+    if 'c' not in _OLE:
+        import array
+        from olefile import olefile as _of
+        class _Ole(olefile.OleFileIO):
+            def loadfat_sect(self, sect):
+                fat1 = sect if isinstance(sect, array.array) else self.sect2array(sect)
+                isect = None
+                for isect in fat1:
+                    isect = isect & 0xFFFFFFFF
+                    if isect == _of.ENDOFCHAIN or isect == _of.FREESECT: break
+                    self.fat.extend(self.sect2array(self.getsect(isect)))
+                return isect
+        _OLE['c'] = _Ole
+    return _OLE['c']
+
+
+NAME_SRC = ('m_text', 'm_viewName', 'm_name', 'm_symbolInfo', 'm_pMaterial', 'm_pAppearanceAsset')     # _lite name sources
+
+
+def _has_ptr(cls, f, depth=0):
+    """a schema field whose value is or holds a pointer slot (rvt_decode.Dec.elem: kind 0x0e with flags 1-4 or a pointer set/vector) or an embedded struct
+    (kind 0x0e) of a class with such a field. Unknown -> True."""
+    if depth > 8: return True
+    for T in f.get('types') or ():
+        kind = T & 0xff; fl = (T >> 8) & 0xff
+        if kind != 0x0e: continue
+        if fl in (1, 2, 3, 4) or (fl & 0xf0) == 0x50 and (fl & 0x0f): return True
+        if fl in (0, 0x50, 0x10, 0x40):
+            ref = f.get('ref') if f.get('ref') is not None else f.get('ref2')
+            if ref is None: return True
+            ci = (ref & 0x7fff) - 12
+            if not 0 <= ci < len(cls): return True
+            if any(_has_ptr(cls, g, depth + 1) for g in cls[ci].get('fields') or ()): return True
+        else: return True
+    return False
+
+
+def _inline_safe(cls, ci, keys):
+    """True when every field of class ci (and its ancestors) that collect reads (keys + the _lite name sources) is decoded inline, so a decoder that stops
+    at the first queued pointer object gives the same values (MaterialElem: False, its name is in m_pMaterial)"""
+    want = set(keys) | set(NAME_SRC); seen = 0
+    while 0 <= ci < len(cls) and seen < 64:
+        for f in cls[ci].get('fields') or ():
+            if f.get('name') in want and _has_ptr(cls, f): return False
+        p = cls[ci].get('parent'); p = p & 0x7fff if isinstance(p, int) else None
+        if p is None or not 12 <= p < 12 + len(cls) or p - 12 == ci: break
+        ci = p - 12; seen += 1
+    return True
+
+
 def _setup(path, log):
     from . import rvtfile as FI
     FI._tune(); FI._paths()
@@ -739,30 +856,48 @@ def _setup(path, log):
         _G['fd'] = None
     fd = os.open(path, os.O_RDONLY); st0 = _stamp(os.fstat(fd))           # read-only, the only handle: olefile and every forked worker read through it
     _G.update(path=path, fd=fd, st0=st0)                                     # set first: an error while parsing a file that is being saved is reported as a change
-    o = olefile.OleFileIO(os.fdopen(os.dup(fd), 'rb')); names = ['/'.join(e) for e in o.listdir(streams=True)]
+    o = (_ole_class(olefile) if FASTFAT else olefile.OleFileIO)(os.fdopen(os.dup(fd), 'rb')); names = ['/'.join(e) for e in o.listdir(streams=True)]
     pns = sorted(n for n in names if n.startswith('Partitions/'))
     streams = {pn: Stream(o, pn) for pn in pns}; _G.pop('views', None); _G.pop('groups', None)
     cls, _ = fp.parse(rvtfmt.inflate_stream(o.openstream('Formats/Latest').read())[1])
     W = S.id_size(cls); sch = D.Schema(cls)
+    esj = _es_start(o, sch, W, rvtfmt, F) if not ESCACHE and ESFORK else None     # ES schemas in a forked child while the rest is built
     import numpy as np
     et = rvtfmt.inflate_stream(o.openstream('Global/ElemTable').read())[1]; ids, owned = _ids_owned(et, W); del et
-    try: es = F.es_load(path)[0]
-    except Exception: es = {}
     # the geometry STOP list is given explicitly: rvt_decode derives it from RVT_GEOM at import time and rvt_fast sets RVT_GEOM=1 on import, so a child
     # process of an earlier query inherited a different decoder (2024 HVAC sample: 7 vs 53 sub/user category names, other category counts)
     rd = F._rc().RecDecoder(sch.c, W, ['GeomStepList', 'GeomTable'], D.STRCAP, D.EID, D.Desync)
-    if es: rd.set_es(es)
     rd.set_ids(ids.tolist())
     # second decoder WITHOUT the geometry STOP list: the stop at GeomStepList/GeomTable also drops what follows it, e.g. SymbolInfo.m_name (type names): 0 of 199
     # type names on the 2024 HVAC sample with STOP, 199 of 199 without; Level elevations.
     # Used only for those record classes (FULL_DECODE; fields would be slower for instances).
     rd_full = F._rc().RecDecoder(sch.c, W, [], D.STRCAP, D.EID, D.Desync)
-    if es: rd_full.set_es(es)
     rd_full.set_ids(ids.tolist())
+    # third decoder, for type records read for their NAME only: stops at the first pointer object queued after SymbolInfo (FamilyParams of FamilySymbol,
+    # CurveLoop of InsertableObj m_pCutLoops), so the big FamilySymbol tail (params, refs, faces, icons) is not decoded. 984 MB file, type records of
+    # the doors query: 1999 of 1999 names equal to rd_full, decode 1.52 -> 0.51 s
+    rd_sym = None
+    if SYMSTOP:
+        st = [n for n in ('FamilyParams', 'CurveLoop') if n in sch.by]
+        if st: rd_sym = F._rc().RecDecoder(sch.c, W, st, D.STRCAP, D.EID, D.Desync); rd_sym.set_ids(ids.tolist())
+    # fourth decoder: stops at the FIRST queued pointer object, so a record gives only its inline top-level fields (collect pass 1, no extra fields asked)
+    rd_inl = None
+    if INLINE: rd_inl = F._rc().RecDecoder(sch.c, W, sorted({c['name'] for c in cls}), D.STRCAP, D.EID, D.Desync); rd_inl.set_ids(ids.tolist())
     cnames = {i + 12: c['name'] for i, c in enumerate(cls)}
+    # extensible-storage schemas from Global/Latest of THIS open (rvt_fast.es_load opens the file a second time, parses Formats/Latest again and reads a
+    # pickle cache of earlier runs, which a cold query must not rely on); joined after the decoders are built, given to them by set_es
+    try:
+        if ESCACHE: es = F.es_load(path)[0]
+        else:
+            es = _es_join(esj)
+            if es is None: es = F.find_schemas(rvtfmt.inflate_stream(o.openstream('Global/Latest').read())[1], sch, W)
+    except Exception: es = {}
+    if es:
+        for d_ in (rd, rd_full, rd_sym, rd_inl):
+            if d_ is not None: d_.set_es(es)
     log('schema + decoder: %.2fs' % (time.time() - t0))
     _G['gen'] = _G.get('gen', 0) + 1
-    _G.update(path=path, fd=fd, st0=st0, damaged=0, o=o, pns=pns, streams=streams, cls=cls, W=W, sch=sch, rd=rd, rd_full=rd_full, ids=ids, owned=owned,
+    _G.update(path=path, fd=fd, st0=st0, damaged=0, o=o, pns=pns, streams=streams, cls=cls, W=W, sch=sch, rd=rd, rd_full=rd_full, rd_sym=rd_sym, rd_inl=rd_inl, ids=ids, owned=owned,
               cnames=cnames, EH=sch.by.get('ElementHeader', -999) + 12)
     consistent()
     return _G
@@ -866,10 +1001,13 @@ def header_jobs(segtab, tasks, res, want_ids, per_task=False):
     segment through OVL decoded bytes of the same channel (the same tail a task has), windows of one task merged; asked for just those ids"""
     import numpy as np
     nd = np.array(sorted(int(i) for i in want_ids), np.uint64); jobs = []; gcache = {}
+    # membership by one bool table indexed by id (np.isin per task re-hashed nd: 0.09 of 0.11 s for 8140 ids on a 984 MB file); same result
+    top = int(nd[-1]) + 1 if len(nd) else 0
+    tbl = np.zeros(top, bool); tbl[nd] = True
     for key in sorted(res):
         ehc = res[key][2]
         if ehc is None or not len(ehc[0]): continue
-        sel = np.isin(ehc[0], nd)
+        a_ = ehc[0]; inr = a_ < top; sel = np.zeros(len(a_), bool); sel[inr] = tbl[a_[inr]]
         if not sel.any(): continue
         _, pn, tsegs, nmain = tasks[key]; pi, k0 = key; segs = segtab[pn]
         if pn not in gcache:
@@ -1109,9 +1247,19 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
     spec = [{'tags': sorted(tag_of[n] for n in (want | aux) - sym if n in tag_of), 'mode': 'lite'}]
     spec = [x for x in spec if x['tags']]
     fl = (want | aux) & sym
-    if fl: spec.append({'tags': sorted(tag_of[n] for n in fl if n in tag_of), 'mode': 'lite', 'full': True})
+    if fl:
+        spec.append({'tags': sorted(tag_of[n] for n in fl if n in tag_of), 'mode': 'lite', 'full': True})
+        if SLIM and not fields: spec[-1]['dec'] = 'sym'      # read for name / type / level / m_text only: names-only decoder
     stags = sorted(tag_of[n] for n in sym - {'Level'} if n in tag_of)
     if names and stags and LOCATE: spec.append({'tags': stags, 'locate': True})
+    if SLIM:
+        kp = frozenset(('name', 'm_assocLevelId', 'm_text', 'm_parentCategoryId') + TYPE_FIELDS + tuple(fields or ()))
+        spec = [dict(x, keep=kp) if not x.get('locate') else x for x in spec]
+        if INLINE and not fields and spec and not spec[0].get('full') and not spec[0].get('locate'):
+            ok = [t for t in spec[0]['tags'] if _inline_safe(G['cls'], t - 12, kp)]
+            rest = [t for t in spec[0]['tags'] if t not in set(ok)]
+            spec = ([dict(spec[0], tags=ok, dec='inl')] if ok else []) + ([dict(spec[0], tags=rest)] if rest else []) + spec[1:]
+    wall_types = subclasses(G['cls'], 'WallType')
     E = Engine(workers, log)
     try:
         segtab, tasks, res = E.walk_and_decode(spec, True)
@@ -1126,6 +1274,26 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
         hdr = {}
         if rows:
             hdr = headers(E, segtab, tasks, res, list(rows))
+        if EARLYCAT and (cat is not None or acat) and rows:
+            # the category filter of the output loop (same rules) before the type pass: names of rows it drops are never read (doors on a 984 MB file:
+            # type ids asked 2081 -> those of the 241 doors)
+            par_ = {}
+            for (e, c), r in full.items():
+                if c == 'CategoryElem' and r['fields'].get('m_parentCategoryId') is not None: par_[e] = _sid(r['fields']['m_parentCategoryId'], W)
+            def bi_(v):
+                for _ in range(4):
+                    if v is None: return None
+                    if v < -1: return v
+                    if v > 0 and v in par_: v = par_[v]
+                    else: return None
+                return None
+            def ok_(e, c):
+                h = hdr.get(e); craw = _sid(h[0], W) if h else None; cb = bi_(craw)
+                if cb is None and c in wall_types: cb = -2000011
+                if cat is not None and cb != cat and craw != cat: return False
+                cid_ = cb if cb is not None else craw
+                return not (acat and (acat[0] == 'in' and cid_ not in acat[1] or acat[0] == 'not' and cid_ in acat[1]))
+            rows = {e: v for e, v in rows.items() if ok_(e, v[0])}
         # type records (names) by id: only type classes, no-STOP decoder, only the referenced ids
         tid = {}
         for e, (c, r) in rows.items():
@@ -1157,16 +1325,18 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
                 if e in assign: per[max(assign[e]) if rule == 'last' else min(assign[e])].add(e)
             for k in unknown: per[k] |= set(need)
             def tjobs(per_):
-                return [tasks[k] + ([{'tags': stags, 'mode': 'lite', 'full': True, 'only': sorted(per_[k])}], False, None) for k in sorted(per_)]
-            got = collections.defaultdict(list)
+                return [tasks[k] + ([{'tags': stags, 'mode': 'lite', 'full': True, 'dec': 'sym', 'only': sorted(per_[k])}], False, None) for k in sorted(per_)]
+            got = collections.defaultdict(list); per = dict(per)
             for key, (rr, _, _) in E.run(tjobs(per), 'types by id').items():
                 for (e, c), r in rr: got[key].append((e, c, r))
             miss = set(need) - {e for v in got.values() for e, _, _ in v}
             if miss:
                 per2 = collections.defaultdict(set)
                 for e in miss:
-                    for k in assign.get(e, ()): per2[k].add(e)
-                for k in unknown: per2[k] |= miss
+                    for k in assign.get(e, ()):
+                        if not (R2SKIP and e in per.get(k, ())): per2[k].add(e)
+                if not R2SKIP:                  # R2SKIP: tasks without a locator were asked for every id in round 1 already
+                    for k in unknown: per2[k] |= miss
                 for key, (rr, _, _) in E.run(tjobs(per2), 'types by id (round 2)').items():
                     for (e, c), r in rr:
                         if e in miss: got[key].append((e, c, r))
@@ -1190,7 +1360,7 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
             else: return None
         return None
     levels = {e: r['fields'].get('m_text') for (e, c), r in full.items() if c == 'Level'}
-    ct = _cat_table(); out = []; wall_types = subclasses(G['cls'], 'WallType')
+    ct = _cat_table(); out = []
     for e, (c, r) in sorted(rows.items()):
         f = r['fields']; h = hdr.get(e)
         craw = _sid(h[0], W) if h else None; cb = builtin(craw)
