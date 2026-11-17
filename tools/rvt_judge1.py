@@ -185,11 +185,7 @@ def judge_batch(cases, wd):
                     else: lines.append('TWIN: no usable twin (%s)' % ((tt or '')[:150].replace(chr(10), ' ') if tt else 'no output'))
                 vol = pc['volatile']; volcls = {pc['ec'].get(k) for k in vol} - {None}
                 rest = sorted(k for k in pc['eh'].keys() & po['eh'].keys() if pc['eh'][k] != po['eh'][k] and k not in c['allowed'] and k not in vol)
-                dep, tra, bad = [], [], []
-                for k in rest:
-                    if pt is not None and pt.get(k) == po['eh'][k]: dep.append(k)
-                    elif pe and pe['eh'].get(k) != po['eh'][k] and pe['eh'].get(k) == pc['eh'][k] and (pt is None or pt.get(k) == pe['eh'][k]) and po['ec'].get(k) in volcls: tra.append(k)
-                    else: bad.append(k)
+                dep, tra, bad = classify_extra(rest, pc, po, pe, pt, volcls)
                 lines.append('TWIN: %d differing ids: %d Revit-derived dependents %s, %d transient first-open %s, %d unexplained %s; control noise classes %s' % (len(rest), len(dep), dep[:8], len(tra), tra[:8], len(bad), bad[:8], sorted(volcls)))
                 if rest and not bad: code, why = 0, 'control and output open clean, readback exact; extra differing ids all proven: %d Revit-derived dependents (equal the Revit-made twin), %d transient first-open (settled hash equals control and twin, class flaps in the unedited control)' % (len(dep), len(tra))
             pr = parse(txt); why += ' [open %s ms, total %s ms, sec %.0f, sha %s]' % (pr['t_open'], pr['t_total'], time.time() - t0, osha[:12])
@@ -205,6 +201,15 @@ def judge_batch(cases, wd):
             for y in sorted({c['year'] for c in cases}): guest.down(y)      # leave the lane clean
         print('LOCK held=%.0fs cases=%d' % (time.time() - t_acq, len(cases)), flush=True)
     return res
+
+def classify_extra(rest, pc, po, pe, pt, volcls):
+    """split ids that differ outside the allowed list into (dependent, transient, unexplained); transient REQUIRES a usable Revit-made twin (pt)"""
+    dep, tra, bad = [], [], []
+    for k in rest:
+        if pt is not None and pt.get(k) == po['eh'][k]: dep.append(k)
+        elif pe and pt is not None and pe['eh'].get(k) != po['eh'][k] and pe['eh'].get(k) == pc['eh'][k] and pt.get(k) == pe['eh'][k] and po['ec'].get(k) in volcls: tra.append(k)
+        else: bad.append(k)
+    return dep, tra, bad
 
 def load_case(year, orig, out, expf, allowed, name=None):
     return {'year': int(year), 'orig': os.path.abspath(orig), 'out': os.path.abspath(out), 'exp': json.load(open(expf)) if expf not in ('', '-') else [],
