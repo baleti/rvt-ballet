@@ -15,6 +15,6 @@ for e, v in ix.items():
     if str(v) != 'FamilyInstance': continue
     s = field(e, 'FamilyInstance.m_masterSymbolId')
     if fam.get(s) is None: continue
-    sib = [x for x in by.get(fam.get(s), []) if x != s]
+    sib = [x for x in by.get(fam.get(s), []) if x != s and field(x, "FamilySymbol.m_masterId") in (None, 0xFFFFFFFFFFFFFFFF)]
     if sib: print('PICK', e, s, sib[0]); break
 else: print('NONE')

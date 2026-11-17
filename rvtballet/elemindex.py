@@ -347,6 +347,12 @@ def compare_partitions(orig, out, name, allow_added=True):
             if i2 - i1 > m: reasons.append("%d original segment(s) removed near orig %d" % (i2 - i1 - m, i1 + m))
         elif tag == "insert": added += list(range(j1, j2))
         elif tag == "delete": reasons.append("%d original segment(s) removed at orig %d" % (i2 - i1, i1))
+    for k, (off, ln, il) in enumerate(sb):                   # 24-byte segment header words: measured ranges (4085 segments): w0 4..9, w4 101..103, w5 0
+        w = struct.unpack("<6I", Pb.payload(off - 24, 24))
+        if not (4 <= w[0] <= 9 and 101 <= w[4] <= 103 and w[5] == 0): reasons.append("segment %d header words out of range: %s" % (k, w))
+    for i, j in match.items():                               # an unchanged segment keeps its 24-byte header (stored_len word 2 excluded)
+        ha_ = Pa.payload(sa[i][0] - 24, 24); hb_ = Pb.payload(sb[j][0] - 24, 24)
+        if ha_[:8] + ha_[12:] != hb_[:8] + hb_[12:]: reasons.append("header of unchanged segment %d (out %d) changed" % (i, j))
     if added and not allow_added: reasons.append("%d segment(s) added" % len(added))
     if added: warnings.append("%d segment(s) added (out idx %s...)" % (len(added), added[:4]))
     ga = _gaps(Pa, sa); gb = _gaps(Pb, sb)

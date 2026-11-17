@@ -10,5 +10,5 @@ with guest.vmlock():
         base='rb%d_%s'%(i,os.path.basename(f)); guest.put(f,'C:/wl/'+base)
         cs=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'rvt_import_bbox_readback.cs')).read().replace('__FILE__','C:/wl/'+base).replace('__IDS__',ids)
         out=guest.run_job(year,port,cs,'rb%d'%i,300)
-        print('==',os.path.basename(os.path.dirname(f)) or f, flush=True); print('\n'.join(l for l in out.replace('\r','').splitlines() if l.startswith(("BB","RB",'REGEN','RESULT','TF')))[:400000], flush=True)
+        print('==',os.path.basename(os.path.dirname(f)) or f, flush=True); print('\n'.join(l for l in out.replace('\r','').splitlines() if l.startswith(("PIN","BB","RB",'REGEN','RESULT','TF')))[:400000], flush=True)
         guest.down(year)

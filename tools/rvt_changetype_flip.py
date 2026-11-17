@@ -23,7 +23,9 @@ res = {}; esc = []
 for k, nb in T.items():
     dest = os.path.join(_T, 'o_%s.rvt' % k)
     try: save.save_as(ss, 'm', src, dest, new_bytes=nb, manifest=man); acc = True
-    except Exception as e: acc = False; res[k] = type(e).__name__
+    except Exception as e:
+        acc = False; res[k] = type(e).__name__
+        if os.environ.get("TB") and type(e).__name__ == "ModuleNotFoundError": import traceback; traceback.print_exc()
     if acc:
         res[k] = 'ACCEPTED'
         if k != 'control_true_output': esc.append(k)
