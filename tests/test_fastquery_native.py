@@ -212,3 +212,16 @@ def test_header_window_split_same_answer(cmd):
 def test_header_window_split_default_is_off():
     """RVT_Q_HDR_MAXWIN>0 gave non-deterministic wall-types (category lost in about half of the cold runs, 19_Commercial and 27_Technical_school samples); the default must stay 0 until that is understood. test_header_window_split_same_answer does not cover wall-types"""
     assert Q.HDR_MAXWIN == 0
+
+
+@pytest.mark.parametrize("sample", ["2021/27_Technical_school-current_m.rvt", "2022/33_Technical_school-current_m.rvt"])
+def test_wall_types_always_have_category_walls_family(sample):
+    """2021/2022 Technical_school: the ElementHeader of wall types 399/403/411 carries category -1 (the 2024 file has Walls); wall-types used to print category null for them. Every WallType has a category (Walls or Stacked Walls)"""
+    import subprocess, json
+    src = os.path.join(os.path.expanduser("~/rvt-research/corpus"), sample)
+    if not os.path.exists(src): pytest.skip("sample absent")
+    p = subprocess.run([sys.executable, "-m", "rvtballet.fastquery", "wall-types", src, "--json"], cwd=HERE, capture_output=True, timeout=300)
+    assert p.returncode == 0
+    d = json.loads(p.stdout); assert len(d) == 32
+    assert [x["id"] for x in d if x["category"] is None] == []
+    assert {x["id"]: x["category"] for x in d}[399] == "Walls"

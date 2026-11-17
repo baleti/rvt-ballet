@@ -1190,10 +1190,11 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
             else: return None
         return None
     levels = {e: r['fields'].get('m_text') for (e, c), r in full.items() if c == 'Level'}
-    ct = _cat_table(); out = []
+    ct = _cat_table(); out = []; wall_types = subclasses(G['cls'], 'WallType')
     for e, (c, r) in sorted(rows.items()):
         f = r['fields']; h = hdr.get(e)
         craw = _sid(h[0], W) if h else None; cb = builtin(craw)
+        if cb is None and c in wall_types: cb = -2000011       # OST_Walls: every WallType is a wall type; the 2021/2022 Technical_school and 2021 rac_advanced samples carry no category in the header of 3 types (the 2024 file does)
         if cat is not None and cb != cat and craw != cat: continue
         cid_ = cb if cb is not None else craw
         if acat and (acat[0] == 'in' and cid_ not in acat[1] or acat[0] == 'not' and cid_ in acat[1]): continue
