@@ -87,7 +87,7 @@ def editors(o):
 
 
 
-_KEEP = {'ProjectRevision': ('m_description', 'm_date', 'm_numberStr', 'm_sequenceNumber', 'm_issuedBy', 'm_issuedTo', 'm_issued'), 'Level': ('m_text',), 'Grid': ('m_text',), 'ProjectPhase': ('m_name',), 'ProjectInfo': ('m_text', 'm_name'), 'Viewport': ('m_dbViewId',), 'FamilySurrogate': ('m_categoryId', 'm_elemId'), 'FamSymSurrogate': ('m_categoryId', 'm_elemId'), 'GStyleElem': ('m_categoryId',), 'CategoryElem': ('m_ownerId',), 'ViewSheetSet': ('m_name', 'm_orderedViewSheetList')}
+_KEEP = {'Family': ('m_categoryId',), 'ProjectRevision': ('m_description', 'm_date', 'm_numberStr', 'm_sequenceNumber', 'm_issuedBy', 'm_issuedTo', 'm_issued'), 'Level': ('m_text',), 'Grid': ('m_text',), 'ProjectPhase': ('m_name',), 'ProjectInfo': ('m_text', 'm_name'), 'Viewport': ('m_dbViewId',), 'FamilySurrogate': ('m_categoryId', 'm_elemId'), 'FamSymSurrogate': ('m_categoryId', 'm_elemId'), 'GStyleElem': ('m_categoryId',), 'CategoryElem': ('m_ownerId',), 'ViewSheetSet': ('m_name', 'm_orderedViewSheetList')}
 _KEEP_VIEW = ('m_viewName', 'm_sheetNumber', 'm_issueDate', 'm_drawnBy', 'm_sheetViewportElemIds', 'm_isTemplate', 'm_scale', 'm_text', 'm_name', 'm_approvedBy', 'm_explicitlyPresentRevisionIds', 'm_revNumMap', 'm_dbDrawingId')
 
 

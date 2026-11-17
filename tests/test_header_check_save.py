@@ -17,4 +17,10 @@ try: save._readback(src, bad, [{'op': 'set_link_path', 'eid': EID, 'value': 'x'}
 except Exception as e: assert 'header' in str(e), e
 dd = headercheck.deep_diff(F, out); assert len(dd) == 1 and str(EID) in dd[0], dd      # whole-model layer: finds the rewrite without being told the element
 assert headercheck.deep_diff(F, out, {EID}) == [] and headercheck.deep_diff(F, F) == []
+# Family body category (FamilyBase.m_categoryId): live in Revit 2024 (VM: a PanelType of the family went Curtain_Panels -> Walls), invisible in headers
+FAM = 20915; s2 = segedit.Session(F, part=segedit.partition_of(F, [FAM])); i, r, log, q = s2.trace(FAM)
+off = [l[2] for l in log if l[1] == 'FamilyBase.m_categoryId'][0]; s2._replace(off, 8, struct.pack('<q', -2000011), 'famcatflip')
+out2 = d + '/famflip.rvt'; s2.write(out2)
+fd = headercheck.deep_diff(F, out2); assert len(fd) == 1 and 'Family %d' % FAM in fd[0], fd
+assert headercheck.deep_diff(F, out2, {FAM}) == []
 print('ok')

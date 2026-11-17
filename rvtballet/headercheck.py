@@ -31,13 +31,14 @@ def deep_diff(src_path, out_path, allowed=(), limit=20):
     family and class of EVERY element must be identical in source and output, except `allowed` ids (edited, deleted, added). Catches a category rewrite in an element the ops did not name
     and in a body-level category (Family, GStyleElem) the header check cannot see. -> list of messages"""
     from . import fastinfo
-    A = fastinfo.scan(src_path, want_elements=True)["arrays"]; B = fastinfo.scan(out_path, want_elements=True)["arrays"]
+    ra = fastinfo.scan(src_path, want_elements=True); rb = fastinfo.scan(out_path, want_elements=True); A, B = ra["arrays"], rb["arrays"]
     def tab(x):
         nm = x["cls_names"]
         return {int(i): (int(c), int(o), int(f), str(nm[k])) for i, c, o, f, k in zip(x["id"], x["cat"], x["owner_view"], x["family"], x["cls"])}
+    fa, fb = ra.get("family_body_cats", {}), rb.get("family_body_cats", {}); extra = ["Family %d: body category (m_categoryId, live in Revit: its types take it) %d -> %d" % (e, v, fb[e]) for e, v in fa.items() if e in fb and e not in {int(x) for x in allowed} and fb[e] != v]
     a, b = tab(A), tab(B); al = {int(e) for e in allowed}; bad = []
     for e, v in a.items():
         if e in al or e not in b: continue
         if v != b[e]: bad.append("element %d: resolved (category, owner view, family, class) %s -> %s" % (e, v, b[e]))
         if len(bad) >= limit: break
-    return bad
+    return (bad + extra)[:limit]

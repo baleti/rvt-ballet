@@ -1313,7 +1313,7 @@ def walls_red_material(path, max_height_ft=5 / 0.3048, workers=None, log=None, r
 FULL_DECODE = ('Level',)
 # CategoryElem stays on the STOP decoder: without the stop it yields more sub/user category names (2024 HVAC sample 53 vs 7) and parents, but per-element
 # categories then agree with Revit's API dump less often (5 samples 2020-2023: 87.8 vs 88.1 percent of 94080 elements): Revit reports the subcategory itself
-ADMIN = ('FamilySurrogate', 'FamSymSurrogate', 'GStyleElem', 'CategoryElem', 'Level', 'Grid', 'ProjectPhase', 'ProjectInfo', 'Viewport', 'ProjectRevision', 'ViewSheetSet')
+ADMIN = ('Family', 'FamilySurrogate', 'FamSymSurrogate', 'GStyleElem', 'CategoryElem', 'Level', 'Grid', 'ProjectPhase', 'ProjectInfo', 'Viewport', 'ProjectRevision', 'ViewSheetSet')
 NOCAT = -(1 << 62)
 
 
@@ -1429,6 +1429,7 @@ def scan(path, log=None, want_elements=False, counts=True, workers=None):
             x = sid(fam)
             if x is not None: a_fam[k] = x
             if bb: a_bb[k] = bb
+        fam_body = {int(e): CT._sc(r['fields']['m_categoryId'], W) for (e, c), r in full.items() if c == 'Family' and r['fields'].get('m_categoryId') is not None}      # c9x-rvtcat 2026-11-17: FamilyBase.m_categoryId is live in Revit (the types of the family take it; VM 2024) but invisible in every header
         a_cat = CT.resolve(a_cat, a_cls, np.array(cnames_l or ['']), idarr, full, W)
         cat = _cat_table(); cc = collections.Counter()
         u, n = np.unique(a_cat[seen], return_counts=True)
@@ -1442,6 +1443,7 @@ def scan(path, log=None, want_elements=False, counts=True, workers=None):
         out['view_owned'] = int(((a_ov != -1) & seen).sum())
         out['stats'].update(elements_with_header=int(seen.sum()), primary_elements=N)
         if want_elements:
+            out['family_body_cats'] = fam_body
             out['arrays'] = {'id': idarr[seen], 'cat': a_cat[seen], 'owner_view': a_ov[seen], 'family': a_fam[seen], 'bbox': a_bb[seen], 'cls': a_cls[seen], 'cls_names': np.array(cnames_l or [''], dtype=str)}
     out['stats']['seconds'] = round(time.time() - t0, 2)
     log('scan: %d sheets, %d views, %d levels, %s headers, %.2fs' % (len(out['sheets']), len(out['views']), len(out['levels']), out['stats'].get('elements_with_header', '-'), time.time() - t0))
