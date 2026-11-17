@@ -105,3 +105,12 @@ def test_gate_rejects_zeroed_trailer():
     X._paths(); a = X._open(orig)
     assert not X.compare_partitions(a, X._open(z), "Partitions/21")["ok"]
     assert X.compare_partitions(a, X._open(fl), "Partitions/21")["ok"]
+
+
+def test_last_page_ecc_check():
+    """the trailer block is the last page's ECC parity: a legit writer output verifies, the VM-refused zeroed variant does not (a 1-bit flip also fails here: stricter than Revit, which corrects it)"""
+    orig = os.path.expanduser("~/demo-state/c3x-codexlab-oracle/2024_hvac_original.rvt"); z = os.path.expanduser("~/c9x-var24/tail_zero.rvt")
+    if not all(os.path.exists(p) for p in (orig, z)): pytest.skip("variants not available")
+    X._paths()
+    assert X._last_page_ecc_ok(X._open(orig), "Partitions/21") is True
+    assert X._last_page_ecc_ok(X._open(z), "Partitions/21") is False
