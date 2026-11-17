@@ -22,3 +22,12 @@ attempt('undeclared', nb, {})
 bad = bytearray(nb); bad[len(bad) // 2] ^= 1
 attempt('bitflip', bytes(bad), {"added": ["el:%d" % i for i in ids]})
 attempt('truncated', nb[:-4096], {"added": ["el:%d" % i for i in ids]})
+
+# backup == original and restore byte-identical after an accepted in-place add
+p2 = T + '/rt.rvt'; shutil.copy(src, p2)
+with sg.open_doc(p2, adapter=RvtAdapter(elements_fn=rvt_elements.elements), cfg=sg.Config(allow_overwrite=True)) as d: sg.save(d, nb, {'added': ['el:%d' % i for i in ids]})
+changed = sha(p2) != h0
+import glob
+bk = [f for f in glob.glob(os.path.dirname(p2) + '/.savegate/*') if os.path.isfile(f) and sha(f) == h0]
+sg.restore(p2, 0)
+print('add roundtrip: changed=%s backup_is_original=%s restored_identical=%s' % (changed, bool(bk), sha(p2) == h0), flush=True)
