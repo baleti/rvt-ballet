@@ -356,6 +356,13 @@ for (e, c), r in x['recs'].items():
     for v in t:
         for i in ids(v):
             if i < 2 ** 32 - 1 and i != e and cls_of.get(i) == 'Grid': gridded.setdefault(i, set()).add(e)
+attached = {}      # element id -> support ids named in its OWN m_refs[].m_endStructId (a beam end attached to a column/wall): Revit VM (Structural 2024 795822, end at 663713) MoveElement fails 'Can't keep elements joined' and rolls back; the support side is already reported as 'supports N framing member(s)'
+for (e, c), r in x['recs'].items():
+    if c != 'FamilyInstance' or e not in want: continue
+    t = []; find(r.get('fields'), 'm_endStructId', t)
+    for v in t:
+        for i in ids(v):
+            if i < 2 ** 32 - 1 and i != e: attached.setdefault(e, set()).add(i)
 sketched = set()      # instances named as m_assocId by CurveElem / VarSketch curves (Structural 2024 774939/774940): Revit VM MoveElement of 774939 +1 ft ends 'RolledBack' (Revit itself refuses the move), the writer would produce a state Revit never makes
 for (e, c), r in x['recs'].items():
     if c not in ('CurveElem', 'VarSketch'): continue
@@ -375,7 +382,7 @@ for (e, c), r in x['recs'].items():
 for (e, c), r in x['recs'].items():
     if e not in want: continue
     d = []; find(r.get('fields'), 'm_designOptionId', d); h = []; find(r.get('fields'), 'm_hostId', h)
-    out.setdefault(str(e), []).append({'cls': c, 'groups': sorted(members.get(e, ())), 'options': [i for v in d for i in ids(v) if i < 2 ** 31], 'hosts': [i for v in h for i in ids(v) if i < 2 ** 32 - 1], 'hosting': len(hosting.get(e, ())), 'nested': sorted(nested.get(e, ())), 'children': sorted(parent_of.get(e, ())), 'joined': len(joined.get(e, ())), 'connected': len(connected.get(e, ())), 'framed': len(framed.get(e, ())), 'dimmed': len(dimmed.get(e, ())), 'leveled': len(leveled.get(e, ())), 'gridded': len(gridded.get(e, ())), 'annot': len(annot.get(e, ())), 'gridtrk': e in gridtrk, 'sketched': e in sketched})
+    out.setdefault(str(e), []).append({'cls': c, 'groups': sorted(members.get(e, ())), 'options': [i for v in d for i in ids(v) if i < 2 ** 31], 'hosts': [i for v in h for i in ids(v) if i < 2 ** 32 - 1], 'hosting': len(hosting.get(e, ())), 'nested': sorted(nested.get(e, ())), 'children': sorted(parent_of.get(e, ())), 'joined': len(joined.get(e, ())), 'connected': len(connected.get(e, ())), 'framed': len(framed.get(e, ())), 'dimmed': len(dimmed.get(e, ())), 'leveled': len(leveled.get(e, ())), 'gridded': len(gridded.get(e, ())), 'annot': len(annot.get(e, ())), 'gridtrk': e in gridtrk, 'sketched': e in sketched, 'attached': sorted(attached.get(e, ()))})
 print(json.dumps(out))
 """
 
@@ -394,7 +401,7 @@ def membership(buf, eids):
         if r.returncode: raise RuntimeError('group/design-option check failed: ' + (r.stderr.strip().splitlines() or ['?'])[-1][:150])
         res = {}
         for e, recs in json.loads(r.stdout.strip().splitlines()[-1]).items():
-            why = sorted({'group %d' % g for x in recs for g in x['groups']} | {'design option %d' % o for x in recs for o in x['options']} | {'hosted on %d' % h for x in recs for h in x.get('hosts', [])} | {'nested in %d parent(s): %s' % (len(n), ','.join(str(i) for i in n)) for x in recs for n in [x.get('nested', [])] if n} | {'nesting parent of %d sub-component(s)' % len(n) for x in recs for n in [x.get('children', [])] if n} | {'joined to %d element(s)' % n for x in recs for n in [x.get('joined', 0)] if n} | {'joined family instance (%d)' % n for x in recs for n in [x.get('joined', 0)] if n and x.get('cls') == 'FamilyInstance'} | {'connected to %d MEP element(s)' % n for x in recs for n in [x.get('connected', 0)] if n} | {'supports %d framing member(s)' % n for x in recs for n in [x.get('framed', 0)] if n} | {'hosts %d element(s)' % n for x in recs for n in [x.get('hosting', 0)] if n} | {'dimensioned by %d dimension(s)' % n for x in recs for n in [x.get('dimmed', 0)] if n} | {'level constrains %d element(s)' % n for x in recs for n in [x.get('leveled', 0)] if n and x.get('cls') == 'Level'} | {'grid constrains %d element(s)' % n for x in recs for n in [x.get('gridded', 0)] if n} | {'referenced by %d annotation/rebar element(s)' % n for x in recs for n in [x.get('annot', 0)] if n} | {'on a grid intersection (GridsForColumn entry)' for x in recs if x.get('gridtrk')} | {'associated with sketch curves (m_assocId)' for x in recs if x.get('sketched')})
+            why = sorted({'group %d' % g for x in recs for g in x['groups']} | {'design option %d' % o for x in recs for o in x['options']} | {'hosted on %d' % h for x in recs for h in x.get('hosts', [])} | {'nested in %d parent(s): %s' % (len(n), ','.join(str(i) for i in n)) for x in recs for n in [x.get('nested', [])] if n} | {'nesting parent of %d sub-component(s)' % len(n) for x in recs for n in [x.get('children', [])] if n} | {'joined to %d element(s)' % n for x in recs for n in [x.get('joined', 0)] if n} | {'joined family instance (%d)' % n for x in recs for n in [x.get('joined', 0)] if n and x.get('cls') == 'FamilyInstance'} | {'connected to %d MEP element(s)' % n for x in recs for n in [x.get('connected', 0)] if n} | {'supports %d framing member(s)' % n for x in recs for n in [x.get('framed', 0)] if n} | {'hosts %d element(s)' % n for x in recs for n in [x.get('hosting', 0)] if n} | {'dimensioned by %d dimension(s)' % n for x in recs for n in [x.get('dimmed', 0)] if n} | {'level constrains %d element(s)' % n for x in recs for n in [x.get('leveled', 0)] if n and x.get('cls') == 'Level'} | {'grid constrains %d element(s)' % n for x in recs for n in [x.get('gridded', 0)] if n} | {'referenced by %d annotation/rebar element(s)' % n for x in recs for n in [x.get('annot', 0)] if n} | {'on a grid intersection (GridsForColumn entry)' for x in recs if x.get('gridtrk')} | {'associated with sketch curves (m_assocId)' for x in recs if x.get('sketched')} | {'attached to support %s at an end' % ','.join(str(i) for i in x['attached']) for x in recs if x.get('attached')})
             if why: res[int(e)] = why
         return res
     finally:
@@ -1274,7 +1281,7 @@ def risky_membership(mem, ops):
     moved = {o['eid'] for o in ops if o.get('op') in ('move', 'rotate')}; out = {}
     deleted = {o['eid'] for o in ops if o.get('op') == 'delete'}      # a deleted element still named by a dimension witness leaves 100+ raw mentions (Structural 2024 wall 585072); Revit's own cascade is unrecorded, so refuse until the paired VM run says
     for e, why in mem.items():
-        w = [x for x in why if not x.startswith(('hosted on ', 'hosts ', 'joined to ', 'connected to ', 'supports ', 'dimensioned by ', 'level constrains ', 'grid constrains ', 'referenced by ', 'nested in ', 'nesting parent of ', 'joined family instance ', 'on a grid intersection ', 'associated with sketch curves ')) or e in moved or (e in deleted and x.startswith(('dimensioned by ', 'nested in ', 'joined family instance ')))]      # Revit 2024 VM: Facades column 593361 (joined to 2) deleted alone = CorruptModelException 'needs to be recovered', gate had accepted it; beams without joins open clean
+        w = [x for x in why if not x.startswith(('hosted on ', 'hosts ', 'joined to ', 'connected to ', 'supports ', 'dimensioned by ', 'level constrains ', 'grid constrains ', 'referenced by ', 'nested in ', 'nesting parent of ', 'joined family instance ', 'on a grid intersection ', 'associated with sketch curves ', 'attached to support ')) or e in moved or (e in deleted and x.startswith(('dimensioned by ', 'nested in ', 'joined family instance ')))]      # Revit 2024 VM: Facades column 593361 (joined to 2) deleted alone = CorruptModelException 'needs to be recovered', gate had accepted it; beams without joins open clean
         if w: out[e] = w
     return out
 
