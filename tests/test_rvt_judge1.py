@@ -101,3 +101,14 @@ def test_twin_string_supports_delete_and_absent():
     assert j.twin_string([{"kind": "absent", "eid": 5}]) == "delete|5"
     assert j.twin_string([{"kind": "delete", "eid": 7}, {"kind": "move", "eid": 1, "d": [1, 0, 0]}]).split(chr(30))[0] == "delete|7"
     assert j.twin_string([{"kind": "unknown", "eid": 1}]) == ""
+
+
+def test_warn_diff_counts_new_and_resolved(tmp_path):
+    import importlib.util, os
+    spec = importlib.util.spec_from_file_location("wd", os.path.join(os.path.dirname(__file__), "..", "tools", "rvt_warn_diff.py"))
+    w = importlib.util.module_from_spec(spec); spec.loader.exec_module(w)
+    c = tmp_path / "c.txt"; o = tmp_path / "o.txt"
+    c.write_text("FAILURE Warning A\nFAILURE Warning A\nFAILURE Warning B\nFAILURE Error X\n")
+    o.write_text("FAILURE Warning A\nFAILURE Warning C\nFAILURE Warning C\nDIALOG d\n")
+    new, gone = w.diff(str(c), str(o))
+    assert new == {"FAILURE Warning C": 2} and gone == {"FAILURE Warning A": 1, "FAILURE Warning B": 1}
