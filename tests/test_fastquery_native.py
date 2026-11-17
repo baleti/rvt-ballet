@@ -176,3 +176,21 @@ def test_cpu_gate_blocks_native_on_old_cpu(monkeypatch):
     assert fq._cpu_v3() is False
     monkeypatch.setenv("RVT_Q_CPUFLAGS", "avx2 bmi1 bmi2 fma movbe abm")
     assert fq._cpu_v3() is True
+
+
+@pytest.mark.parametrize("sample", ["2020/22_rme_basic_sample_project.rvt", "2024/42_Snowdon_Towers_Sample_HVAC.rvt"])
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_damaged_real_sample_native_equals_python(sample, seed, tmp_path):
+    """real Autodesk sample (skipped when absent), 8 bit flips in one 4 KB window: the native path must give the same stdout and exit code as RVT_Q_NATIVE=0 and never die on a signal (CRC retry / fallback)"""
+    import subprocess
+    src = os.path.join(os.path.expanduser("~/rvt-research/corpus"), sample)
+    if not os.path.exists(src): pytest.skip("sample absent")
+    b = bytearray(open(src, "rb").read()); rnd = random.Random(seed); o = rnd.randrange(len(b) // 4, len(b) - 4096)
+    for _ in range(8): b[o + rnd.randrange(4096)] ^= 1 << rnd.randrange(8)
+    f = str(tmp_path / "x.rvt"); open(f, "wb").write(b)
+    r = {}
+    for n in ("1", "0"):
+        p = subprocess.run([sys.executable, "-m", "rvtballet.fastquery", "walls", f, "--json"], cwd=HERE, capture_output=True, timeout=300, env=dict(os.environ, RVT_Q_NATIVE=n))
+        assert p.returncode >= 0, "died on signal %d (native=%s)" % (-p.returncode, n)
+        r[n] = (p.returncode, p.stdout)
+    assert r["1"] == r["0"]
