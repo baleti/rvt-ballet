@@ -56,3 +56,15 @@ def deep_diff(src_path, out_path, allowed=(), limit=20):
         if v != b[e]: bad.append("element %d: resolved (category, owner view, family, class) %s -> %s" % (e, v, b[e]))
         if len(bad) >= limit: break
     return (bad + extra)[:limit]
+
+
+def deep_check_bufs(src_buf, out_buf, allowed, limit=20):
+    """deep_diff on two in-memory files (temp files). RVTBALLET_DEEP_CHECK = auto (default: files up to RVTBALLET_DEEP_MAX_MB, 200) | 1 (always) | 0 (off). -> messages ([] when skipped)"""
+    mode = os.environ.get("RVTBALLET_DEEP_CHECK", "auto")
+    if mode == "0" or (mode == "auto" and len(src_buf) > int(os.environ.get("RVTBALLET_DEEP_MAX_MB", "200")) << 20): return []
+    d = tempfile.mkdtemp(prefix="rvtballet-dc-")
+    try:
+        a, b = os.path.join(d, "a.rvt"), os.path.join(d, "b.rvt"); open(a, "wb").write(src_buf); open(b, "wb").write(out_buf)
+        return deep_diff(a, b, allowed, limit)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)

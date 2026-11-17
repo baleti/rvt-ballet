@@ -25,4 +25,10 @@ fd = headercheck.deep_diff(F, out2); assert len(fd) == 1 and 'Family %d' % FAM i
 assert headercheck.deep_diff(F, out2, {FAM}) == []
 hf = headercheck.header_diff(open(F, 'rb').read(), open(out2, 'rb').read(), [FAM]); assert hf and 'body category' in hf[0], hf      # per-edit layer
 assert headercheck.header_diff(open(F, 'rb').read(), open(F, 'rb').read(), [FAM]) == []
+# production layer: the rewrite is in an element the op does NOT name (op names the Family 20915): only the whole-model layer sees it
+os.environ['RVTBALLET_DEEP_CHECK'] = '1'
+try: save._readback(src, bad, [{'op': 'set_link_path', 'eid': FAM, 'value': 'x'}]); raise SystemExit('ESCAPE: category flip of an unnamed element accepted')
+except Exception as e: assert 'resolved' in str(e), e
+os.environ['RVTBALLET_DEEP_CHECK'] = '0'
+save._readback(src, bad, [{'op': 'set_link_path', 'eid': FAM, 'value': 'x'}])      # layer off: not seen (documents the switch)
 print('ok')

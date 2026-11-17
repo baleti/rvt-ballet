@@ -1139,6 +1139,10 @@ def _readback(src_buf, nb, ops):
         from .headercheck import header_diff
         try: _hb = header_diff(src_buf, nb, {o["eid"] for o in ops if o.get("eid") is not None and o.get("op") != "delete"})
         except Exception as e: raise OutputUnreadable("the element headers could not be compared (%s: %s); nothing was written" % (type(e).__name__, e)) from e
+        if not _hb and any(o.get("eid") is not None for o in ops):      # whole-model layer: no element outside the edited ids may change its resolved category / owner view / family / class, no Family body category may change
+            from .headercheck import deep_check_bufs
+            try: _hb = deep_check_bufs(src_buf, nb, {o["eid"] for o in ops if o.get("eid") is not None})
+            except Exception as e: raise OutputUnreadable("the whole-model category check failed (%s: %s); nothing was written" % (type(e).__name__, e)) from e
     if _hb: raise sg.VerifyFailed("read-back of the edited element(s) failed: %s" % "; ".join(_hb[:3]), {"n_unexpected": len(_hb), "unexpected": _hb[:20]})
     if not tg and not mv and not fl and not dl and not ct and not tn: return
     g = lambda x: (x.get('params', x) if isinstance(x, dict) else {})
