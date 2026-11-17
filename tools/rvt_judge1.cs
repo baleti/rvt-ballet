@@ -49,6 +49,7 @@ try {
         if (e == null) throw new Exception("twin element missing " + q[1]);
         if (q[0] == "move") ElementTransformUtils.MoveElement(d, e.Id, new XYZ(double.Parse(q[2], System.Globalization.CultureInfo.InvariantCulture), double.Parse(q[3], System.Globalization.CultureInfo.InvariantCulture), double.Parse(q[4], System.Globalization.CultureInfo.InvariantCulture)));
         else if (q[0] == "rotate") { var lp0 = e.Location as LocationPoint; if (lp0 == null) throw new Exception("twin rotate needs LocationPoint"); ElementTransformUtils.RotateElement(d, e.Id, Line.CreateBound(lp0.Point, lp0.Point + XYZ.BasisZ), double.Parse(q[2], System.Globalization.CultureInfo.InvariantCulture) * Math.PI / 180.0); }
+        else if (q[0] == "delete") { d.Delete(e.Id); }
         else if (q[0] == "param") { var p0 = e.LookupParameter(q[2]); if (p0 == null || p0.IsReadOnly) throw new Exception("twin parameter unusable " + q[2]);
           bool okp = p0.StorageType == StorageType.Integer ? p0.Set(int.Parse(q[3])) : p0.StorageType == StorageType.Double ? p0.Set(double.Parse(q[3], System.Globalization.CultureInfo.InvariantCulture)) : p0.StorageType == StorageType.String ? p0.Set(q[3]) : false;
           if (!okp) throw new Exception("twin parameter set refused " + q[2]); }

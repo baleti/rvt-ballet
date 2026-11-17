@@ -112,6 +112,7 @@ def twin_string(exp):
     for e in exp:
         if e['kind'] == 'move': out.append('move|%d|%r|%r|%r' % (e['eid'], *[float(x) for x in e['d']]))
         elif e['kind'] == 'rotate': out.append('rotate|%d|%r' % (e['eid'], float(e['deg'])))
+        elif e["kind"] in ("delete", "absent"): out.append('delete|%d' % e['eid'])
         elif e['kind'] == 'param' and e.get('type') in ('Integer', 'Double', 'String') and '|' not in str(e['value']) and RS not in str(e['value']): out.append('param|%d|%s|%s' % (e['eid'], e['name'], e['value']))
         else: return ''
     return RS.join(out)
