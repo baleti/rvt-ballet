@@ -1541,6 +1541,8 @@ def _summary(a, say, log):
         if a.json: say(json.dumps(r['grids'], indent=1, default=str)); return 0
         for g in r['grids']: say(g)
     elif a.cmd == 'counts':
+        if r['stats'].get('members') == 0 and r['stats'].get('primary_elements'):      # c9x-rvtcat 2026-11-17: Revit 2017 files: 0 members decoded, 0 headers, empty tables printed as if the model were empty
+            sys.stderr.write('counts: no element headers could be read (0 of %d primary elements decoded; this file layout, probably Revit 2017, is not supported by the cold decoder). Categories are UNKNOWN for every element, not zero.\n' % r['stats']['primary_elements']); return 2
         out = {'subcategories': sorted((r.get('subcategory_names') or {}).values()), 'by_category': r['counts'], 'by_class': r['class_counts'], 'view_owned_elements': r['view_owned'], 'elements': r['stats']['elements_with_header']}
         if a.json: say(json.dumps(out, indent=1, sort_keys=True)); return 0     # sorted keys: diffable between saves
         if a.tsv:
