@@ -78,7 +78,7 @@ def verdict(c, o, exp, allowed, emit=print):
     if bad or bad_a or only_b: return 1, 'untouched elements: %d differ outside allowed, %d undeclared missing, %d new' % (len(bad), len(bad_a), len(only_b))
     return 0, 'control and output open clean, readback exact (%d expectations), only the allowed ids differ in Revit (%d elements)' % (npass, len(a))
 
-def guest_run(guest, year, f, loc, par, tag, wd, tries=3, ed=(), twin=''):
+def guest_run(guest, year, f, loc, par, tag, wd, tries=3, ed=(), twin='', timeout=0):
     """one open of f in the guest; returns j1 text or None (infrastructure)"""
     base = tag + os.path.splitext(f)[1]
     cs = open(CS).read().replace('__FILE__', 'C:/wl/' + base).replace('__TAG__', tag).replace('__LOCIDS__', ','.join(loc)).replace('__TWIN__', twin).replace('__EDIDS__', ','.join(str(x) for x in ed)).replace('__PARITEMS__', RS.join(par)).replace('__IDT__', 'long' if year >= 2024 else 'int')
@@ -93,7 +93,7 @@ def guest_run(guest, year, f, loc, par, tag, wd, tries=3, ed=(), twin=''):
             gs = ((getattr(r, 'stdout', r) or '').strip().split() or [''])[-1].upper()
             if len(gs) == 64 and gs != hs: print('guest copy of %s differs (host %s guest %s): re-sending' % (base, hs[:8], gs[:8])); continue
         except Exception: pass
-        con = guest.run_job(year, port, cs, tag, int(os.environ.get('RVT_JUDGE1_TIMEOUT', '1500')))
+        con = guest.run_job(year, port, cs, tag, (timeout or int(os.environ.get('RVT_JUDGE1_TIMEOUT', '1500'))))
         lf = os.path.join(wd, tag + '_j1.txt')
         if os.path.exists(lf): os.remove(lf)
         guest.get('C:/wl/out/%s_j1.txt' % tag, lf, 600)
@@ -180,7 +180,7 @@ def judge_batch(cases, wd):
                 pc, po = parse(ctl_t), parse(txt); pe = parse(eo) if eo else None; pt = None
                 tw = twin_string(c['exp'])
                 if tw:
-                    tt = guest_run(guest, c['year'], c['orig'], [], [], 'j1t%s' % osha[:8], wd, twin=tw)
+                    tt = guest_run(guest, c['year'], c['orig'], [], [], 'j1t%s' % osha[:8], wd, tries=2, twin=tw, timeout=420)
                     if tt and 'TWIN applied' in tt and parse(tt)['opened']: pt = parse(tt)['eh']
                     else: lines.append('TWIN: no usable twin (%s)' % ((tt or '')[:150].replace(chr(10), ' ') if tt else 'no output'))
                 vol = pc['volatile']; volcls = {pc['ec'].get(k) for k in vol} - {None}

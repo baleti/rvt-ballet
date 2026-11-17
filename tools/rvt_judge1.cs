@@ -7,6 +7,7 @@ using System.Collections.Generic;
 // Same checks, same formulas: verify2.cs open (audit, FAILURE/DIALOG capture, curve dump, BBOXNULL, SaveAs + reopen + COMPARE),
 // rvt_elemhash_readback.cs (EH hash of every element and type, identical string recipe), rvt_rotation_readback.cs (RB loc / TF lines),
 // rvt_param_readback.cs (RB param lines). Everything goes to C:\wl\out\__TAG___j1.txt (the console transport truncates at ~10 KB).
+class TwinFailPre : IFailuresPreprocessor { public FailureProcessingResult PreprocessFailures(FailuresAccessor fa) { fa.DeleteAllWarnings(); return FailureProcessingResult.Continue; } }
 var app = UIApp.Application;
 string file = @"__FILE__".Replace("/", "\\"); string tag = "__TAG__";
 var edIds = new HashSet<string>("__EDIDS__".Split(new[] { ',' }, System.StringSplitOptions.RemoveEmptyEntries));
@@ -17,7 +18,8 @@ System.IO.Directory.CreateDirectory(@"C:\wl\out");
 var log = new StringBuilder();
 EventHandler<FailuresProcessingEventArgs> fh = (s, e) => { foreach (var m in e.GetFailuresAccessor().GetFailureMessages()) log.AppendLine("FAILURE " + m.GetSeverity() + " " + m.GetDescriptionText()); };
 app.FailuresProcessing += fh;
-EventHandler<Autodesk.Revit.UI.Events.DialogBoxShowingEventArgs> dh = (s, e) => { log.AppendLine("DIALOG " + e.DialogId); };
+string phaseNow = "";
+EventHandler<Autodesk.Revit.UI.Events.DialogBoxShowingEventArgs> dh = (s, e) => { log.AppendLine("DIALOG " + e.DialogId); if (phaseNow == "twin") { try { e.OverrideResult(1); } catch {} } };
 try { UIApp.DialogBoxShowing += dh; } catch {}
 Func<byte[], IEnumerable<byte>> Sha = b => { var t = Type.GetType("System.Security.Cryptography.SHA256, System.Security.Cryptography"); var h = t.GetMethod("Create", Type.EmptyTypes).Invoke(null, null); return (byte[])h.GetType().GetMethod("ComputeHash", new[] { typeof(byte[]) }).Invoke(h, new object[] { b }); };
 Func<Document, string[]> dump = (d) => {
@@ -40,8 +42,8 @@ try {
   d = app.OpenDocumentFile(ModelPathUtils.ConvertUserVisiblePathToModelPath(file), oo);
   log.AppendLine("T_OPEN " + sw.ElapsedMilliseconds);
   if (twin.Length > 0) {
-    phase = "twin";
-    using (var tr = new Transaction(d, "twin")) { tr.Start();
+    phase = "twin"; phaseNow = "twin";
+    using (var tr = new Transaction(d, "twin")) { var fo = tr.GetFailureHandlingOptions(); fo.SetFailuresPreprocessor(new TwinFailPre()); fo.SetClearAfterRollback(true); tr.SetFailureHandlingOptions(fo); tr.Start();
       foreach (var it in twin.Split(new[] { (char)30 }, System.StringSplitOptions.RemoveEmptyEntries)) {
         var q = it.Split('|'); var e = d.GetElement(new ElementId((__IDT__)long.Parse(q[1])));
         if (e == null) throw new Exception("twin element missing " + q[1]);
@@ -53,7 +55,7 @@ try {
         else throw new Exception("twin kind unsupported " + q[0]);
       }
       tr.Commit(); }
-    log.AppendLine("TWIN applied");
+    phaseNow = ""; log.AppendLine("TWIN applied");
   }
   phase = "dump1"; d1 = dump(d);
   int bbn = 0; foreach (var c in new FilteredElementCollector(d).OfClass(typeof(CurveElement)).Cast<CurveElement>()) { if (c.get_BoundingBox(null) == null) bbn++; }
@@ -74,7 +76,8 @@ try {
     var tn = e as TextNote; if (tn != null) sb.Append("TN" + tn.Coord.X.ToString("F6") + "," + tn.Coord.Y.ToString("F6"));
     foreach (char c in sb.ToString()) { h ^= c; h *= 16777619; }
     outp.AppendLine("EH " + e.Id.ToString() + " " + h.ToString("x8")); n++;
-    outp.AppendLine("EC " + e.Id.ToString() + " " + e.GetType().Name);
+    { string cn = ""; try { cn = e.Category != null ? e.Category.Name : ""; } catch (Exception) { } string fn = ""; try { var fi = e as FamilyInstance; fn = fi != null && fi.Symbol != null ? fi.Symbol.Family.Name : e.Name; } catch (Exception) { }
+      outp.AppendLine("EC " + e.Id.ToString() + " " + (e.GetType().Name + "/" + cn + "/" + fn).Replace(" ", "_")); }
     if (edIds.Contains(e.Id.ToString())) outp.AppendLine("ED " + e.Id.ToString() + " " + sb.ToString().Replace("\r", " ").Replace("\n", " "));
   }
   log.AppendLine("COUNT " + n);
