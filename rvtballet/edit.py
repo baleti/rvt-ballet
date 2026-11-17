@@ -578,7 +578,7 @@ def _set_link_override(ed, o):
         if fy != 2024: raise EditError('link override edit is only verified on Revit 2024 files (this file is %d): refused' % fy)
     if len(_LINK_OVR_TEMPLATE) != 142: raise EditError('internal: override template size')
     for _k in ('eid', 'link', 'linked_view'):
-        if type(o.get(_k)) is not int or not 0 <= o[_k] < 2 ** 62: raise EditError('link override: %s must be a non-negative element id (got %r): refused' % (_k, o.get(_k)))
+        if type(o.get(_k)) is not int or not 1 <= o[_k] < 2 ** 62: raise EditError('link override: %s must be a positive element id (got %r): refused' % (_k, o.get(_k)))
     if o['link'] not in ed.g.e.m.ids: raise EditError('link element %d does not exist' % o['link'])
     try: _lk = ed.g.e.trace(o['link'])[3]
     except (IndexError, KeyError, StopIteration): raise EditError('link element %d cannot be decoded: link override refused' % o['link'])
