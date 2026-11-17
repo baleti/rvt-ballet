@@ -360,6 +360,15 @@ LOCATE = os.environ.get('RVT_Q_LOCATE', '1') == '1'
 _NAT = {}
 
 
+def _cpu_v3():
+    """_rvtframe.so is built -march=x86-64-v3: on a CPU without these flags it would die with SIGILL on first call instead of falling back; check first"""
+    if os.environ.get("RVT_Q_CPUFLAGS") is not None: fl = set(os.environ["RVT_Q_CPUFLAGS"].split())          # test hook
+    else:
+        try: fl = set(next(l for l in open("/proc/cpuinfo") if l.startswith("flags")).split())
+        except Exception: return False
+    return {"avx2", "bmi1", "bmi2", "fma", "movbe", "abm"} <= fl or {"avx2", "bmi1", "bmi2", "fma", "movbe", "lzcnt"} <= fl
+
+
 def _native():
     """ctypes handle on _rvtframe.so (next to this file) + libdeflate; None when either is missing (the Python path is used)"""
     key = (os.getpid(), _G.get('gen'))           # one mmap/chain/id cache per _setup: a second query in the same process (another file, or the same one after a save) must not see the first one's
@@ -370,7 +379,7 @@ def _native():
         except Exception: pass
     lib = None; ld = _libdeflate()
     so = os.path.join(os.path.dirname(os.path.abspath(__file__)), '_rvtframe.so')
-    if ld is not None and os.path.exists(so):
+    if ld is not None and os.path.exists(so) and _cpu_v3():
         import ctypes as C, mmap
         try:
             L = C.CDLL(so)

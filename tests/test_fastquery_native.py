@@ -168,3 +168,11 @@ def test_two_files_in_one_process_do_not_share_native_cache():
     try: b = [json.dumps(Q.sheets(f, workers=2), sort_keys=True, default=str) for f in fs + fs[:1]]
     finally: Q.NATIVE = True
     assert a == b
+
+
+def test_cpu_gate_blocks_native_on_old_cpu(monkeypatch):
+    from rvtballet import fastquery as fq
+    monkeypatch.setenv("RVT_Q_CPUFLAGS", "sse2 avx")             # no avx2/bmi2: the v3 .so must not be loaded (SIGILL)
+    assert fq._cpu_v3() is False
+    monkeypatch.setenv("RVT_Q_CPUFLAGS", "avx2 bmi1 bmi2 fma movbe abm")
+    assert fq._cpu_v3() is True
