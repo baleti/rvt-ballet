@@ -13,10 +13,10 @@ ix = G.file_geometry_index(F); buf = open(F, 'rb').read()
 first = {}
 for e, c in ix.items(): first.setdefault(str(c), e)
 bad = 0; n = 0
-for cls, eid in sorted(first.items()):
+for cls, eid in sorted(first.items())[:int(os.environ.get('SWEEP_LIMIT', '100000'))]:
     if cls in edit.DELETE_VM_VERIFIED: continue
     for o in ({'op': 'delete', 'eid': eid},):
-        n += 1
+        n += 1; print('try', cls, eid, o['op'], flush=True)
         try: edit.apply_full(buf, [edit.validate_op(o)]); print('ACCEPTED', cls, eid, o['op']); bad += 1
         except edit.EditError: pass
         except Exception as ex: print('CRASH', cls, eid, o['op'], type(ex).__name__, str(ex)[:80]); bad += 1
