@@ -234,3 +234,16 @@ def test_weak_candidate_needs_a_plausible_id():
     assert frame(real) is None
     r2, _ = rec((1 << 31) if W == 4 else (1 << 50), 20, bytes(20)); junk = bytes(8) + struct.pack('<I', 0) + r2[:-10]
     assert frame(junk) == []
+
+
+def test_es_schemas_independent_of_es_thread_count():
+    """the ES child (RVT_Q_ES_THREADS) must not change what the schema search finds: sheets output of a Snowdon MEP sample (4-5 MB Global/Latest, the slow case) is
+    byte-identical for 1 and 4 threads (also holds for the old single-threaded rvt_core)"""
+    import glob, subprocess, sys
+    fs = sorted(glob.glob(os.path.expanduser('~/rvt-research/corpus/2024/4[25]_Snowdon*.rvt')))
+    if not fs: pytest.skip('public corpus missing')
+    outs = []
+    for th in ('1', '4'):
+        r = subprocess.run([sys.executable, '-m', 'rvtballet.fastquery', 'sheets', fs[0]], cwd=HERE, env=dict(os.environ, RVT_Q_ES_THREADS=th), capture_output=True, text=True, timeout=300)
+        assert r.returncode == 0 and 'Sheets' in r.stdout; outs.append(r.stdout)
+    assert outs[0] == outs[1]
