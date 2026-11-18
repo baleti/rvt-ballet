@@ -1237,7 +1237,7 @@ def _readback(src_buf, nb, ops):
     for o in dl:      # a declared deletion must really have happened: the gate accepts a manifest that names a still-present element as deleted (tests/test_save_escape_delete.py)
         if o['eid'] in a and o['eid'] in b: bad.append('element %d was declared deleted but is still in the output' % o['eid'])
     if dl:      # a delete must not touch the elements that survive: every element present before and after reads back with identical parameters (measured 0 drift: 2024 Construction wall delete)
-        _drift = [e for e in a if e in b and g(a[e]) != g(b[e])]
+        _own = {o['eid'] for o in tg + fl}; _drift = [e for e in a if e in b and e not in _own and g(a[e]) != g(b[e])]      # the elements this same save edits by name are checked by the read-back above, not blamed on the delete (item 146)
         if _drift: bad.append('delete changed the parameters of %d surviving element(s) (e.g. %s)' % (len(_drift), ', '.join(str(e) for e in _drift[:3])))
         _gm = {e: w for e, w in membership(src_buf, set(a) - set(b)).items() if any(x.startswith('group') or x.startswith('design option') for x in w)}
         if _gm:      # HVAC 2024: deleting group member 1421734 was accepted and left it in ElementGroup 1421744's member set (a stale id); Revit semantics for deleting a group member are not reproduced, so refuse
