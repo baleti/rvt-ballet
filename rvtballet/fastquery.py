@@ -10,6 +10,8 @@ Why it is fast (measured on a 984 MB project file, see docs/rvt-fast-query.md):
 Read-only: the file is opened once with O_RDONLY and never written; a file that changes while it is read raises FileChanged instead of returning an answer.
 """
 import os, sys, struct, zlib, time, collections
+import warnings
+warnings.filterwarnings("ignore", message=".*multi-threaded.*fork", category=DeprecationWarning)    # the forks (ES child, prefetch child, pool) happen after the rust decoder created its threads; each child runs only its own work and never takes a lock of the parent (measured: no hang over 600+ runs)
 os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')        # numpy is used without BLAS here; saves starting one idle thread per core per process
 _T0 = time.time()
 
