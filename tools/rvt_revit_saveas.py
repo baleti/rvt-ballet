@@ -14,5 +14,5 @@ with guest.vmlock():
             out = guest.run_job(year, port, cs, 'rsave%d' % i, 300)
             print(base, [l for l in out.replace('\r', '').splitlines() if l.startswith('RESULT')][:1], flush=True)
             if 'RESULT ok' in out:
-                guest.get('C:/wl/out_' + base, os.path.join(outd, 'revit_saved_%d_%s' % (year, os.path.basename(f)))); ok = True
+                ok = bool(guest.get('C:/wl/out_' + base, os.path.join(outd, 'revit_saved_%d_%s' % (year, os.path.basename(f))), timeout=900)); print('copy-out', 'ok' if ok else 'FAILED (file not copied)', flush=True)
             guest.down(year); break
