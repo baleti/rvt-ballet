@@ -756,7 +756,9 @@ def _es_start(o, sch, W, rvtfmt, F):
     if pid == 0:
         ok = 1
         try:
-            os.close(r_); import pickle; data = pickle.dumps(F.find_schemas(gl, sch, W), 5); v = memoryview(data)
+            os.close(r_); import pickle
+            os.environ["RVT_THREADS"] = os.environ.get("RVT_Q_ES_THREADS", "4")      # the schema search (rvt-core es.rs) verifies its candidates in parallel; this child holds only tiny decodes, so the 1-thread memory rule (_tune) does not apply; its pool is built at the first parallel call, after the fork
+            data = pickle.dumps(F.find_schemas(gl, sch, W), 5); v = memoryview(data)
             while v: v = v[os.write(w_, v):]
             ok = 0
         except BaseException: pass
