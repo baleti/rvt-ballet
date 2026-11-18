@@ -58,7 +58,17 @@ def test_damaged_file_warns_or_fails_cleanly():
         with open(t1, "r+b") as h: h.truncate(os.path.getsize(A) - 400000)
         r = subprocess.run([rb, "counts", t1], capture_output=True, text=True); assert "Traceback" not in r.stderr and (r.returncode != 0 or "WARNING" in r.stderr), (r.returncode, r.stderr[-300:])
         t2 = T + "/t2.rvt"; shutil.copy(A, t2)
-        with open(t2, "r+b") as h: h.seek(os.path.getsize(A) // 2); b = h.read(1); h.seek(os.path.getsize(A) // 2); h.write(bytes([b[0] ^ 0xFF]))
+        import struct
+        d = open(A, "rb").read(); pos = 0; seg = []
+        while True:       # a byte inside a 102 (class record) segment: counts reads every one (the mid-file byte was in a 103 geometry segment, never read)
+            i = d.find(bytes.fromhex("1f8b0800"), pos)
+            if i < 0: break
+            pos = i + 1
+            if i >= 24:
+                w = struct.unpack_from("<6I", d, i - 24)
+                if w[4] == 102 and w[0] < 16 and w[3] > 0 and 34 <= w[2] <= len(d): seg.append((i, w[2]))
+        i, L = seg[len(seg) // 2]; k = i + 10 + L // 2 - 10
+        with open(t2, "r+b") as h: h.seek(k); b = h.read(1); h.seek(k); h.write(bytes([b[0] ^ 0xFF]))
         r = subprocess.run([rb, "counts", t2], capture_output=True, text=True); assert "Traceback" not in r.stderr and ("WARNING" in r.stderr or r.returncode != 0), (r.returncode, r.stderr[-300:])
 
 
