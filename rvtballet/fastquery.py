@@ -14,7 +14,7 @@ os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')        # numpy is used withou
 _T0 = time.time()
 
 PAGE_STORED = 65249; PAGE_PAYLOAD = 64896
-TASK_MB = float(os.environ.get('RVT_Q_TASK_MB', '8'))          # decoded MB per task (plus the overlap)
+TASK_MB = float(os.environ.get('RVT_Q_TASK_MB', '3'))          # decoded MB per task (plus the overlap)
 OVL = int(os.environ.get('RVT_Q_OVERLAP_KB', '1024')) << 10     # decoded bytes of the following segments appended to a task (a record straddling the task end is decoded whole)
 _G = {}
 # segment header word 4 is a channel: 101 = ElementHeaders, 102 = element records, 103 = geometry/bulk blobs (each channel carries the same sequence of
@@ -83,22 +83,26 @@ class Stream:
         if N is not None:
             rows = _native_walk_all(N, s, hdr, T)
             if rows is not None:
-                for off_, st_, dl_, ch_, _w0 in rows:
+                w1ok = _sel() and N.get('c5')
+                for off_, st_, dl_, ch_, _w in rows:
                     if ch_ not in KNOWN_CH: unknown = True
-                    allsegs.append((off_, st_, dl_, ch_))
+                    sg_ = (off_, st_, dl_, ch_, _w) if w1ok else (off_, st_, dl_, ch_)
+                    allsegs.append(sg_)
                     if CHANNELS is None or ch_ in CHANNELS:
-                        segs.append((off_, st_, dl_, ch_))
+                        segs.append(sg_)
                         if cb and len(segs) % every == 0 and not unknown: cb(segs)
                 hdr = None
         while hdr is not None and hdr + 24 <= T:
             if N is not None:                   # C walk over the mmap (same tests); stops where a header does not verify, the Python step below resyncs
                 k, hdr2, arr = _native_walk(N, s, hdr, T)
                 if k:
-                    for off_, st_, dl_, ch_, _w0 in arr:
+                    w1ok = _sel() and N.get('c5')
+                    for off_, st_, dl_, ch_, _w in arr:
                         if ch_ not in KNOWN_CH: unknown = True
-                        allsegs.append((off_, st_, dl_, ch_))
+                        sg_ = (off_, st_, dl_, ch_, _w) if w1ok else (off_, st_, dl_, ch_)
+                        allsegs.append(sg_)
                         if CHANNELS is None or ch_ in CHANNELS:
-                            segs.append((off_, st_, dl_, ch_))
+                            segs.append(sg_)
                             if cb and len(segs) % every == 0 and not unknown: cb(segs)
                     hdr = hdr2; continue
             b = rd(hdr, 28)
@@ -106,8 +110,9 @@ class Stream:
                 w = struct.unpack('<6I', b[:24])
                 if b[24:28] == GZ and 18 <= w[2] and hdr + 24 + w[2] <= T and w[0] < 16 and w[3] > 0:
                     if w[4] not in KNOWN_CH: unknown = True
-                    allsegs.append((hdr + 24, w[2], w[3], w[4]))
-                    if CHANNELS is None or w[4] in CHANNELS: segs.append((hdr + 24, w[2], w[3], w[4]))
+                    sg_ = (hdr + 24, w[2], w[3], w[4], w[1]) if _sel() else (hdr + 24, w[2], w[3], w[4])
+                    allsegs.append(sg_)
+                    if CHANNELS is None or w[4] in CHANNELS: segs.append(sg_)
                     hdr += 24 + w[2]
                     if cb and len(segs) % every == 0 and not unknown: cb(segs)
                     continue
@@ -282,14 +287,88 @@ def plan(pi, pn, segs, task_mb=None, ovl=None, final_only=False):
 def _winit():
     if _G.get('fd') is None: _G['fd'] = os.open(_G['path'], os.O_RDONLY)      # normally inherited from _setup (one handle: every worker reads the same file version)
     try:      # task buffers are ~10 MB: above glibc's mmap threshold every one is a fresh mmap that is zeroed and page-faulted (sys time 2.8 -> 8 s); keep them on the heap
-        import ctypes; libc = ctypes.CDLL('libc.so.6'); libc.mallopt(-3, 64 << 20); libc.mallopt(-1, 256 << 20)       # M_MMAP_THRESHOLD, M_TRIM_THRESHOLD
+        import ctypes; libc = ctypes.CDLL('libc.so.6'); libc.mallopt(-3, 64 << 20); libc.mallopt(-1, int(os.environ.get('RVT_Q_TRIM_MB', '256')) << 20)       # M_MMAP_THRESHOLD, M_TRIM_THRESHOLD
     except Exception: pass
 
 
+def _prefetch(path, nthreads=None):
+    """evicted file: a child forked at start (before the heavy imports, so it shares a ~10 MB interpreter) reads the whole file once with N threads
+    and large reads into a small buffer, so the page cache fills at disk speed (~2.7 GB/s here) while imports + setup run; the segment walk then hits
+    the cache instead of one small synchronous read per header. Pages land in the page cache only. posix_fadvise(WILLNEED) and readahead() were no-ops
+    on the WSL2 kernel; threads in the main process cost ~+90 MB PSS (the master kept running them after the worker fork, unsharing pages)."""
+    try: size = os.path.getsize(path); pid = os.fork()
+    except OSError: return
+    if pid: return
+    try:
+        import threading
+        n = max(1, nthreads or PREFETCH); step = -(-size // n)
+        def run(a, b):
+            try:
+                fd = os.open(path, os.O_RDONLY); buf = bytearray(PREFETCH_KB << 10); mv = memoryview(buf)
+                while a < b:
+                    k = os.preadv(fd, [mv[:min(len(buf), b - a)]], a)
+                    if k <= 0: break
+                    a += k
+                os.close(fd)
+            except OSError: pass
+        ts = [threading.Thread(target=run, args=(i * step, min(size, (i + 1) * step))) for i in range(n)]
+        for t in ts: t.start()
+        for t in ts: t.join()
+    finally: os._exit(0)
+
+
+def _prefetch_chains(path, sts):
+    """evicted file: a forked child reads the partition streams' sectors in the order the segment walk (and then the tasks) needs them: streams in walk
+    order, each stream's sector chain coalesced into contiguous runs, cut in 4 MB blocks dealt round-robin to N threads, so the front of the walk order
+    fills first at full disk parallelism. Pages land in the page cache only (child exits, nothing mapped in the master or the workers)."""
+    try: pid = os.fork()
+    except OSError: return
+    if pid: return
+    try:
+        import threading
+        blk = PREFETCH_KB << 10; pieces = []
+        for S in sts:
+            if S.small is not None or not S.chain: continue
+            ch = S.chain; ss = S.ss; i = 0; n = len(ch)
+            while i < n:
+                j = i + 1
+                while j < n and ch[j] == ch[j - 1] + 1: j += 1
+                a = (ch[i] + 1) * ss; L = (j - i) * ss
+                while L > 0: k = min(blk, L); pieces.append((a, k)); a += k; L -= k
+                i = j
+        N = max(1, PREFETCH)
+        def run(mine):
+            try:
+                fd = os.open(path, os.O_RDONLY); buf = bytearray(blk); mv = memoryview(buf)
+                for a, k in mine: os.preadv(fd, [mv[:k]], a)
+                os.close(fd)
+            except OSError: pass
+        ts = [threading.Thread(target=run, args=(pieces[t::N],)) for t in range(N)]
+        for t in ts: t.start()
+        for t in ts: t.join()
+    finally: os._exit(0)
+
+
+def _privdirty():
+    try:
+        for l in open('/proc/self/smaps_rollup'):
+            if l.startswith('Private_Dirty:'): return int(l.split()[1]) >> 10
+    except Exception: return -1
+
+
 def _job(job):
+    if MEMDBG:
+        m0 = _privdirty(); r = _job0(job); m1 = _privdirty()
+        sys.stderr.write('MEMDBG pid %d %s before %d after %d MB\n' % (os.getpid(), job[0], m0, m1)); return r
+    return _job0(job)
+
+
+def _job0(job):
     """one pool job: ('walk', pi, pn) -> segment table; ('dec', key, pn, segs, nmain, wanted, note_eh, hdr_ids) -> records, headers, header candidates"""
     if job[0] == 'walk':
         return job, _G['streams'][job[2]].segments(_G['fd'])
+    if job[0] == 'sel101':
+        return _sel101(job)
     c0 = time.process_time(); w0 = time.time()
     _, key, pn, segs, nmain, wanted, note_eh, hdr_ids = job; S = _G['streams'][pn]; fd = _G['fd']
     a = segs[0][0]; b = segs[-1][0] + segs[-1][1]
@@ -356,9 +435,24 @@ def _job(job):
                 t += ((tuple(map(float, mm[0])) + tuple(map(float, mm[1]))) if mm and len(mm) == 2 else None,)
             ehs.append((int(eid), t))
         del r
-    return job[:2], (recs, ehs, ehc, (time.process_time() - c0, time.time() - w0, os.getpid(), len(bad)), loc)
+    fids = None
+    if _sel() and ch == 102:         # ids of every framed record whose tag a decode spec asks for (main part); None when the framing was not available
+        import numpy as np
+        dt = sorted({t for sp in specs if not sp.get('locate') for t in sp['tags']})
+        if nat is not None:
+            rv = nat['recs'][:4 * nat['k']].reshape(-1, 4); fids = np.unique(rv[np.isin(rv[:, 3], np.asarray(dt, np.int64)), 2].astype(np.uint64))
+        elif fr is not None:
+            tg = set(dt); fids = np.unique(np.asarray([e for (a_, b_, e, t) in fr if t in tg], np.uint64))
+    return job[:2], (recs, ehs, ehc, (time.process_time() - c0, time.time() - w0, os.getpid(), len(bad)), loc, fids)
 
 
+GCFREEZE = os.environ.get('RVT_Q_GCFREEZE', '1') == '1'       # gc.freeze() before the worker fork (copy-on-write of inherited pages)
+MEMDBG = bool(os.environ.get('RVT_Q_MEMDBG'))
+PREFETCH_KB = int(os.environ.get('RVT_Q_PREFETCH_KB', '4096'))
+REUSE = os.environ.get('RVT_Q_REUSE', '0') == '1'         # native task: reuse the frame table and gather buffers per worker
+PREFETCH_MODE = os.environ.get('RVT_Q_PREFETCH_MODE', 'chain')     # chain: partitions in walk order from _setup; file: whole file from main
+PREFETCH = int(os.environ.get('RVT_Q_PREFETCH', '2'))     # main: N background threads read the whole file once at start (0 = off)
+PREAD = os.environ.get('RVT_Q_PREAD', '1') == '1'             # C helper reads stored bytes with pread (no whole-file mmap: file pages out of RSS)
 NATIVE = os.environ.get('RVT_Q_NATIVE', '1') == '1'           # C helper _rvtframe.so (inflate from mmap, 102 framing, walk); missing -> Python
 DEBUG = bool(os.environ.get('RVT_Q_DEBUG'))
 LOCATE = os.environ.get('RVT_Q_LOCATE', '1') == '1'
@@ -372,6 +466,21 @@ FASTFAT = os.environ.get('RVT_Q_FASTFAT', '1') == '1'     # _setup: linear olefi
 ESCACHE = os.environ.get('RVT_Q_ESCACHE', '0') == '1'     # _setup: 1 = rvt_fast.es_load (second open of the file + pickle cache of earlier runs)
 ESFORK = os.environ.get('RVT_Q_ESFORK', '1') == '1'       # _setup: ES schemas computed in a forked child while the decoders are built
 ES_TIMEOUT = float(os.environ.get('RVT_Q_ES_TIMEOUT', '5'))
+SEL = os.environ.get('RVT_Q_SEL', '0') == '1'      # records pass inflates only the 102 segments holding wanted classes (101 header class + w1 locator)
+C5 = os.environ.get('RVT_Q_C5', '1') == '1'
+SEL_TIGHT = os.environ.get('RVT_Q_SEL_TIGHT', '1') == '1'
+SEL_OVL_STARTS = int(os.environ.get('RVT_Q_SEL_OVL_STARTS', '3'))        # use _rvtframe_c5.so when present (adds frame101; walk column 5 = w1)
+SEL_RETRY = os.environ.get('RVT_Q_SEL_RETRY', '1') == '1'   # SEL: an unframed 102 task is retried from earlier segments of its run, not the full pass
+LAZY = os.environ.get('RVT_Q_LAZY', '1') == '1'     # collect under SEL: auxiliary classes (categories, levels, surrogates) fetched by id, not decoded in full
+SEL_EARLY = os.environ.get('RVT_Q_SEL_EARLY', '1') == '1'   # SEL phase A tasks submitted during the walks
+HDR101 = os.environ.get('RVT_Q_HDR101', '1') == '1'     # SEL collect: category / family / owner view read from the phase A 101 header (fixed offsets), no headers pass
+HDR101_CHECK = os.environ.get('RVT_Q_HDR101_CHECK', '0') == '1'     # also run the headers pass and log every difference (verification)
+SEL_ET = os.environ.get('RVT_Q_SEL_ET', '1') == '1'     # SEL winners: only ids in the ElemTable (the only ids the decoders accept)
+SEL_AUTO = os.environ.get('RVT_Q_SEL_AUTO', '1') == '1'   # collect turns SEL (+ LAZY) on by itself, except for classes where it measured slower
+SEL_SKIP = ('TextNote', 'Family', 'Dimension')             # 984 MB file, 3 saves: SEL 1.0-1.45x the default time for these (and for every type class)
+def _sel(): return bool(_G.get('sel'))        # per query (collect / sheets set it): the scan paths (counts, elements, views, levels) never use SEL, whatever RVT_Q_SEL says
+LOCFAST = os.environ.get('RVT_Q_LOCFAST', '1') == '1'   # SEL: one vectorised locator per partition instead of per-task id arrays
+PREWALK = os.environ.get('RVT_Q_PREWALK', '0') == '1'      # measured slower (GIL contention with setup); kept as a switch
 _NAT = {}
 
 
@@ -394,25 +503,34 @@ def _native():
         except Exception: pass
     lib = None; ld = _libdeflate()
     so = os.path.join(os.path.dirname(os.path.abspath(__file__)), '_rvtframe.so')
+    c4 = PREAD; c5 = C5; c7 = HDR101      # one helper build carries every feature (set_fd, frame101/frame101b); the ABI check below refuses an older build
     if ld is not None and os.path.exists(so) and _cpu_v3():
         import ctypes as C, mmap
         try:
             L = C.CDLL(so)
+            L.rvtframe_abi.restype = C.c_int64
+            if L.rvtframe_abi() != 7: raise OSError('_rvtframe.so is an older build (rebuild: gcc -O2 -march=x86-64-v3 -shared -fPIC -o _rvtframe.so rvtframe.c)')
             for f in ('inflate_task', 'frame102', 'gather', 'eh_candidates'): getattr(L, f).restype = C.c_int64
             P = C.c_void_p; I = C.c_int64
             L.inflate_task.argtypes = [P, I, P, I, I, P, I, P, I, P, P, I, P, P, P, P]
             L.frame102.argtypes = [P, I, P, I, I, P, C.c_int, C.c_uint64, C.c_int, P, I]
             L.gather.argtypes = [P, P, I, P, P, I, P, I]
             L.eh_candidates.argtypes = [P, I, C.c_int, C.c_int, P, I, P, I, P, I]
+            if c5: L.frame101.restype = I; L.frame101.argtypes = [P, I, P, I, I, P, C.c_int, C.c_int, C.c_uint64, C.c_int, P, I, P]
+            if c7: L.frame101b.restype = I; L.frame101b.argtypes = L.frame101.argtypes
             LD, _ = ld
             fnp = C.cast(LD.libdeflate_deflate_decompress_ex, C.c_void_p).value
             crcp = C.cast(LD.libdeflate_crc32, C.c_void_p).value
             dec = LD.libdeflate_alloc_decompressor()
             fd = os.open(_G['path'], os.O_RDONLY); fsize = os.fstat(fd).st_size
-            mm = mmap.mmap(fd, 0, prot=mmap.PROT_READ); os.close(fd)
             import numpy as np
-            mv = np.frombuffer(mm, np.uint8); base = mv.ctypes.data
-            lib = dict(L=L, C=C, np=np, fnp=fnp, crcp=crcp, dec=dec, mm=mm, mv=mv, base=base, fsize=fsize, chains={},
+            if c4:      # pread mode: no whole-file mmap, the file's pages are never mapped into the process (the master walk touched ~650 MB of them)
+                L.set_fd.restype = C.c_int64; L.set_fd.argtypes = [I]; L.set_fd(fd); mm = None; mv = None; base = None
+            else:
+                L.set_fd.restype = C.c_int64; L.set_fd.argtypes = [I]; L.set_fd(-1)       # the fd is a process-global of the helper: a stale one must not be read in mmap mode
+                mm = mmap.mmap(fd, 0, prot=mmap.PROT_READ); os.close(fd)
+                mv = np.frombuffer(mm, np.uint8); base = mv.ctypes.data
+            lib = dict(L=L, C=C, np=np, fnp=fnp, crcp=crcp, dec=dec, mm=mm, mv=mv, base=base, fsize=fsize, chains={}, c4=c4, c5=c5, c7=c7,
                        tmp=np.empty(4 << 20, np.uint8), buf=np.empty(0, np.uint8), ids=np.ascontiguousarray(_G['ids'], np.uint64))
         except Exception as ex:
             sys.stderr.write('native helper unavailable: %r\n' % (ex,)); lib = None
@@ -478,10 +596,147 @@ def _native_task(S, segs, nmain, ch, bad):
         if k < 0: _G['why'] = 'eh cap'; return None
         v = out[0:2 * k:2].astype(np.uint64); sg = out[1:2 * k:2].astype(np.int32); o = np.lexsort((sg, v))
         return {'ehc': (v[o], sg[o])}
-    cap = n // 20 + 64; recs = np.empty(4 * cap, np.int64)
+    cap = n // 20 + 64
+    if REUSE:     # one growing frame table per worker instead of a fresh 1.6 x task-size array per task (heap high water / fragmentation)
+        if len(N.get('recs', ())) < 4 * cap: N['recs'] = np.empty(int(4 * cap * 1.3), np.int64)
+        recs = N['recs']; cap = len(recs) // 4
+    else: recs = np.empty(4 * cap, np.int64)
     k = L.frame102(buf.ctypes.data, n, bounds.ctypes.data, len(segs), nmain, sa.ctypes.data, 12 + len(_G['cls']), _id_top(), _G['W'], recs.ctypes.data, cap)
     if k < 0: _G['why'] = 'frame %d' % k; return None
     return {'buf': buf, 'n': n, 'recs': recs, 'k': k}
+
+
+def _sel101(job):
+    """('sel101', key, pn, segs, nmain, tagmask bytes, note_eh) -> (job[:2], (rows, ehc, err, stat)). rows: int64 (k, 4) = (main segment index in the
+    task, rank of the record among the records whose id lies in that segment, id, class tag) for the headers whose class is set in tagmask. err: None,
+    or why the header framing could not be trusted (then the caller uses the full records pass). The per-segment record counts are checked against
+    each segment header's w1 (records starting in the segment, + 1 for the run terminator): any difference is an error, never ignored."""
+    c0 = time.process_time(); w0 = time.time()
+    _, key, pn, segs, nmain, tmask, note_eh = job; S = _G['streams'][pn]
+    def done(rows, ehc, err): return job[:2], (rows, ehc, err, (time.process_time() - c0, time.time() - w0, os.getpid()))
+    if _G['W'] != 8 or len(segs[0]) < 5: return done(None, None, 'W / no w1')
+    N = _native()
+    if N is None or not N.get('c5') or S.small is not None:       # ministream partitions (small) or no helper: same framing in Python
+        import numpy as np
+        sizes = []; chunk = inflate_run(None, None, segs, sizes, reader=lambda x, y: S.payload(_G['fd'], x, y))
+        bounds = [0]
+        for z in sizes: bounds.append(bounds[-1] + z)
+        r_ = _frame101_py(chunk, bounds, segs, nmain)
+        if isinstance(r_, str): return done(None, None, r_)
+        rv, cnt = r_
+        w1 = [x[4] for x in segs[:nmain]]
+        if cnt != w1: return done(None, None, 'w1 count (py)')
+        rows = []; last = -1; rank = 0
+        cb = np.frombuffer(chunk, np.uint8) if HDR101 else None
+        for sj, e, t, B in rv:
+            rank = rank + 1 if sj == last else 0; last = sj
+            if sj < nmain and tmask[t]: rows.append((sj, rank, e, t) + (_eh3(cb, B) if HDR101 else ()))
+        rows = np.asarray(rows, np.int64).reshape(-1, 7 if HDR101 else 4)
+        ehc = _eh_candidate_ids(chunk, sizes) if note_eh else None
+        return done(rows, ehc, None)
+    np = N['np']; L = N['L']
+    ck = id(S); chain = N['chains'].get(ck)
+    if chain is None: chain = N['chains'][ck] = np.ascontiguousarray(np.array(S.chain, np.int32))
+    sa = np.array([(x[0], x[1]) for x in segs], np.int64)
+    need = int(sum(x[2] for x in segs) + 8 * len(segs) + 4096)
+    if len(N['buf']) < need: N['buf'] = np.empty(int(need * 1.3), np.uint8)
+    buf = N['buf']; sizes = np.zeros(len(segs), np.int64)
+    if int(sa[:, 1].max()) > len(N['tmp']): N['tmp'] = np.empty(int(sa[:, 1].max()) + 4096, np.uint8)
+    n = L.inflate_task(N['base'], N['fsize'], chain.ctypes.data, len(chain), S.ss, sa.ctypes.data, len(segs), buf.ctypes.data, len(buf),
+                       sizes.ctypes.data, N['tmp'].ctypes.data, len(N['tmp']), N['dec'], N['fnp'], None, None)
+    if n < 0: return done(None, None, 'inflate %d' % n)
+    bounds = np.zeros(len(segs) + 1, np.int64); np.cumsum(sizes, out=bounds[1:])
+    st4 = 4 if HDR101 else 3
+    if HDR101 and not N.get('c7'): return done(None, None, 'HDR101 needs _rvtframe_c7.so')
+    cap = max(1024, n // 40); recs = np.empty(st4 * cap, np.int64); cnt = np.zeros(max(1, nmain), np.int64)
+    k = (L.frame101b if HDR101 else L.frame101)(buf.ctypes.data, n, bounds.ctypes.data, len(segs), nmain, sa.ctypes.data, _G['EH'], 12 + len(_G['cls']), _id_top(), 8,
+                   recs.ctypes.data, cap, cnt.ctypes.data)
+    if k < 0: return done(None, None, 'frame101 %d' % k)
+    w1 = np.array([x[4] for x in segs[:nmain]], np.int64)
+    if not np.array_equal(cnt[:nmain], w1): return done(None, None, 'w1 count %d of %d segments differ' % (int((cnt[:nmain] != w1).sum()), nmain))
+    rv = recs[:st4 * k].reshape(-1, st4); sj = rv[:, 0]
+    rank = np.arange(len(sj)) - np.searchsorted(sj, sj, 'left')
+    m = (sj < nmain) & (np.frombuffer(tmask, np.uint8)[rv[:, 2]] != 0)
+    if HDR101:
+        B_ = rv[m, 3]; c3 = _eh3v(buf, B_)
+        rows = np.stack([sj[m], rank[m], rv[m, 1], rv[m, 2], c3[:, 0], c3[:, 1], c3[:, 2]], 1) if m.any() else np.zeros((0, 7), np.int64)
+    else: rows = np.stack([sj[m], rank[m], rv[m, 1], rv[m, 2]], 1) if m.any() else np.zeros((0, 4), np.int64)
+    ehc = None
+    if note_eh:
+        cap2 = max(1024, n // 64); out = np.empty(2 * cap2, np.int64)
+        k2 = L.eh_candidates(buf.ctypes.data, n, _G['EH'], _G['W'], N['ids'].ctypes.data, len(N['ids']), bounds.ctypes.data, len(segs), out.ctypes.data, cap2)
+        if k2 < 0: return done(None, None, 'eh cap')
+        v = out[0:2 * k2:2].astype(np.uint64); sg = out[1:2 * k2:2].astype(np.int32); o = np.lexsort((sg, v)); ehc = (v[o], sg[o])
+    return done(rows, ehc, None)
+
+
+def _eh3v(buf, B):
+    """ElementHeader body at B (W = 8: [u16 EH tag][u32 N][N x 22][cat u64][family u64][owner view u64]...): (k, 3) int64 = category, owner view,
+    family (raw 8-byte values, -1 = none), the m_categroryId / m_ownerViewId / m_familyId of the decoded header (offsets verified 8140 of 8140)"""
+    import numpy as np
+    B = np.asarray(B, np.int64)
+    if not len(B): return np.zeros((0, 3), np.int64)
+    Nn = buf[(B + 2)[:, None] + np.arange(4)].copy().view(np.uint32)[:, 0].astype(np.int64); o = B + 6 + 22 * Nn
+    g = lambda q: buf[q[:, None] + np.arange(8)].copy().view(np.int64)[:, 0]
+    return np.stack([g(o), g(o + 16), g(o + 8)], 1)
+
+
+def _eh3(cb, B): return tuple(int(x) for x in _eh3v(cb, [B])[0])
+
+
+def _frame101_py(c, bounds, segs, nmain):
+    """Python twin of rvtframe frame101 (W = 8): -> ([(segment, id, class tag)], counts per main segment) or an error string"""
+    uf = struct.unpack_from; n = len(c); eh = _G['EH']; nt = 12 + len(_G['cls']); top = _id_top(); NONE = 0xffffffffffffffff
+    main_end = bounds[nmain]; cnt = [0] * nmain; out = []
+    rs = [0] + [i for i in range(1, len(segs)) if segs[i][0] != segs[i - 1][0] + segs[i - 1][1] + 24]
+    def chain(q):
+        good = 0; r = q
+        for _ in range(6):
+            if r + 18 > n: break
+            e, = uf('<Q', c, r + 4); L, = uf('<I', c, r + 12)
+            if e == NONE and L == 0 and good >= 1: return True
+            if uf('<H', c, r + 16)[0] != eh or e >= top: return False
+            E = r + 16 + L
+            if E + 4 > n: break
+            if uf('<I', c, E)[0] != L: return False
+            good += 1; r = E
+        return good >= 2
+    sj = 0
+    for k, i in enumerate(rs):
+        if bounds[i] + 8 >= main_end: break
+        run_end = bounds[rs[k + 1]] if k + 1 < len(rs) else n
+        if i == 0:
+            p = None; j = 0
+            while p is None and j < nmain and (j == 0 or not (k + 1 < len(rs) and rs[k + 1] == j)):
+                for q in range(max(4, bounds[j]), min(bounds[j + 1], n - 24)):
+                    if uf('<H', c, q + 16)[0] == eh and chain(q): p = q; break
+                j += 1
+            if p is None: return 'resync (py)'
+        else: p = bounds[i] + 4
+        while p + 4 < main_end:
+            if p + 18 > run_end:
+                if run_end < n and p + 4 == run_end: break
+                if run_end == n: break
+                return 'run end (py)'
+            e, = uf('<Q', c, p + 4); L, = uf('<I', c, p + 12); t, = uf('<H', c, p + 16)
+            while sj + 1 < len(segs) and bounds[sj + 1] <= p + 4: sj += 1
+            if e == NONE and p + 20 == run_end and L == 0:
+                if sj < nmain: cnt[sj] += 1
+                break
+            if t != eh or e >= top: return 'tag/id (py)'
+            B = p + 16; E = B + L
+            if E > n: return 'past chunk (py)'
+            N_, = uf('<I', c, B + 2); ko = 62 + 22 * N_
+            if N_ > 100000 or ko + 2 > L: return 'class offset (py)'
+            cl, = uf('<H', c, B + ko)
+            if not 12 <= cl < nt: return 'class tag (py)'
+            out.append((sj, e, cl, B))
+            if sj < nmain: cnt[sj] += 1
+            if E + 4 <= run_end:
+                if uf('<I', c, E)[0] != L: return 'chain (py)'
+            elif run_end < n: return 'past run end (py)'
+            p = E
+    return out, cnt
 
 
 def _native_gather(nat, tags, only):
@@ -490,7 +745,10 @@ def _native_gather(nat, tags, only):
     on = np.unique(np.asarray([int(x) for x in only], np.uint64)) if only is not None else np.zeros(1, np.uint64)
     rv = nat['recs'][:4 * nat['k']].reshape(-1, 4)
     tot = int((rv[:, 1] - rv[:, 0]).sum() + 8 * len(rv)) + 16
-    out = np.empty(tot, np.uint8)
+    if REUSE:
+        if len(N.get('gout', ())) < tot: N['gout'] = np.empty(int(tot * 1.3), np.uint8)
+        out = N['gout']; tot = len(out)
+    else: out = np.empty(tot, np.uint8)
     if only is not None and not len(on): return b''
     m = N['L'].gather(nat['buf'].ctypes.data, nat['recs'].ctypes.data, nat['k'], mask.ctypes.data, on.ctypes.data, len(on) if only is not None else 0, out.ctypes.data, tot)
     return out[:m].tobytes() if m > 0 else b''
@@ -854,6 +1112,7 @@ def _inline_safe(cls, ci, keys):
 def _setup(path, log):
     from . import rvtfile as FI
     FI._tune(); FI._paths()
+    _G['sel'] = False             # per-query SEL switch (collect sets it after _setup)
     import olefile, rvt_scan as S, rvt_decode as D, fmt_parser as fp, rvtfmt, rvt_fast as F
     from . import elemindex as EI
     t0 = time.time(); _G['st0'] = None
@@ -869,6 +1128,19 @@ def _setup(path, log):
     cls, _ = fp.parse(rvtfmt.inflate_stream(o.openstream('Formats/Latest').read())[1])
     W = S.id_size(cls); sch = D.Schema(cls)
     esj = _es_start(o, sch, W, rvtfmt, F) if not ESCACHE and ESFORK else None     # ES schemas in a forked child while the rest is built
+    if PREFETCH and PREFETCH_MODE == 'chain': _prefetch_chains(path, [streams[p] for p in sorted(pns, key=lambda p: -streams[p].size)])
+    _G.pop('segtab', None); wt = None
+    if PREWALK and NATIVE:
+        # segment walks of every partition in a thread while the schema, id table and decoders are built (the C walk releases the GIL); joined
+        # before this returns, so the pool forks after it (no thread alive at fork) and walk_and_decode plans every task at once
+        import threading
+        _G['path'] = path
+        def _walk_all():
+            fd = os.open(path, os.O_RDONLY)
+            try: _G['segtab'] = {pn: streams[pn].segments(fd) for pn in sorted(pns, key=lambda p: -streams[p].size)}
+            except Exception as ex: _G.pop('segtab', None); sys.stderr.write('prewalk failed: %r\n' % (ex,))
+            finally: os.close(fd)
+        wt = threading.Thread(target=_walk_all, daemon=True); wt.start()
     import numpy as np
     et = rvtfmt.inflate_stream(o.openstream('Global/ElemTable').read())[1]; ids, owned = _ids_owned(et, W); del et
     # the geometry STOP list is given explicitly: rvt_decode derives it from RVT_GEOM at import time and rvt_fast sets RVT_GEOM=1 on import, so a child
@@ -910,6 +1182,40 @@ def _setup(path, log):
     return _G
 
 
+NAME_SRC = ('m_text', 'm_viewName', 'm_name', 'm_symbolInfo', 'm_pMaterial', 'm_pAppearanceAsset')     # _lite name sources
+
+
+def _has_ptr(cls, f, depth=0):
+    """a schema field whose value is or holds a pointer slot (rvt_decode.Dec.elem: kind 0x0e with flags 1-4 or a pointer set/vector), an ES slot, or an
+    embedded struct (kind 0x0e, flags 0 / 0x50) of a class with such a field. Unknown -> True."""
+    if depth > 8: return True
+    for T in f.get('types') or ():
+        kind = T & 0xff; fl = (T >> 8) & 0xff
+        if kind != 0x0e: continue
+        if fl in (1, 2, 3, 4) or (fl & 0xf0) == 0x50 and (fl & 0x0f): return True
+        if fl in (0, 0x50, 0x10, 0x40):
+            ref = f.get('ref') if f.get('ref') is not None else f.get('ref2')
+            if ref is None: return True
+            ci = (ref & 0x7fff) - 12
+            if not 0 <= ci < len(cls): return True
+            if any(_has_ptr(cls, g, depth + 1) for g in cls[ci].get('fields') or ()): return True
+        elif fl not in (0, 0x50): return True
+    return False
+
+
+def _inline_safe(cls, ci, keys):
+    """True when every field of class ci (and its ancestors) that collect reads (keys + the _lite name sources) is decoded inline, so a decoder that stops
+    at the first queued pointer object gives the same values"""
+    want = set(keys) | set(NAME_SRC); seen = 0
+    while 0 <= ci < len(cls) and seen < 64:
+        for f in cls[ci].get('fields') or ():
+            if f.get('name') in want and _has_ptr(cls, f): return False
+        p = cls[ci].get('parent'); p = p & 0x7fff if isinstance(p, int) else None
+        if p is None or not 12 <= p < 12 + len(cls) or p - 12 == ci: break
+        ci = p - 12; seen += 1
+    return True
+
+
 def subclasses(cls, root):
     """names of `root` and every class deriving from it (schema parent = tag of the base class, tag = index + 12)"""
     names = [c['name'] for c in cls]; out = set(); memo = {}
@@ -926,9 +1232,11 @@ class Engine:
     """one fork pool for the whole query: segment walks (biggest partition first), each partition's decode tasks submitted as soon as its walk is back,
     later passes reuse the same workers. Results are keyed (partition index, first segment) so first-wins follows stream order."""
     def __init__(s, workers, log):
-        s.log = log; s.workers = workers; s.pool = None; s.stat = []; s.loc = {}; s.hdr = None; s.plan_kw = {}      # hdr = 'all': every task also decodes every ElementHeader (scan)
+        s.log = log; s.workers = workers; s.pool = None; s.stat = []; s.loc = {}; s.hdr = None; s.plan_kw = {}; s.locfast = None      # hdr = 'all': every task also decodes every ElementHeader (scan)
         if workers > 1:
             import multiprocessing as mp
+            if GCFREEZE:      # objects inherited from the master go to the permanent generation: worker gc passes never touch (copy) their pages
+                import gc; gc.freeze()
             s.pool = mp.get_context('fork').Pool(workers, initializer=_winit)
         else: _winit()
     def close(s):
@@ -937,7 +1245,248 @@ class Engine:
             t = time.time(); s.pool.terminate(); s.log('pool terminate %.2fs' % (time.time() - t)); s.pool = None
         consistent()
         if _G.get('damaged'): s.log('WARNING: %d gzip segments fail their CRC (file damaged?)' % _G['damaged'])
+    def assign(s, tasks, nd):
+        """(assign {id: {task keys whose locator holds it}}, unknown [task keys without a locator, 101 tasks excluded]) for the sorted uint64 ids nd.
+        SEL registers a vectorised locator per partition (s.locfast: located (segment, id) sorted by segment + segment -> task key), one isin per
+        partition instead of one per task; same result as the per-task E.loc arrays."""
+        import numpy as np
+        assign = collections.defaultdict(set); unknown = []
+        if s.locfast is not None:
+            for pn, (G, E_, tkg, keys) in s.locfast.items():
+                if not len(E_): continue
+                m = np.isin(E_.astype(np.uint64), nd)
+                if not m.any(): continue
+                for g, e in zip(G[m].tolist(), E_[m].tolist()):
+                    ti = tkg[g]
+                    if ti >= 0: assign[e].add(keys[ti])
+            for k in s.loc:
+                if s.loc[k] is None and k in tasks:
+                    t_ = tasks[k]
+                    if not (SPLIT and len(t_[2][0]) > 3 and t_[2][0][3] == 101): unknown.append(k)
+            return assign, unknown
+        for k in sorted(tasks):
+            lc = s.loc.get(k)
+            if lc is None:
+                t_ = tasks[k]
+                if not (SPLIT and len(t_[2][0]) > 3 and t_[2][0][3] == 101): unknown.append(k)
+                continue
+            for e in lc[np.isin(lc, nd)].tolist(): assign[e].add(k)
+        return assign, unknown
     def walk_and_decode(s, wanted, note_eh):
+        """-> (segtab {pn: segs}, tasks {key: task}, results {key: (recs, ehs, ehc)})"""
+        s.hdr101 = None
+        if _sel() and s.pool is not None:
+            r_ = s.walk_and_decode_sel(wanted, note_eh)
+            if r_ is not None: return r_
+            s.loc = {}; s.locfast = None; s.stat = []        # SEL refused: nothing of it may leak into the full pass
+        return s.walk_and_decode_full(wanted, note_eh)
+    def walk_and_decode_sel(s, wanted, note_eh):
+        """records pass that inflates channel 101 (ElementHeaders, 1/4 of the 102 size) and then only the 102 segments that hold a wanted record.
+        101 header i and 102 record i of a (101 run, 102 run) pair are the same element (ids equal in order on 7.8M records of 3 saves); a segment header's
+        w1 counts the records starting in it (+1 for a run terminator), so the cumulative w1 of the 102 run maps ordinal i to its segment without inflating
+        it. The class of record i is the class tag in header i (_sel101). Checks, any failure -> None (the caller runs the full pass): run layout
+        (each 101 run followed by a 102 run), counts per 101 segment == w1 (worker), run totals 101 vs 102, every expected id framed in its 102 task.
+        Tasks holding only located (type) records are registered with their locator (E.loc) but not run (the types-by-id pass asks them)."""
+        import numpy as np
+        t0 = time.time(); pns = _G['pns']; order = sorted(range(len(pns)), key=lambda i: -_G['streams'][pns[i]].size)
+        specs = wanted if isinstance(wanted, list) and wanted and isinstance(wanted[0], dict) else ([{'tags': wanted}] if wanted else [])
+        dtags = {t for sp in specs if not sp.get('locate') for t in sp['tags']}; ltags = {t for sp in specs if sp.get('locate') for t in sp['tags']}
+        if not dtags: return None
+        tmask = bytearray(65536)
+        for t in dtags | ltags: tmask[t] = 1
+        tmask = bytes(tmask)
+        segtab = {}; tasks = {}; res = {}; rowsby = {}; njobs = [0]
+        if SEL_EARLY:
+            # phase A overlaps the walks: the biggest partition is walked HERE and each of its 101 tasks is submitted as soon as the walk prefix fixes it
+            # (plan(final_only) == plan() for those, asserted); the other partitions are walked by workers and their 101 tasks submitted on return
+            import queue
+            q = queue.Queue(); pending = [0]
+            def put(r): q.put(r)
+            def err(e): q.put(('error', e))
+            def submit(t):
+                tasks[t[0]] = t; njobs[0] += 1; pending[0] += 1
+                s.pool.apply_async(_job, (('sel101',) + t + (tmask, note_eh),), callback=put, error_callback=err)
+            for pi in order[1:]: s.pool.apply_async(_job, (('walk', pi, pns[pi]),), callback=put, error_callback=err); pending[0] += 1
+            pi0 = order[0]; pn0 = pns[pi0]; sent = set()
+            def early(segs):
+                for t in plan(pi0, pn0, segs, final_only=True):
+                    if t[0] in sent or len(t[2][0]) < 5 or t[2][0][3] != 101: continue
+                    sent.add(t[0]); submit(t)
+            fd = os.open(_G['path'], os.O_RDONLY)
+            try: segtab[pn0] = _G['streams'][pn0].segments(fd, every=4096, cb=early)
+            finally: os.close(fd)
+            for t in plan(pi0, pn0, segtab[pn0]):
+                if len(t[2][0]) < 4 or t[2][0][3] != 101: continue        # an unknown channel word leaves a task without the channel column
+                if t[0] in sent:
+                    assert tasks[t[0]] == t, 'early 101 task differs from plan()'
+                    continue
+                submit(t)
+            tw = None; bad = None
+            while pending[0]:
+                r = q.get(); pending[0] -= 1
+                if r[0] == 'error': raise r[1]
+                head, body = r
+                if head[0] == 'walk':
+                    segtab[head[2]] = body
+                    for t in plan(head[1], head[2], body):
+                        if len(t[2][0]) > 3 and t[2][0][3] == 101: submit(t)
+                    if len(segtab) == len(pns): tw = time.time() - t0
+                else:
+                    rows, ehc, err_, st = body; s.stat.append(st)
+                    if err_ is not None: bad = bad or 'SEL off: 101 task %r: %s' % (head[1], err_)
+                    res[head[1]] = ([], [], ehc); rowsby[head[1]] = rows
+            if tw is None: tw = time.time() - t0
+            if bad: s.log('  ' + bad); return None
+            for pn in pns:
+                sg = segtab[pn]
+                if not sg or len(sg[0]) < 5: s.log('  SEL off: %s has no w1 segments' % pn[-8:]); return None
+        else:
+            rs = [s.pool.apply_async(_job, (('walk', pi, pns[pi]),)) for pi in order[1:]]
+            fd = os.open(_G['path'], os.O_RDONLY)
+            try: segtab[pns[order[0]]] = _G['streams'][pns[order[0]]].segments(fd)
+            finally: os.close(fd)
+            for r_ in rs: h_, b_ = r_.get(); segtab[h_[2]] = b_
+            tw = time.time() - t0
+            for pn in pns:
+                sg = segtab[pn]
+                if not sg or len(sg[0]) < 5: s.log('  SEL off: %s has no w1 segments' % pn[-8:]); return None
+            # phase A: every 101 task, header framing with classes
+            jobs = []
+            for pi in order:
+                for t in plan(pi, pns[pi], segtab[pns[pi]]):
+                    if t[2][0][3] == 101: tasks[t[0]] = t; jobs.append(('sel101',) + t + (tmask, note_eh))
+            for head, body in s.pool.imap_unordered(_job, jobs, chunksize=1):
+                rows, ehc, err, st = body; s.stat.append(st)
+                if err is not None: s.log('  SEL off: 101 task %r: %s' % (head[1], err)); return None
+                res[head[1]] = ([], [], ehc); rowsby[head[1]] = rows
+            njobs[0] = len(jobs)
+        s._report('headers 101 (classes)', njobs[0], t0, 'walks done at %.2fs' % tw)
+        # map header ordinals to 102 segments, per partition (vectorised: one global ordinal per (101 run, 102 run) pair)
+        pick = _G.get('sel_pick'); dt_arr = np.zeros(65536, bool); dt_arr[list(dtags)] = True; lt_arr = np.zeros(65536, bool)
+        if ltags: lt_arr[list(ltags)] = True
+        WA = {}; LA = {}; WS = {}; cand = []       # pn -> (sorted 102 segment index, id) of all decode occurrences / located records; winner segments
+        for pi in order:
+            pn = pns[pi]; sg = segtab[pn]
+            A_ = np.asarray(sg, np.int64)[:, :5]; off_, sz_, ch_, w1_ = A_[:, 0], A_[:, 1], A_[:, 3], A_[:, 4]; n_ = len(A_)
+            contig = np.zeros(n_, bool); contig[1:] = (ch_[1:] == ch_[:-1]) & (off_[1:] == off_[:-1] + sz_[:-1] + 24)
+            rstart = np.flatnonzero(~contig); rid = np.cumsum(~contig) - 1; rch = ch_[rstart]; nr = len(rstart)
+            rsum = np.add.reduceat(w1_, rstart) if n_ else np.zeros(0, np.int64)
+            i101 = np.flatnonzero(rch == 101)
+            if int((rch == 102).sum()) != len(i101): s.log('  SEL off: %d 101 runs vs %d 102 runs' % (len(i101), int((rch == 102).sum()))); return None
+            if len(i101) and (i101[-1] + 1 >= nr or (rch[np.minimum(i101 + 1, nr - 1)] != 102).any()): s.log('  SEL off: 101 run not followed by 102 in %s' % pn[-8:]); return None
+            n101 = rsum[i101] - 1; n102 = rsum[i101 + 1] if len(i101) else np.zeros(0, np.int64)      # the 101 run ends with a terminator (in w1)
+            if ((n101 != n102) & (n101 != n102 - 1)).any(): s.log('  SEL off: run totals 101 vs 102 differ'); return None
+            Bk = np.concatenate(([0], np.cumsum(n102)[:-1])).astype(np.int64) if len(i101) else np.zeros(0, np.int64)
+            pk = np.full(nr, -1, np.int64); pk[i101] = np.arange(len(i101)); pk[i101 + 1] = np.arange(len(i101))
+            cw = np.cumsum(w1_); exw = cw - w1_; ex = exw - exw[rstart][rid]      # ordinal of a segment's first record inside its run
+            spk = pk[rid]
+            base101 = np.where((ch_ == 101) & (spk >= 0), Bk[np.maximum(spk, 0)] + ex, -1) if len(i101) else np.full(n_, -1, np.int64)
+            end101 = np.where(spk >= 0, Bk[np.maximum(spk, 0)] + n102[np.maximum(spk, 0)], 0) if len(i101) else np.zeros(n_, np.int64)
+            CG = np.flatnonzero((ch_ == 102) & (spk >= 0)); CC = Bk[spk[CG]] + ex[CG] if len(i101) else np.zeros(0, np.int64)
+            idx101 = np.flatnonzero(ch_ == 101); at101 = {int(g): j for j, g in enumerate(idx101.tolist())}
+            parts = [(at101[key[1]], rows) for key, rows in rowsby.items() if key[0] == pi and rows is not None and len(rows)]
+            if not parts: WA[pn] = LA[pn] = (np.zeros(0, np.int64), np.zeros(0, np.int64)); WS[pn] = set(); continue
+            R = np.concatenate([rows for _, rows in parts]); J0 = np.concatenate([np.full(len(rows), j0, np.int64) for j0, rows in parts])
+            G101 = idx101[J0 + R[:, 0]]; O = base101[G101] + R[:, 1]
+            if (base101[G101] < 0).any() or (O >= end101[G101]).any(): s.log('  SEL off: ordinal past the 102 run'); return None
+            Q = np.searchsorted(CC, O, 'right') - 1; G = CG[Q]; E_ = R[:, 2]; T_ = R[:, 3]
+            dm = dt_arr[T_]; lm = lt_arr[T_]
+            tm_ = time.time(); o_ = np.argsort(G[dm], kind='stable'); WA[pn] = (G[dm][o_], E_[dm][o_])
+            if LOCFAST: LA[pn] = (G[lm], E_[lm])          # the vectorised locator needs no order
+            else: o_ = np.argsort(G[lm], kind='stable'); LA[pn] = (G[lm][o_], E_[lm][o_])
+            cand.append((np.full(int(dm.sum()), pi, np.int64), G[dm], O[dm], E_[dm], T_[dm]) + ((R[dm, 4:7],) if R.shape[1] >= 7 else ()))
+            WS[pn] = set(np.unique(G[dm]).tolist())
+            if DEBUG: s.log('  SEL map %s: %d rows (%d decode), %.3fs at %.3fs' % (pn[-8:], len(R), int(dm.sum()), time.time() - tm_, time.time() - t0))
+        if DEBUG:
+            ct = collections.Counter()
+            for key, rows in rowsby.items():
+                if rows is not None and len(rows): ct.update(rows[:, 3].tolist())
+            s.log('  SEL rows by class: ' + ', '.join('%s %d' % (_G['cnames'].get(t, t), c) for t, c in ct.most_common(12)))
+        # rule last / first: only the segment of the winning occurrence of each (id, class) is needed: the merge keeps the record of the last (first)
+        # task holding the id, and that is the task holding the winning occurrence (inside a task the decoder keeps its first, as in the full pass)
+        if pick in ('last', 'first') and cand:
+            PI = np.concatenate([c[0] for c in cand]); GG = np.concatenate([c[1] for c in cand]); OO = np.concatenate([c[2] for c in cand])
+            EE = np.concatenate([c[3] for c in cand]); TT = np.concatenate([c[4] for c in cand])
+            s.hdr101 = None
+            if HDR101 and all(len(c) > 5 for c in cand):
+                # ElementHeader of every decode-class id from phase A: first occurrence in stream order (= headers(): first-wins in stream order)
+                HH = np.concatenate([c[5] for c in cand]); o_ = np.lexsort((OO, GG, PI, EE)); e_ = EE[o_]
+                f_ = o_[np.concatenate(([0], np.flatnonzero(e_[1:] != e_[:-1]) + 1))] if len(e_) else o_
+                s.hdr101 = (EE[f_].astype(np.int64), HH[f_], TT[f_].astype(np.int64))
+            if SEL_ET:      # the decoders only accept ids of the ElemTable (rvt-core candidates_tagged: ids.has); a winner outside it (deleted element:
+                # 2714 of 2942 Level winners on the 984 MB file) can never give a row, so its segment is not inflated
+                ids_ = _G["ids"]; k_ = np.searchsorted(ids_, EE.astype(np.uint64)); k_[k_ >= len(ids_)] = 0; m_ = ids_[k_] == EE.astype(np.uint64)
+                PI, GG, OO, EE, TT = PI[m_], GG[m_], OO[m_], EE[m_], TT[m_]
+            o_ = np.lexsort((OO, GG, PI, TT, EE))           # by (id, class), then stream position (pi, g, o)
+            EE, TT, PI, GG = EE[o_], TT[o_], PI[o_], GG[o_]
+            brk = np.flatnonzero((EE[1:] != EE[:-1]) | (TT[1:] != TT[:-1]))
+            if not len(EE): sel_ = np.zeros(0, np.int64)       # every winner filtered out (SEL_ET): none left to inflate
+            else: sel_ = np.concatenate((brk, [len(EE) - 1])) if pick == 'last' else np.concatenate(([0], brk + 1))
+            WS = {pn: set() for pn in pns}
+            for pi_, g_ in set(zip(PI[sel_].tolist(), GG[sel_].tolist())): WS[pns[pi_]].add(g_)
+            s.log('  SEL winners: %d in %d segments' % (len(sel_), sum(map(len, WS.values()))))
+            if DEBUG: s.log('  SEL winners by class: ' + ', '.join('%s %d' % (_G['cnames'].get(t, t), c) for t, c in collections.Counter(TT[sel_].tolist()).most_common(8)))
+        elif pick in ('last', 'first'): WS = {pn: set() for pn in pns}
+        s.log('  SEL map done at %.3fs' % (time.time() - t0))
+        def _slice(A, g0, g1):
+            ga, ea = A; return ea[np.searchsorted(ga, g0, 'left'):np.searchsorted(ga, g1, 'right')]
+        # phase B: 102 tasks over the needed segments only (main = consecutive needed segments up to TASK_MB, then the usual overlap)
+        per = TASK_MB * 1e6; jobs = []; expect = {}; nseg = 0; dmb = 0; meta = {}
+        tkg_ = {pn: np.full(len(segtab[pn]), -1, np.int64) for pn in pns}; tkeys_ = {pn: [] for pn in pns}
+        for pi in order:
+            pn = pns[pi]; sg = segtab[pn]; wp = WS[pn]
+            need = wp | set(np.unique(LA[pn][0]).tolist())
+            idx = [g for g, x in enumerate(sg) if x[3] == 102]; N_ = len(idx); kx = 0
+            while kx < N_:
+                if idx[kx] not in need: kx += 1; continue
+                j = kx; n_ = 0
+                while j < N_ and idx[j] in need and (n_ < per or j == kx): n_ += sg[idx[j]][2]; j += 1
+                m = j; ov = 0; st_ = 0
+                # tight overlap: a record whose id lies in the main part ends before the next record start, and never past its run: following
+                # segments of the same run until they hold SEL_OVL_STARTS record starts (w1; enough hops for the resync check) or OVL bytes
+                while m < N_ and ov < OVL and (not SEL_TIGHT or st_ < SEL_OVL_STARTS and sg[idx[m]][0] == sg[idx[m - 1]][0] + sg[idx[m - 1]][1] + 24):
+                    ov += sg[idx[m]][2]; st_ += sg[idx[m]][4]; m += 1
+                key = (pi, idx[kx]); t = (key, pn, [sg[x] for x in idx[kx:m]], j - kx); tasks[key] = t; nseg += j - kx
+                if idx[kx] in wp: dmb += sum(x[2] for x in t[2])
+                if ltags and LOCFAST:
+                    s.loc[key] = True; tkg_[pn][idx[kx]:idx[j - 1] + 1] = len(tkeys_[pn]); tkeys_[pn].append(key)
+                else: s.loc[key] = np.unique(_slice(LA[pn], idx[kx], idx[j - 1]).astype(np.uint64)) if ltags else None
+                if any(x in wp for x in idx[kx:j]): expect[key] = np.unique(_slice(WA[pn], idx[kx], idx[j - 1]).astype(np.uint64)); jobs.append(('dec',) + t + (wanted, note_eh, None)); meta[key] = (pn, idx, kx, j)
+                kx = j
+        if ltags and LOCFAST: s.locfast = {pn: (LA[pn][0], LA[pn][1], tkg_[pn], tkeys_[pn]) for pn in pns}
+        t1 = time.time(); retry = []; s.log('  SEL plan done at %.3fs (%d jobs)' % (t1 - t0, len(jobs)))
+        for head, body in s.pool.imap_unordered(_job, jobs, chunksize=1):
+            res[head[1]] = body[:3]; s.stat.append(body[3]); fids = body[5] if len(body) > 5 else None
+            if fids is None and SEL_RETRY: retry.append(head[1]); continue
+            if fids is None or not np.array_equal(fids, expect[head[1]]):
+                s.log('  SEL off: 102 task %r framed %s ids, expected %d' % (head[1], None if fids is None else len(fids), len(expect[head[1]]))); return None
+        # a task whose framing could not resync (no verifiable record chain inside its main part / tight overlap, e.g. a blob continuation): run it again
+        # starting 1, 4, 16, 64 segments earlier IN THE SAME 102 RUN (a run holds one record per id, so the decoder's first-of-task rule cannot pick an
+        # older occurrence) with the full overlap; same key, expected ids recomputed for the wider main part; still failing at the run start -> full pass
+        for back in (1, 4, 16, 64):
+            if not retry: break
+            jobs2 = []
+            for key in retry:
+                pn, idx, kx, j = meta[key]; sg = segtab[pn]; r0 = kx
+                while r0 > 0 and sg[idx[r0]][0] == sg[idx[r0 - 1]][0] + sg[idx[r0 - 1]][1] + 24: r0 -= 1
+                k2 = max(r0, kx - back)
+                if k2 == kx and back > 1: s.log('  SEL off: 102 task %r does not frame back to its run start' % (key,)); return None
+                m = j; ov = 0
+                while m < len(idx) and ov < OVL and sg[idx[m]][0] == sg[idx[m - 1]][0] + sg[idx[m - 1]][1] + 24: ov += sg[idx[m]][2]; m += 1
+                expect[key] = np.unique(_slice(WA[pn], idx[k2], idx[j - 1]).astype(np.uint64))
+                meta[key] = (pn, idx, k2, j)
+                jobs2.append(('dec', key, pn, [sg[x] for x in idx[k2:m]], j - k2, wanted, note_eh, None))
+            retry = []
+            for head, body in s.pool.imap_unordered(_job, jobs2, chunksize=1):
+                res[head[1]] = body[:3]; s.stat.append(body[3]); fids = body[5] if len(body) > 5 else None
+                if fids is None: retry.append(head[1]); continue
+                if not np.array_equal(fids, expect[head[1]]):
+                    s.log('  SEL off: retried 102 task %r framed %d ids, expected %d' % (head[1], len(fids), len(expect[head[1]]))); return None
+            s.log('  SEL retry back %d: %d tasks, %d still unframed' % (back, len(jobs2), len(retry)))
+        if retry: s.log('  SEL off: %d tasks unframed after retries' % len(retry)); return None
+        s._report('records (SEL)', len(jobs), t1, '%d of %d 102 segments needed, %d tasks registered, ~%.0f MB inflated' % (nseg, sum(1 for pn in pns for x in segtab[pn] if x[3] == 102), len(tasks), dmb / 1e6))
+        return segtab, tasks, res
+    def walk_and_decode_full(s, wanted, note_eh):
         """-> (segtab {pn: segs}, tasks {key: task}, results {key: (recs, ehs, ehc)})"""
         t0 = time.time(); pns = _G['pns']; order = sorted(range(len(pns)), key=lambda i: -_G['streams'][pns[i]].size)
         segtab = {}; tasks = {}; res = {}
@@ -1055,11 +1604,12 @@ def headers(E, segtab, tasks, res, want_ids):
     return hdr
 
 
-def classes(path, want, header_ids=None, workers=None, log=None, last_wins=False):
+def classes(path, want, header_ids=None, workers=None, log=None, last_wins=False, sel=False):
     """generic primitive: first-wins reduced records of the classes `want` (names, or a predicate on the class name) and, optionally, the ElementHeaders
     (cat, owner view, family, classdef) of `header_ids` (callable: ids from the records). -> (records {(eid, class): rec}, headers {eid: tuple}, G)"""
     log = log or (lambda *a: None); workers = workers or _workers()
-    G = _setup(path, log); pred = want if callable(want) else (lambda c, w=set(want): c in w)
+    G = _setup(path, log); pred = want if callable(want) else (lambda c, w=set(want): c in w); _G['sel_pick'] = 'last' if last_wins else 'first'
+    if sel and (SEL or SEL_AUTO and SEL_ET): _G['sel'] = True      # sheets: SEL pays once deleted-element winners are dropped (984 MB file 1.15 -> 0.92 s evicted)
     wanted = sorted(t for t, n in G['cnames'].items() if pred(n))
     log('  @%.3f setup done' % (time.time() - _T0))
     E = Engine(workers, log)
@@ -1095,8 +1645,9 @@ def _workers():
     For the 900 MB suite cap use RVT_Q_MEM_GB=0.9 (8 workers)."""
     n = int(os.environ.get('RVT_Q_WORKERS', '0') or 0)
     if n: return n
-    budget = float(os.environ.get('RVT_Q_MEM_GB', '3')) * 1024
-    return max(1, min((os.cpu_count() or 2) - 1, 20, int((budget - 250) // 70)))
+    # 2026-11-18 (pread, gc.freeze, 3 MB tasks): ~130 MB master + ~57 MB per worker peak PSS (12 workers 811 MB sheets); default budget = the 900 MB cap
+    budget = float(os.environ.get('RVT_Q_MEM_GB', '0.9')) * 1024
+    return max(1, min((os.cpu_count() or 2) - 1, 20, int((budget - 130) // 62)))
 
 
 def sheets(path, workers=None, log=None):
@@ -1115,7 +1666,7 @@ def sheets(path, workers=None, log=None):
         sheet_lists = [r['fields'].get('m_sheetViewportElemIds') for (e, c), r in full.items() if c == 'DBViewDrafting' and r['fields'].get('m_sheetNumber') and r['fields'].get('m_viewName') is not None]
         vps = [e for (e, c) in full if c == 'Viewport']
         return vps if vps and any(not x for x in sheet_lists) else []
-    full, hdr, G = classes(path, want, need_headers, workers, log, last_wins=True)
+    full, hdr, G = classes(path, want, need_headers, workers, log, last_wins=True, sel=True)
     import numpy as np
     recs = {}; by = collections.defaultdict(list)
     groups = {e for (e, c) in full if c in _group_classes()}
@@ -1231,6 +1782,40 @@ def _builtin_param(params, name):
     return None
 
 
+def _by_id(E, tasks, need, jspec, rule, what):
+    """{id: (class, reduced record)} of the winning record of each id in `need`, decoding only the tasks whose locator (E.loc: located ids of the
+    task's main part) holds it (rule last: the last such task, first: the first; tasks without a locator are asked for every id), with the specs
+    `jspec` restricted to those ids. Round 2: ids still missing are asked of every other task holding them (the types-by-id rule)."""
+    import numpy as np
+    need = set(need)
+    if not need: return {}
+    nd = np.asarray(sorted(need), np.uint64); assign, unknown = E.assign(tasks, nd)
+    per = collections.defaultdict(set)
+    for e in need:
+        if e in assign: per[max(assign[e]) if rule == 'last' else min(assign[e])].add(e)
+    for k in unknown: per[k] |= need
+    def jobs(p): return [tasks[k] + ([dict(sp, only=sorted(p[k])) for sp in jspec], False, None) for k in sorted(p)]
+    got = collections.defaultdict(list)
+    for key, (rr, _, _) in E.run(jobs(per), what).items():
+        for (e, c), r in rr:
+            if e in need: got[key].append((e, c, r))
+    miss = need - {e for v in got.values() for e, _, _ in v}
+    if miss:
+        per2 = collections.defaultdict(set)
+        for e in miss:
+            for k in assign.get(e, ()):
+                if e not in per.get(k, ()): per2[k].add(e)
+        if per2:
+            for key, (rr, _, _) in E.run(jobs(per2), what + ' (round 2)').items():
+                for (e, c), r in rr:
+                    if e in miss: got[key].append((e, c, r))
+    out = {}
+    for key in sorted(got):
+        for e, c, r in got[key]:
+            if rule == 'last' or e not in out: out[e] = (c, r)
+    return out
+
+
 def collect(path, cls=None, category=None, fields=None, where=None, workers=None, log=None, rule='last', names=True):
     """rows of every element of class `cls` (Revit API or schema class name / list; subclasses included) and/or `category` (built-in name or id), like
     FilteredElementCollector(doc).OfClass(..).OfCategory(..). Each row: id, class, name, type_id, type_name, level_id, level, category_id, category,
@@ -1250,6 +1835,11 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
     acat = ALIAS_CATS.get(cls if isinstance(cls, str) else (cls[0] if cls and len(cls) == 1 else None))
     tag_of = {n: t for t, n in G['cnames'].items()}
     aux = {'Level', 'CategoryElem', 'FamilySurrogate', 'FamSymSurrogate'}
+    lazy = set()
+    _G['sel'] = bool(SEL or SEL_AUTO and not (want & subclasses(G['cls'], 'Symbol')) and not (want & set(SEL_SKIP)))
+    if _sel(): _G['sel_pick'] = rule if rule in ('last', 'first') else None      # SEL decodes only the segment of each id's winning occurrence
+    if _sel() and LAZY and LOCATE:     # aux records fetched by id after the records pass (only those the rows reference); want classes stay in pass 1
+        lazy = {n for n in aux - want if n in tag_of}; aux = aux - lazy
     sym = subclasses(G['cls'], 'Symbol') | {'Level'}           # no-STOP decoder: type names (SymbolInfo) and Level elevations (m_pSurface.m_origin) sit behind the geometry stop
     spec = [{'tags': sorted(tag_of[n] for n in (want | aux) - sym if n in tag_of), 'mode': 'lite'}]
     spec = [x for x in spec if x['tags']]
@@ -1259,16 +1849,30 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
         if SLIM and not fields: spec[-1]['dec'] = 'sym'      # read for name / type / level / m_text only: names-only decoder
     stags = sorted(tag_of[n] for n in sym - {'Level'} if n in tag_of)
     if names and stags and LOCATE: spec.append({'tags': stags, 'locate': True})
-    if SLIM:
-        kp = frozenset(('name', 'm_assocLevelId', 'm_text', 'm_parentCategoryId') + TYPE_FIELDS + tuple(fields or ()))
-        spec = [dict(x, keep=kp) if not x.get('locate') else x for x in spec]
-        if INLINE and not fields and spec and not spec[0].get('full') and not spec[0].get('locate'):
-            ok = [t for t in spec[0]['tags'] if _inline_safe(G['cls'], t - 12, kp)]
-            rest = [t for t in spec[0]['tags'] if t not in set(ok)]
-            spec = ([dict(spec[0], tags=ok, dec='inl')] if ok else []) + ([dict(spec[0], tags=rest)] if rest else []) + spec[1:]
+    if lazy: spec = [x for x in spec if not x.get('locate')] + [{'tags': sorted(set(stags if names else []) | {tag_of[n] for n in lazy}), 'locate': True}]
+    akp = frozenset(('name', 'm_assocLevelId', 'm_text', 'm_parentCategoryId') + TYPE_FIELDS + tuple(fields or ()))
+    def aspec(names_):      # the decode spec pass 1 would have used for these aux classes
+        o = []
+        for n in sorted(names_):
+            t = tag_of[n]
+            if n in sym: d = {'tags': [t], 'mode': 'lite', 'full': True}; d.update({'dec': 'sym'} if SLIM and not fields else {})
+            else:
+                d = {'tags': [t], 'mode': 'lite'}
+                if SLIM and INLINE and not fields and _inline_safe(G['cls'], t - 12, akp): d['dec'] = 'inl'
+            if SLIM: d['keep'] = akp
+            o.append(d)
+        return o
     wall_types = subclasses(G['cls'], 'WallType')
     E = Engine(workers, log)
     try:
+        if SLIM:
+            kp = frozenset(('name', 'm_assocLevelId', 'm_text', 'm_parentCategoryId') + TYPE_FIELDS + tuple(fields or ()))
+            spec = [dict(x, keep=kp) if not x.get('locate') else x for x in spec]
+            if INLINE and not fields and spec and not spec[0].get('full') and not spec[0].get('locate'):
+                # split the plain spec: classes whose read fields are all inline -> inline decoder; the rest (MaterialElem: name in m_pMaterial) as before
+                ok = [t for t in spec[0]['tags'] if _inline_safe(G['cls'], t - 12, kp)]
+                rest = [t for t in spec[0]['tags'] if t not in set(ok)]
+                spec = ([dict(spec[0], tags=ok, dec='inl')] if ok else []) + ([dict(spec[0], tags=rest)] if rest else []) + spec[1:]
         segtab, tasks, res = E.walk_and_decode(spec, True)
         full = {}
         for key in sorted(res):
@@ -1279,28 +1883,54 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
             if c in want: rows[eid] = (c, r)
         # ElementHeaders of the result ids: category, owner view, family
         hdr = {}
-        if rows:
+        h101 = getattr(E, 'hdr101', None)
+        if rows and h101 is not None:
+            import numpy as np
+            ie, hh, ht = h101; ra = np.asarray(sorted(rows), np.int64); k_ = np.searchsorted(ie, ra); k_[k_ >= len(ie)] = 0; ok_ = ie[k_] == ra
+            M64 = (1 << 64) - 1
+            for e_, j_ in zip(ra[ok_].tolist(), k_[ok_].tolist()):
+                a_, b_, c_ = hh[j_].tolist(); hdr[e_] = (a_ & M64, b_ & M64, c_ & M64, int(ht[j_]), None)
+            miss_ = [e for e in rows if e not in hdr]
+            if miss_: hdr.update(headers(E, segtab, tasks, res, miss_))      # not in phase A (should not happen): the headers pass for those
+            if HDR101_CHECK:
+                ref_ = headers(E, segtab, tasks, res, list(rows)); bad_ = 0
+                for e_ in rows:
+                    x, y = hdr.get(e_), ref_.get(e_)
+                    if (x is None) != (y is None) or x is not None and (_sid(x[0], W), _sid(x[1], W)) != (_sid(y[0], W), _sid(y[1], W)): bad_ += 1
+                log('HDR101_CHECK: %d rows, %d differ, %d missing in phase A' % (len(rows), bad_, len(miss_)))
+        elif rows:
             hdr = headers(E, segtab, tasks, res, list(rows))
-        if EARLYCAT and (cat is not None or acat) and rows:
-            # the category filter of the output loop (same rules) before the type pass: names of rows it drops are never read (doors on a 984 MB file:
-            # type ids asked 2081 -> those of the 241 doors)
-            par_ = {}
-            for (e, c), r in full.items():
-                if c == 'CategoryElem' and r['fields'].get('m_parentCategoryId') is not None: par_[e] = _sid(r['fields']['m_parentCategoryId'], W)
-            def bi_(v):
-                for _ in range(4):
-                    if v is None: return None
-                    if v < -1: return v
-                    if v > 0 and v in par_: v = par_[v]
-                    else: return None
-                return None
-            def ok_(e, c):
-                h = hdr.get(e); craw = _sid(h[0], W) if h else None; cb = bi_(craw)
-                if cb is None and c in wall_types: cb = -2000011
-                if cat is not None and cb != cat and craw != cat: return False
-                cid_ = cb if cb is not None else craw
-                return not (acat and (acat[0] == 'in' and cid_ not in acat[1] or acat[0] == 'not' and cid_ in acat[1]))
-            rows = {e: v for e, v in rows.items() if ok_(e, v[0])}
+        # categories: header id, sub/user categories through CategoryElem parents (as fastinfo / categories.resolve)
+        parent = {}
+        for (e, c), r in full.items():
+            if c == 'CategoryElem' and r['fields'].get('m_parentCategoryId') is not None: parent[e] = _sid(r['fields']['m_parentCategoryId'], W)
+        if 'CategoryElem' in lazy:      # fetch the CategoryElem chain of the rows' header categories (builtin() follows at most 4 parents)
+            ask = {_sid(h[0], W) for e, h in hdr.items() if e in rows}; seen = set()
+            for _ in range(4):
+                ask = {v for v in ask if v is not None and v > 0 and v not in seen}
+                if not ask: break
+                seen |= ask; got_ = _by_id(E, tasks, ask, aspec(['CategoryElem']), rule, 'categories by id')
+                ask = set()
+                for e, (c, r) in got_.items():
+                    if c == 'CategoryElem' and r['fields'].get('m_parentCategoryId') is not None:
+                        parent[e] = _sid(r['fields']['m_parentCategoryId'], W); ask.add(parent[e])
+        def builtin(v):
+            for _ in range(4):
+                if v is None: return None
+                if v < -1: return v
+                if v > 0 and v in parent: v = parent[v]
+                else: return None
+            return None
+        def cat_ok(e, c=None):
+            h = hdr.get(e); craw = _sid(h[0], W) if h else None; cb = builtin(craw)
+            if cb is None and c in wall_types: cb = -2000011       # a WallType whose ElementHeader has no category is a wall type
+            if cat is not None and cb != cat and craw != cat: return False
+            cid_ = cb if cb is not None else craw
+            return not (acat and (acat[0] == 'in' and cid_ not in acat[1] or acat[0] == 'not' and cid_ in acat[1]))
+        if EARLYCAT and (cat is not None or acat):
+            # the category filter (the same test as the output loop) before the type pass: names of rows it drops are never read. doors on the
+            # 984 MB file: type ids asked 2081 -> those of the 241 doors
+            rows = {e: v for e, v in rows.items() if cat_ok(e, v[0])}
         # type records (names) by id: only type classes, no-STOP decoder, only the referenced ids
         tid = {}
         for e, (c, r) in rows.items():
@@ -1320,20 +1950,16 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
                 return bool(np.isin(lc, nd).any())
             # only the occurrence that wins can matter (rule last: the last task holding the id, first: the first); tasks without a locator get every id.
             # ids that come back without a decoded record are asked again of every task holding them (round 2 = the old rule for those ids)
-            ks = sorted(tasks); assign = collections.defaultdict(set); unknown = []
-            for k in ks:
-                lc = E.loc.get(k)
-                if lc is None:
-                    if has(k): unknown.append(k)
-                    continue
-                for e in lc[np.isin(lc, nd)].tolist(): assign[e].add(k)
+            assign, unknown = E.assign(tasks, nd)
             per = collections.defaultdict(set)
             for e in need:
                 if e in assign: per[max(assign[e]) if rule == 'last' else min(assign[e])].add(e)
             for k in unknown: per[k] |= set(need)
+            sur = aspec(lazy & {'FamilySurrogate', 'FamSymSurrogate'})      # lazy: surrogate type ids come back from the same pass
             def tjobs(per_):
-                return [tasks[k] + ([{'tags': stags, 'mode': 'lite', 'full': True, 'dec': 'sym', 'only': sorted(per_[k])}], False, None) for k in sorted(per_)]
-            got = collections.defaultdict(list); per = dict(per)
+                return [tasks[k] + ([{'tags': stags, 'mode': 'lite', 'full': True, 'dec': 'sym', 'only': sorted(per_[k])}] + [dict(x, only=sorted(per_[k])) for x in sur], False, None) for k in sorted(per_)]
+            got = collections.defaultdict(list)
+            per = dict(per)
             for key, (rr, _, _) in E.run(tjobs(per), 'types by id').items():
                 for (e, c), r in rr: got[key].append((e, c, r))
             miss = set(need) - {e for v in got.values() for e, _, _ in v}
@@ -1342,8 +1968,10 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
                 for e in miss:
                     for k in assign.get(e, ()):
                         if not (R2SKIP and e in per.get(k, ())): per2[k].add(e)
-                if not R2SKIP:                  # R2SKIP: tasks without a locator were asked for every id in round 1 already
+                if not R2SKIP:
                     for k in unknown: per2[k] |= miss
+                # R2SKIP: a (task, id) pair round 1 already asked is not asked again (the tasks without a locator were asked for every id in round 1);
+                # windows on the 984 MB file: 5 type ids that no task decodes cost an 18-task round 2 on every query
                 for key, (rr, _, _) in E.run(tjobs(per2), 'types by id (round 2)').items():
                     for (e, c), r in rr:
                         if e in miss: got[key].append((e, c, r))
@@ -1353,20 +1981,17 @@ def collect(path, cls=None, category=None, fields=None, where=None, workers=None
         tv = set(tid.values())
         for (e, c), r in full.items():
             if e in tv and e not in types: types[e] = (c, r)
+        levels = {e: r['fields'].get('m_text') for (e, c), r in full.items() if c == 'Level'}
+        if 'Level' in lazy:
+            lv_ = set()
+            for e, (c, r) in rows.items():
+                v = r['fields'].get('m_assocLevelId')
+                if isinstance(v, int) and v > 0: lv_.add(v)
+            for e, (c, r) in _by_id(E, tasks, lv_, aspec(['Level']), rule, 'levels by id').items():
+                if c == 'Level': levels[e] = r['fields'].get('m_text')
     finally: E.close()
     # categories: header id, sub/user categories through CategoryElem parents (as fastinfo / categories.resolve)
     from . import categories as CT
-    parent = {}
-    for (e, c), r in full.items():
-        if c == 'CategoryElem' and r['fields'].get('m_parentCategoryId') is not None: parent[e] = _sid(r['fields']['m_parentCategoryId'], W)
-    def builtin(v):
-        for _ in range(4):
-            if v is None: return None
-            if v < -1: return v
-            if v > 0 and v in parent: v = parent[v]
-            else: return None
-        return None
-    levels = {e: r['fields'].get('m_text') for (e, c), r in full.items() if c == 'Level'}
     ct = _cat_table(); out = []
     for e, (c, r) in sorted(rows.items()):
         f = r['fields']; h = hdr.get(e)

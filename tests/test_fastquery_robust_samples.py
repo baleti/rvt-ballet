@@ -38,7 +38,7 @@ def test_crc_flip_102_warns_103_silent(tmp_path):
     for ch, warn in ((103, False), (102, True)):
         d = bytearray(d0); i, L = list(segs(d, ch))[3]; d[i + 10 + L // 2 - 10] ^= 0xFF
         p = tmp_path / ("c%d.rvt" % ch); p.write_bytes(d)
-        out, err = q(str(p))
+        out, err = q(str(p), RVT_Q_SEL_AUTO="0")      # the full pass reads every 102 segment; SEL inflates only the segments of wanted classes (an unread damaged segment is not reported, like 103)
         assert ("fail their CRC" in err) == warn
         if not warn: assert out == ref
 

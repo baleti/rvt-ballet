@@ -129,6 +129,7 @@ def test_c_inflate_task_crc_flag(nat, tmp_path):
     """C inflate_task: good segments inflate with bad[i]=0; a segment whose stored CRC32 is wrong inflates but is flagged"""
     import ctypes as C, mmap
     ld = Q._libdeflate()[0]; P = C.c_void_p; I = C.c_int64
+    nat.set_fd.restype = I; nat.set_fd.argtypes = [I]; nat.set_fd(-1)      # mmap mode: the helper keeps the fd of an earlier pread-mode test
     nat.inflate_task.restype = I; nat.inflate_task.argtypes = [P, I, P, I, I, P, I, P, I, P, P, I, P, P, P, P]
     pays = [bytes(random.Random(i).randrange(256) for _ in range(3000)) for i in range(3)]
     st = [stored_segment(p) for p in pays]
