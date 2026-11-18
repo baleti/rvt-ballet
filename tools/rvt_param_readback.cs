@@ -6,7 +6,7 @@ using System.Text;
 var app = UIApp.Application;
 string file = @"__FILE__".Replace("/", "\\"); string[] items = "__IDS__".Split(',');
 var log = new StringBuilder();
-Func<byte[], IEnumerable<byte>> Sha = b => { var t = Type.GetType("System.Security.Cryptography.SHA256, System.Security.Cryptography"); var h = t.GetMethod("Create", Type.EmptyTypes).Invoke(null, null); return (byte[])h.GetType().GetMethod("ComputeHash", new[] { typeof(byte[]) }).Invoke(h, new object[] { b }); };
+Func<byte[], IEnumerable<byte>> Sha = b => { var t = Type.GetType("System.Security.Cryptography.SHA256, System.Security.Cryptography") ?? Type.GetType("System.Security.Cryptography.SHA256"); var h = t.GetMethod("Create", Type.EmptyTypes).Invoke(null, null); return (byte[])h.GetType().GetMethod("ComputeHash", new[] { typeof(byte[]) }).Invoke(h, new object[] { b }); };
 try {
   var op = new OpenOptions(); op.Audit = true;
   var d = app.OpenDocumentFile(ModelPathUtils.ConvertUserVisiblePathToModelPath(file), op);
