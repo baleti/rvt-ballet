@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'tools'))
 for _p in ('~/rvt-research', '~/rvt-research/write-lab', '~/src/savegate'): sys.path.insert(0, os.path.expanduser(_p))
 os.environ['RVTBALLET_EDIT_BACKEND'] = 'rvtedit'
-F = os.path.expanduser('~/c6x-rm/cp/fse.rte')
+F = os.path.expanduser(os.environ.get('SWEEP_FILE', '~/c6x-rm/cp/fse.rte'))
 if not os.path.exists(F): print('skip'); sys.exit(0)
 from rvtballet import edit
 import rvt_geometry as G
