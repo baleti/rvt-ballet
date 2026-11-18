@@ -479,7 +479,7 @@ HDR101 = os.environ.get('RVT_Q_HDR101', '1') == '1'     # SEL collect: category 
 HDR101_CHECK = os.environ.get('RVT_Q_HDR101_CHECK', '0') == '1'     # also run the headers pass and log every difference (verification)
 SEL_ET = os.environ.get('RVT_Q_SEL_ET', '1') == '1'     # SEL winners: only ids in the ElemTable (the only ids the decoders accept)
 SEL_AUTO = os.environ.get('RVT_Q_SEL_AUTO', '1') == '1'   # collect turns SEL (+ LAZY) on by itself, except for classes where it measured slower
-SEL_SKIP = ('TextNote', 'Family', 'Dimension')             # 984 MB file, 3 saves: SEL 1.0-1.45x the default time for these (and for every type class)
+SEL_SKIP = ('TextNote',)             # 984 MB file, 3 saves: SEL 1.0-1.45x the default time for these (and for every type class)
 def _sel(): return bool(_G.get('sel'))        # per query (collect / sheets set it): the scan paths (counts, elements, views, levels) never use SEL, whatever RVT_Q_SEL says
 LOCFAST = os.environ.get('RVT_Q_LOCFAST', '1') == '1'   # SEL: one vectorised locator per partition instead of per-task id arrays
 PREWALK = os.environ.get('RVT_Q_PREWALK', '0') == '1'      # measured slower (GIL contention with setup); kept as a switch
