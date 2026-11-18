@@ -453,6 +453,11 @@ def sketch_loops(ctx, e):
         if segs: return geom.chain_loops(segs)
     return None
 
+def arc_span(ep):
+    """arc parameter range; an unbounded (full) circle is stored with equal end parameters (m_endParams [0, 0]: section heads, tags, round plan symbols)"""
+    t0, t1 = float(ep[0]), float(ep[1])
+    return (t0, t0 + 2 * math.pi) if abs(t1 - t0) < 1e-12 else (t0, t1)
+
 def curve_pts(c, maxdeg=10):
     """polyline (Nx3, feet) of a decoded curve object: GLine, GArc, GNurbSpline (clamped-uniform assumption), GPolyLine"""
     if not isinstance(c, dict): return None
@@ -462,7 +467,7 @@ def curve_pts(c, maxdeg=10):
         o = np.array(c['m_origin'], float); d = np.array(c['m_dirVec'], float); t0, t1 = c['m_endParams']
         return np.array([o + d * t0, o + d * t1])
     if 'm_radius' in c and 'm_center' in c and 'm_endParams' in c and 'm_xVec' in c:
-        t0, t1 = c['m_endParams']; R = float(c['m_radius']); ctr = np.array(c['m_center'], float)
+        t0, t1 = arc_span(c['m_endParams']); R = float(c['m_radius']); ctr = np.array(c['m_center'], float)
         x = np.array(c['m_xVec'], float); y = np.array(c['m_yVec'], float)
         k = max(2, int(abs(t1 - t0) / math.radians(maxdeg)) + 1); t = np.linspace(t0, t1, k + 1)
         return ctr + R * (np.cos(t)[:, None] * x + np.sin(t)[:, None] * y)
@@ -666,7 +671,7 @@ def record_curves(fields):
             if 'm_endParams' in n and 'm_dirVec' in n and 'm_origin' in n:
                 o = np.array(n['m_origin'], float); d = np.array(n['m_dirVec'], float); t0, t1 = n['m_endParams'][:2]; out.append(np.array([o + d * t0, o + d * t1])); return
             if 'm_endParams' in n and 'm_radius' in n and 'm_center' in n:
-                c = np.array(n['m_center'], float); x = np.array(n['m_xVec'], float); y = np.array(n['m_yVec'], float); rr = float(n['m_radius']); t0, t1 = n['m_endParams'][:2]
+                c = np.array(n['m_center'], float); x = np.array(n['m_xVec'], float); y = np.array(n['m_yVec'], float); rr = float(n['m_radius']); t0, t1 = arc_span(n['m_endParams'])
                 t = np.linspace(t0, t1, max(3, int(abs(t1 - t0) / 0.1) + 2)); out.append(c + rr * np.cos(t)[:, None] * x + rr * np.sin(t)[:, None] * y); return
         except Exception: return
         for v in n.values():
