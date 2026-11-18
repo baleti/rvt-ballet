@@ -34,7 +34,7 @@ CASES = {
     (C_MOVE, 'wall rotate (isolated, experiment writer)'): {'static': ('PASS', 'verified 2026-11-15 (c1x-rvtdiff): same wall, Edit.rotate 90 deg (opt-in RVTBALLET_ENABLE_WALLROTATE=1): Revit 2024 open clean, no dialogs, cmp 0/0, location rotated exactly, API BB = new box; rvt_diff: 1 element changed; rotate by 0 is a byte-identical no-op. Default gate stays off. 2026 rotate 30 deg isolated wall 1037167 also verified (open clean, cmp 0/0, BB = new box).'), 'static_years': [2024, 2026]},
     (C_MOVE, 'column'): {'static': ('PASS', 'Structural 2024 W Shapes-Column 608201 move +1 ft and rotate 30 deg: SAVE AS verify_diffs 0, 99.994% untouched, in-place SAVE! byte-identical to SAVE AS, Revit 2024 opens clean, cmp 0/0; Concrete-Rectangular-Column 606069 SAVE AS PASS, in place refused (joined). The generic FamilyInstance bundle picks hosted wall openings, so this row is static until the bundle selects by family category'), 'static_years': [2024]},
     (C_TYPE, 'string parameter'): {'bundle': ('FamilyInstance', 'HVAC'), 'use': 'set_string'},
-    (C_TYPE, 'number parameter'): {'bundle': ('Floor', 'Structural'), 'use': 'set_num'},
+    (C_TYPE, 'number parameter'): {'bundle': ('FamilyInstance', 'HVAC'), 'use': 'set_num'},
     (C_FILE, 'save in place (overwrite)'): {'bundle': ('FamilyInstance', 'HVAC'), 'use': 'save_in_place'},
     (C_SAFE, 'opens in Revit with no repair dialog'): {'bundle': ('FamilyInstance', 'HVAC'), 'use': 'opens'},
     (C_SAFE, 'untouched elements identical'): {'bundle': ('FamilyInstance', 'HVAC'), 'use': 'untouched'},
