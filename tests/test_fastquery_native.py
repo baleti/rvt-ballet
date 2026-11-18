@@ -225,3 +225,12 @@ def test_wall_types_always_have_category_walls_family(sample):
     d = json.loads(p.stdout); assert len(d) == 32
     assert [x["id"] for x in d if x["category"] is None] == []
     assert {x["id"]: x["category"] for x in d}[399] == "Walls"
+
+
+def test_weak_candidate_needs_a_plausible_id():
+    """an uncheckable candidate (record past the chunk end) forces the old scan only when its id is plausible (2025/2026 files have many more schema tags, so random
+    bytes gave false weak candidates and half the tasks fell back); same rule in rvtframe.c and frame_records"""
+    r, L = rec(500, 20, bytes(20)); real = bytes(8) + struct.pack('<I', 0) + r[:-10]
+    assert frame(real) is None
+    r2, _ = rec((1 << 31) if W == 4 else (1 << 50), 20, bytes(20)); junk = bytes(8) + struct.pack('<I', 0) + r2[:-10]
+    assert frame(junk) == []

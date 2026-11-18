@@ -515,7 +515,12 @@ def _resync102(chunk, lo, hi, n, nt, W=8):
     ok = (T >= 12) & (T < nt)
     E = P.astype(np.uint64) + ro + 4 + L
     inside = E + 4 <= n
-    weak = bool((ok & ~inside).any())
+    wk = ok & ~inside
+    if wk.any():                                  # uncheckable candidate: only a plausible id counts (same rule as rvtframe.c resync)
+        wi = np.flatnonzero(wk); wp = P[wi].astype(np.int64) + 4
+        idv = u32(wp) if W == 4 else (u32(wp) | u32(wp + 4) << np.uint64(32))
+        weak = bool((idv < np.uint64(_id_top())).any())
+    else: weak = False
     ii = np.flatnonzero(ok & inside)
     if not len(ii): return None, weak
     sel = u32(E[ii].astype(np.int64)) == L[ii]
